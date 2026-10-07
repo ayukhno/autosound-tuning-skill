@@ -44,6 +44,7 @@ Design invariants
 """
 
 import copy
+import errno
 import glob
 import hashlib
 import json
@@ -360,8 +361,27 @@ def bind_model_rate(project_dir_or_profile):
 
 
 def load_profile(path):
-    with open(path, encoding="utf-8") as f:
-        return json.load(f)
+    """The profile file at `path`, as its JSON object (wrapper and all).
+
+    No file is `FileNotFoundError`, as it always was. A file that is there and cannot be read -- empty, cut off, not
+    UTF-8, not JSON, not an object -- raises `project_io.Unreadable` naming it and its repair (#136): read as absent,
+    a damaged draft was replaced by a blank one (audit T-13). So does a profile a newer method wrote (`schema_version`
+    above this copy's, audit T-21), which this copy cannot read and must not write back down. `Unreadable` is neither
+    an `OSError` nor a `ValueError`: match it by its `is_unreadable` attribute.
+    """
+    io_ = _project_io()
+    folder = os.path.dirname(os.path.abspath(path))
+    # `contract.py repair-encoding` rewrites a project's own profile; another file in another code page goes back to
+    # its committed copy.
+    data = io_.read_json(path, None, repair=io_.restore_line(path),
+                         repair_encoding=(io_.reencode_line(folder) if os.path.basename(path) == "dsp_profile.json"
+                                          else None))
+    if data is None:
+        raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), path)
+    newer = io_.newer_schema(data, SCHEMA_VERSION)
+    if newer is not None:
+        raise io_.Unreadable(path, f"is schema v{newer}; this method reads v{SCHEMA_VERSION}", io_.UPDATE_THE_METHOD)
+    return data
 
 
 def _provenance():
@@ -463,7 +483,15 @@ def save_profile(path, data):
     the identifier that lets an artifact brought back from a weekend be compared with another
     instead of trusted. `""` means the question was asked and had no answer; the key MISSING means
     the file predates anyone asking. See `provenance.py` for why it is not the version string.
+
+    A profile a newer method wrote is refused before anything is stamped or written (`ValueError`, #136, audit T-21):
+    stamping this copy's version over it wrote it down to v3.
     """
+    io_ = _project_io()
+    newer = io_.newer_schema(data, SCHEMA_VERSION)
+    if newer is not None:
+        raise ValueError(f"{path}: the profile to write is schema v{newer} and this method writes v{SCHEMA_VERSION} -- "
+                         f"writing it would write it down, so nothing was written; {io_.UPDATE_THE_METHOD}")
     validate_profile(data)
     try:
         annotate_modellable(data)
@@ -480,7 +508,7 @@ def save_profile(path, data):
     parent = os.path.dirname(path)
     if parent:
         os.makedirs(parent, exist_ok=True)
-    _project_io().atomic_write_json(path, data, indent=2, sort_keys=True, ensure_ascii=False)
+    io_.atomic_write_json(path, data, indent=2, sort_keys=True, ensure_ascii=False)
     return path
 
 
@@ -530,9 +558,8 @@ def find_bundled(vendor, model, dir_=None):
     else's. It stays an argument because a consumer may legitimately ship its own.
     """
     for path in sorted(glob.glob(os.path.join(dir_ or bundled_dir(), "*.json"))):
-        try:
-            data = load_profile(path)
-        except (OSError, ValueError):
+        data = _library_entry(path)
+        if data is None:
             continue
         profile = _unwrap(data)
         if (profile.get("vendor", "").strip().lower() == vendor.strip().lower()
@@ -545,12 +572,24 @@ def list_bundled(dir_=None):
     """Every reference profile in the library, as (vendor, model, path), vendor+model sorted."""
     out = []
     for path in sorted(glob.glob(os.path.join(dir_ or bundled_dir(), "*.json"))):
-        try:
-            profile = _unwrap(load_profile(path))
-        except (OSError, ValueError):
+        data = _library_entry(path)
+        if data is None:
             continue
+        profile = _unwrap(data)
         out.append((profile.get("vendor", ""), profile.get("name", ""), path))
     return sorted(out)
+
+
+def _library_entry(path):
+    """A library file's profile, or None when it cannot be read: a library is a shelf of candidates, and a file on it
+    that cannot be read -- damaged, or written by a newer method (`load_profile`'s `Unreadable`, #136) -- is not one.
+    Nothing is written from a library scan; a project's own profile is read by `load_profile`, which refuses."""
+    try:
+        return load_profile(path)
+    except Exception as exc:  # noqa: BLE001 -- what cannot be read is skipped; anything else still raises
+        if isinstance(exc, (OSError, ValueError)) or getattr(exc, "is_unreadable", False):
+            return None
+        raise
 
 
 def refresh_project(project_dir, dir_=None, write=False):
@@ -689,14 +728,13 @@ def load_draft(project_dir, vendor=None, model=None):
     re-interview corrects an existing profile rather than starting blank), else an empty draft.
 
     Never raises on a missing file — "no draft yet" is the normal state of a project that has not
-    been interviewed.
+    been interviewed. The first of the two that is there is read, and if it cannot be read that raises
+    (`load_profile`'s `Unreadable`, #136, audit T-13): it used to be passed over for a BLANK draft -- the good
+    `dsp_profile.json` with it -- which the next `set_field` saved over the interview's answers.
     """
     for path in (draft_path(project_dir), profile_path(project_dir)):
-        if os.path.isfile(path):
-            try:
-                return load_profile(path)
-            except (OSError, ValueError):
-                break
+        if os.path.exists(path):
+            return load_profile(path)
     return empty_draft(vendor, model)
 
 
@@ -776,8 +814,9 @@ def set_setting(project_dir, path, value):
     if path not in MACHINE_SETTINGS:
         raise ValueError(f"{path}: not a machine setting ({', '.join(MACHINE_SETTINGS)})")
     target = os.path.join(project_dir, "dsp_profile.json")
-    with open(target, encoding="utf-8") as fh:
-        data = json.load(fh)
+    # Through `load_profile` (#136): a profile that cannot be read, or that a newer method wrote, is refused with its
+    # repair before anything is set in it.
+    data = load_profile(target)
     inner = data.setdefault("dsp_profile", {}) if "dsp_profile" in data else data
     options_path, allowed = MACHINE_SETTINGS[path]
     value = maybe_decode_json(value)
@@ -1152,7 +1191,19 @@ def _main(argv=None):
 
     sub.add_parser("selftest")
     args = p.parse_args(argv)
+    try:
+        return _run(args)
+    except Exception as exc:  # noqa: BLE001 -- matched by its attribute; anything else still raises
+        # A profile or a draft that is there and cannot be read, or that a newer method wrote (#136): a refusal naming
+        # it and its repair, exit 1, not a traceback.
+        if not getattr(exc, "is_unreadable", False):
+            raise
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
 
+
+def _run(args):
+    """`_main`'s verbs, once the arguments are parsed."""
     if args.cmd == "effects":
         prof = load_profile(args.path)
         names = effects_and_dynamics(prof)
@@ -1348,9 +1399,92 @@ def _check_bind_model_rate_binds_the_callers_dsp_math():
     assert not missed, "; ".join(missed)
 
 
+def _check_draft_refuses_unreadable():
+    """A draft that is there and cannot be read is refused, never passed over (#136, audit T-13). `load_draft` broke out
+    of its loop to a BLANK draft -- passing over the good `dsp_profile.json` it would have started from -- and
+    `set_field` saved that blank over the interview's answers. Now `set_field`, `load_draft` and `finalize` raise an
+    exception with `is_unreadable` naming the draft and its repair, the draft keeps its bytes, and the command line
+    says so with exit 1."""
+    import contextlib
+    import io
+    import shutil
+    import tempfile
+    proj = tempfile.mkdtemp(prefix="autosound_t13_")
+    try:
+        save_profile(profile_path(proj), {"dsp_profile": {"name": "M6V4", "vendor": "Musway", "groups": [
+            {"id": "physical_outputs", "label": "Outputs", "fields": ["hp", "lp", "gain_db"]}]}})
+        draft = draft_path(proj)
+        damaged = b'{"dsp_profile": {"name": "M6V4", "vendor": "Musway", "gro'
+        with open(draft, "wb") as f:
+            f.write(damaged)
+        for label, call in (("set_field", lambda: set_field(proj, "delay.max_ms", "20")),
+                            ("load_draft", lambda: load_draft(proj)), ("finalize", lambda: finalize(proj))):
+            try:
+                call()
+            except Exception as exc:  # noqa: BLE001 -- the kind is what is under test
+                assert getattr(exc, "is_unreadable", False), (label, repr(exc))
+                assert str(exc).startswith(draft + " ") and "checkout HEAD -- dsp_profile.draft.json" in str(exc), \
+                    (label, str(exc))
+            else:
+                raise AssertionError(f"{label}: a draft that cannot be read was passed over")
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            rc = _main(["set-field", proj, "delay.max_ms", "20"])
+        assert rc == 1 and err.getvalue().startswith(f"error: {draft} ") and not out.getvalue(), \
+            (rc, out.getvalue(), err.getvalue())
+        with open(draft, "rb") as f:
+            assert f.read() == damaged, "the draft changed"
+        assert os.path.isfile(profile_path(proj)), "finalize removed or moved the profile"
+    finally:
+        shutil.rmtree(proj, ignore_errors=True)
+
+
+def _check_newer_profile_refused():
+    """A profile a newer method wrote is refused on read and never written back down (#136, audit T-21): its version
+    was read by nobody, so this copy took a v4 profile for its own, and `save_profile` stamped it v3. `load_profile`
+    raises `Unreadable` (reason "is schema v4; this method reads v3", the repair a newer method); `save_profile`
+    refuses one before it stamps or writes anything. No file is still `FileNotFoundError`."""
+    import shutil
+    import tempfile
+    d = tempfile.mkdtemp(prefix="autosound_t21_profile_")
+    try:
+        path = os.path.join(d, "dsp_profile.json")
+        try:
+            load_profile(path)
+        except FileNotFoundError:
+            pass
+        else:
+            raise AssertionError("an absent profile was read")
+        newer = {"schema_version": SCHEMA_VERSION + 1, "dsp_profile": {"name": "X", "vendor": "Y", "groups": [
+            {"id": "physical_outputs", "label": "Out", "fields": None}]}}
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(newer, f)
+        try:
+            load_profile(path)
+        except Exception as exc:  # noqa: BLE001 -- the kind is what is under test
+            assert getattr(exc, "is_unreadable", False), repr(exc)
+            assert exc.reason == f"is schema v{SCHEMA_VERSION + 1}; this method reads v{SCHEMA_VERSION}", exc.reason
+            assert "update the method" in exc.repair and "/autosound-tuning:setup" in exc.repair, exc.repair
+            assert str(exc).startswith(path + " "), str(exc)
+        else:
+            raise AssertionError("a profile a newer method wrote was read")
+        written = os.path.join(d, "written.json")
+        try:
+            save_profile(written, copy.deepcopy(newer))
+        except ValueError as exc:
+            assert f"v{SCHEMA_VERSION + 1}" in str(exc) and f"v{SCHEMA_VERSION}" in str(exc), str(exc)
+            assert "update the method" in str(exc), str(exc)
+        else:
+            raise AssertionError("save_profile wrote a v4 profile down to v3")
+        assert not os.path.exists(written), "save_profile wrote something"
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+
+
 def _selftest():
     failures = []
-    for check in (_check_loads_by_path, _check_bind_model_rate_binds_the_callers_dsp_math):
+    for check in (_check_loads_by_path, _check_bind_model_rate_binds_the_callers_dsp_math,
+                  _check_draft_refuses_unreadable, _check_newer_profile_refused):
         try:
             check()
         except AssertionError as exc:
@@ -1835,6 +1969,8 @@ def _selftest():
           f"and every bundled profile's `modellable` marker re-derives to the same verdict "
           f"`dsp_math.options_for` gives (a hand-flipped one is caught, absent stays None, "
           f"a refusal owes a reason and the Helix's Chebyshev names both of its own). "
+          f"#136: a draft that cannot be read refuses set-field, load_draft and finalize, its bytes kept, and a "
+          f"profile a newer method wrote is refused on read and never written down. "
           f"tmp={tmp}")
     return 0
 

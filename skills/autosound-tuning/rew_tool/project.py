@@ -856,13 +856,23 @@ class Project:
         The revision counts WRITES, not semantic changes (SCR-024). A consumer only ever needs two
         things from it — ordering and equality — and deciding "did these facts really change?"
         would put this module in the business of diffing, with no reader asking for it.
+
+        Facts a newer method wrote are refused before anything is stamped or written (#136, audit T-21):
+        stamping this copy's version over them wrote a newer `project.json` down to v3, and `validate`
+        then found nothing wrong.
         """
+        io_ = _project_io()
+        newer = io_.newer_schema(data, SCHEMA_VERSION)
+        if newer is not None:
+            raise ProjectError(f"{self.path}: the facts to write are schema v{newer} and this method writes "
+                               f"v{SCHEMA_VERSION} -- writing them would write them down, so nothing was written; "
+                               f"{io_.UPDATE_THE_METHOD}")
         data["schema_version"] = SCHEMA_VERSION
         rev = data.get("project_rev")
         data["project_rev"] = (rev if isinstance(rev, int) and not isinstance(rev, bool) else 0) + 1
         validate(data)
         os.makedirs(self.dir, exist_ok=True)
-        _project_io().atomic_write_json(self.path, data, indent=2, sort_keys=True, ensure_ascii=False)
+        io_.atomic_write_json(self.path, data, indent=2, sort_keys=True, ensure_ascii=False)
         return data
 
     def migrate_fields(self, write=True):
@@ -1850,11 +1860,47 @@ def _check_record_change_refuses_unreadable():
         shutil.rmtree(top, ignore_errors=True)
 
 
+def _check_save_refuses_newer():
+    """`Project.save` refuses facts a newer method wrote (#136, audit T-21). It stamped `schema_version` 3 over the 4
+    before it validated, so a newer `project.json` loaded and saved by this copy was written down to v3. Now it raises
+    `ProjectError` naming both numbers and the way to a newer method, before it stamps anything, and `project.json`
+    keeps its bytes -- or stays absent."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_project_newer_")
+    try:
+        proj = Project(top)
+        newer = {"schema_version": SCHEMA_VERSION + 1, "project_rev": 7, "channels": []}
+
+        def held():
+            if not os.path.exists(proj.path):
+                return None
+            with open(proj.path, "rb") as f:
+                return f.read()
+        for label in ("no project.json yet", "a project.json there"):
+            if label == "a project.json there":
+                proj.save({"schema_version": SCHEMA_VERSION, "channels": []})
+            before = held()
+            sent = dict(newer)
+            try:
+                proj.save(sent)
+            except ProjectError as exc:
+                said = str(exc)
+                assert f"v{SCHEMA_VERSION + 1}" in said and f"v{SCHEMA_VERSION}" in said, (label, said)
+                assert "update the method" in said and proj.path in said, (label, said)
+            else:
+                raise AssertionError(f"{label}: facts a newer method wrote were written down to v{SCHEMA_VERSION}")
+            assert held() == before, f"{label}: project.json changed"
+            assert sent == newer, f"{label}: the caller's data was stamped"
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
 def _selftest():
     import tempfile
 
     failures = []
-    for check in (_check_record_change_refuses_unreadable,):
+    for check in (_check_record_change_refuses_unreadable, _check_save_refuses_newer):
         try:
             check()
         except AssertionError as exc:
@@ -2565,7 +2611,7 @@ def _selftest():
     except ProjectError:
         pass
 
-    print(f"selftest OK — the seat is the PROJECT's type, one of six, written once and refused a second different value with the route out (S-032); an imported fact says so without losing the value or the moment it was measured there, and no second measurement is owed (S-024); the REPLY language has a machine home, a front-end's report wins over it, and a project written before the field existed still reports the question (S-045); an unreadable project.json is refused rather than replaced (load AND write); record-change beside an unreadable process state exits 1 naming it, nothing appended (#136); two spare slots sharing slot 'F' stayed apart by tier and the profile's "
+    print(f"selftest OK — the seat is the PROJECT's type, one of six, written once and refused a second different value with the route out (S-032); an imported fact says so without losing the value or the moment it was measured there, and no second measurement is owed (S-024); the REPLY language has a machine home, a front-end's report wins over it, and a project written before the field existed still reports the question (S-045); an unreadable project.json is refused rather than replaced (load AND write); record-change beside an unreadable process state exits 1 naming it, nothing appended (#136); facts a newer method wrote are refused by save, nothing stamped or written (#136, T-21); two spare slots sharing slot 'F' stayed apart by tier and the profile's "
           f"group id was refused as one (SCR-042), a tier-less project still validates; "
           f"channels[] round-tripped driver/fs_hz facts (SCR-001), duplicate code "
           f"refused, a rename kept the channel's id and resolved its old captures (SCR-039), "

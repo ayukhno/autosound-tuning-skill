@@ -1,4 +1,4 @@
-"""How the method writes, and reads, the files it owns (skill #135, #136; audit T-8, T-9, T-14, T-17, K-2).
+"""How the method writes, and reads, the files it owns (skill #135, #136; audit T-8, T-9, T-14, T-17, T-21, K-2).
 
 WRITES go through `atomic_write_text` / `atomic_write_json` / `atomic_write_bytes`, which share one path: a temp file
 with a name no other writer uses, opened exclusively, written, flushed and fsynced, then moved over the target in one
@@ -17,7 +17,8 @@ repair -- the caller's for damaged contents, its own where the file may be whole
 Read as empty instead, such a file was written over with an empty one by the next write. `Unreadable` is
 neither an `OSError` nor a `ValueError`, so the `except (OSError, ValueError)` blocks that read "empty" do not catch
 it, and it is matched by its attribute `is_unreadable`, never by its class: a copy of this module loaded under
-another name has a class of its own.
+another name has a class of its own. `restore_line` and `reencode_line` are the repairs a caller names for a project
+file. A file a newer method wrote (`newer_schema`) is refused by its reader too, with `UPDATE_THE_METHOD` (T-21).
 
 Stdlib only. Loaded by path like every sibling: `_siblings().load("project_io.py")`.
 
@@ -263,6 +264,36 @@ def read_json(path, default=None, *, want=dict, repair=None, repair_encoding=Non
     if want is not None and not isinstance(data, want):
         raise Unreadable(path, f"holds {_json_kind(type(data))} where {_json_kind(want)} belongs", repair)
     return data
+
+
+#: What a file a newer method wrote is answered with (#136, audit T-21): this copy cannot read it, and a write from
+#: here would write it down to this copy's schema. The way out is a newer method, by any of its three routes.
+UPDATE_THE_METHOD = "update the method: /autosound-tuning:setup, the installer, or TCC's «Оновити Скіл»"
+
+
+def newer_schema(data, reads):
+    """The `schema_version` of `data` when it is an int above `reads` -- a file a newer method wrote -- else None.
+
+    Only that: a bool, a text, a float, a missing key or a value that is not an object is no claim to be newer, and
+    each reader judges those as it did. An older version is the migration's business, not this one's."""
+    found = data.get("schema_version") if isinstance(data, dict) else None
+    if isinstance(found, int) and not isinstance(found, bool) and found > reads:
+        return found
+    return None
+
+
+def restore_line(path):
+    """The repair for a project file whose contents are damaged: its last committed copy back (a project is a git
+    repository, hub #199). For `read_json`'s `repair`."""
+    folder, name = os.path.split(os.path.abspath(path))
+    return f"restore the last committed copy: git -C {folder} checkout HEAD -- {name}"
+
+
+def reencode_line(project_dir):
+    """The repair for a project file written in another code page: `contract.py repair-encoding`, which shows what each
+    candidate page makes it say and rewrites it as UTF-8. For `read_json`'s `repair_encoding`."""
+    contract_py = os.path.join(os.path.dirname(os.path.abspath(__file__)), "contract.py")
+    return f"rewrite it as UTF-8: python3 {contract_py} repair-encoding {os.path.abspath(project_dir)}"
 
 
 # ── selftest ─────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -708,6 +739,25 @@ def _check_read_json():
         _drop(d)
 
 
+def _check_newer_schema():
+    """A file a newer method wrote is told by its `schema_version`, an int above the one this copy reads (#136, audit
+    T-21) -- not a bool, a text, a float, an equal or lower number, a missing key, or a value that is not an object.
+    The answer names the three ways to a newer method; the repair lines name the file and the command."""
+    assert newer_schema({"schema_version": 4}, 3) == 4, newer_schema({"schema_version": 4}, 3)
+    for data in ({"schema_version": 3}, {"schema_version": 1}, {"schema_version": True}, {"schema_version": "4"},
+                 {"schema_version": 4.0}, {"schema_version": None}, {}, [{"schema_version": 4}], None, "4"):
+        assert newer_schema(data, 3) is None, data
+    assert newer_schema({"schema_version": True}, 0) is None, "a bool is no version, though True > 0"
+    for route in ("update the method", "/autosound-tuning:setup", "the installer", "«Оновити Скіл»"):
+        assert route in UPDATE_THE_METHOD, (route, UPDATE_THE_METHOD)
+    folder = os.path.abspath(os.path.join("car", "state"))
+    assert restore_line(os.path.join("car", "state", "seals.json")) == \
+        f"restore the last committed copy: git -C {folder} checkout HEAD -- seals.json", restore_line("x")
+    contract_py = os.path.join(os.path.dirname(os.path.abspath(__file__)), "contract.py")
+    assert reencode_line("car") == f"rewrite it as UTF-8: python3 {contract_py} repair-encoding " \
+                                   f"{os.path.abspath('car')}", reencode_line("car")
+
+
 def _check_two_writers_one_reader():
     """Audit T-8's test: two processes write one file 100 times each while a third reads it: every read parses.
 
@@ -767,7 +817,7 @@ def _selftest():
     failures, seen = [], {}
     for check in (_check_text_and_json, _check_foreign_tmp, _check_replace_fails_clean, _check_write_fails_clean,
                   _check_replace_retry, _check_private_mode, _check_create_exclusive, _check_append_line,
-                  _check_read_json, _check_two_writers_one_reader):
+                  _check_read_json, _check_newer_schema, _check_two_writers_one_reader):
         try:
             seen[check.__name__] = check()
         except Exception as exc:  # noqa: BLE001 -- each check is reported by name; one failing must not hide the rest
@@ -785,6 +835,7 @@ def _selftest():
           f"appended after a torn one starts on a fresh line, the old append's bytes otherwise; read_json gives the "
           f"default for no file, reads a BOM, and refuses an empty, cut-off, cp1251, wrong-type, held or directory one "
           f"as Unreadable, naming it and its repair -- never the caller's older copy for a file that may be whole; "
+          f"newer_schema tells a file a newer method wrote by an int version alone; "
           f"two writers x 100 and a reader: {reads} reads, every one whole")
     return 0
 

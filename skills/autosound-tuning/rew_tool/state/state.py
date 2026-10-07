@@ -368,8 +368,16 @@ def _project_rev(project_dir):
     Read as plain JSON rather than through `project.py`: this module lives one directory down and
     is imported under a synthetic name by consumers, and one integer is not worth a cross-package
     import that would only ever be used here.
+
+    Read strictly (#136, audit T-11): a `project.json` that is there and cannot be read raises `Unreadable`,
+    naming it and its repair. Read as "no facts file", it stamped rev 0 into the snapshot being banked, and a
+    snapshot is never rewritten. `_project_json` stays lenient: it serves the sheet's join (`project_channels`),
+    where "not captured" is the right answer.
     """
-    rev = _project_json(project_dir).get("project_rev")
+    io_ = _project_io()
+    path = os.path.join(project_dir, "project.json")
+    data = io_.read_json(path, None, repair=io_.restore_line(path), repair_encoding=io_.reencode_line(project_dir))
+    rev = (data or {}).get("project_rev")
     return rev if isinstance(rev, int) and not isinstance(rev, bool) and rev >= 0 else 0
 
 
@@ -493,10 +501,13 @@ def _read_snapshot_json(path):
     fail -- it succeeds with mangled text -- so a reader that guesses cannot report the mirror case
     at all. What the guess would buy is a note that reads `Phase 0 В§2.5`; what it costs is not
     knowing it happened. So: name it, and hand over the repair.
+
+    A version a newer method wrote (`schema_version` above this copy's) is refused here too, with the way to a newer
+    method (#136, audit T-21): the ledger's own check wanted only an int, so it was read as this copy's own.
     """
     try:
         with open(path, encoding="utf-8") as f:
-            return json.load(f)
+            data = json.load(f)
     except UnicodeDecodeError as exc:
         raise SnapshotError(
             f"{path}: not UTF-8 -- byte {exc.object[exc.start]:#04x} at position {exc.start} "
@@ -509,6 +520,11 @@ def _read_snapshot_json(path):
         raise SnapshotError(f"{path}: not readable JSON -- {exc}") from exc
     except OSError as exc:
         raise SnapshotError(f"{path}: cannot be read -- {exc}") from exc
+    io_ = _project_io()
+    newer = io_.newer_schema(data, SCHEMA_VERSION)
+    if newer is not None:
+        raise SnapshotError(f"{path} is schema v{newer}; this method reads v{SCHEMA_VERSION} -- {io_.UPDATE_THE_METHOD}")
+    return data
 
 
 # ── the version line: one per project, the preset is the slot (W-2 R, hub #195) ─────────────
@@ -736,11 +752,13 @@ def content_digest(snapshot):
 
 
 def _read_seals(root):
-    try:
-        with open(os.path.join(root, SEALS_FILE), encoding="utf-8") as fh:
-            return json.load(fh)
-    except (OSError, ValueError):
-        return {}
+    """`seals.json`, or `{}` when there is none yet. One that is there and cannot be read raises `Unreadable`, naming it
+    and its repair (#136, audit T-11): read as "no seals", it made `verify` pass, and the next bank rewrote it holding
+    its own seal alone -- every earlier seal gone, and a version changed since invisible from then on."""
+    path, where = os.path.join(root, SEALS_FILE), os.path.abspath(root)
+    return _project_io().read_json(path, {}, repair=(
+        f"restore it: git -C {where} checkout HEAD -- {SEALS_FILE}, or move it aside and run "
+        f"`python3 {os.path.abspath(__file__)} --root {where} seal` to rebuild it from the versions"))
 
 
 def _write_seals(root, seals):
@@ -762,7 +780,8 @@ def _all_version_paths(root):
 
 def seal_all(root):
     """Seal every version not sealed yet -- for a ledger banked before seals existed. Returns the keys sealed.
-    A version already sealed is never re-sealed: that would bless a mutation."""
+    A version already sealed is never re-sealed: that would bless a mutation. A `seals.json` that cannot be read
+    raises (`_read_seals`): rebuilt from nothing, it would have sealed every version as it stands now."""
     seals = _read_seals(root)
     added = []
     for key, path in _all_version_paths(root):
@@ -775,7 +794,8 @@ def seal_all(root):
 
 
 def verify_seals(root):
-    """`[{"version", "why"}]` -- every sealed version whose content changed, or whose file is gone."""
+    """`[{"version", "why"}]` -- every sealed version whose content changed, or whose file is gone. A `seals.json`
+    that cannot be read raises (`_read_seals`, #136): it is not "nothing to verify"."""
     seals = _read_seals(root)
     if not seals:
         return []
@@ -1194,6 +1214,10 @@ class PresetHistory:
         old values are being re-applied to today's car. Pass it explicitly to override (a caller
         that already holds the number, or a migration restoring a historical one); pass
         `project_dir` to point at a project other than this history's own.
+
+        Nothing is written beside a `project.json` or a `seals.json` that is there and cannot be read: each raises
+        `Unreadable` first (#136, audit T-11). The first was a rev 0 stamped into the version; the second a seals file
+        rewritten holding this version's seal alone.
         """
         state = copy.deepcopy(state)
         state["preset"] = self.preset
@@ -1204,6 +1228,9 @@ class PresetHistory:
         if note is not None:
             state["note"] = note
         validate(state)
+        # Read before anything is written, so a `seals.json` that cannot be read refuses the bank whole; it is read
+        # again where the seal is added, to keep that read next to its write.
+        _read_seals(self.root)
         project_line = self._project()
         if project_line:
             # The version it was made from: a line of numbers is a tree of edits (hub #195).
@@ -1858,7 +1885,20 @@ def _main(argv=None):
 
     if args.cmd == "selftest" or args.cmd is None:
         return _selftest()
+    try:
+        return _run(p, args)
+    except Exception as exc:  # noqa: BLE001 -- matched below; anything else still raises
+        # A file the ledger reads that is there and cannot be read -- `seals.json`, `project.json` (#136) -- or a
+        # version it cannot take (`SnapshotError`: one a newer method wrote, audit T-21, or one in another code page)
+        # is a refusal naming it and its repair: exit 1, as the traceback it was, with the sentence instead.
+        if not (getattr(exc, "is_unreadable", False) or isinstance(exc, SnapshotError)):
+            raise
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
 
+
+def _run(p, args):
+    """`_main`'s verbs, once the arguments are parsed (`p` is the parser, for its usage errors)."""
     # Every verb below reads an existing ledger, so the root is settled -- and named -- once.
     args.root, _root_source = resolve_root(args.root)
     try:
@@ -2294,11 +2334,119 @@ def _check_survey_reads_a_torn_journal_as_torn():
         shutil.rmtree(folder, ignore_errors=True)
 
 
+def _check_unreadable_seals_and_project_refused():
+    """A `seals.json` that is there and cannot be read is refused, never read as "no seals" (#136, audit T-11). Read as
+    none, `verify` said every sealed version was as banked -- exit 0 -- and the next bank rewrote the file holding its
+    own seal alone: every earlier seal gone, a tampered version invisible from then on. `verify_seals`, `seal_all` and
+    `snapshot` raise an exception with `is_unreadable` naming the file and its repair; `verify` and `seal` exit 1 saying
+    so; nothing is banked and the file keeps its bytes. A `project.json` that is there and cannot be read is refused by
+    `snapshot` too: it stamped rev 0 into a version, and a version is never rewritten."""
+    import contextlib
+    import io
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_t11_")
+
+    def refused(label, fn):
+        try:
+            fn()
+        except Exception as exc:  # noqa: BLE001 -- the kind is what is under test
+            assert getattr(exc, "is_unreadable", False), f"{label}: {type(exc).__name__}: {exc}"
+            return str(exc)
+        raise AssertionError(f"{label}: went through")
+    try:
+        root = os.path.join(top, "state")                  # the project is `top`, PresetHistory's own default
+        h = PresetHistory(root, "SQ")
+        assert h.snapshot(_sample_state(), note="banked") == "v_001"
+        seals, slots = os.path.join(root, SEALS_FILE), os.path.join(root, SLOTS_FILE)
+        with open(seals, "rb") as f:
+            whole = f.read()
+        cut = whole[:len(whole) // 2]                      # a write cut off, or a merge conflict's half
+        with open(seals, "wb") as f:
+            f.write(cut)
+        with open(slots, "rb") as f:
+            slots_before = f.read()
+        said = refused("verify_seals", lambda: verify_seals(root))
+        assert said.startswith(seals + " ") and "checkout HEAD -- seals.json" in said, said
+        assert f"--root {root} seal" in said, said
+        refused("seal_all", lambda: seal_all(root))
+        refused("snapshot", lambda: h.snapshot(_sample_state(), note="never banked"))
+        assert project_versions(root) == ["v_001"], project_versions(root)
+        for verb in ("verify", "seal"):
+            out, err = io.StringIO(), io.StringIO()
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                rc = _main(["--root", root, verb])
+            assert rc == 1 and err.getvalue().startswith(f"error: {seals} "), (verb, rc, out.getvalue(), err.getvalue())
+            assert "checkout HEAD -- seals.json" in err.getvalue() and not out.getvalue(), (verb, out.getvalue())
+        with open(seals, "rb") as f:
+            assert f.read() == cut, "seals.json changed"
+        with open(slots, "rb") as f:
+            assert f.read() == slots_before, "slots.json changed"
+        with open(seals, "wb") as f:
+            f.write(whole)
+        project_json = os.path.join(top, "project.json")
+        for label, raw, repair in (
+                ("cut off", b'{"schema_version": 3, "project_rev": 4, "chan', "checkout HEAD -- project.json"),
+                ("cp1251", '{"schema_version": 3, "project_rev": 4, "note": "тест"}'.encode("cp1251"),
+                 "repair-encoding")):
+            with open(project_json, "wb") as f:
+                f.write(raw)
+            said = refused(f"snapshot over a {label} project.json", lambda: h.snapshot(_sample_state(), note="rev 0"))
+            assert said.startswith(project_json + " ") and repair in said, (label, said)
+            assert project_versions(root) == ["v_001"], (label, project_versions(root))
+            with open(seals, "rb") as f:
+                assert f.read() == whole, f"{label}: seals.json changed"
+        os.remove(project_json)                            # no facts file at all is rev 0, as before
+        assert h.snapshot(_sample_state(), note="no project.json") == "v_002"
+        assert h.load("v_002")["project_rev"] == 0, h.load("v_002")["project_rev"]
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_newer_version_refused():
+    """A ledger version a newer method wrote is refused (#136, audit T-21): the ledger's own check wanted only an int,
+    so a `schema_version` 4 loaded, and `contract.py check` called the project OK. `load` raises `SnapshotError`
+    naming the file, both numbers and the way to a newer method; a version at this copy's number still loads. The
+    command line says it in a sentence, exit 1, where it printed the traceback."""
+    import contextlib
+    import io
+    import shutil
+    import tempfile
+    root = tempfile.mkdtemp(prefix="autosound_t21_ledger_")
+    try:
+        h = PresetHistory(root, "SQ")
+        v = h.snapshot(_sample_state(), note="banked")
+        assert h.load(v)["schema_version"] == SCHEMA_VERSION
+        path = h._path(v)
+        with open(path, encoding="utf-8") as f:
+            snap = json.load(f)
+        snap["schema_version"] = SCHEMA_VERSION + 1
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(snap, f)
+        try:
+            h.load(v)
+        except SnapshotError as exc:
+            said = str(exc)
+            assert said.startswith(f"{path} is schema v{SCHEMA_VERSION + 1}; this method reads v{SCHEMA_VERSION} -- "
+                                   f"update the method"), said
+            assert "/autosound-tuning:setup" in said, said
+        else:
+            raise AssertionError("a version a newer method wrote was read")
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            rc = _main(["--root", root, "log", "SQ"])
+        assert rc == 1 and err.getvalue().startswith(f"error: {path} is schema v{SCHEMA_VERSION + 1}"), \
+            (rc, out.getvalue(), err.getvalue()[-300:])
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def _selftest():
     failures = []
     for check in (_check_eq_refusals, _check_canonical_code_uses_the_loaded_naming,
                   _check_repair_encoding_keeps_the_file, _check_version_never_overwritten,
-                  _check_survey_reads_a_torn_journal_as_torn):
+                  _check_survey_reads_a_torn_journal_as_torn, _check_unreadable_seals_and_project_refused,
+                  _check_newer_version_refused):
         try:
             check()
         except AssertionError as exc:
@@ -2885,6 +3033,8 @@ def _selftest():
           f"byte-for-byte and kept the original, a page that does not decode was refused. "
           f"root: --root > $AUTOSOUND_STATE_ROOT > $AUTOSOUND_PROJECT_DIR/state > cwd, and an "
           f"absent root refused instead of answering 'NO ACTIVE SLOT SET'. "
+          f"#136: a seals.json or a project.json that cannot be read refuses verify, seal and a bank, naming it and "
+          f"its repair, every byte kept; a version a newer method wrote is refused. "
           f"root={root}")
     return 0
 

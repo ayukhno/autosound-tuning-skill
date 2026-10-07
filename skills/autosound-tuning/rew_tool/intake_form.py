@@ -1371,6 +1371,14 @@ def _coerce(field_id, value):
     return value
 
 
+def _refusal(exc):
+    """Is `exc` a refusal the page reports (an answer refused, the method's words handed back verbatim)? The method's
+    own, a `ValueError`, and a file that is there and cannot be read (`is_unreadable`, #136) -- which is neither an
+    `OSError` nor a `ValueError`, so it ended the whole request and the page heard nothing."""
+    return (isinstance(exc, (intake.IntakeError, project.ProjectError, ValueError))
+            or bool(getattr(exc, "is_unreadable", False)))
+
+
 def apply_save(project_dir, payload):
     """One posted answer → the method's own writer. Returns what was written.
 
@@ -1386,7 +1394,9 @@ def apply_save(project_dir, payload):
         for i, item in enumerate(payload["batch"] or []):
             try:
                 results.append(apply_save(project_dir, item))
-            except (intake.IntakeError, project.ProjectError, ValueError) as exc:
+            except Exception as exc:  # noqa: BLE001 -- a refusal (`_refusal`) is reported; anything else raises
+                if not _refusal(exc):
+                    raise
                 errors.append({"index": i, "error": str(exc)})
         return {"results": results, "errors": errors}
 
@@ -1505,7 +1515,9 @@ class _Handler(BaseHTTPRequestHandler):
         try:
             payload = json.loads(self.rfile.read(length) or b"{}")
             written = apply_save(self.project_dir, payload)
-        except (intake.IntakeError, project.ProjectError, ValueError) as exc:
+        except Exception as exc:  # noqa: BLE001 -- a refusal (`_refusal`) is answered 400; anything else raises
+            if not _refusal(exc):
+                raise
             return self._send(400, json.dumps({"error": str(exc)}, ensure_ascii=False))
         if "batch" in payload:
             # The page reads `errors` at the top: one Save, one report of what was refused.
@@ -1549,9 +1561,41 @@ def serve(project_dir, port=0, lang=DEFAULT_LANG, open_browser=False):
 
 
 # ── selftest ──────────────────────────────────────────────────────────────────
+def _check_unreadable_answer_reported():
+    """An answer whose writer meets a file that cannot be read is that answer's refusal, naming the file, and the
+    answers after it still go in (#136). Such a refusal is neither an `OSError` nor a `ValueError`: it passed the
+    batch's handler and ended the whole request, so the page heard nothing and the answers after it were lost.
+    `do_POST` answers 400 by the same rule (`_refusal`)."""
+    import shutil
+    import tempfile
+    root = tempfile.mkdtemp(prefix="autosound_form_unreadable_")
+    try:
+        prof = os.path.join(root, "dsp_profile.json")
+        with open(prof, "wb") as fh:
+            fh.write(b'{"dsp_profile": {"name": "Helix DSP Ultra S", "gro')
+        res = apply_save(root, {"batch": [{"dsp": {"vendor": "Acme", "model": "X8"}},
+                                          {"car": {"make": "VW", "model": "Passat", "generation": "B8",
+                                                   "body": "sedan"}}]})
+        assert [e["index"] for e in res["errors"]] == [0], res
+        assert res["errors"][0]["error"].startswith(prof + " ") and "checkout HEAD" in res["errors"][0]["error"], res
+        assert len(res["results"]) == 1 and "car" in res["results"][0], res
+        unreadable = dsp_profile._project_io().Unreadable(prof, "is empty -- a write was cut off", "REPAIR")
+        assert _refusal(unreadable) and _refusal(intake.IntakeError("no")) and not _refusal(KeyError("x")), "_refusal"
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def _selftest():
     import re
     import tempfile
+
+    failures = []
+    for check in (_check_unreadable_answer_reported,):
+        try:
+            check()
+        except Exception as exc:  # noqa: BLE001 -- a check that raises is reported by name, like one that fails
+            failures.append(f"{check.__name__}: {type(exc).__name__}: {exc}")
+    assert not failures, "\n".join(failures)
 
     # ── the translation covers the table, and covers it by ID ────────────────────────────────
     # A label file that has drifted from FIELDS is worse than none: the page would silently fall
@@ -1820,7 +1864,8 @@ def _selftest():
           "value is an ordinary one (no ticks), the seat's first Save asks and a written seat is shown fixed with why and how to make another, the reply language is the "
           "interface's and never asked, knobs are rows the processor pre-seeds, a processor change REPLACES a saved map only when "
           "confirmed, a new processor gets its own page and its map from it, the page loads nothing "
-          "from the network (one link out: NTT), and every write goes through intake's own writers")
+          "from the network (one link out: NTT), and every write goes through intake's own writers; "
+          "an answer refused over a file that cannot be read is that answer's refusal, and the rest go in (#136)")
     return 0
 
 

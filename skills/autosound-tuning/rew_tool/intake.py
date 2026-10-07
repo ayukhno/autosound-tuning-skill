@@ -348,7 +348,8 @@ def change_dsp(project_dir, vendor, model, replace_map=False):
       are placed again on the new processor's slots;
     * `dsp.tiers_used` is cleared (it named the old processor's tiers);
     * a `dsp_profile.json` or draft that describes the OLD processor is moved aside
-      (`…replaced-<vendor>-<model>.json`), so the Phase-0 gate cannot pass on another unit's profile.
+      (`…replaced-<vendor>-<model>.json`), so the Phase-0 gate cannot pass on another unit's profile;
+      one that cannot be read refuses the change before anything is written (#136).
 
     Returns `{"vendor", "model", "replaced": <slots moved to the record>, "set_aside": [paths]}`.
     """
@@ -389,15 +390,14 @@ def change_dsp(project_dir, vendor, model, replace_map=False):
     dsp.pop("tiers_used", None)
     dsp.update(vendor=vendor, model=model)
     data["dsp"] = dsp
+    # Which profiles on disk describe another processor is read BEFORE anything is written (#136): one that is there
+    # and cannot be read raises, naming it and its repair, and the change waits for it. Met after the save, it left
+    # the change half made -- and a second try found the processor already changed and sorted nothing.
+    others = [path for path in (dsp_profile.profile_path(project_dir), dsp_profile.draft_path(project_dir))
+              if os.path.isfile(path) and not _same_dsp(dsp_profile.load_profile(path), vendor, model)]
     handle.save(data)
-    for path in (dsp_profile.profile_path(project_dir), dsp_profile.draft_path(project_dir)):
-        if os.path.isfile(path):
-            try:
-                mine = _same_dsp(dsp_profile.load_profile(path), vendor, model)
-            except (OSError, ValueError):
-                mine = False
-            if not mine:
-                out["set_aside"].append(_set_aside(path, old_v, old_m))
+    for path in others:
+        out["set_aside"].append(_set_aside(path, old_v, old_m))
     return out
 
 
@@ -1379,7 +1379,10 @@ def gate_requirements(project_dir=None):
         if os.path.isfile(profile_path):
             try:
                 out["ledger"]["tiers"] = dsp_profile.tier_keys(dsp_profile.load_profile(profile_path))
-            except (OSError, ValueError) as exc:
+            except Exception as exc:  # noqa: BLE001 -- matched below; anything else still raises
+                # A profile that cannot be read raises `Unreadable` now (#136): reported here like the rest.
+                if not (isinstance(exc, (OSError, ValueError)) or getattr(exc, "is_unreadable", False)):
+                    raise
                 out["ledger"]["tiers_error"] = str(exc)
         report = contract.check_project(project_dir, skip_rew=True)
         out["missing_files"] = [f["file"] for f in report["files"]
@@ -1749,8 +1752,50 @@ def _main(argv):
 
 
 # ── selftest ──────────────────────────────────────────────────────────────────
+def _check_unreadable_profile_refused_before_a_write():
+    """A processor change refuses before it writes anything when a profile it has to sort cannot be read (#136):
+    `load_profile` raises for such a file now, and `change_dsp` met it after `project.json` was saved -- the new
+    processor recorded, the old profile left in place, and a second try found the processor already changed and
+    sorted nothing. `gate_requirements` reports it as the tier list's error, as it reports any other."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_intake_unreadable_")
+    try:
+        project.Project(top).save({"schema_version": project.SCHEMA_VERSION, "channels": [],
+                                   "dsp": {"vendor": "Audiotec-Fischer", "model": "Helix DSP Ultra S"}})
+        facts, prof = os.path.join(top, "project.json"), os.path.join(top, "dsp_profile.json")
+        damaged = b'{"dsp_profile": {"name": "Helix DSP Ultra S", "gro'
+        with open(prof, "wb") as fh:
+            fh.write(damaged)
+        with open(facts, "rb") as fh:
+            before = fh.read()
+        try:
+            change_dsp(top, "Acme", "X8")
+        except Exception as exc:  # noqa: BLE001 -- the kind is what is under test
+            assert getattr(exc, "is_unreadable", False) and str(exc).startswith(prof + " "), repr(exc)
+        else:
+            raise AssertionError("the processor changed past a profile nobody could read")
+        with open(facts, "rb") as fh:
+            assert fh.read() == before, "project.json was written"
+        with open(prof, "rb") as fh:
+            assert fh.read() == damaged, "the profile changed"
+        assert sorted(os.listdir(top)) == ["dsp_profile.json", "project.json"], os.listdir(top)
+        tiers = gate_requirements(top)["ledger"]
+        assert tiers["tiers"] is None and str(tiers.get("tiers_error")).startswith(prof + " "), tiers
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
 def _selftest():
     import tempfile
+
+    failures = []
+    for check in (_check_unreadable_profile_refused_before_a_write,):
+        try:
+            check()
+        except AssertionError as exc:
+            failures.append(f"{check.__name__}: {exc}")
+    assert not failures, "\n".join(failures)
 
     # ── the table is well formed, and every destination it names is REAL ──────────────────────
     ids = [f["id"] for f in FIELDS]
@@ -2080,7 +2125,8 @@ def _selftest():
           "PROJECT IS and is written once, a second different one refused with the route out "
           "(S-032); the car refuses three "
           "parts, a slot refuses to go in without its tier, and neither refusal writes anything; "
-          "`missing` reports prose as unreadable rather than as a gap.")
+          "`missing` reports prose as unreadable rather than as a gap; a processor change past a profile "
+          "that cannot be read refuses before it writes, and the gate list reports that profile (#136).")
     return 0
 
 

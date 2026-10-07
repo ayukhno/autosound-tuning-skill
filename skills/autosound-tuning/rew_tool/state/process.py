@@ -227,25 +227,28 @@ _FLAW_MAP_REQUIRED_FROM = 1
 
 
 def _flaw_map_entries(project_dir):
-    """`acoustics.flaws[]` from `project.json`, or None if the file cannot be read.
+    """`acoustics.flaws[]` from `project.json`, or None when there is no `project.json` -- "no opinion": a missing
+    file is the intake check's to name.
 
     Read as plain JSON rather than through `project.py`: this module is imported BY consumers that
-    already load these files their own way, and a gate that cannot run because an import failed is
-    a gate that silently stops gating. None means "no opinion" for the same reason.
+    already load these files their own way. A `project.json` that is there and cannot be read raises
+    `Unreadable`, naming it and its repair (#136, audit T-10): read as "no opinion", it let the phase in with no flaw
+    map to equalise against, and one holding an array stopped the gate with a traceback.
     """
-    try:
-        with open(os.path.join(project_dir, "project.json"), encoding="utf-8") as f:
-            data = json.load(f)
-    except (OSError, ValueError):
+    io_ = _project_io()
+    path = os.path.join(project_dir, "project.json")
+    data = io_.read_json(path, None, repair=io_.restore_line(path), repair_encoding=io_.reencode_line(project_dir))
+    if data is None:
         return None
     profile = data.get("project", data)
     return list(((profile.get("acoustics") or {}).get("flaws")) or [])
 
 
 #: `flaw_map.classify` writes this on a peak row it could not check, and this gate reads it back.
-#: Imported by VALUE rather than by module, for the same reason `_flaw_map_entries` reads raw JSON:
-#: a gate that cannot run because an import failed is a gate that silently stops gating. The two
-#: copies are held together by `flaw_map`'s own selftest.
+#: Imported by VALUE rather than by module, as `_flaw_map_entries` reads `project.json` itself
+#: rather than through `project.py`: a gate that depends on an import cannot run where the import
+#: fails -- and a gate that cannot run refuses the phase (#136). The two copies are held together
+#: by `flaw_map`'s own selftest.
 _ASSUMED_NOTE = "no positions measured -- staying is ASSUMED, not shown"
 #: `p1`…`p9` as the grammar writes it -- `m-L p3_49 (sw)`. NOT `\bp[1-9]\b`: `_` is a word
 #: character, so that pattern never matches a real title, and the gate would have passed every
@@ -352,9 +355,9 @@ def _require_flaw_map(phase, previous, project_dir):
         return
     if going < _FLAW_MAP_REQUIRED_FROM or came_from >= going:
         return  # re-entry and going back are always allowed, same rule as the target gate
-    if _flaw_map_entries(project_dir) is None:
-        return  # no readable project.json at all is contract.py's complaint, not this one
-    entries = _flaw_map_entries(project_dir)
+    entries = _flaw_map_entries(project_dir)        # one that cannot be read raises, naming it (#136)
+    if entries is None:
+        return  # no project.json at all is the intake check's complaint, not this one
     if entries:
         # S-047: the map exists, and some of its rows stand on an assumption nobody tested. The
         # tool computed that and carried it nowhere; the phase does not close over it in silence.
@@ -403,6 +406,12 @@ def _require_intake(phase, previous, project_dir):
     Deliberately the SAME answer `contract.py check --gate` gives, computed by the same code —
     two implementations of "is intake finished" would eventually disagree, and the one nobody runs
     would be the one that says yes.
+
+    A check that cannot run refuses the phase (#136, audit T-10). It used to pass it -- "cannot check is not the same
+    as failed", "a checker that raises must not become a wall" -- and so a gate that could not check let the phase
+    in, on the damaged projects most of all: the files it trips on are the ones it exists to stop. A `contract.py`
+    that cannot be loaded is the install's fault and is said so; a check that raises names what it raised; a file it
+    found unreadable raises as itself, with its own repair.
     """
     try:
         going, came_from = int(phase), int(previous) if previous is not None else -99
@@ -410,13 +419,19 @@ def _require_intake(phase, previous, project_dir):
         return
     if going < _INTAKE_REQUIRED_FROM or came_from >= going:
         return  # re-entry and going back are always allowed, same rule as every gate here
-    contract = _load_sibling("contract.py")
-    if contract is None:
-        return  # cannot check is not the same as failed
+    try:
+        contract = _siblings().load("contract.py")
+    except Exception as exc:  # noqa: BLE001 -- any failure to load is the install's, and refuses the phase
+        raise ProcessError(f"phase {phase} is not entered: the intake check could not be loaded "
+                           f"({type(exc).__name__}: {exc}) -- the install is broken, not the project") from exc
     try:
         report = contract.check_project(project_dir, skip_rew=True)
-    except Exception:  # noqa: BLE001 — a checker that raises must not become a wall
-        return
+    except Exception as exc:  # noqa: BLE001 -- refused, never passed (#136, audit T-10: a gate that cannot check let
+        # the phase in): an unreadable file raises as itself, with its repair; anything else is named.
+        if getattr(exc, "is_unreadable", False):
+            raise
+        raise ProcessError(f"phase {phase} is not entered: the intake check raised {type(exc).__name__}: {exc}") \
+            from exc
     missing = report.get("missing") or []
     if not missing:
         return
@@ -456,7 +471,8 @@ _PHASE_FACTS = {
 
 def _load_dsp_profile_module():
     """`dsp_profile.py` from the same checkout, by path — same reason as `_load_naming`. None when it
-    cannot be loaded: an unloadable sibling must not make the gate crash."""
+    cannot be loaded: the capture check's rate note then says nothing. The phase gate loads it itself, and refuses
+    when it cannot (`_require_profile_facts`)."""
     return _load_sibling("dsp_profile.py")
 
 
@@ -467,6 +483,11 @@ def _require_profile_facts(phase, previous, project_dir):
     nobody wrote down is a rate somebody assumes. Observed on a real project (2026-08-11) — a Helix
     profile with no rate, no slot counts and no EQ or crossover description at all, reporting
     nothing open because those keys were absent rather than null.
+
+    A check that cannot run refuses, as the intake gate's does (#136, audit T-10): a `dsp_profile.json` that is there
+    and cannot be read -- or that a newer method wrote -- raises `load_profile`'s `Unreadable`, naming it and its
+    repair (read as "no profile", it let phase 1 in with no rate on record), and a `dsp_profile.py` that cannot be
+    loaded is the install's fault. No profile at all is still the intake check's to name.
     """
     wanted = _PHASE_FACTS.get(str(phase))
     if not wanted:
@@ -477,14 +498,15 @@ def _require_profile_facts(phase, previous, project_dir):
         return
     if came_from >= going:
         return  # re-entry and going back are always allowed, same rule as the other two gates
-    module = _load_dsp_profile_module()
-    if module is None:
-        return
     try:
-        with open(os.path.join(project_dir, "dsp_profile.json"), encoding="utf-8") as f:
-            data = json.load(f)
-    except (OSError, ValueError):
-        return  # no readable profile at all is contract.py's complaint, not this gate's
+        module = _siblings().load("dsp_profile.py")
+    except Exception as exc:  # noqa: BLE001 -- any failure to load is the install's, and refuses the phase
+        raise ProcessError(f"phase {phase} is not entered: the profile check could not be loaded "
+                           f"({type(exc).__name__}: {exc}) -- the install is broken, not the project") from exc
+    try:
+        data = module.load_profile(os.path.join(project_dir, "dsp_profile.json"))
+    except FileNotFoundError:
+        return  # no profile at all is the intake check's complaint, not this gate's
     blocking = [path for path in module.missing_facts(data) if path.split(".")[-1] in wanted]
     if not blocking:
         return
@@ -580,8 +602,8 @@ def _changelog_text(project_dir):
 def _continue_block(project_dir):
     """Does `tuning-changelog` carry its ▶️ CONTINUE block? None when there is no such file.
 
-    None means "no opinion", the same answer `_flaw_map_entries` gives for an unreadable project:
-    a project that keeps no prose changelog is not failing a check it never opted into.
+    None means "no opinion", the same answer `_flaw_map_entries` gives for a project with no
+    `project.json`: a project that keeps no prose changelog is not failing a check it never opted into.
     """
     text = _changelog_text(project_dir)
     return None if text is None else "CONTINUE" in text
@@ -966,6 +988,11 @@ class Process:
 
         Nothing is written from what a lenient read made of such a file: `_write` and `_append` read the file
         strictly once more before they write.
+
+        A state a newer method wrote (`schema_version` above this copy's) is refused by the strict read with
+        `ProcessError`, naming both numbers and the way to a newer method (#136, audit T-21); `validate` refused it
+        only at the write, after the reads before it had taken it for this copy's. The lenient read returns it as
+        it did.
         """
         try:
             state = self._read_state()
@@ -973,6 +1000,8 @@ class Process:
             if strict or not getattr(exc, "is_unreadable", False):
                 raise
             state = None
+        if strict:
+            self._refuse_newer(state)
         base = _empty_state()
         if state is None:
             return base
@@ -986,6 +1015,16 @@ class Process:
         the file and its repair when there is one that cannot be read."""
         return _project_io().read_json(self.state_path, None, repair=self._repair(),
                                        repair_encoding=self._repair(encoding=True))
+
+    def _refuse_newer(self, state):
+        """`state` as read, unless a newer method wrote it: `ProcessError` then (#136, audit T-21) -- this copy
+        cannot read it, and a write from here would write it down to v3."""
+        io_ = _project_io()
+        newer = io_.newer_schema(state, SCHEMA_VERSION)
+        if newer is not None:
+            raise ProcessError(f"{self.state_path} is schema v{newer}; this method reads v{SCHEMA_VERSION} -- "
+                               f"{io_.UPDATE_THE_METHOD}")
+        return state
 
     def _repair(self, encoding=False):
         """The line that puts an unreadable `process-state.json` right, said with the refusal (#136): the committed
@@ -2542,7 +2581,8 @@ class Process:
         # write -- what the transition built is not put over it. Before #136 the transitions read through a lenient
         # `load()`, which gave the empty process for such a file, and this write put that -- no plan, no round -- over
         # the one on disk. `Unreadable` names the file and the repair; no file at all is a fresh project, and passes.
-        self._read_state()
+        # A state a newer method wrote there since the read is not written down to v3 either (audit T-21).
+        self._refuse_newer(self._read_state())
         os.makedirs(self.dir, exist_ok=True)  # first real write is what creates `process/`
         # A temp of this writer's own, then one move (skill #135): a crash mid-write would otherwise leave truncated
         # JSON, and the next session would read an empty process and think nothing had happened; a fixed temp name
@@ -2583,10 +2623,10 @@ class Process:
 
     def _append(self, event_type, **payload):
         if event_type != EV_WRITTEN_BY:
-            # Strictly first, as `_write` (#136): no event is appended beside a state that cannot be read -- several
-            # carry what they read of it (the phase, the open round), and `project.py record-change` and any other
-            # caller outside `_main` write through here.
-            self._read_state()
+            # Strictly first, as `_write` (#136): no event is appended beside a state that cannot be read, or that a
+            # newer method wrote -- several carry what they read of it (the phase, the open round), and `project.py
+            # record-change` and any other caller outside `_main` write through here.
+            self._refuse_newer(self._read_state())
             self._stamp()
         event = {"at": _now(), "type": event_type}
         event.update({k: v for k, v in payload.items() if v is not None})
@@ -3284,6 +3324,194 @@ def _check_every_writer_refuses_unreadable():
     assert not failures, f"{len(failures)} verb run(s) read an unreadable state as empty:\n  " + "\n  ".join(failures)
 
 
+def _gate_run(d, argv):
+    """`_main` on `process/` folder `d`: (exit code, stderr, whether the state and the journal kept their bytes). A
+    traceback is no exit code: it comes back as the text `raised <type>: <message>` in the code's place."""
+    import contextlib
+    import io as _io
+
+    def held():
+        out = {}
+        for name in ("process-state.json", "journal.jsonl"):
+            path = os.path.join(d, name)
+            if os.path.exists(path):
+                with open(path, "rb") as f:
+                    out[name] = f.read()
+        return out
+    before = held()
+    err = _io.StringIO()
+    with contextlib.redirect_stdout(_io.StringIO()), contextlib.redirect_stderr(err):
+        try:
+            rc = _main(["process.py", d, *argv])
+        except Exception as exc:  # noqa: BLE001 -- a traceback is what some of these runs gave; it is reported
+            rc = f"raised {type(exc).__name__}: {exc}"
+    return rc, err.getvalue(), held() == before
+
+
+def _check_gates_refuse_unreadable():
+    """A gate that cannot check refuses (#136, audit T-10). "A checker that raises must not become a wall" let the phase
+    in whenever the intake check itself failed or could not be loaded; a `project.json` holding `[1, 2]` stopped phase
+    1 with a traceback; a `dsp_profile.json` cut off let phase 1 in with no rate on record. Each now exits 1, naming
+    what failed, and writes nothing -- an unreadable file raised inside the check as itself, with its own repair. A
+    file that is not there is still no wall: that is the intake check's to name."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_process_gates_")
+    contract = _siblings().load("contract.py")
+    real_check, real_siblings = contract.check_project, globals()["_siblings"]
+    unreadable = _project_io().Unreadable
+    failures = []
+
+    def at_phase_minus_one():
+        d = os.path.join(tempfile.mkdtemp(dir=top), "process")
+        Process(d).enter_phase("-1")
+        return d
+    try:
+        for label, boom, want in (
+                ("the check raised", RuntimeError("the checker broke"),
+                 "phase 0 is not entered: the intake check raised RuntimeError: the checker broke"),
+                ("a file it read is unreadable", unreadable("/x/glossary.json", "is empty -- a write was cut off",
+                                                            "REPAIR"),
+                 "error: /x/glossary.json is empty -- a write was cut off -- REPAIR")):
+            def raiser(*args, _boom=boom, **kwargs):
+                raise _boom
+            contract.check_project = raiser
+            try:
+                rc, said, kept = _gate_run(at_phase_minus_one(), ["enter-phase", "0"])
+            finally:
+                contract.check_project = real_check
+            if not (rc == 1 and want in said and kept):
+                failures.append(f"{label}: rc {rc}, files kept {kept}, said {said.strip()[-160:]!r}")
+
+        def without(missing):
+            """A `_siblings` whose `load` fails for `missing` at import and loads every other file as the real one."""
+            def siblings():
+                sib = real_siblings()
+
+                def load(rel):
+                    if rel == missing:
+                        raise ImportError(f"{missing} fails at import")
+                    return sib.load(rel)
+                return type("S", (), {"load": staticmethod(load)})
+            return siblings
+        d = at_phase_minus_one()
+        globals()["_siblings"] = without("contract.py")
+        try:
+            rc, said, kept = _gate_run(d, ["enter-phase", "0"])
+        finally:
+            globals()["_siblings"] = real_siblings
+        if not (rc == 1 and kept and "phase 0 is not entered: the intake check could not be loaded (ImportError: "
+                                     "contract.py fails at import) -- the install is broken, not the project" in said):
+            failures.append(f"contract.py not loaded: rc {rc}, files kept {kept}, said {said.strip()[-160:]!r}")
+        globals()["_siblings"] = without("dsp_profile.py")
+        try:
+            _require_profile_facts("1", "0", top)
+        except ProcessError as exc:
+            if str(exc) != ("phase 1 is not entered: the profile check could not be loaded (ImportError: "
+                            "dsp_profile.py fails at import) -- the install is broken, not the project"):
+                failures.append(f"dsp_profile.py not loaded: refused with {exc}")
+        else:
+            failures.append("dsp_profile.py not loaded: the phase 1 profile check passed")
+        finally:
+            globals()["_siblings"] = real_siblings
+        # Phase 1's gates, on a project that passes everything else: intake, a target, a flaw map with evidence.
+        for name, raw, reason in (("project.json", b"[1, 2]", "holds an array where an object belongs"),
+                                  ("dsp_profile.json", b'{"dsp_profile": {"name": "Fixture", "gro',
+                                   "is not valid JSON")):
+            root = tempfile.mkdtemp(dir=top)
+            _seed_intake(root)
+            p = Process(os.path.join(root, "process"))
+            p.enter_phase("-1")
+            p.enter_phase("0")
+            p.set_target("FULL", "Jazzi")
+            _load_sibling("project.py").Project(root).add_flaw(
+                f_hz=160, level_db=-12, kind="cabin_null", action="leave", why="fixture", evidence=["w-L_01 (sw)"])
+            path = os.path.join(root, name)
+            with open(path, "wb") as f:
+                f.write(raw)
+            rc, said, kept = _gate_run(p.dir, ["enter-phase", "1"])
+            if not (rc == 1 and kept and p.load()["active_phase"] == "0"):
+                failures.append(f"{name} {raw[:12]!r}: rc {rc}, files kept {kept}, phase {p.load()['active_phase']}, "
+                                f"said {said.strip()[-160:]!r}")
+            if name == "dsp_profile.json" and not (f"error: {path} {reason}" in said
+                                                   and "checkout HEAD -- dsp_profile.json" in said):
+                failures.append(f"{name}: enter-phase 1 said {said.strip()[-160:]!r}")
+            # The gate of its own, asked directly: the file, the reason and the repair (the intake check, run first by
+            # `enter_phase`, may refuse such a `project.json` before it -- it reads the glossary from it too).
+            gate = _flaw_map_entries if name == "project.json" else (lambda r: _require_profile_facts("1", "0", r))
+            try:
+                gate(root)
+            except Exception as exc:  # noqa: BLE001 -- the kind is what is under test
+                if not (getattr(exc, "is_unreadable", False) and str(exc).startswith(f"{path} {reason}")
+                        and f"checkout HEAD -- {name}" in str(exc)):
+                    failures.append(f"{name}: its gate raised {type(exc).__name__}: {exc}")
+            else:
+                failures.append(f"{name}: its gate read it")
+        # No file is not a wall: an absent `project.json` is no flaw map to judge, an absent profile no facts to ask.
+        bare = tempfile.mkdtemp(dir=top)
+        if _flaw_map_entries(bare) is not None:
+            failures.append("an absent project.json read as a flaw map")
+        try:
+            _require_profile_facts("1", "0", bare)
+        except Exception as exc:  # noqa: BLE001 -- any refusal here is the failure
+            failures.append(f"an absent dsp_profile.json refused: {type(exc).__name__}: {exc}")
+    finally:
+        contract.check_project = real_check
+        globals()["_siblings"] = real_siblings
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, f"{len(failures)} gate(s) let a phase in that they could not check:\n  " + "\n  ".join(failures)
+
+
+def _check_newer_state_refused():
+    """A `process-state.json` a newer method wrote is refused by every strict read (#136, audit T-21). Its version was
+    checked only at the write ("unsupported"), after the reads before it had taken the state for this copy's. `load(
+    strict=True)` raises `ProcessError` naming the file, both numbers and the way to a newer method, so every verb but
+    the display-only ones exits 1 before it does anything; and `_write` and `_append` refuse one that a newer method
+    wrote between a writer's read and its write. The lenient read is as it was."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_process_newer_")
+    newer = json.dumps(dict(_empty_state(), schema_version=SCHEMA_VERSION + 1)).encode("utf-8")
+    want = f"is schema v{SCHEMA_VERSION + 1}; this method reads v{SCHEMA_VERSION} -- update the method: "
+    failures = []
+    try:
+        p = Process(_state_dir_with(newer, top))
+        try:
+            p.load(strict=True)
+        except ProcessError as exc:
+            if not (str(exc).startswith(f"{p.state_path} {want}") and "/autosound-tuning:setup" in str(exc)):
+                failures.append(f"load(strict=True) said {exc}")
+        else:
+            failures.append("load(strict=True) read a state a newer method wrote")
+        if p.load()["schema_version"] != SCHEMA_VERSION + 1:
+            failures.append("the lenient read changed")
+        for argv in (["enter-phase", "-1"], ["add-step", "1.1", "a step"], ["decision", "keep 45 degrees?", "yes"],
+                     ["session-start", "tcc", "opus"], ["show"], ["check"], ["handoff"]):
+            rc, said, kept = _gate_run(_state_dir_with(newer, top), argv)
+            if not (rc == 1 and kept and want in said):
+                failures.append(f"{argv[0]}: rc {rc}, files kept {kept}, said {said.strip()[-120:]!r}")
+        for what, call in (("enter_phase", lambda q: q.enter_phase("-1")),
+                           ("set_target", lambda q: q.set_target("FULL", "Jazzi")),
+                           ("record_decision", lambda q: q.record_decision("keep 45 degrees?", "yes"))):
+            q = Process(_state_dir_with(newer, top))
+            with _StateReads(lambda n, read: _empty_state() if n == 1 else read()):
+                try:
+                    call(q)
+                except ProcessError as exc:
+                    if want not in str(exc):
+                        failures.append(f"{what}: refused with {exc}")
+                else:
+                    failures.append(f"{what}: wrote beside a state a newer method wrote")
+            with open(q.state_path, "rb") as f:
+                if f.read() != newer:
+                    failures.append(f"{what}: wrote the newer state down")
+            if os.path.exists(q.journal_path):
+                failures.append(f"{what}: appended an event beside it")
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, f"{len(failures)} read(s) took a newer state:\n  " + "\n  ".join(failures)
+
+
 def _selftest():
     """The refusals, exercised. This module is the one with the most of them — evidence must exist
     and must resolve (SCR-035), a round's captures must be usable (SCR-040), phase 0 must record a
@@ -3295,7 +3523,7 @@ def _selftest():
                   _check_foreign_tmp_untouched, _check_state_bytes, _check_torn_journal_line,
                   _check_line_torn_inside_a_character, _check_unreadable_state,
                   _check_every_writer_refuses_unreadable, _check_write_guard_catches_damage_after_the_read,
-                  _check_writers_read_strictly):
+                  _check_writers_read_strictly, _check_gates_refuse_unreadable, _check_newer_state_refused):
         try:
             check()
         except AssertionError as exc:
@@ -4130,7 +4358,7 @@ def _selftest():
         "the journal headed itself with the writing checkout and re-headed only when it changed; "
         "and STOPPING is an event: `open_work` names the open round and every step left in "
         "progress, drops a round once it is closed, and owes a step again when it is picked "
-        "back up; an RTA the check does not apply to is kept as such and holds no step (#29); a step CARRIES what it covers and its name names the first three and counts the rest (S-031); a capture under the wrong title is SUPERSEDED and stops counting, never deleted (S-039); the handoff REFUSES while anything the next session needs is only in the chat, and prints the resume line when it is not (S-044); `session-close --check` gives the same report and exit code and writes nothing, the plain form still records a clean stop, and a close is taken back only with a reason and only right after it, staying in the journal while the session reads as open; a ▶️ CONTINUE block naming a HEAD the ledger is not at is warned of and refuses nothing (S-084); a series number that is not this project's is refused until its ORIGIN is on record (S-048); a round records WHICH counter its version is, refuses a `v_NNN` nobody banked with both ways on, and marks a skip planned or not (TCC-022); and a phase does not close over a flaw row that stands on an UNASKED question -- the refusal carries the titles that would settle it, and a round opened or a ruling recorded closes it (S-047); a process-state.json that is there and cannot be read is refused before anything is done by every verb but the three display-only ones -- each writer of the state or the journal, each verdict, and show; handoff --json in its own JSON -- naming it and its repair and leaving the state and the journal byte for byte; every writer method reads it strictly itself, so a read that fails once never becomes an empty process written over the plan, and _write and _append refuse a file damaged after that read; a missing one is a fresh project and a BOM is read (#136). "
+        "back up; an RTA the check does not apply to is kept as such and holds no step (#29); a step CARRIES what it covers and its name names the first three and counts the rest (S-031); a capture under the wrong title is SUPERSEDED and stops counting, never deleted (S-039); the handoff REFUSES while anything the next session needs is only in the chat, and prints the resume line when it is not (S-044); `session-close --check` gives the same report and exit code and writes nothing, the plain form still records a clean stop, and a close is taken back only with a reason and only right after it, staying in the journal while the session reads as open; a ▶️ CONTINUE block naming a HEAD the ledger is not at is warned of and refuses nothing (S-084); a series number that is not this project's is refused until its ORIGIN is on record (S-048); a round records WHICH counter its version is, refuses a `v_NNN` nobody banked with both ways on, and marks a skip planned or not (TCC-022); and a phase does not close over a flaw row that stands on an UNASKED question -- the refusal carries the titles that would settle it, and a round opened or a ruling recorded closes it (S-047); a process-state.json that is there and cannot be read is refused before anything is done by every verb but the three display-only ones -- each writer of the state or the journal, each verdict, and show; handoff --json in its own JSON -- naming it and its repair and leaving the state and the journal byte for byte; every writer method reads it strictly itself, so a read that fails once never becomes an empty process written over the plan, and _write and _append refuse a file damaged after that read; a missing one is a fresh project and a BOM is read (#136); the phase gates refuse what they cannot check -- an intake check that raised or would not load, a profile check that would not load, a project.json or a dsp_profile.json that cannot be read -- writing nothing, and a state a newer method wrote is refused by every strict read and by both guards (#136, T-10, T-21). "
         f"root={root}"
     )
     return 0

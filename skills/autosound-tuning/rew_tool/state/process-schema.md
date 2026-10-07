@@ -240,6 +240,46 @@ p.unevidenced_done_steps()      # resume drift check
   - for a folder in its place, move the folder aside.
 
   In the last two the file may be whole, and an older copy restored over it would replace a good file.
+- **A state a newer method wrote** (`schema_version` an int above 3, audit T-21) is refused by every strict read with
+  `ProcessError`: `<file> is schema v4; this method reads v3 -- update the method: /autosound-tuning:setup, the
+  installer, or TCC's «Оновити Скіл»`. So every verb but the three display-only ones exits 1 on it and writes
+  nothing, and `_write` and `_append` refuse one a newer method wrote after the writer's own read. Before, only the
+  write noticed (`validate`: "unsupported schema_version 4"), and the journal-only verbs appended beside it. `load()`
+  (lenient) still returns it as it is.
+
+### The phase gates and the files beside the state (#136, audit T-10, T-11, T-13)
+
+`enter-phase` reads by the same rule. A gate that cannot check refuses the phase; it used to let it in ("a checker
+that raises must not become a wall"), on the damaged projects most of all.
+
+- **The intake gate** (leaving −1): a `contract.py` that cannot be loaded refuses with `phase N is not entered: the
+  intake check could not be loaded (<type>: <message>) -- the install is broken, not the project`; a check that raises
+  refuses with `phase N is not entered: the intake check raised <type>: <message>`; a file the check found unreadable
+  raises as itself, with its own repair. It still gates on `missing`; gating on `complete`, with a parity test against
+  `contract.py check --gate`, is J3b (W-11).
+- **The flaw-map gate** (leaving 0): a `project.json` that is there and cannot be read raises `Unreadable` with its
+  repair (`git -C <project-dir> checkout HEAD -- project.json`, or `contract.py repair-encoding` for another code
+  page). One holding an array stopped the gate with a traceback; a damaged one let the phase in with no map.
+- **The profile gate** (into 1 and 2): a `dsp_profile.json` that cannot be read, or that a newer method wrote, raises
+  `dsp_profile.load_profile`'s refusal; a `dsp_profile.py` that cannot be loaded refuses as the intake gate's does.
+- **No file is still no wall:** an absent `project.json` or `dsp_profile.json` is the intake check's to name.
+
+The files beside the state, each refused with its repair and nothing written (`error: <file> <reason> -- <repair>`,
+exit 1, from `state.py`, `dsp_profile.py` and `apply.py`):
+
+- `state/seals.json`: `verify` (it said "every sealed version is as it was banked"), `seal`, a bank and
+  `repair-version`. Read as "no seals", the next bank rewrote the file holding its own seal alone. The repair:
+  `git -C <state> checkout HEAD -- seals.json`, or move it aside and run `state.py --root <state> seal` to rebuild it
+  from the versions as they stand.
+- `project.json` where a bank stamps its `project_rev`: read as "no facts file", it stamped rev 0 into a version that
+  is never rewritten.
+- `dsp_profile.json` and `dsp_profile.draft.json`: `load_profile`, `load_draft` and every writer through them
+  (`set-field`, `reset-field`, `start`, `finalize`, `set-setting`, `refresh`). A draft that could not be read was passed over -- and
+  the good profile with it -- for a blank one, which `set-field` saved over the interview's answers. The intake's
+  processor change sorts the profiles before it writes, so it refuses whole.
+
+`contract.py check` reports `seals.json`, `project.json` and `dsp_profile.json` as there and not valid, the refusal
+in `issues`, and does not fail.
 
 ## Consumers
 

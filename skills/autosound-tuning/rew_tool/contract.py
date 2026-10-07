@@ -241,7 +241,11 @@ def check_dsp_profile(project_dir):
     try:
         data = dsp_profile.load_profile(path)
         dsp_profile.validate_profile(data)
-    except (OSError, ValueError) as exc:
+    except Exception as exc:  # noqa: BLE001 -- matched below; anything else still raises
+        # A profile that is there and cannot be read, or that a newer method wrote, raises `Unreadable` now (#136):
+        # reported, with its repair, like any other refusal -- never a crash of the check.
+        if not (isinstance(exc, (OSError, ValueError)) or getattr(exc, "is_unreadable", False)):
+            raise
         return _entry("dsp_profile.json", True, None, False, [str(exc)]), None
     # The version lives at the wrapper level, beside `dsp_profile` -- it describes the FILE, and a
     # profile written before 3.0 simply has none, which reads as "—" rather than as an error.
@@ -421,10 +425,13 @@ def check_ledgers(project_dir):
         entry["slot"] = preset          # the file alone does not say it on the per-project line
         entries.append(entry)
         snapshots[preset] = snap
-    # #58 P1: a banked version is immutable, and this is the check that says when one is not.
+    # #58 P1: a banked version is immutable, and this is the check that says when one is not. A `seals.json` that
+    # cannot be read raises `Unreadable` now (#136, audit T-11) -- it read as "no seals", and nothing was reported.
     try:
         broken = state_mod.verify_seals(root)
-    except state_mod.SnapshotError as exc:
+    except Exception as exc:  # noqa: BLE001 -- matched below; anything else still raises
+        if not (isinstance(exc, state_mod.SnapshotError) or getattr(exc, "is_unreadable", False)):
+            raise
         broken = [{"version": "state/", "why": str(exc)}]
     if broken:
         entries.append(_entry(f"state/{state_mod.SEALS_FILE}", True, None, False,
@@ -1133,7 +1140,35 @@ def verdict_lines(report):
     return verdict_block.block(head, numbers, step, indent="")
 
 
-def render_report(report):
+#: The questions a report can end on (`render_report`'s `gate`): None, plain `check` -- is anything wrong; "intake",
+#: `--gate` -- does phase 0 have everything it needs; "phase0", `--phase0-gate` -- does every flaw row stand on a
+#: measurement.
+GATES = (None, "intake", "phase0")
+
+
+def _verdict_line(report, gate=None):
+    """The report's last line: the answer to the question asked, the one its exit code gives (#136, audit I-28).
+
+    It said "**OK — nothing to fix.**" whatever the gate, so `check <empty> --gate` exited 1 under a last line saying
+    all was well. Not ready with nothing missing is something there being wrong, and is said so -- not "0 missing"."""
+    if gate == "phase0":
+        return ("**READY for phase 0.**" if report.get("map_ready")
+                else "**NOT READY for phase 0 — flaw rows without evidence.**")
+    if gate == "intake":
+        missing = report.get("missing") or []
+        if report.get("complete"):
+            return "**READY: everything phase 0 needs is here.**"
+        if missing:
+            return f"**NOT READY for phase 0 — {len(missing)} item(s) missing.**"
+        return "**NOT READY for phase 0 — issues found, see above.**"
+    return "**OK — nothing to fix.**" if report["ok"] else "**Issues found — see above.**"
+
+
+def render_report(report, gate=None):
+    """The human report of `check_project`'s `report`. `gate` (`GATES`) is the question its last line answers: None for
+    plain `check`, "intake" for `--gate`, "phase0" for `--phase0-gate` -- the line the exit code agrees with."""
+    if gate not in GATES:
+        raise ValueError(f"gate {gate!r} is not one of {GATES}")
     lines = [f"# Project contract check — {report['project_dir']}", ""]
     # FIRST, before the files: it decides the language of the very sentence that reports the rest.
     if report.get("reply_language"):
@@ -1347,10 +1382,14 @@ def render_report(report):
                      + (f" (named in {w['named_in']})" if w.get("named_in") else "")
                      + (f" — {w['look']}" if w.get("look") else "")
                      + ". What came from it stays valid, but cannot be re-checked until it is found")
-    if report.get("row_gaps") and report.get("map_ready"):
+    # Every row standing on a measurement is said of a map that has rows: of an empty one it was true and said nothing.
+    rows = max((g.get("rows") or 0 for g in report.get("row_gaps") or []), default=0)
+    if report.get("row_gaps") and not rows:
+        lines.append("- flaw map: no rows yet.")
+    elif rows and report.get("map_ready"):
         lines.append("- flaw map: every row stands on a measurement.")
     lines.append("")
-    lines.append("**OK — nothing to fix.**" if report["ok"] else "**Issues found — see above.**")
+    lines.append(_verdict_line(report, gate))
     return "\n".join(lines)
 
 
@@ -1490,7 +1529,8 @@ def _main(argv):
     if as_json:
         print(json.dumps(report, indent=2, ensure_ascii=False))
     else:
-        print(render_report(report))
+        # The last line answers the question the exit code below answers (#136, audit I-28).
+        print(render_report(report, gate="phase0" if "--phase0-gate" in argv else "intake" if gate else None))
     if "--phase0-gate" in argv:
         return 0 if report["map_ready"] else 1
     if gate:
@@ -1543,6 +1583,85 @@ def _check_unreadable_process_state():
         assert "checkout HEAD -- process-state.json" in entry["issues"][0], entry
         assert (journal["file"], journal["exists"]) == ("process/journal.jsonl", False), journal
         assert check_project(d, skip_rew=True)["ok"] is False, "an unreadable process state made an OK project"
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+
+
+def _check_gate_last_line():
+    """A gate's report ends with that gate's verdict (#136, audit I-28). `check <empty> --gate` exited 1 and its last
+    line said "**OK — nothing to fix.**"; `--phase0-gate` said "every row stands on a measurement" of a map with no
+    rows. The last line now answers the question the exit code answers; without a gate it is as before."""
+    import contextlib
+    import io
+    import shutil
+    import tempfile
+    d = tempfile.mkdtemp(prefix="autosound_contract_gate_")
+    try:
+        report = check_project(d, skip_rew=True)
+        assert render_report(report, gate="intake").splitlines()[-1].startswith("**NOT READY"), "I-28"
+        assert render_report(report).splitlines()[-1] in ("**OK — nothing to fix.**", "**Issues found — see above.**")
+        assert "every row stands on a measurement" not in render_report(report, gate="phase0")
+        assert render_report(report, gate="intake").splitlines()[-1] == \
+            f"**NOT READY for phase 0 — {len(report['missing'])} item(s) missing.**", report["missing"]
+        assert render_report(report) == render_report(report, gate=None), "gate=None is the old report"
+        assert "- flaw map: no rows yet." in render_report(report, gate="phase0").splitlines(), "no rows, said so"
+        for gate, flag in (("intake", "--gate"), ("phase0", "--phase0-gate")):
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                rc = _main(["contract.py", "check", d, "--no-rew", flag])
+            last = out.getvalue().rstrip("\n").splitlines()[-1]
+            assert last == render_report(report, gate=gate).splitlines()[-1], (flag, last)
+            assert last.startswith("**READY") is (rc == 0), (flag, rc, last)
+        ready = dict(report, complete=True, missing=[], map_ready=True,
+                     row_gaps=[dict(g, rows=2) for g in report["row_gaps"]])
+        assert render_report(ready, gate="intake").splitlines()[-1] == "**READY: everything phase 0 needs is here.**"
+        assert render_report(ready, gate="phase0").splitlines()[-1] == "**READY for phase 0.**"
+        assert "- flaw map: every row stands on a measurement." in render_report(ready).splitlines()
+        assert render_report(dict(ready, map_ready=False), gate="phase0").splitlines()[-1] == \
+            "**NOT READY for phase 0 — flaw rows without evidence.**"
+        # Not complete with nothing missing: something there is wrong, and the line does not say "0 missing".
+        broken = dict(report, ok=False, complete=False, missing=[])
+        assert render_report(broken, gate="intake").splitlines()[-1] == \
+            "**NOT READY for phase 0 — issues found, see above.**", render_report(broken, gate="intake")[-200:]
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+
+
+def _check_unreadable_profile_and_seals_reported():
+    """`check` reports a `dsp_profile.json` and a `seals.json` that cannot be read -- and a profile a newer method
+    wrote -- as there and not valid, the file and its repair in `issues`, and the project as not OK (#136):
+    `load_profile` and `verify_seals` refuse them now, and a checker that dies on the worst project is the checker that
+    is absent for it."""
+    import shutil
+    import tempfile
+    d = tempfile.mkdtemp(prefix="autosound_contract_unreadable_")
+    try:
+        path = os.path.join(d, "dsp_profile.json")
+        for label, raw, said in (
+                ("cut off", b'{"dsp_profile": {"name": "X", "gro', "checkout HEAD -- dsp_profile.json"),
+                ("newer", json.dumps({"schema_version": FORMAT_VERSION + 1, "dsp_profile": {
+                    "name": "X", "vendor": "Y", "groups": [{"id": "physical_outputs", "label": "Out",
+                                                            "fields": None}]}}).encode("utf-8"),
+                 f"is schema v{FORMAT_VERSION + 1}; this method reads v{FORMAT_VERSION}")):
+            with open(path, "wb") as f:
+                f.write(raw)
+            entry, data = check_dsp_profile(d)
+            assert (entry["exists"], entry["valid"], data) == (True, False, None), (label, entry)
+            assert len(entry["issues"]) == 1 and entry["issues"][0].startswith(path + " ") \
+                and said in entry["issues"][0], (label, entry["issues"])
+            assert check_project(d, skip_rew=True)["ok"] is False, label
+        os.remove(path)
+        state_mod = _load_vendored("state")
+        root = os.path.join(d, "state")
+        state_mod.PresetHistory(root, "SQ").snapshot(state_mod._sample_state(), note="banked")
+        seals = os.path.join(root, state_mod.SEALS_FILE)
+        with open(seals, "wb") as f:
+            f.write(b'{"v_001": "ab')
+        entries, _snapshots = check_ledgers(d)
+        bad = [e for e in entries if e["file"] == f"state/{state_mod.SEALS_FILE}"]
+        assert bad and bad[0]["valid"] is False and any(
+            seals in i and "checkout HEAD -- seals.json" in i for i in bad[0]["issues"]), entries
+        assert check_project(d, skip_rew=True)["ok"] is False, "an unreadable seals.json made an OK project"
     finally:
         shutil.rmtree(d, ignore_errors=True)
 
@@ -1659,8 +1778,9 @@ def _check_skill_sha():
 def _selftest():
     os.environ["AUTOSOUND_NO_GH"] = "1"          # the history line is checked; GitHub is never reached from a test
     failures = []
-    for check in (_check_invalid_project_json, _check_unreadable_process_state, _check_version_verb,
-                  _check_version_shape, _check_skill_version, _check_skill_sha):
+    for check in (_check_invalid_project_json, _check_unreadable_process_state, _check_gate_last_line,
+                  _check_unreadable_profile_and_seals_reported, _check_version_verb, _check_version_shape,
+                  _check_skill_version, _check_skill_sha):
         try:
             check()
         except AssertionError as exc:
@@ -2158,7 +2278,10 @@ def _selftest():
           f"names runs and clears it (TCC-007); `catch-up` fills the marked draft on a "
           f"project written before the field, is idempotent, leaves a `notch` row alone and "
           f"still does NOT close the phase-0 gate; a process-state.json cut off mid-object is reported as there and not valid, its repair named (#136); every skip is reported and one the round never expected is named as such (TCC-022); a fact carried in from another project is REPORTED and gates nothing (S-024); a ▶️ CONTINUE block naming a HEAD the ledger is not at is warned of and moves no verdict (S-084); and the report names the REPLY language above "
-          f"the file table, or says nobody has answered (S-045). root={root}")
+          f"the file table, or says nobody has answered (S-045); a gate's report ends with that gate's verdict, the "
+          f"one its exit code gives, and an empty flaw map is said to have no rows (I-28); a dsp_profile.json or a "
+          f"seals.json that cannot be read, or a profile a newer method wrote, is reported with its repair (#136). "
+          f"root={root}")
     return 0
 
 

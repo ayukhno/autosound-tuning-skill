@@ -545,8 +545,50 @@ def attest(history, version=None, note=None):
 
 
 # ── self-test ─────────────────────────────────────────────────────────────────
+def _check_cli_refuses_unreadable():
+    """`propose` beside a `seals.json` that cannot be read exits 1 naming it and its repair, and banks nothing (#136):
+    the snapshot refuses such a file now -- read as "no seals", the bank rewrote it holding its own seal alone -- and
+    the refusal, neither an `OSError` nor a `ValueError`, ended here in a traceback."""
+    import contextlib
+    import io
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_apply_unreadable_")
+    try:
+        root = os.path.join(top, "state")
+        _state.PresetHistory(root, "SQ", project_dir=top).snapshot(_state._sample_state(), note="baseline")
+        _state.Registry(root).set_active("SQ")
+        with open(os.path.join(top, "eq-delta.json"), "w", encoding="utf-8") as fh:
+            json.dump({"w-L": {"gain_db": -1.0}}, fh)
+        seals = os.path.join(root, _state.SEALS_FILE)
+        damaged = b'{"v_001": "ab'
+        with open(seals, "wb") as fh:
+            fh.write(damaged)
+        out, err = io.StringIO(), io.StringIO()
+        try:
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                rc = _main(["apply.py", top, "propose", "eq-delta.json", "--evidence", "w-L_2 (sw)"])
+        except Exception as exc:  # noqa: BLE001 -- the failure under test is the traceback itself
+            raise AssertionError(f"propose raised {type(exc).__name__}: {exc}") from None
+        assert rc == 1 and err.getvalue().startswith(f"error: {seals} "), (rc, err.getvalue()[-300:])
+        assert "checkout HEAD -- seals.json" in err.getvalue() and not out.getvalue(), out.getvalue()
+        assert _state.project_versions(root) == ["v_001"], _state.project_versions(root)
+        with open(seals, "rb") as fh:
+            assert fh.read() == damaged, "seals.json changed"
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
 def _selftest():
     import tempfile
+    failures = []
+    for check in (_check_cli_refuses_unreadable,):
+        try:
+            check()
+        except AssertionError as exc:
+            failures.append(f"{check.__name__}: {exc}")
+    assert not failures, "\n".join(failures)
+
     root = tempfile.mkdtemp(prefix="autosound_apply_")
     h = _state.PresetHistory(root, "SQ_Jazzi")
     h.snapshot(_state._sample_state(), note="baseline")   # seed HEAD (all applied)
@@ -765,7 +807,8 @@ def _selftest():
           f"read as bands not a dict repr; 4 deterministic refusals banked nothing, new-channel add "
           f"allowed; a renamed channel's delta landed on its id row rather than forking it "
           f"(SCR-039); slot-guard refused a non-active-slot propose (banked nothing) + stamped "
-          f"ACTIVE/NON-ACTIVE. root={root}")
+          f"ACTIVE/NON-ACTIVE; propose beside a seals.json that cannot be read exits 1 naming it, banking "
+          f"nothing (#136). root={root}")
     return 0
 
 
@@ -825,6 +868,12 @@ def _main(argv):
             print(f"🟢 {got['version']} on {preset}: applied {', '.join(got['applied_channels']) or 'nothing proposed'}")
             return 0
     except (ValueError, OSError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    except Exception as exc:  # noqa: BLE001 -- matched by its attribute; anything else still raises
+        # The snapshot refuses a `seals.json` or a `project.json` that is there and cannot be read (#136).
+        if not getattr(exc, "is_unreadable", False):
+            raise
         print(f"error: {exc}", file=sys.stderr)
         return 1
     print(_USAGE, file=sys.stderr)

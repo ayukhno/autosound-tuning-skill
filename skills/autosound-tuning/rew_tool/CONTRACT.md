@@ -70,14 +70,47 @@ under `<project>/process/reviews/`.
 
 One handshake per copy is enough (item 1); TCC asked for no number per output (§8 M6).
 
-## 7. Files, their versions, and the read rule — planned (W-8, #136)
+## 7. Files, their versions, and the read rule — guaranteed (W-8, #136)
 
-Today `project.json`, `process/process-state.json`, the ledger's `v_NNN.json` and `dsp_profile.json` carry
+`project.json`, `process/process-state.json`, the ledger's `v_NNN.json` and `dsp_profile.json` carry
 `schema_version` 3 (`FORMAT_VERSION`); `glossary.json` carries 1; `process/journal.jsonl`, `state/slots.json` and
 `state/seals.json` carry none. A ledger version, once written, is not rewritten.
 
-The rule: a file newer than this copy reads is refused, and an older one gets the migration hint. PLAN-W-8 Task 8
-flips this item.
+**A file a newer method wrote** (an int `schema_version` above 3) is refused, naming the file, both numbers and the
+way out: `<file> is schema v4; this method reads v3 -- update the method: /autosound-tuning:setup, the installer, or
+TCC's «Оновити Скіл»`. Nothing is written.
+
+- On read: `Process.load(strict=True)` raises `ProcessError`, so every `process.py` verb but the three display-only
+  ones refuses such a state. A ledger version raises `SnapshotError` wherever it is read (`PresetHistory.load`,
+  `verify`, ...). `dsp_profile.load_profile` raises an exception with `is_unreadable` (below), and through it the
+  draft, `set-setting`, `refresh` and the phase gates refuse too.
+- On write: `Project.save` (`ProjectError`) and `dsp_profile.save_profile` (`ValueError`) refuse data a newer method
+  wrote before they stamp v3 over it; `process.py`'s `_write` and `_append` refuse beside a state a newer method wrote
+  since the writer read it.
+- Left as they were: `Process.load()` (lenient) and `Project.load()` return such a file as it is (`project.py`'s
+  `validate` calls it unsupported, and `contract.py check` reports every one of the four as not valid).
+
+An older file gets the migration hint where it got one before (`project.json`'s and `process-state.json`'s
+`validate`, a ledger row carrying identity fields); a check per file for older versions, the glossary's included, is
+planned (W-11, J3b).
+
+**The read rule: a file that is there and cannot be read is refused, never read as absent.** Empty, cut off, not
+UTF-8, not JSON, the wrong top-level type, a folder in its place or a file that cannot be opened raises an exception
+with `is_unreadable` (`project_io.Unreadable`, with `.path`, `.reason`, `.repair`; neither an `OSError` nor a
+`ValueError`, so match the attribute, never the class), naming the file and its repair, and nothing is written. No
+file at all is the one quiet case: a fresh project. It holds for:
+
+- `process/process-state.json`: every `process.py` verb but `plan`, `amp-changes` and `listening-verdicts`, every
+  writer method, `handoff()` and `contract.py check` (`state/process-schema.md` has it in full);
+- `state/seals.json`: `state.py verify` and `seal` (exit 1), a bank (`PresetHistory.snapshot`: nothing banked) and
+  `repair-version`;
+- `project.json`, where a bank stamps its `project_rev` and where the phase-1 gate reads the flaw map;
+- `dsp_profile.json` and `dsp_profile.draft.json`: `load_profile`, `load_draft` and every writer that reads through
+  them (`set-field`, `reset-field`, `start`, `finalize`, `set-setting`, `refresh`), and the phase gates.
+
+The phase gates refuse what they cannot check: an intake check that raises or cannot be loaded, a profile check that
+cannot be loaded, and a `project.json` or `dsp_profile.json` that cannot be read. `contract.py check` reports such a
+file (`exists: true`, `valid: false`, the refusal in `issues`) instead of failing.
 
 ## 8. How to write them — atomic writes guaranteed (W-8, #135); the lock planned (W-9, J2b)
 
