@@ -130,12 +130,14 @@ def _run(*args, env=None, ok=(0,)):
         interpreter that has not imported `rew_api` yet. Running that stage in-process would
         silently talk to localhost:4735 -- the exact quiet failure this walk exists to catch. The
         same address as this process's (the runner exports a dead port to every selftest, #133)
-        changes nothing at import, so it stays in-process.
+        changes nothing at import, so it stays in-process -- and so does an `env` that names no
+        `REW_API_URL` at all: a fresh interpreter would fall back to localhost:4735, while this one
+        keeps the address it was given.
 
     A tool that raises anything other than `SystemExit` in-process is reported as rc 1 with its
     traceback in `out`, which is what the subprocess version would have shown.
     """
-    if env is not None and env.get("REW_API_URL") != os.environ.get("REW_API_URL"):
+    if env is not None and "REW_API_URL" in env and env["REW_API_URL"] != os.environ.get("REW_API_URL"):
         # The child is one of ours, and the pipe between two of our own processes has no console
         # to respect: pin it to UTF-8 at both ends rather than inherit whatever page the machine
         # runs (issue #21). Without this the parent decodes UTF-8 while a Windows child writes
@@ -283,7 +285,35 @@ def _make_capture_set(directory, chains=None, protectives=True, errors=None, pai
 
 
 # ---------------------------------------------------------------- the walk
+def _check_env_without_rew_url():
+    """An `env` that names no `REW_API_URL` keeps this process's (#133). It went to a fresh interpreter, which falls
+    back to localhost:4735 -- a REW open on this machine -- while the runner has pointed this process at a dead port."""
+    d = tempfile.mkdtemp(prefix="autosound_path_env_")
+    saved = os.environ.get("REW_API_URL")
+    try:
+        probe = os.path.join(d, "probe.py")
+        with open(probe, "w", encoding="utf-8") as f:
+            f.write("import os\nprint('REW_API_URL=' + str(os.environ.get('REW_API_URL')))\n")
+        os.environ["REW_API_URL"] = "http://127.0.0.1:1"
+        _rc, out = _run(probe, env={k: v for k, v in os.environ.items() if k != "REW_API_URL"})
+        assert "REW_API_URL=http://127.0.0.1:1" in out, out
+    finally:
+        if saved is None:
+            os.environ.pop("REW_API_URL", None)
+        else:
+            os.environ["REW_API_URL"] = saved
+        shutil.rmtree(d, ignore_errors=True)
+
+
 def _selftest():
+    failures = []
+    for check in (_check_env_without_rew_url,):
+        try:
+            check()
+        except AssertionError as exc:
+            failures.append(f"{check.__name__}: {exc}")
+    assert not failures, "\n".join(failures)
+
     root = tempfile.mkdtemp(prefix="autosound_path_")
     proj = os.path.join(root, "project")
     os.makedirs(os.path.join(proj, "process"))
@@ -318,8 +348,10 @@ def _selftest():
                                 "polarity": "NORM", "eq": []}
     hist.snapshot(v1, note="the desk design: crossovers, delays 0 -- before alignment")
     _state.Registry(state_root).set_active("SQ")
-    rc, out = _run(tool("contract.py"), "check", proj, env=env)
-    assert "OK" in out, out[-800:]
+    # `--no-rew`: the walk is offline. Without it the check asks REW for its list (`cross_check_rew`) -- at the
+    # runner's dead port nothing answers, but run alone it reached a REW open on this machine.
+    rc, out = _run(tool("contract.py"), "check", proj, "--no-rew", env=env)
+    assert "OK" in out and "REW: skipped (--no-rew)" in out, out[-800:]
 
     # ---- 0 · the capture session: a round with protective marks, solos WITH the protectives in ---
     titles = [f"{c}_1 (sw)" for c in DRIVERS] + ["m-L-ctl1_1 (sw)", "m-L-ctl3_1 (sw)"]
