@@ -83,7 +83,8 @@ TCC's «Оновити Скіл»`. Nothing is written.
 - On read: `Process.load(strict=True)` raises `ProcessError`, so every `process.py` verb but the three display-only
   ones refuses such a state. A ledger version raises `SnapshotError` wherever it is read (`PresetHistory.load`,
   `verify`, ...). `dsp_profile.load_profile` raises an exception with `is_unreadable` (below), and through it the
-  draft, `set-setting`, `refresh` and the phase gates refuse too.
+  draft, `set-setting`, `refresh` and the phase-1 and phase-2 profile gate refuse too. Leaving phase −1 does not
+  refuse such a profile yet (below).
 - On write: `Project.save` (`ProjectError`) and `dsp_profile.save_profile` (`ValueError`) refuse data a newer method
   wrote before they stamp v3 over it; `process.py`'s `_write` and `_append` refuse beside a state a newer method wrote
   since the writer read it.
@@ -106,13 +107,17 @@ file at all is the one quiet case: a fresh project. It holds for:
   `repair-version`;
 - `project.json`, where a bank stamps its `project_rev` and where the phase-1 gate reads the flaw map;
 - `dsp_profile.json` and `dsp_profile.draft.json`: `load_profile`, `load_draft` and every writer that reads through
-  them (`set-field`, `reset-field`, `start`, `finalize`, `set-setting`, `refresh`), and the phase gates. The
-  intake's processor change, which replaces the profile, sets such a file aside unread and byte for byte, with one
-  line on stderr saying where; the intake form's page shows it with its repair.
+  them (`set-field`, `reset-field`, `start`, `finalize`, `set-setting`, `refresh`), and the phase-1 and phase-2
+  profile gate. The intake's processor change, which replaces the profile, sets such a file aside unread and byte for
+  byte, with one line on stderr saying where; the intake form's page shows it with its repair.
 
-The phase gates refuse what they cannot check: an intake check that raises or cannot be loaded, a profile check that
-cannot be loaded, and a `project.json` or `dsp_profile.json` that cannot be read. `contract.py check` reports such a
-file (`exists: true`, `valid: false`, the refusal in `issues`) instead of failing.
+Each phase gate refuses what it cannot check. Leaving phase −1: an intake check that raises or cannot be loaded.
+Leaving phase 0: a `project.json` that cannot be read, where the flaw-map gate reads the map. Into phases 1 and 2: a
+`dsp_profile.json` that cannot be read or that a newer method wrote, and a profile check that cannot be loaded.
+Leaving −1 still gates on missing files only, so `enter-phase 0` passes over a `dsp_profile.json` that is there and
+cannot be read, or a newer one, where `contract.py check --gate` says NOT READY; gating it on the profile's
+readability, with that parity, waits for J3b (W-11). `contract.py check` reports such a file (`exists: true`,
+`valid: false`, the refusal in `issues`) instead of failing.
 
 ## 8. How to write them — atomic writes guaranteed (W-8, #135); the lock planned (W-9, J2b)
 

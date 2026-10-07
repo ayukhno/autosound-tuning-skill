@@ -403,9 +403,12 @@ _INTAKE_REQUIRED_FROM = 0
 def _require_intake(phase, previous, project_dir):
     """Refuse to leave phase −1 until the machine files intake is supposed to produce exist.
 
-    Deliberately the SAME answer `contract.py check --gate` gives, computed by the same code —
-    two implementations of "is intake finished" would eventually disagree, and the one nobody runs
-    would be the one that says yes.
+    Computed by the same code `contract.py check --gate` runs (`check_project`) — two
+    implementations of "is intake finished" would eventually disagree, and the one nobody runs
+    would be the one that says yes. Not yet the same ANSWER: this gate refuses on `missing` alone,
+    while `--gate` also wants nothing there invalid (`complete`), so a `dsp_profile.json` that is
+    there and cannot be read, or that a newer method wrote, passes here and is NOT READY there.
+    Gating on `complete`, with a parity test, is J3b (W-11).
 
     A check that cannot run refuses the phase (#136, audit T-10). It used to pass it -- "cannot check is not the same
     as failed", "a checker that raises must not become a wall" -- and so a gate that could not check let the phase
