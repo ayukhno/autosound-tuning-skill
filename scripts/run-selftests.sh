@@ -28,6 +28,11 @@ export REW_API_URL="http://127.0.0.1:1"   # refused at once on every platform (T
 export no_proxy="127.0.0.1,localhost${no_proxy:+,$no_proxy}" NO_PROXY="127.0.0.1,localhost${NO_PROXY:+,$NO_PROXY}"
 unset PYTHONOPTIMIZE   # -O strips every assert, and a selftest whose asserts are gone passes: never inherited
 
+# How a check's LAST line is read -- by run_one below, and by the runner's selftest about its own line: one saying
+# SKIPPED (as eq_gate/project_repo print it) did not run; one saying OK passed. grep reads to EOF (no -q).
+says_not_run() { printf '%s\n' "$1" | grep -w 'SKIPPED' >/dev/null; }
+says_ok()      { printf '%s\n' "$1" | grep -w 'OK' >/dev/null; }
+
 if [ "${1:-}" = "--selftest" ]; then
   tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
   mkdir -p "$tmp/t" "$tmp/t2"
@@ -119,7 +124,13 @@ if [ "${1:-}" = "--selftest" ]; then
   [ "$rc" -eq 0 ] || { printf 'runner selftest: locally a NOT RUN is counted, not failed (rc %s)\n%s\n' "$rc" "$out"; exit 1; }
   want '^  --   plot\.py +skipped: a plotting helper$'
   last_is "all 1 checks passed; NOT RUN: skipped.py"
-  echo "runner selftest OK -- every failure is named and counted in the verdict: a usage text, rc 1 under an OK line, an OK line not last, rc 3, SKIPPED, a timeout, a missing or unlisted module, a bad skip line or one hiding a selftest; a child left behind, or deaf to TERM, is stopped; checks see REW at the dead port, with asserts on"
+  ok_line="runner selftest OK -- every failure is named and counted in the verdict: a usage text, rc 1 under an OK line, an OK line not last, rc 3, a module that prints it skipped, a timeout, a missing or unlisted module, a bad skip line or one hiding a selftest; a child left behind, or deaf to TERM, is stopped; checks see REW at the dead port, with asserts on"
+  # In a full run this line is the runner's own last line, read by the same rules as every check's: it must read as a
+  # pass. One that named the NOT RUN word counted the runner itself as NOT RUN -- and failed CI -- while all passed.
+  if says_not_run "$ok_line" || ! says_ok "$ok_line"; then
+    printf 'runner selftest: its own OK line would not read as a pass in a run (NOT RUN, or no OK):\n  %s\n' "$ok_line"; exit 1
+  fi
+  echo "$ok_line"
   exit 0
 fi
 
@@ -164,9 +175,9 @@ run_one() {
   if [ "$rc" -eq 142 ]; then                                   # 128 + SIGALRM
     fail=$((fail + 1)); failed+=("$name"); printf '  FAIL %-24s timeout after %ss\n' "$name" "$LIMIT"
     [ -z "$out" ] || printf '%s\n' "$out" | tail -n 12 | sed 's/^/         /'
-  elif [ "$rc" -eq 0 ] && printf '%s\n' "$last" | grep -w 'SKIPPED' >/dev/null; then   # the LAST line, as eq_gate/project_repo print it
+  elif [ "$rc" -eq 0 ] && says_not_run "$last"; then
     notrun=$((notrun + 1)); skipped+=("$name"); printf '  --   %-24s NOT RUN: %s\n' "$name" "$(printf '%s' "$last" | cut -c1-60)"
-  elif [ "$rc" -eq 0 ] && { [ "$mode" = rc ] || printf '%s\n' "$last" | grep -w 'OK' >/dev/null; }; then
+  elif [ "$rc" -eq 0 ] && { [ "$mode" = rc ] || says_ok "$last"; }; then
     pass=$((pass + 1)); printf '  ok   %-24s %s\n' "$name" "$(printf '%s' "$last" | cut -c1-72)"
   else
     fail=$((fail + 1)); failed+=("$name")
