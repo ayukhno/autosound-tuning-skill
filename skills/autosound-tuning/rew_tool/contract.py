@@ -40,12 +40,37 @@ import naming
 import project
 import verdict as verdict_block
 
+
+def _siblings():
+    """`rew_tool/siblings.py`, by its path: how this module reaches a sibling (skill #137).
+
+    The same text in every module that loads a sibling -- only the `here` line differs with the file's folder;
+    scripts/contract-guard.py holds the copies identical.
+    """
+    import hashlib
+    import importlib.util
+    here = os.path.dirname(os.path.realpath(__file__))
+    name = "_autosound_" + hashlib.sha1(here.encode("utf-8")).hexdigest()[:8] + "_siblings"
+    module = sys.modules.get(name)
+    if module is None:
+        spec = importlib.util.spec_from_file_location(name, os.path.join(here, "siblings.py"))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        # Published only once it has run: a thread racing this first call never gets a half-run siblings.py.
+        module = sys.modules.setdefault(name, module)
+    return module
+
+
 # `state/state.py` schema_version this contract expects — kept as a literal constant table
 # (`CONTRACT`) rather than re-deriving it from the module on every run, so a version bump is a
 # one-line diff both repos read (SKILL-SYNC-PLAN.md §2.3's "CONTRACT table" ask).
 # One format number for the whole project (3.0): every versioned machine file carries the same
 # `schema_version`, so "which format is this project in?" is one comparison rather than a matrix.
 FORMAT_VERSION = 3
+#: The contract the front ends program against (skill #137; rew_tool/CONTRACT.md). An int LITERAL: TCC reads it
+#: from any tag with `ast`, without running this file. It moves only on a breaking change to a listed item, only
+#: in a minor, and only after a TCC release that accepts the new number is out (PLAN-AUDIT-2026-10 §8 M5).
+CONTRACT_VERSION = 1
 #: Row fields the ledger owned in 2.x and `project.json` owns now — the same list as
 #: `state/state.py::MOVED_TO_PROJECT_JSON`, spelled out here for the same reason `CONTRACT` is:
 #: this module deliberately does not import the state layer, so that a checker still runs on a
@@ -78,6 +103,90 @@ CONTRACT = (
     ("state/<preset>/HEAD ledger", "hard-params ledger", "skill", FORMAT_VERSION),
     ("state/registry.json", "multi-slot active-slot pointer", "skill", None),
 )
+
+#: What TCC imports in-process: its loader's 15 modules (`vendor_loader._VENDORED`, keyed the same way) and the
+#: names it reads from each -- contract 1 (CONTRACT.md item 9). A separate table, not rows of `CONTRACT`
+#: (`intake.py` unpacks those as 4-tuples). A dict LITERAL: TCC reads it with `ast`. An entry is a name, a function
+#: with the parameters TCC passes (`f(a, b=None)`: the real ones begin with these, and any past them has a
+#: default), a class with its constructor's (`Process(root)`), or a member (`Process.load()`, `Glossary.pairs`).
+#: Adding a trailing parameter with a default is not a break; scripts/contract-guard.py refuses a removal or a
+#: rename. Read from tcc 47257ff: SURFACE.md B1 (written at f58d208) and every call site at HEAD.
+#: TCC also relies on VALUES, which no entry pins: naming's tags "sw"/"rta" (`METHOD_SWEEP`/`METHOD_RTA` are
+#: listed by name, but TCC compares the strings), rew_api's kinds "sweep"/"rta"/"impedance", and the journal's
+#: event names, which TCC folds itself.
+IMPORTABLE = {
+    "rew_api.py": (
+        "BASE_URL", "FINEST_SMOOTHING", "get_measurements()", "get_measurement(mid)",
+        "find_measurement_id(name, measurements=None, exact=True)", "get_measurement_by_name(name, exact=True)",
+        "rename_measurement(mid, title)", "get_fr(mid, smoothing=None)", "get_group_delay(mid, smoothing=None)",
+        "get_impulse_response(mid)", "get_distortion(mid)", "get_filters(mid)", "get_equaliser(mid)",
+        "get_equalisers()", "get_crossover_types()", "get_slopes()", "get_target_settings(mid)",
+        "get_target_response(mid)", "set_filters(mid, filters)", "is_swept(record)",
+        "duplicate_titles(measurements=None)",
+    ),
+    "state/state.py": (
+        "PresetHistory(root, preset, project_dir=None)", "PresetHistory.head()", "PresetHistory.load(version=None)",
+        # Private, and TCC calls it (dsp_state.py): held until J1b's public accessor replaces it (W-10).
+        "PresetHistory._path(version)",
+        "SnapshotError", "identity_error(path, snap)", "project_channels(project_dir)",
+    ),
+    "state/process.py": (
+        "Process(root)", "Process.load()", "Process.events(limit=None, kinds=None)", "Process.session_closed()",
+        "Process.protective_record()", "PHASES", "PHASE_TITLES", "EV_CONFIG_CHANGE", "EV_STEP_DONE",
+    ),
+    "naming.py": (
+        "parse_name(title, glossary=None)", "name_key(parsed)", "Glossary.for_project(project_dir)",
+        "Glossary.channel_codes(active_only=False)", "Glossary.resolve_code(code)",
+        "Glossary.pairs", "Glossary.joints", "Glossary.sides", "Glossary.combos",
+        "generate_name(code, version, method=None, modifier=None, position=None, control=None, params=None)",
+        "expected_groups(phase, glossary, version)", "validate_series(titles, expected, glossary=None)",
+        "METHODS", "METHOD_SWEEP", "METHOD_RTA", "canonical_title(title)", "canonical_code(code)",
+        "explain_name(title, glossary=None)",
+    ),
+    "dsp_profile.py": (
+        "load_profile(path)", "validate_profile(data)", "FIELD_VOCABULARY", "CAPABILITY_CHECKLIST",
+        "processing_rate_hz(data)", "bundled_dir()", "list_bundled(dir_=None)",
+    ),
+    "project.py": (
+        "Project(root)", "Project.load()", "Project.save(data)", "Project.parse_impact(impact)", "PROJECT_TYPES",
+        "project_type(data)",
+    ),
+    "dsp_math.py": ("apf1_response(freqs_hz, f0)", "apf2_response(freqs_hz, f0, q)"),
+    "resonalyze_vc.py": (
+        "load_session(path)",
+        "convert(doc, *, profile=None, proj=None, mapping=None, group_id='physical_outputs', source_path=None)",
+    ),
+    "project_seed.py": (
+        "seed(source, target, *, include_findings=False, copy_profile=True, note=DEFAULT_NOTE, today=None, "
+        "seat=None, include_fs=True)",
+        "describe(source)", "dsp_of(source)",
+    ),
+    "eq_export.py": (
+        "export_eq(profile, eq_rows, *, crossovers=None, fmt=None, group_id='physical_outputs', channel=None)",
+    ),
+    "protective.py": (
+        "legs_of(record, channel)", "should_de_embed(record, channel, *, baseline=None)", "matters_at(legs, freq_hz)",
+        "de_embed(freqs_hz, measured, legs)",
+    ),
+    "listening.py": (
+        "characteristics(lang=None)", "tracks(lang=None)", "links(lang=None)", "routes()", "check(lang=None)",
+        # Not in SURFACE.md B1; TCC asks it all the same (tcc core/listening.py `languages()`).
+        "languages()",
+        "PATTERNS", "CHEAT_SHEET",
+    ),
+    "gates/side_effect.py": (
+        "FORM_POST_URL", "FORM_FIELD_SENDER", "FORM_FIELD_KIND", "FORM_FIELD_IMPACT", "FORM_FIELD_MESSAGE",
+        "FORM_FIELD_VERSIONS", "FORM_LABELS", "FORM_KINDS", "FORM_PERSON_KINDS", "FORM_IMPACTS", "FORM_TIMEOUT_S",
+        "form_answers(sender, kind, message, impact='', versions='')", "verify_form_reply(status, body)",
+        "upload_issue_asset(image_path, dest_name, *, consented=False, message=None, runner=_subprocess_runner, "
+        "dry_run=False)",
+    ),
+    "car_profile.py": (
+        "find_prior_projects(dirs, make, model, generation='', body='')",
+        "body_slug(make, model, generation='', body='')", "find_bundled_car(make, model, generation='', body='')",
+    ),
+    "verify.py": ("verdict(name, measurements=None, f_low=20, f_high=20000)",),
+}
 
 
 def _state_dir():
@@ -1235,6 +1344,40 @@ def render_report(report):
 
 
 # --------------------------------------------------------------------------- CLI
+def _skill_version(start=None):
+    """`.claude-plugin/plugin.json`'s `version` for this copy, or None when absent or unreadable.
+
+    Walked up from `_HERE` (or `start`), five folders at most -- rew_tool/ sits three under the repository root --
+    and from the REAL folder: an installed method is a link into a clone, and the folders above the link are not
+    the clone (`provenance.repo_root` paid for that lesson). The first plugin.json found is this copy's; one that
+    cannot be read is "cannot be told", not a reason to look further up.
+    """
+    here = os.path.realpath(start or _HERE)
+    for _ in range(5):
+        path = os.path.join(here, ".claude-plugin", "plugin.json")
+        if os.path.isfile(path):
+            try:
+                with open(path, encoding="utf-8") as f:
+                    version = json.load(f).get("version")
+            except (OSError, ValueError, AttributeError):
+                return None
+            return version if isinstance(version, str) and version else None
+        parent = os.path.dirname(here)
+        if parent == here:
+            break
+        here = parent
+    return None
+
+
+def _skill_sha():
+    """The commit this copy is at (`provenance.skill_sha()`), or None when it cannot be told: no repository, no git,
+    or a provenance that cannot be loaded. Through `_siblings()`, so a contract.py loaded by path finds it."""
+    try:
+        return _siblings().load("provenance.py").skill_sha() or None
+    except Exception:  # noqa: BLE001 -- a diagnostic that cannot tell the sha says so (null); it does not fail
+        return None
+
+
 _USAGE = """usage: contract.py check <project-dir> [--json] [--no-rew] [--gate] [--phase0-gate]
        contract.py gaps <dir> [<dir> ...] [--json] [--depth N]
                                                which projects on disk are INCOMPLETE against the
@@ -1246,6 +1389,7 @@ _USAGE = """usage: contract.py check <project-dir> [--json] [--no-rew] [--gate] 
                                                was not UTF-8 (TCC-007). Without --from it only
                                                SHOWS what each candidate page makes the text say
        contract.py table                       print the CONTRACT (file -> owner -> schema version)
+       contract.py version [--json]            the contract this copy keeps (CONTRACT_VERSION), for diagnostics
        contract.py selftest
 
   --gate         phase -1: does everything the method needs before phase 0 EXIST and validate
@@ -1313,6 +1457,15 @@ def _main(argv):
             print(f"{d['path']} — rewritten as UTF-8 (was {d['codec']}); original bytes kept at "
                   f"{os.path.basename(d['backup'])}")
         return 0
+    if argv[1] == "version":
+        info = {"contract_version": CONTRACT_VERSION, "format_version": FORMAT_VERSION,
+                "skill_version": _skill_version(), "sha": _skill_sha()}
+        if "--json" in argv:
+            print(json.dumps(info))
+        else:
+            print(f"contract {info['contract_version']} · format {info['format_version']} · "
+                  f"skill {info['skill_version'] or 'unknown'} · {info['sha'] or 'no git'}")
+        return 0
     if argv[1] != "check" or len(argv) < 3:
         print(_USAGE, file=sys.stderr)
         return 2
@@ -1359,10 +1512,115 @@ def _check_invalid_project_json():
         shutil.rmtree(d, ignore_errors=True)
 
 
+def _check_version_verb():
+    import ast, contextlib, io
+    tree = ast.parse(open(os.path.abspath(__file__), encoding="utf-8").read())
+    lit = [n for n in tree.body if isinstance(n, ast.Assign) and any(getattr(t, "id", None) == "CONTRACT_VERSION"
+                                                                         for t in n.targets)]
+    assert lit and isinstance(lit[0].value, ast.Constant) and lit[0].value.value == 1, "CONTRACT_VERSION literal"
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        assert _main(["contract.py", "version", "--json"]) == 0
+    v = json.loads(out.getvalue())
+    assert v["contract_version"] == CONTRACT_VERSION == 1 and v["format_version"] == FORMAT_VERSION, v
+    # an older method has no `version`: it answers usage and exit 2 -- that is how a caller reads "contract 0"
+    with contextlib.redirect_stderr(io.StringIO()):
+        assert _main(["contract.py", "no-such-verb"]) == 2
+
+
+def _check_version_shape():
+    """`version --json` carries exactly the four keys a diagnostics panel reads, each from its own source; without
+    `--json` the same four on one line, a missing one said as such."""
+    import contextlib, io
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        rc = _main(["contract.py", "version", "--json"])
+    assert rc == 0, rc
+    v = json.loads(out.getvalue() or "{}")
+    assert sorted(v) == ["contract_version", "format_version", "sha", "skill_version"], v
+    assert v["skill_version"] == _skill_version() and v["sha"] == _skill_sha(), v
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        rc = _main(["contract.py", "version"])
+    line = out.getvalue().strip()
+    assert rc == 0 and line == (f"contract {CONTRACT_VERSION} · format {FORMAT_VERSION} · "
+                                f"skill {v['skill_version'] or 'unknown'} · {v['sha'] or 'no git'}"), line
+
+
+def _check_skill_version():
+    """`skill_version` is `.claude-plugin/plugin.json`'s `version`, found walking up at most five folders from this
+    file's REAL folder (an installed method is a link into a clone: the folders above the link are not the clone);
+    absent, unreadable or not a string is None."""
+    import shutil
+    import tempfile
+    d = tempfile.mkdtemp(prefix="autosound_contract_ver_")
+    try:
+        deep = os.path.join(d, "a", "b", "c", "d")          # the fifth folder up from here is the root
+        os.makedirs(deep)
+        os.makedirs(os.path.join(d, ".claude-plugin"))
+        plugin = os.path.join(d, ".claude-plugin", "plugin.json")
+
+        def put(text):
+            with open(plugin, "w", encoding="utf-8") as f:
+                f.write(text)
+        put('{"name": "autosound-tuning", "version": "9.8.7"}')
+        assert _skill_version(deep) == "9.8.7", _skill_version(deep)
+        too_deep = os.path.join(deep, "e")
+        os.makedirs(too_deep)
+        assert _skill_version(too_deep) is None, "a plugin.json six folders up was taken for this checkout's"
+        link = os.path.join(d, "link")
+        try:
+            os.symlink(deep, link)
+        except (OSError, NotImplementedError):
+            link = None                                      # no symlinks here (Windows without the privilege)
+        if link:
+            outside = os.path.join(link, "x", "y", "z")     # by the LINK, plugin.json is not five folders up
+            os.makedirs(outside)
+            assert _skill_version(outside) is None, "the walk counted folders above the link, not the real ones"
+            assert _skill_version(link) == "9.8.7", "the walk lost the plugin.json behind the link"
+        for text in ("{", '["9.8.7"]', '{"version": 9}', '{"version": ""}'):
+            put(text)
+            assert _skill_version(deep) is None, text
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+    # And this copy: the plugin.json of the checkout it sits in (rew_tool/ is three folders under the root).
+    root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(_HERE))))
+    mine = os.path.join(root, ".claude-plugin", "plugin.json")
+    if os.path.isfile(mine):
+        with open(mine, encoding="utf-8") as f:
+            assert _skill_version() == json.load(f)["version"], _skill_version()
+
+
+def _check_skill_sha():
+    """`sha` is `provenance.skill_sha()` from the provenance `_siblings()` holds -- one object, loaded by path, so a
+    contract.py loaded by path still finds it -- and "cannot be told" is None: no repository (""), or a provenance
+    that cannot be loaded."""
+    import types
+    real = globals()["_siblings"]
+    sha = "f" * 40
+
+    def stub(answer):
+        def load(rel):
+            assert rel == "provenance.py", rel
+            if isinstance(answer, Exception):
+                raise answer
+            return types.SimpleNamespace(skill_sha=lambda: answer)
+        return lambda: types.SimpleNamespace(load=load)
+    try:
+        for answer, want in ((sha, sha), ("", None), (ImportError("siblings: provenance.py is not in X"), None),
+                             (RuntimeError("provenance.py fails at import"), None)):
+            globals()["_siblings"] = stub(answer)
+            assert _skill_sha() == want, (answer, _skill_sha())
+    finally:
+        globals()["_siblings"] = real
+    assert _skill_sha() == (real().load("provenance.py").skill_sha() or None), _skill_sha()
+
+
 def _selftest():
     os.environ["AUTOSOUND_NO_GH"] = "1"          # the history line is checked; GitHub is never reached from a test
     failures = []
-    for check in (_check_invalid_project_json,):
+    for check in (_check_invalid_project_json, _check_version_verb, _check_version_shape, _check_skill_version,
+                  _check_skill_sha):
         try:
             check()
         except AssertionError as exc:

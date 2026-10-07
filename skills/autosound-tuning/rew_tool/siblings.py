@@ -6,8 +6,9 @@ call, and `sys.path` edits at import. One file then lived as several module obje
 several `rew_api` modules each with its own `BASE_URL`.
 
 `load(rel)` is the one way in:
-  * a module already in `sys.modules` whose file is this one (by real path) is ADOPTED, whatever its name -- a bare
-    `import naming`, TCC's `autosound_tcc._vendor.naming`, an earlier `load`;
+  * a module already in `sys.modules` whose file is this one is ADOPTED, whatever its module name -- a bare
+    `import naming`, TCC's `autosound_tcc._vendor.naming`, an earlier `load`. Its file NAME must match first, then
+    its real path: a module whose `__file__` is a symlink under another name is not adopted;
   * otherwise the file runs once, under a name tied to this copy of the method, registered in `sys.modules` BEFORE it
     runs (a cycle finds it) and removed again if it fails;
   * one re-entrant lock around both, so two threads never run one file twice.
@@ -46,7 +47,8 @@ def module_name(rel):
 
 
 def find_loaded(path):
-    """The module already in `sys.modules` for `path` (by real path), or None."""
+    """The module already in `sys.modules` for `path`, or None: its file NAME must match first, then its real path
+    (a module whose `__file__` is a symlink under another name is not adopted)."""
     want = _real(path)
     module = _BY_PATH.get(want)
     if module is not None and sys.modules.get(module.__name__) is module:

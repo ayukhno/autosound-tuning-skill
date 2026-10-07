@@ -222,6 +222,10 @@ if [ -z "${SELFTEST_ONLY_TOOL:-}" ]; then
   run_one "harvest-inbox"   ok skills/autosound-tuning/scripts/harvest_inbox.py --selftest
   run_one "doc-commands"    ok scripts/doc-commands-check.py --selftest
   run_one "tool-docs"       ok scripts/tool-docs-check.py --selftest
+  # #137: contract 1 -- CONTRACT_VERSION, the IMPORTABLE table TCC reads, the _siblings() copies, the by-path probe.
+  # The guard's own mechanics in a throwaway tree, then this tree (its success line says OK, so `ok`, not `rc`).
+  run_one "contract-guard"  ok scripts/contract-guard.py --selftest
+  run_one "contract-in-tree" ok scripts/contract-guard.py
   # HUB-044: README and FAQ live in four languages. The guard compares what can be compared without
   # knowing them -- the heading skeleton and the commands -- and says out loud that it cannot see all
   # four lagging the code together.

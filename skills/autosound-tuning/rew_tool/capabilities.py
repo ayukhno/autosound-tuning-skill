@@ -57,6 +57,7 @@ NOT_ON_BOARD = {
                   "(issue #21). Not a decision a tuner makes -- `console.py report` exists to "
                   "answer 'what is this terminal?' when a Windows machine reports a crash",
     "siblings.py": "a loader: one module object per file of the method (skill #137), not a step a tuner takes",
+    "contract-guard.py": "the guard that holds contract 1 (skill #137): a maintainer's check, not a tuner's step",
     "encoding-check.py": "the checker that keeps issue #21 from coming back",
     "changelog-index.py": "generates the CHANGELOG's index table from the version headings "
                           "(HUB-043); --check fails the suite on a stale one. Repo hygiene, not a "
