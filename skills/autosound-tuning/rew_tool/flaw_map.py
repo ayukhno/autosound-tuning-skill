@@ -314,8 +314,12 @@ def run(project_dir, solos_dir=None, ellipsoid_dir=None, write=False, rew_ver=No
 
 def render(result):
     out = []
-    if result["refused"]:
-        out.append(f"refused at de-embed (no recorded protective state): {', '.join(result['refused'])}")
+    for code in result["refused"]:
+        # In its note's words (#134, R52, batch 4's re-review): the leg the method cannot model, or the baseline nobody
+        # marked, and the person's way on. It said "(no recorded protective state)" of every refusal, a recorded
+        # Chebyshev too, and the notes are not printed here.
+        why = P.refusal_reason(result.get("notes"), code)
+        out.append(f"refused at de-embed: {code}" + (f" -- {why}" if why else ""))
     if not result["rows"]:
         out.append("no flaw rows proposed")
     else:
@@ -355,9 +359,59 @@ def render(result):
     return "\n".join(out)
 
 
+def _check_refusal_names_its_reason():
+    """A channel refused at the de-embedding is said with its reason (#134, R52, batch 4's re-review): the leg the
+    method cannot model -- or the baseline nobody marked -- and the person's way on, in the note's words. The text
+    said `refused at de-embed (no recorded protective state): m-L` over a Chebyshev the round recorded: no leg, and a
+    way on that sends the person to record what is recorded. Only `--json` carried the reason, in `notes`."""
+    import contextlib
+    import io
+    import shutil
+    import tempfile
+    import resonalyze_ir as ri
+    top = tempfile.mkdtemp(prefix="autosound_flaw_map_refused_")
+    try:
+        proj = os.path.join(top, "project")
+        os.makedirs(proj)
+        pj = _project.Project(proj)
+        pj.save(pj.load())
+        solos = os.path.join(top, "solos")
+        os.makedirs(solos)
+        x = np.zeros(1 << 15)
+        x[96] = 0.5
+        for stem, prot in (("m_L", {"hz": 100, "family": "CH", "slopeDbPerOct": 24}), ("w_L", None)):
+            doc = ri.build_v7(x, 96000, 0.0, low_hz=20.0, high_hz=20000.0, rew_source={
+                "protectiveHighPass": prot, "protectiveState": "raw" if prot else "bare"})
+            ri.write_v7(doc[0] if isinstance(doc, tuple) else doc, os.path.join(solos, f"{stem}.json"))
+        said = {}
+        for mode in ([], ["--json"]):
+            out, err = io.StringIO(), io.StringIO()
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                rc = _main(["--project", proj, "--solos", solos] + mode)
+            said[bool(mode)] = (rc, out.getvalue())
+        rc, text = said[False]
+        line = [ln for ln in text.splitlines() if "m-L" in ln]
+        assert rc == 0 and line and line[0].startswith("refused at de-embed: m-L -- protective HP 100 Hz CH24 cannot be "
+                                                         "taken out") and "LR, BW or BE" in line[0] \
+            and "no recorded protective state" not in text, (rc, line)
+        rc, js = said[True]
+        r = json.loads(js)
+        assert rc == 0 and r["refused"] == ["m-L"] and any(
+            n.startswith("m-L: REFUSED -- protective HP 100 Hz CH24") for n in r["notes"]), (rc, r["refused"], r["notes"])
+        # A baseline channel nobody marked (a REW solo, `--rew`) is said in its note's words too, its way on with them.
+        why = ("'w-L' was captured at baseline -- before any crossover was designed -- and is not marked raw. Was "
+               "protection in force? If it was, record it; if it was not, say so explicitly.")
+        text = render({"refused": ["w-L"], "notes": [f"w-L: REFUSED -- {why}"], "rows": [], "left_out": []})
+        assert f"refused at de-embed: w-L -- {why}" in text.splitlines(), text
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
 def _selftest():
     import shutil
     import tempfile
+
+    _check_refusal_names_its_reason()
 
     # --- the classifier, rule by rule, on definitions ---
     peak = {"f_center": 1000.0, "width_oct": 0.33, "extremum_db": 5.0, "kind": "peak", "route": "x"}

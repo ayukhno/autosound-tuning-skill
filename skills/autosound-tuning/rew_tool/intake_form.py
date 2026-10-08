@@ -206,6 +206,11 @@ def model(project_dir, lang=DEFAULT_LANG):
         })
 
     gate = intake.gate_requirements(project_dir)
+    # A gate file that is there and cannot be read keeps the gate shut (#134, batch 4's re-review N4), and is said with
+    # the page's other refusals, in the method's words -- unless the page's own read said that file already.
+    for u in gate.get("unreadable_files") or []:
+        if not any(r.startswith(os.path.join(project_dir, u["file"])) for r in refusals):
+            refusals.append(u["issue"])
     groups = [{"id": gid, "title": lab["groups"].get(gid) or gid, "why": why}
               for gid, why in intake.GROUPS]
     whens = [{"id": w, "what": what, "title": (lab.get("when") or {}).get(w) or what}
@@ -1653,12 +1658,41 @@ def _check_unreadable_profile_shown_and_refused():
         shutil.rmtree(root, ignore_errors=True)
 
 
+def _check_unreadable_gate_file_named():
+    """The page's gate stays shut over a gate file that is there and cannot be read -- a `glossary.json` cut off --
+    and says the file, why and its repair with the page's refusals (#134, batch 4's re-review N4): the gate read "no
+    file missing" as open, beside `project.json`'s own glossary, which the cut file shadows; without that glossary,
+    shut and "missing: glossary.json", over a file that is there."""
+    import shutil
+    import tempfile
+    root = tempfile.mkdtemp(prefix="autosound_form_gate_unreadable_")
+    try:
+        project.Project(root).save({"schema_version": project.SCHEMA_VERSION,
+                                    "channels": [{"code": "w-L", "tier": "channels"}],
+                                    "glossary": {"schema_version": 1, "channels": [{"code": "w-L", "active": True}]}})
+        dsp_profile.save_profile(dsp_profile.profile_path(root), {"dsp_profile": {
+            "name": "Fixture", "vendor": "Fixture", "dsp_processing_rate_hz": 96000,
+            "delay": {"step_ms": 0.01}, "polarity": {"scope": []},
+            "groups": [{"id": "physical_outputs", "label": "Outputs", "max_count": 2,
+                        "fields": ["hp", "lp", "gain_db", "ta_ms", "polarity"],
+                        "crossover_filters": {"types": {"LR": {"orders_db_per_oct": [24]}}}}]}})
+        path = os.path.join(root, "glossary.json")
+        with open(path, "wb") as fh:
+            fh.write(b'{"schema_version": 1, "chan')
+        m = model(root, "uk")
+        said = [r for r in m["refusals"] if r.startswith(path)]
+        assert m["gate"]["open"] is False and said and "checkout HEAD -- glossary.json" in said[0], \
+            (m["gate"], m["refusals"])
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def _selftest():
     import re
     import tempfile
 
     failures = []
-    for check in (_check_unreadable_profile_shown_and_refused,):
+    for check in (_check_unreadable_profile_shown_and_refused, _check_unreadable_gate_file_named):
         try:
             check()
         except Exception as exc:  # noqa: BLE001 -- a check that raises is reported by name, like one that fails

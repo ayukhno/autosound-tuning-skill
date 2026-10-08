@@ -816,11 +816,12 @@ def note_lines(notes, verbose=False, limit=NOTES_SHOWN):
 
     Until skill #70 this was `notes[:8]`: the ninth note was cut in silence and nothing could show it. The
     tail line is this module's own rather than predict's, which adds "all of them are in --out's JSON" --
-    true of predict's JSON, not of this one, which holds the packages alone."""
+    true of predict's JSON, not of this one, which holds the packages alone. A channel's refusal is never cut
+    (`predict.cut_notes`, #134, batch 4's re-review, Out of Scope 5)."""
     lines = P.compact_notes(notes, verbose=True)
     if verbose or len(lines) <= limit:
         return lines
-    return lines[:limit] + [f"(+{len(lines) - limit} more -- --verbose)"]
+    return P.cut_notes(lines, limit, "--verbose")
 
 
 def render(packages, *, source=None, project=None, out=None, accepted=None, refused=(), notes=(),
@@ -1099,10 +1100,12 @@ def _main(argv=None):
     # which is cut to five lines (skill #70; eight then) and printed only in the human mode. So under `--json` a
     # channel could vanish from the proposal in silence -- the same shape of silence the refusal
     # exists to prevent (autosound-hub #31). It goes to stderr in BOTH modes; stdout is untouched,
-    # so the JSON contract is exactly what it was.
+    # so the JSON contract is exactly what it was. In the note's words (#134, R52, batch 4's re-review): the leg the
+    # method cannot model, or the baseline nobody marked, and the person's way on -- "record the capture round's
+    # protective state and re-run" was said over a Chebyshev the round recorded, a way on that loops.
     for code in refused:
-        print(f"  {code}: refused at de-embed -- no EQ proposed for it. "
-              f"Record the capture round's protective state (or say there was none) and re-run.",
+        why = P.refusal_reason(notes, code)
+        print(f"  {code}: refused at de-embed -- no EQ proposed for it" + (f": {why}" if why else ""),
               file=sys.stderr)
     if args.json:
         print(json.dumps(packages, indent=1, default=float))
@@ -1168,6 +1171,78 @@ def _check_profile_read_strictly():
         shutil.rmtree(d, ignore_errors=True)
 
 
+def _check_refusal_names_its_reason():
+    """A channel refused at the de-embedding is said on stderr with its reason, in both modes (#134, R52, batch 4's
+    re-review): the leg the method cannot model, or the baseline nobody marked, and the person's way on, in the
+    note's words. It said "Record the capture round's protective state (or say there was none) and re-run." over a
+    Chebyshev the round recorded -- a way on that loops -- and under `--json` that was the only line said."""
+    import contextlib
+    import io as _io
+    import shutil
+    import tempfile
+    import resonalyze_ir as ri
+    import project as _project
+    state_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "state")
+    if state_dir not in sys.path:
+        sys.path.insert(0, state_dir)
+    import state as st
+    top = tempfile.mkdtemp(prefix="autosound_eq_propose_refused_")
+    saved_env = os.environ.pop("AUTOSOUND_PROJECT_DIR", None)
+    try:
+        proj = os.path.join(top, "project")
+        os.makedirs(proj)
+        pj = _project.Project(proj)
+        pj.save(pj.load())
+
+        def row(hp, lp):
+            return {"hp": {"f": hp, "type": "LR", "slope": 24}, "lp": {"f": lp, "type": "LR", "slope": 24},
+                    "gain_db": 0.0, "ta_ms": 0.0, "polarity": "NORM", "eq": []}
+        root = os.path.join(proj, "state")
+        st.PresetHistory(root, "SQ", project_dir=proj).snapshot({"schema_version": 3, "preset": "SQ",
+                                                                 "sample_rate": 96000, "channels": {
+                                                                     "m-L": row(300, 3000), "w-L": row(60, 300)}},
+                                                                note="a ledger")
+        st.Registry(root).set_active("SQ")
+        solos = os.path.join(top, "solos")
+        os.makedirs(solos)
+        x = np.zeros(1 << 15)
+        x[96] = 0.5
+        for stem, prot in (("m_L", {"hz": 100, "family": "CH", "slopeDbPerOct": 24}), ("w_L", None)):
+            doc = ri.build_v7(x, 96000, 0.0, low_hz=20.0, high_hz=20000.0, rew_source={
+                "protectiveHighPass": prot, "protectiveState": "raw" if prot else "bare"})
+            ri.write_v7(doc[0] if isinstance(doc, tuple) else doc, os.path.join(solos, f"{stem}.json"))
+        house = os.path.join(top, "house.txt")
+        with open(house, "w", encoding="utf-8") as fh:
+            fh.write("".join(f"{v} 0\n" for v in (20, 100, 1000, 10000, 20000)))
+        failures = []
+        for mode in ([], ["--json"]):
+            out, err = _io.StringIO(), _io.StringIO()
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                rc = main(["--project", proj, "--house", house, "--solos", solos] + mode)
+            said = [ln for ln in err.getvalue().splitlines() if "m-L" in ln]
+            if rc != 0 or len(said) != 1 or not said[0].startswith("  m-L: refused at de-embed -- no EQ proposed for "
+                                                                   "it: protective HP 100 Hz CH24 cannot be taken out") \
+                    or "LR, BW or BE" not in said[0] or "Record the capture round" in err.getvalue():
+                failures.append(f"{mode or 'human'}: rc {rc!r}, said {said!r}")
+        assert not failures, "\n  ".join(["a refusal said without its reason:"] + failures)
+    finally:
+        if saved_env is not None:
+            os.environ["AUTOSOUND_PROJECT_DIR"] = saved_env
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_refused_notes_never_cut():
+    """The run's notes keep every channel's refusal, past the fifth too (#134, batch 4's re-review, Out of Scope 5):
+    `note_lines` cut every note past `limit`, and a `<ch>: REFUSED -- <why>` went with them. The tail counts what was
+    cut."""
+    refusal = "m-L: REFUSED -- protective HP 100 Hz CH24 cannot be taken out of the sweep for a phase decision"
+    notes = [f"note {i}" for i in range(6)] + [refusal, "late note"]
+    shown = note_lines(notes)
+    assert shown[:NOTES_SHOWN] == notes[:NOTES_SHOWN] and refusal in shown and shown[-1] == "(+2 more -- --verbose)", \
+        shown
+    assert note_lines(notes, verbose=True) == notes
+
+
 def _selftest():
     """Anchored to the definitions: a driver resonance is cut where it is, a comb is not boosted,
     a moving peak is not proposed, an L/R shelf difference goes to the pair package, a tonal
@@ -1175,6 +1250,8 @@ def _selftest():
     import tempfile
     import ellipsoid as E
     _check_profile_read_strictly()
+    _check_refusal_names_its_reason()
+    _check_refused_notes_never_cut()
     f = P.grid(20, 20000, 96)
 
     class House:

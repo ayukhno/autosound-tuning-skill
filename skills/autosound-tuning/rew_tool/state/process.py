@@ -445,8 +445,9 @@ def _require_intake(phase, previous, project_dir):
     Computed by the same code `contract.py check --gate` runs (`check_project`) — two
     implementations of "is intake finished" would eventually disagree, and the one nobody runs
     would be the one that says yes. Not yet the same ANSWER: this gate refuses on `missing` alone,
-    and on a `project.json` that is there and cannot be read (the report's `unreadable`, #134, F M-5:
-    named first, with its repair -- the glossary inside it read as "not produced"), while `--gate`
+    and on a `project.json` or a standalone `glossary.json` that is there and cannot be read (the
+    report's `unreadable`, #134, F M-5, batch 4's re-review N4: named first, with its repair -- the
+    glossary inside the one, and the other itself, read as "not produced"), while `--gate`
     also wants nothing there invalid (`complete`), so a `dsp_profile.json` that is there and cannot
     be read, or that a newer method wrote, passes here and is NOT READY there. Gating on
     `complete`, with a parity test, is J3b (W-11).
@@ -477,7 +478,8 @@ def _require_intake(phase, previous, project_dir):
         raise ProcessError(f"phase {phase} is not entered: the intake check raised {type(exc).__name__}: {exc}") \
             from exc
     # A `project.json` that is there and cannot be read refuses as itself, with its repair (#134, F M-5): the glossary
-    # it carries read as "not produced", and the person was sent to redo an intake that is done.
+    # it carries read as "not produced", and the person was sent to redo an intake that is done. So does a standalone
+    # `glossary.json` (batch 4's re-review N4): read as no glossary, it let the phase in beside the one in project.json.
     for entry in report.get("unreadable") or []:
         raise ProcessError(f"phase {phase} is not entered: {entry['issue']}")
     missing = report.get("missing") or []
@@ -1566,7 +1568,12 @@ class Process:
         glossary = naming.Glossary.for_project(self.project_dir) if naming is not None else None
         groups = []
         if plan:
-            if naming is None or glossary is None or not glossary.channel_codes():
+            if naming is None:
+                # The load failure, with why (#134, batch 4's re-review, Out of Scope 2; m4's form): it read as a
+                # glossary nobody wrote.
+                raise ProcessError(f"--plan builds its titles with the title grammar (naming.py), which cannot be "
+                                   f"loaded{_load_failure('naming.py')} -- the round is not opened")
+            if glossary is None or not glossary.channel_codes():
                 raise ProcessError("--plan needs the project's glossary (project.json `glossary`, or glossary.json): "
                                    "the list is what the method says this phase measures, for the channels the "
                                    "project has -- with no glossary there is nothing to derive it from")
@@ -3437,6 +3444,73 @@ def _check_intake_gate_names_an_unreadable_project_json():
         rc, said, _kept = _gate_run(p.dir, ["enter-phase", "0"])
         assert rc == 0 and p.load()["active_phase"] == "0", (rc, said[-300:])
     finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_intake_gate_names_an_unreadable_glossary():
+    """Leaving phase −1 over a standalone `glossary.json` that is there and cannot be read is refused naming that file
+    and its repair (#134, batch 4's re-review N4 and Out of Scope 4): the check read it leniently, as no glossary,
+    so the gate let phase 0 in beside `project.json`'s own glossary, or refused it as "not produced" without one.
+    Refused before anything is written; the file whole again, the phase is entered."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_intake_cut_glossary_")
+    try:
+        root = os.path.join(top, "p")
+        os.makedirs(root)
+        _seed_intake(root)
+        p = Process(os.path.join(root, "process"))
+        p.enter_phase("-1")
+        path = os.path.join(root, "glossary.json")
+        whole = json.dumps({"schema_version": 1, "channels": [{"code": "w-L", "active": True, "label": "Низ"}]},
+                           ensure_ascii=False).encode("utf-8")
+        with open(path, "wb") as f:
+            f.write(whole[: whole.index("Низ".encode("utf-8")) + 1])         # inside `Н`: a write cut off
+        rc, said, kept = _gate_run(p.dir, ["enter-phase", "0"])
+        last = (said.strip().splitlines() or [""])[-1]
+        assert rc == 1 and kept and p.load()["active_phase"] == "-1", (rc, kept, last)
+        assert last.startswith(f"error: phase 0 is not entered: {path} ") and "checkout HEAD -- glossary.json" in last \
+            and "not produced" not in last, last
+        with open(path, "wb") as f:
+            f.write(whole)
+        rc, said, _kept = _gate_run(p.dir, ["enter-phase", "0"])
+        assert rc == 0 and p.load()["active_phase"] == "0", (rc, said[-300:])
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_plan_names_the_naming_load_error():
+    """`capture-start --plan` over a `naming.py` that cannot be loaded says that, and why (#134, batch 4's re-review,
+    Out of Scope 2; m4's form): it said "--plan needs the project's glossary", the load failure read as a glossary
+    nobody wrote. Nothing is opened."""
+    import shutil
+    import tempfile
+    global _load_naming
+    real_naming = _load_naming
+    top = tempfile.mkdtemp(prefix="autosound_process_plan_naming_")
+    try:
+        root = os.path.join(top, "p")
+        os.makedirs(root)
+        _seed_intake(root)
+        p = Process(os.path.join(root, "process"))
+        p.enter_phase("-1")
+
+        def broken():
+            _LOAD_FAILURES["naming.py"] = SyntaxError("invalid syntax (naming.py, line 3)")
+            return None
+        _load_naming = broken
+        try:
+            p.start_capture("55", plan=True, phase="0")
+        except ProcessError as exc:
+            said = str(exc)
+        else:
+            said = "went through"
+        assert "naming.py" in said and "(SyntaxError: invalid syntax (naming.py, line 3))" in said \
+            and "needs the project's glossary" not in said, said
+        assert not p.load().get("capture"), "a round was opened"
+    finally:
+        _load_naming = real_naming
+        _LOAD_FAILURES.pop("naming.py", None)
         shutil.rmtree(top, ignore_errors=True)
 
 
@@ -6222,7 +6296,8 @@ def _selftest():
                   _check_check_never_invents_taken, _check_close_says_what_rew_did,
                   _check_listing_never_read_as_rew, _check_ambiguous_capture, _check_close_swallows_only_rew,
                   _check_intake_gate_names_an_unreadable_project_json, _check_close_checks_stage_refusals,
-                  _check_naming_load_error_named, _check_round_lookups_read_the_state_strictly):
+                  _check_naming_load_error_named, _check_round_lookups_read_the_state_strictly,
+                  _check_intake_gate_names_an_unreadable_glossary, _check_plan_names_the_naming_load_error):
         try:
             check()
         except AssertionError as exc:

@@ -1408,7 +1408,11 @@ def gate_requirements(project_dir=None):
         report = contract.check_project(project_dir, skip_rew=True)
         out["missing_files"] = [f["file"] for f in report["files"]
                                 if not f["exists"] and f["file"] in contract.GATE_REQUIRED]
-        out["gate_open"] = not out["missing_files"]
+        # A file that is there and cannot be read keeps the gate shut, as `enter-phase 0` does (#134, batch 4's re-review
+        # N4): "no file missing" opened it over a `project.json` cut off -- and over a cut `glossary.json`, now that the
+        # check reads it strictly. `unreadable_files` is the check's `unreadable`, `[{file, issue}]`.
+        out["unreadable_files"] = report.get("unreadable") or []
+        out["gate_open"] = not out["missing_files"] and not out["unreadable_files"]
     return out
 
 
@@ -1701,7 +1705,8 @@ def _main(argv):
             if "gate_open" in data:
                 print(f"\n  gate open: {data['gate_open']}"
                       + (f" — missing {', '.join(data['missing_files'])}"
-                         if data["missing_files"] else ""))
+                         if data["missing_files"] else "")
+                      + "".join(f"\n     cannot be read: {u['issue']}" for u in data["unreadable_files"]))
         return 0
 
     if cmd == "missing":
@@ -1821,11 +1826,54 @@ def _check_change_dsp_sets_an_unreadable_profile_aside():
         shutil.rmtree(top, ignore_errors=True)
 
 
+def _check_gate_shut_over_an_unreadable_file():
+    """`gate_requirements` keeps the gate shut while a gate file is there and cannot be read, and names it (#134, batch
+    4's re-review N4 / Out of Scope 4): `gate_open` was "no file missing", so a `project.json` cut off opened the gate
+    `enter-phase 0` refuses (`process._require_intake` refuses the check's `unreadable`) -- and, with `check` reading
+    `glossary.json` strictly, a cut one would have too, where it used to read as missing. `unreadable_files` is the
+    check's `unreadable`."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_intake_gate_unreadable_")
+    try:
+        project.Project(top).save({"schema_version": project.SCHEMA_VERSION,
+                                   "channels": [{"code": "w-L", "tier": "channels"}],
+                                   "glossary": {"schema_version": 1, "channels": [{"code": "w-L", "active": True}]}})
+        dsp_profile.save_profile(os.path.join(top, "dsp_profile.json"), {"dsp_profile": {
+            "name": "Fixture", "vendor": "Fixture", "dsp_processing_rate_hz": 96000,
+            "delay": {"step_ms": 0.01}, "polarity": {"scope": []},
+            "groups": [{"id": "physical_outputs", "label": "Outputs", "max_count": 2,
+                        "fields": ["hp", "lp", "gain_db", "ta_ms", "polarity"],
+                        "crossover_filters": {"types": {"LR": {"orders_db_per_oct": [24]}}}}]}})
+        assert gate_requirements(top)["gate_open"] is True, gate_requirements(top)
+        failures = []
+        for name in ("glossary.json", "project.json"):
+            path = os.path.join(top, name)
+            before = None
+            if os.path.exists(path):
+                with open(path, "rb") as fh:
+                    before = fh.read()
+            with open(path, "wb") as fh:
+                fh.write(b'{"schema_version": 1, "chan')
+            g = gate_requirements(top)
+            if g["gate_open"] is not False or [u["file"] for u in g.get("unreadable_files") or []] != [name]:
+                failures.append(f"{name} cut off: gate_open {g['gate_open']!r}, missing {g['missing_files']}, "
+                                f"unreadable {g.get('unreadable_files')}")
+            if before is None:
+                os.remove(path)
+            else:
+                with open(path, "wb") as fh:
+                    fh.write(before)
+        assert not failures, "\n  ".join(["the gate over a file it cannot read:"] + failures)
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
 def _selftest():
     import tempfile
 
     failures = []
-    for check in (_check_change_dsp_sets_an_unreadable_profile_aside,):
+    for check in (_check_change_dsp_sets_an_unreadable_profile_aside, _check_gate_shut_over_an_unreadable_file):
         try:
             check()
         except AssertionError as exc:

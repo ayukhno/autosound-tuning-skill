@@ -926,14 +926,18 @@ def reset_field(project_dir, path):
 class DraftLeft(Exception):
     """`finalize` wrote the profile and could not remove the draft (#134, F M-9). The draft is read before the profile
     by `load_draft`, so the interview would resume from it: the person removes it. `.profile`, `.draft`, `.cause`; its
-    words say what landed. Matched by `draft_left` on its class."""
+    words say what landed, and the repair the cause allows (`project_io.repair_for`, batch 4's re-review N1): every
+    refusal was told to "close what holds it", which on POSIX -- a folder without write permission, the disk -- cannot
+    be followed. Matched by `draft_left` on its class."""
     draft_left = True
 
     def __init__(self, profile, draft, cause):
         self.profile, self.draft, self.cause = profile, draft, cause
+        repair = (_project_io().repair_for(cause, writing=True) if isinstance(cause, OSError)
+                  else "remove it by hand")
         super().__init__(f"{profile} is written, but the draft {draft} could not be removed ({cause}): it is still "
-                         f"there, and the interview reads it before the profile -- remove it (close what holds it, "
-                         f"then delete the file) before the next step")
+                         f"there, and the interview reads it before the profile -- remove it before the next step: "
+                         f"{repair} (`finalize` removes it)")
 
 
 def _remove_draft(path):
@@ -1727,12 +1731,37 @@ def _check_finalize_says_a_draft_left():
         shutil.rmtree(d, ignore_errors=True)
 
 
+def _check_draft_left_repair_by_cause():
+    """A draft `finalize` could not remove is said with the repair its cause allows (#134, batch 4's re-review N1;
+    batch 2's errno rule, H minor 3): every refusal said "close what holds it, then delete the file", which on POSIX --
+    where nothing holds a file -- cannot be followed: a folder without write permission refuses the remove, and the
+    delete with it. A permission is said as one there; Windows' holder as a holder; the disk's error as the disk's."""
+    import errno as _errno
+    real_name = os.name
+    failures = []
+    try:
+        for system, cause, want, never in (
+                ("posix", PermissionError(_errno.EACCES, "Permission denied", "d"), "this user may not write it",
+                 "close what holds it"),
+                ("nt", PermissionError(_errno.EACCES, "The process cannot access the file", "d"), "close what holds it",
+                 "this user may not write it"),
+                ("posix", OSError(_errno.EIO, "Input/output error", "d"), "check the disk", "close what holds it")):
+            os.name = system
+            said = str(DraftLeft("p.json", "d.json", cause))
+            if want not in said or never in said or not said.startswith("p.json is written, but the draft d.json "):
+                failures.append(f"{system}, {cause!r}: {said}")
+    finally:
+        os.name = real_name
+    assert not failures, "\n  ".join(["a draft left, said with another cause's repair:"] + failures)
+
+
 def _selftest():
     failures = []
     for check in (_check_loads_by_path, _check_bind_model_rate_binds_the_callers_dsp_math,
                   _check_draft_refuses_unreadable, _check_newer_profile_refused,
                   _check_bind_model_rate_refuses_unreadable, _check_writers_refuse_unreadable_profile,
-                  _check_library_skips_unreadable, _check_finalize_says_a_draft_left):
+                  _check_library_skips_unreadable, _check_finalize_says_a_draft_left,
+                  _check_draft_left_repair_by_cause):
         try:
             check()
         except AssertionError as exc:

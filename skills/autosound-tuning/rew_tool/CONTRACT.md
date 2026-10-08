@@ -100,8 +100,10 @@ tiers_vs_profile}`, `inherited`, `sources_gone`, `complete`. As built today (#13
 the exception's class into `state`: REW down is `reachable: false`; REW answering its list with an error or with
 something that is no measurement list is `reachable: true`, the list not read; an address that is none (`config`),
 or a failure that is none of REW's, is `reachable: null`, its note starting `skipped:` as `--no-rew`'s does.
-`unreadable` names a `project.json` that is there and cannot be read, which both gates' last lines name first;
-`encoding_unread` the files the encoding survey could not open.
+`unreadable` names a `project.json` or a standalone `glossary.json` that is there and cannot be read, which both
+gates' last lines name first (the glossary's row is then there and not valid, with its repair); `encoding_unread` the
+files the encoding survey could not open; `encoding_cut` (`[{file, repair}]`) the files it found cut inside their last
+character, each with its restore -- no code page's, so never in `encoding_damaged`.
 
 ## 4. `deployment.py [<project>] [--json]` — not promised
 
@@ -198,14 +200,14 @@ both. No file at all is the one quiet case: a fresh project. It holds for:
   profile gate. The intake's processor change, which replaces the profile, sets such a file aside unread and byte for
   byte, with one line on stderr saying where; the intake form's page shows it with its repair.
 
-Each phase gate refuses what it cannot check. Leaving phase −1: an intake check that raises or cannot be loaded, and
-a `project.json` that cannot be read, named with its repair (#134) -- the glossary inside it read as not produced.
-Leaving phase 0: a `project.json` that cannot be read, where the flaw-map gate reads the map. Into phases 1 and 2: a
-`dsp_profile.json` that cannot be read or that a newer method wrote, and a profile check that cannot be loaded.
-Leaving −1 still gates on missing files and that `project.json` only, so `enter-phase 0` passes over a
-`dsp_profile.json` that is there and cannot be read, or a newer one, where `contract.py check --gate` says NOT READY;
-gating it on the profile's readability, with that parity, waits for J3b (W-11). `contract.py check` reports such a
-file (`exists: true`, `valid: false`, the refusal in `issues`) instead of failing.
+Each phase gate refuses what it cannot check. Leaving phase −1: an intake check that raises or cannot be loaded, and a
+`project.json` or a standalone `glossary.json` that cannot be read, named with its repair (#134) -- the glossary inside
+the one read as not produced, and the other as no glossary. Leaving phase 0: a `project.json` that cannot be read, where
+the flaw-map gate reads the map. Into phases 1 and 2: a `dsp_profile.json` that cannot be read or that a newer method
+wrote, and a profile check that cannot be loaded. Leaving −1 still gates on missing files and those two only, so
+`enter-phase 0` passes over a `dsp_profile.json` that is there and cannot be read, or a newer one, where `contract.py
+check --gate` says NOT READY; gating it on the profile's readability, with that parity, waits for J3b (W-11).
+`contract.py check` reports such a file (`exists: true`, `valid: false`, the refusal in `issues`) instead of failing.
 
 ## 8. How to write them — atomic writes guaranteed (W-8, #135); the lock planned (W-9, J2b)
 

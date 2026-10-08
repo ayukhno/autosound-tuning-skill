@@ -259,6 +259,28 @@ def check_dsp_profile(project_dir):
 
 
 def check_glossary(project_dir):
+    """The glossary row, and the glossary every name check reads -- None when a standalone `glossary.json` is there and
+    cannot be read, as `check_project_json` answers for its file.
+
+    That file is read strictly here (#134, batch 4's re-review N4 and Out of Scope 4): cut off -- at any byte, or inside
+    its last character -- not UTF-8, not JSON, not an object, held, a folder, or a newer method's, it is a row there
+    and not valid, with the file and its repair, and `check_project` names it in `unreadable`. `Glossary.for_project`
+    reads it leniently, as no glossary (contract 1 holds it so: a screen's read), and the row said "no glossary yet"
+    -- what intake had not produced -- over a glossary written and since cut off."""
+    standalone = os.path.join(project_dir, "glossary.json")
+    if os.path.lexists(standalone):
+        io_ = _siblings().load("project_io.py")
+        try:
+            data = io_.read_json(standalone, {}, repair=io_.restore_line(standalone),
+                                 repair_encoding=io_.reencode_line(project_dir))
+            newer = io_.newer_schema(data, naming.SCHEMA_VERSION)
+            if newer is not None:
+                raise io_.Unreadable(standalone, f"is schema v{newer}; this method reads v{naming.SCHEMA_VERSION}",
+                                     io_.UPDATE_THE_METHOD)
+        except Exception as exc:  # noqa: BLE001 -- matched by its attribute below; anything else still raises
+            if not getattr(type(exc), "is_unreadable", False):
+                raise
+            return _entry("glossary.json (or project.json.glossary)", True, None, False, [str(exc)]), None
     glossary = naming.Glossary.for_project(project_dir)
     present = bool(glossary.channels or glossary.pairs or glossary.combos
                    or glossary.joints or glossary.sides)
@@ -271,7 +293,6 @@ def check_glossary(project_dir):
     # deliberate (SCR-011) and is NOT changed here: a documented rule other projects lean on is
     # worse to flip quietly than to leave. What was missing is the alarm.
     shadow = None
-    standalone = os.path.join(project_dir, "glossary.json")
     if os.path.isfile(standalone) and os.path.isfile(os.path.join(project_dir, "project.json")):
         try:
             with open(os.path.join(project_dir, "project.json"), encoding="utf-8") as f:
@@ -866,6 +887,9 @@ def check_project(project_dir, skip_rew=False):
     files.append(profile_entry)
     glossary_entry, glossary = check_glossary(project_dir)
     files.append(glossary_entry)
+    glossary_read = glossary is not None
+    if not glossary_read:
+        glossary = naming.Glossary()        # the name checks below read no glossary: there is none they could read
     process_entry, journal_entry, process_state = check_process(project_dir)
     files.append(process_entry)
     files.append(journal_entry)
@@ -901,9 +925,12 @@ def check_project(project_dir, skip_rew=False):
         missing.append("state/<preset>/ (first ledger snapshot)")
     complete = ok and not missing
     # A `project.json` that is there and cannot be read (#134, F M-5, H minor 8): what both gates name first. The
-    # glossary it carries reads as "missing" and its flaw map as "no rows yet" -- facts about a file nobody read.
-    unreadable = ([{"file": "project.json", "issue": (project_entry.get("issues") or ["cannot be read"])[0]}]
-                  if project_entry["exists"] and project_data is None else [])
+    # glossary it carries reads as "missing" and its flaw map as "no rows yet" -- facts about a file nobody read. So is
+    # a standalone `glossary.json` (batch 4's re-review N4, Out of Scope 4): it read as no glossary, "not produced".
+    unreadable = [{"file": name, "issue": (entry.get("issues") or ["cannot be read"])[0]}
+                  for name, entry, read in (("project.json", project_entry, project_data is not None),
+                                            ("glossary.json", glossary_entry, glossary_read))
+                  if entry["exists"] and not read]
     prose = looks_like_prose(project_dir, files)
     if prose:
         # The per-file hint is "run intake", which is right for an empty folder and wrong here —
@@ -934,11 +961,17 @@ def check_project(project_dir, skip_rew=False):
     # exists precisely so a consumer would not have to parse our prose (TCC-007, 2026-09-07).
     # A file the survey cannot open is never called UTF-8 by leaving it out (batch 2's re-review, Out of Scope 2): it
     # goes into `encoding_unread`, `[{file, why}]`, and the report says it was not surveyed.
-    unread_files = []
+    # A file cut inside its last character is no code page's (batch 2's re-review, Out of Scope 1), and is named all the
+    # same (batch 4's re-review N4): in `encoding_cut`, `[{file, repair}]` -- its restore. Out of `encoding_damaged`,
+    # nothing named one whose own row reads it leniently, or that no row reads.
+    unread_files, cut_files = [], []
     damaged = [os.path.relpath(e["path"], project_dir).replace(os.sep, "/")
-               for e in _load_vendored("state").encoding_survey(project_text_files(project_dir), unread_files)]
+               for e in _load_vendored("state").encoding_survey(project_text_files(project_dir), unread_files,
+                                                                cut_files)]
     encoding_unread = [{"file": os.path.relpath(path, project_dir).replace(os.sep, "/"), "why": why}
                        for path, why in unread_files]
+    encoding_cut = [{"file": os.path.relpath(path, project_dir).replace(os.sep, "/"), "repair": repair}
+                    for path, repair in cut_files]
     # S-045: WHICH LANGUAGE TO WRITE IN, in the one report a session reads before it speaks. It is
     # a field of its own rather than a line of prose for the same reason `encoding_damaged` is: a
     # front-end reads it, and the session has to ACT on it before the first reply — reading it and
@@ -949,7 +982,7 @@ def check_project(project_dir, skip_rew=False):
             "map_ready": map_ready, "row_gaps": row_gaps, "to_confirm": to_confirm,
             "inherited": carried["inherited"], "sources_gone": carried["sources_gone"],
             "sources_gone_where": carried["sources_gone_where"],
-            "encoding_damaged": damaged, "encoding_unread": encoding_unread,
+            "encoding_damaged": damaged, "encoding_unread": encoding_unread, "encoding_cut": encoding_cut,
             # W-2 R: a ledger numbered per preset, with the move the session offers (not a gate item).
             "line_layout": _line_layout(project_dir),
             # hub #199: history and backup, as one line each and never a gate item.
@@ -1230,7 +1263,7 @@ def _verdict_line(report, gate=None):
     all was well. Not ready with nothing missing is something there being wrong, and is said so -- not "0 missing".
     The phase-0 lines name the step they gate, leaving phase 0 (R27), and say which half is not there. A `project.json`
     that is there and cannot be read is what both gates name first (#134, F M-5, H minor 8): its glossary read as
-    missing and its flaw map as "no flaw rows yet"."""
+    missing and its flaw map as "no flaw rows yet". So is a standalone `glossary.json` (batch 4's re-review N4)."""
     unreadable = ", ".join(u["file"] for u in report.get("unreadable") or [])
     if unreadable and gate in ("phase0", "intake"):
         step = "to leave phase 0" if gate == "phase0" else "for phase 0"
@@ -1303,10 +1336,16 @@ def render_report(report, gate=None):
         lines.append("Do NOT run intake here, and do not convert this folder — the import leaves "
                      "it untouched and still openable in 2.x.")
         lines.append("")
-    elif report.get("missing"):
+    elif report.get("missing") or report.get("unreadable"):
+        # A file that is there and cannot be read is named as that, beside what intake has not produced (#134, batch 4's
+        # re-review N4): a `glossary.json` cut off was counted among the files not produced.
+        said = []
+        if report.get("missing"):
+            said.append(f"intake has not produced: {', '.join(report['missing'])}")
+        if report.get("unreadable"):
+            said.append(f"{', '.join(u['file'] for u in report['unreadable'])} cannot be read (its row below says how)")
         lines.append(
-            "**Not ready for phase 0** — intake has not produced: "
-            + ", ".join(report["missing"])
+            "**Not ready for phase 0** — " + "; ".join(said)
             + ". (`--gate` exits non-zero on this; plain `check` reports only whether what EXISTS "
               "is wrong.)"
         )
@@ -1341,6 +1380,14 @@ def render_report(report, gate=None):
         lines.append(f"**Not surveyed for its encoding — {len(report['encoding_unread'])} file(s) could not be "
                      "opened:** " + "; ".join(f"{u['file']} ({u['why']})" for u in report["encoding_unread"])
                      + ". Whether each is UTF-8 is not known; run the check again once it can be read.")
+        lines.append("")
+    if report.get("encoding_cut"):
+        # No code page's, and named all the same (#134, batch 4's re-review N4): out of `encoding_damaged`, nothing named
+        # a file no row reads strictly.
+        lines.append(f"**Cut off — {len(report['encoding_cut'])} file(s):** "
+                     + "; ".join(f"{c['file']} ({c['repair']})" for c in report["encoding_cut"])
+                     + ". Each is UTF-8 up to a last character a write cut off: no code page mends it, its history "
+                       "does.")
         lines.append("")
     if report.get("unsealed"):
         state_py = os.path.join(os.path.dirname(os.path.abspath(__file__)), "state", "state.py")
@@ -1618,9 +1665,10 @@ def _main(argv):
                       f"{m['set_aside']} (line {shown}); every other line is as it was")
             return 0
         if codec is None:
+            cut = []                            # files cut inside their last character, each named with its restore (N4)
             print(state_mod.render_survey(
-                state_mod.encoding_survey(paths, unread), project_dir,
-                lambda c: f"python3 {here} repair-encoding {project_dir} --from {c}", set_aside_command, unread))
+                state_mod.encoding_survey(paths, unread, cut), project_dir,
+                lambda c: f"python3 {here} repair-encoding {project_dir} --from {c}", set_aside_command, unread, cut))
             return state_mod.said_unread(unread)
         try:
             done = state_mod.repair_encoding(paths, codec, unread)
@@ -2386,6 +2434,89 @@ def _check_skill_sha():
     assert _skill_sha() == (real().load("provenance.py").skill_sha() or None), _skill_sha()
 
 
+def _check_glossary_read_strictly():
+    """A standalone `glossary.json` that is there and cannot be read is said as such (#134, batch 4's re-review N4 and
+    Out of Scope 4): its row there and not valid, with the file and its repair, and the report's `unreadable` names
+    it, as it names `project.json` (F M-5) -- so the gates and the intake line name it too. It was read leniently, as
+    no glossary: "no glossary yet", counted among what intake has not produced -- cut at any byte, or cut inside its
+    last character, which batch 2's re-review had taken out of the encoding survey, where nothing named it then."""
+    import shutil
+    import tempfile
+    d = tempfile.mkdtemp(prefix="autosound_contract_cut_glossary_")
+    try:
+        pj = project.Project(d)
+        pj.save(pj.load())
+        whole = json.dumps({"schema_version": 1, "channels": [{"code": "w-L", "active": True, "label": "Низ ліво"}]},
+                           ensure_ascii=False).encode("utf-8")
+        path = os.path.join(d, "glossary.json")
+        last = "**NOT READY for phase 0 — glossary.json cannot be read: mend it first (its row above says how).**"
+        failures = []
+        for label, raw, why in (
+                ("cut inside its last character", whole[: whole.index("ліво".encode("utf-8")) + 1], "cut off"),
+                ("cut at an ASCII byte", whole[: whole.index(b'"channels"') + 4], "not valid JSON"),
+                ("an array", b"[]", "holds an array"),
+                ("a newer method's", json.dumps({"schema_version": naming.SCHEMA_VERSION + 1}).encode(),
+                 f"is schema v{naming.SCHEMA_VERSION + 1}")):
+            with open(path, "wb") as fh:
+                fh.write(raw)
+            try:
+                report = check_project(d, skip_rew=True)
+            except Exception as exc:  # noqa: BLE001 -- a check that crashes is the failure under test
+                failures.append(f"{label}: raised {type(exc).__name__}: {exc}")
+                continue
+            row = next(f for f in report["files"] if f["file"].startswith("glossary.json"))
+            said = report.get("unreadable") or []
+            text = render_report(report, gate="intake").splitlines()
+            intake = [ln for ln in text if ln.startswith("**Not ready for phase 0**")]
+            if row["exists"] is not True or row["valid"] is not False or not row["issues"][0].startswith(path) \
+                    or why not in row["issues"][0] or [u["file"] for u in said] != ["glossary.json"] \
+                    or not said[0]["issue"].startswith(path) or any("glossary" in m for m in report["missing"]) \
+                    or text[-1] != last or not intake or "glossary.json cannot be read" not in intake[0]:
+                failures.append(f"{label}: row {row}, unreadable {said}, missing {report['missing']}, "
+                                f"intake {intake[:1]}, last {text[-1]!r}")
+        os.remove(path)
+        if check_project(d, skip_rew=True)["unreadable"]:
+            failures.append("no standalone file: the glossary in project.json read as unreadable")
+        assert not failures, "\n  ".join(["a glossary.json check could not read:"] + failures)
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+
+
+def _check_cut_file_named_in_check():
+    """A project file cut inside its last character is named by `check` and by the `repair-encoding` survey, under
+    "cut off", with its restore (#134, batch 4's re-review N4). Batch 2's re-review took it out of `encoding_damaged`
+    -- no code page mends a cut write -- and then nothing named a file no row reads strictly; the survey said every
+    file was UTF-8 "or cut off in its last character ... nothing to repair". The report carries it in `encoding_cut`,
+    `[{file, repair}]`; `encoding_damaged` stays the files a code page spoiled."""
+    import contextlib
+    import io
+    import shutil
+    import tempfile
+    d = tempfile.mkdtemp(prefix="autosound_contract_cut_named_")
+    try:
+        proc = os.path.join(d, "process")
+        os.makedirs(proc)
+        whole = json.dumps({"note": "тест"}, ensure_ascii=False).encode("utf-8")
+        path = os.path.join(proc, "extra.json")
+        with open(path, "wb") as fh:
+            fh.write(whole[: whole.index("т".encode("utf-8")) + 1])          # inside `т`: a write cut off
+        report = check_project(d, skip_rew=True)
+        cut = report.get("encoding_cut")
+        assert report["encoding_damaged"] == [] and [c["file"] for c in cut or []] == ["process/extra.json"] \
+            and "checkout HEAD -- extra.json" in cut[0]["repair"], (report["encoding_damaged"], cut)
+        lines = [ln for ln in render_report(report).splitlines() if ln.startswith("**Cut off")]
+        assert lines and lines[0].startswith("**Cut off — 1 file(s):** process/extra.json") \
+            and "checkout HEAD -- extra.json" in lines[0], lines
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            rc = _main(["contract.py", "repair-encoding", d])
+        said = out.getvalue()
+        assert rc == 0 and path in said and "cut off" in said and "nothing to repair" not in said \
+            and "checkout HEAD -- extra.json" in said, (rc, said[-500:])
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+
+
 def _selftest():
     os.environ["AUTOSOUND_NO_GH"] = "1"          # the history line is checked; GitHub is never reached from a test
     failures = []
@@ -2394,7 +2525,8 @@ def _selftest():
                   _check_gates_name_an_unreadable_project_json, _check_rew_block_by_state,
                   _check_encoding_survey_in_check, _check_repair_encoding_refusals,
                   _check_unreadable_profile_and_seals_reported, _check_version_verb, _check_version_shape,
-                  _check_skill_version, _check_skill_sha):
+                  _check_skill_version, _check_skill_sha, _check_glossary_read_strictly,
+                  _check_cut_file_named_in_check):
         try:
             check()
         except AssertionError as exc:

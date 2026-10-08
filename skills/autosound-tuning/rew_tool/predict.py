@@ -477,10 +477,13 @@ def de_embed_solos(loaded, freqs, record=None, baseline=None):
     `loaded`: {code: (H, info)}. For v7 solos the mark is in `info["protective"]` (the file says);
     for REW solos it is the capture round's `record` (`protective.legs_of` shape). Returns
     `(solos, notes, refused)`: the corrected {code: H}, one note per channel saying what was done, and
-    the codes left out because the question "was protection in force?" has no recorded answer at a
-    baseline capture -- the `check` verdict of `protective.should_de_embed`, refused here rather than
-    guessed, since a prediction with ~50 degrees of unrecorded phase at a junction looks exactly like a
-    prediction.
+    the codes left out, each for one of two reasons its note gives as `<ch>: REFUSED -- <why>`
+    (`refusal_reason`): the question "was protection in force?" has no recorded answer at a baseline
+    capture -- the `check` verdict of `protective.should_de_embed`, refused here rather than guessed,
+    since a prediction with ~50 degrees of unrecorded phase at a junction looks exactly like a
+    prediction -- or the recorded leg is one the method cannot model, a Chebyshev (#134, R52), never
+    taken out as another family. Either note names the channel, what is wrong and the person's way on;
+    a caller says the refusal in those words.
     """
     import protective as prot
     f = np.asarray(freqs, dtype=float)
@@ -1852,7 +1855,8 @@ NOTES_SHOWN = 5
 
 def compact_notes(notes, verbose=False, limit=NOTES_SHOWN):
     """The notes a person reads: one line per distinct note, the channels it applies to joined (eight
-    `<ch>: solo used as recorded (…)` lines are one), at most `limit` unless `verbose`."""
+    `<ch>: solo used as recorded (…)` lines are one), at most `limit` unless `verbose` -- and every channel's refusal
+    besides (`cut_notes`)."""
     grouped, order = {}, []
     for n in notes or []:
         head, sep, rest = str(n).partition(": ")
@@ -1865,7 +1869,27 @@ def compact_notes(notes, verbose=False, limit=NOTES_SHOWN):
     lines = [(", ".join(grouped[k]) + ": " + k) if grouped[k] else k for k in order]
     if verbose or len(lines) <= limit:
         return lines
-    return lines[:limit] + [f"(+{len(lines) - limit} more -- --verbose, and all of them are in --out's JSON)"]
+    return cut_notes(lines, limit, "--verbose, and all of them are in --out's JSON")
+
+
+#: How a channel `de_embed_solos` refused is noted: `<ch>: REFUSED -- <why>`.
+REFUSED = "REFUSED -- "
+
+
+def cut_notes(lines, limit, more):
+    """`lines` past the first `limit` cut, and the cut counted in a last line `(+N more -- <more>)`. A channel's refusal
+    is never cut (#134, batch 4's re-review, Out of Scope 5): it is the one note that says why a channel is not in the
+    numbers, and it went behind `--verbose` with the rest while stderr said `refused -- see notes`."""
+    kept = lines[:limit] + [ln for ln in lines[limit:] if REFUSED in ln]
+    cut = len(lines) - len(kept)
+    return kept + ([f"(+{cut} more -- {more})"] if cut else [])
+
+
+def refusal_reason(notes, code):
+    """Why `de_embed_solos` refused `code`, in its note's words -- the leg the method cannot model or the baseline nobody
+    marked, and the person's way on -- or None (#134, R52). The words every caller says the refusal in."""
+    head = f"{code}: {REFUSED}"
+    return next((str(n)[len(head):] for n in notes or () if str(n).startswith(head)), None)
 
 
 def verdict_lines(result):
@@ -2030,15 +2054,50 @@ def plot(result, path):
 def main(argv=None):
     """The command line (`_main`), and its refusal of a project file it reads and cannot (#134, R53): the journal held,
     a line in it in another code page, a `dsp_profile.json` cut off or a newer method's (H I-4) -- one line,
-    `error: <file> <reason> -- <repair>`, exit 1, never a traceback. So is a filter the method has no model for met in
-    the model itself (`is_unmodelled`, R49): a crossover of an anchors-style state, an edge of `--ladder-edge`."""
+    `error: <file> <reason> -- <repair>`, exit 1, never a traceback. So is this module's own refusal, `PredictError`
+    (batch 4's re-review, Out of Scope 1): a slot nobody made active, a `--route` to a row the ledger does not have or
+    to one whose crossover the method cannot model, an anchors-style state's or a `--ladder-edge`'s family it cannot
+    model (N6) -- they ended in a traceback. And a filter the method has no model for met in the model itself
+    (`is_unmodelled`, R49)."""
     try:
         return _main(argv)
-    except Exception as exc:  # noqa: BLE001 -- matched by its attribute below; anything else still raises
-        if not (getattr(type(exc), "is_unreadable", False) or getattr(type(exc), "is_unmodelled", False)):
+    except Exception as exc:  # noqa: BLE001 -- matched below; anything else still raises
+        if not (isinstance(exc, PredictError) or getattr(type(exc), "is_unreadable", False)
+                or getattr(type(exc), "is_unmodelled", False)):
             raise
         print(f"error: {exc}", file=sys.stderr)
         return 1
+
+
+def ladder_edges(specs):
+    """`--ladder-edge KIND=F:TYPESLOPE` specs as `[(kind, leg)]`, each in a family the method models -- or a
+    `PredictError` naming the spec (#134, batch 4's re-review N6). Read before anything is printed: an edge in another
+    family was met in the ladder's model, after `--align`'s and `--delta-vs`'s tables were on stdout, and said by its
+    type alone."""
+    edges = []
+    for spec in specs or ():
+        kind, _, rest = spec.partition("=")
+        hz, _, shape = rest.partition(":")
+        family = ("".join(ch for ch in shape if ch.isalpha()) or "LR").upper()
+        slope = "".join(ch for ch in shape if ch.isdigit()) or "24"
+        if family not in dsp_math.MODELLABLE_FAMILIES:
+            raise PredictError(f"--ladder-edge {spec}: the method has no model for {family} (it models LR, BW and BE) "
+                               f"-- never another family in its place")
+        edges.append((kind.strip().lower(), {"f": float(hz), "type": family, "slope": int(slope)}))
+    return edges
+
+
+def refuse_unmodelled_legs(chains, where):
+    """Each crossover of `chains` -- an anchors-style state's, which no ledger row reads -- in a family the method
+    models, or a `PredictError` naming `where`, the channel and the leg (#134, batch 4's re-review N6). A ledger row
+    with such a crossover is left out and said (`_leg`); one here was met in the model, named by its type alone."""
+    for code, chain in chains.items():
+        for kind in ("hp", "lp"):
+            leg = chain.get(kind)
+            if leg and leg.get("type") not in dsp_math.MODELLABLE_FAMILIES:
+                raise PredictError(f"{where}: {code} {kind.upper()} {leg['f']:g} Hz {leg['type']}{leg['slope']}: the "
+                                   f"method has no model for {leg['type']} (it models LR, BW and BE) -- never another "
+                                   f"family in its place")
 
 
 def _main(argv=None):
@@ -2123,6 +2182,7 @@ def _main(argv=None):
                       help="an edge rung, e.g. lp=2500:LR24 (repeatable; applied to the upper member)")
     ap.add_argument("--selftest", action="store_true")
     args = ap.parse_args(argv)
+    edges = ladder_edges(args.ladder_edge)          # before anything is printed (N6)
     # The response model is bound to THIS device's processing rate before anything is modelled.
     # Not inside a branch: the crossover model runs on every path, and a binding that happens only
     # where the delay grid is computed leaves the common case on a module constant (hub #28).
@@ -2143,6 +2203,7 @@ def _main(argv=None):
         if args.state_key:
             d = d[args.state_key]
         chains = chains_from_anchors(d)
+        refuse_unmodelled_legs(chains, f"--state-json {args.state_json}")
         state_label = f"{args.state_json}" + (f"[{args.state_key}]" if args.state_key else "")
         route_notes = []
     else:
@@ -2404,14 +2465,6 @@ def _main(argv=None):
         step = 1000.0 / rate if rate else 0.02
         rungs = ([float(v) for v in args.ladder_delay_ms.split(",")] if args.ladder_delay_ms
                  else [-2 * step, -step, 0.0, step, 2 * step])
-        edges = []
-        for spec in args.ladder_edge:
-            kind, _, rest = spec.partition("=")
-            hz, _, shape = rest.partition(":")
-            fam = "".join(ch for ch in shape if ch.isalpha()) or "LR"
-            slope = "".join(ch for ch in shape if ch.isdigit()) or "24"
-            edges.append((kind.strip().lower(), {"f": float(hz), "type": fam.upper(),
-                                                 "slope": int(slope)}))
         ladder = ladder_report(f, solos, chains, lo, hi, delays_ms=rungs, edges=tuple(edges),
                                band_oct=args.band_oct, solos_gate=solos_gate, gate_spec=gate_kw,
                                gate_anchors=gate_anchors)
@@ -2510,7 +2563,7 @@ def _check_unmodelled_protective_refused():
         except Exception as exc:  # noqa: BLE001 -- a traceback is the failure under test
             rc = f"raised {type(exc).__name__}: {exc}"
         lines = err.getvalue().strip().splitlines()
-        assert rc == 1 and lines and lines[-1].startswith("error: dsp_math has no model for a 'CH' filter") \
+        assert rc == 1 and lines and lines[-1].startswith(f"error: --state-json {anchors}: w-L HP 60 Hz CH24") \
             and "Traceback" not in err.getvalue() and not out.getvalue(), (rc, err.getvalue()[-300:])
     finally:
         shutil.rmtree(top, ignore_errors=True)
@@ -2699,6 +2752,134 @@ def _check_knobs_read_strictly():
         if server is not None:
             server.shutdown()
         shutil.rmtree(top, ignore_errors=True)
+
+
+def _two_way_fixture(top, virtual=None, active=True):
+    """`(project, solos)` for the command-line checks below: a ledger holding w-L and m-L, LR24 crossing at 300 Hz
+    (and `virtual`, a virtual tier, when given), the slot active unless `active` is false, and a v7 solo of each."""
+    import resonalyze_ir as ri
+    state_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "state")
+    if state_dir not in sys.path:
+        sys.path.insert(0, state_dir)
+    import state as st
+    import project as _project_mod
+    proj = os.path.join(top, "project")
+    os.makedirs(proj)
+    pj = _project_mod.Project(proj)
+    pj.save(pj.load())
+
+    def row(hp, lp):
+        return {"hp": {"f": hp, "type": "LR", "slope": 24}, "lp": {"f": lp, "type": "LR", "slope": 24},
+                "gain_db": 0.0, "ta_ms": 0.0, "polarity": "NORM", "eq": []}
+    snap = {"schema_version": 3, "preset": "SQ", "sample_rate": 96000,
+            "channels": {"w-L": row(60, 300), "m-L": row(300, 3000)}}
+    if virtual:
+        snap["virtual_channels"] = virtual
+    root = os.path.join(proj, "state")
+    st.PresetHistory(root, "SQ", project_dir=proj).snapshot(snap, note="the design")
+    if active:
+        st.Registry(root).set_active("SQ")
+    solos = os.path.join(top, "solos")
+    os.makedirs(solos)
+    for stem, at in (("w_L", 96), ("m_L", 100)):
+        x = np.zeros(1 << 15)
+        x[at] = 0.5
+        doc = ri.build_v7(x, 96000, 0.0, low_hz=20.0, high_hz=20000.0)
+        ri.write_v7(doc[0] if isinstance(doc, tuple) else doc, os.path.join(solos, f"{stem}.json"))
+    return proj, solos
+
+
+def _run_main(argv):
+    """`(rc, stdout, stderr)` of `main(argv)`; a traceback is `rc` "raised <type>: <message>"."""
+    import contextlib
+    import io as _io
+    out, err = _io.StringIO(), _io.StringIO()
+    try:
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            rc = main(argv)
+    except Exception as exc:  # noqa: BLE001 -- a traceback is the failure under test
+        rc = f"raised {type(exc).__name__}: {exc}"
+    return rc, out.getvalue(), err.getvalue()
+
+
+def _check_unmodelled_families_refused_up_front():
+    """A crossover family the method cannot model, met where no ledger row is read, refuses the run before anything
+    is printed, naming where it is (#134, batch 4's re-review N6): the channel of an anchors-style state, the edge of
+    a `--ladder-edge`. The refusal named the type alone (`dsp_math has no model for a 'CH' filter`), and a ladder's
+    came after `--align`'s tables were on stdout."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_predict_up_front_")
+    saved_env = os.environ.pop("AUTOSOUND_PROJECT_DIR", None)
+    failures = []
+    try:
+        proj, solos = _two_way_fixture(top)
+        anchors = os.path.join(top, "anchors.json")
+        with open(anchors, "w", encoding="utf-8") as fh:
+            json.dump({"w-L": {"hpf": {"hz": 60, "family": "CH", "slope": 24}, "delay_ms": 0, "gain_db": 0}}, fh)
+        for label, argv, where in (
+                ("an anchors state", ["--solos", solos, "--state-json", anchors], f"--state-json {anchors}: w-L HP 60 "
+                                                                                  "Hz CH24"),
+                ("a ladder edge after --align", ["--solos", solos, "--project", proj, "--align", "--ladder",
+                                                 "w-L,m-L", "--ladder-edge", "lp=2500:CH24"],
+                 "--ladder-edge lp=2500:CH24")):
+            rc, out, err = _run_main(argv)
+            said = err.strip().splitlines()
+            if rc != 1 or out.strip() or not said or not said[-1].startswith(f"error: {where}") \
+                    or "LR, BW and BE" not in said[-1] or "Traceback" in err:
+                failures.append(f"{label}: rc {rc!r}, stdout {len(out)} chars, said {said[-1:]!r}")
+        assert not failures, "\n  ".join(["a family the method cannot model, refused late or unnamed:"] + failures)
+    finally:
+        if saved_env is not None:
+            os.environ["AUTOSOUND_PROJECT_DIR"] = saved_env
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_predict_refusals_are_one_line():
+    """predict's own refusals (`PredictError`) reach the command line as one line, `error: <words>`, exit 1 (#134, batch
+    4's re-review, Out of Scope 1): a slot nobody made active, a `--route` to a virtual row the ledger does not have,
+    or to one whose crossover the method cannot model -- with R52 a Chebyshev there reaches the refusal, where it was
+    modelled as a Butterworth. `main` let them through as a traceback."""
+    import shutil
+    import tempfile
+    saved_env = os.environ.pop("AUTOSOUND_PROJECT_DIR", None)
+    failures = []
+    try:
+        for label, active, extra, said_in in (
+                ("no active slot", False, [], "no active slot in "),
+                ("a route to no row", True, ["--route", "VFX=w-L"], "--route VFX: no such row"),
+                ("a route to a Chebyshev", True, ["--route", "VFL=w-L"], "--route VFL: crossover CH24 at 80 Hz")):
+            top = tempfile.mkdtemp(prefix="autosound_predict_refusal_")
+            try:
+                proj, solos = _two_way_fixture(top, active=active, virtual={"VFL": {
+                    "hp": {"f": 80, "type": "CH", "slope": 24}, "gain_db": 0.0, "ta_ms": 0.0, "polarity": "NORM"}})
+                rc, out, err = _run_main(["--solos", solos, "--project", proj, "--json"] + extra)
+                said = err.strip().splitlines()
+                if rc != 1 or out.strip() or not said or not said[-1].startswith("error: ") \
+                        or said_in not in said[-1] or "Traceback" in err:
+                    failures.append(f"{label}: rc {rc!r}, said {said[-1:]!r}")
+            finally:
+                shutil.rmtree(top, ignore_errors=True)
+        assert not failures, "\n  ".join(["a refusal of predict's own, not one line:"] + failures)
+    finally:
+        if saved_env is not None:
+            os.environ["AUTOSOUND_PROJECT_DIR"] = saved_env
+
+
+def _check_refused_notes_never_cut():
+    """A channel's refusal is never compacted away (#134, batch 4's re-review, Out of Scope 5). The run shows five notes
+    unless `--verbose`, and a `<ch>: REFUSED -- <why>` past the fifth was cut with the rest -- the one note that says
+    why a channel is not in the numbers, while stderr said `refused -- see notes`. Every refusal is shown; the tail
+    counts what was cut."""
+    refusal = "m-L: REFUSED -- protective HP 100 Hz CH24 cannot be taken out of the sweep for a phase decision"
+    notes = [f"note {i}" for i in range(6)] + [refusal] + [f"late {i}" for i in range(2)]
+    shown = compact_notes(notes)
+    assert shown[:NOTES_SHOWN] == notes[:NOTES_SHOWN] and refusal in shown, shown
+    assert shown[-1] == "(+3 more -- --verbose, and all of them are in --out's JSON)", shown
+    assert compact_notes(notes, verbose=True) == notes, compact_notes(notes, verbose=True)
+    two = [f"note {i}" for i in range(6)] + [f"{c}: REFUSED -- one reason" for c in ("m-L", "m-R")]
+    shown = compact_notes(two)
+    assert "m-L, m-R: REFUSED -- one reason" in shown and shown[-1].startswith("(+1 more"), shown
 
 
 def _selftest():
@@ -3392,6 +3573,9 @@ def _selftest():
     _check_knobs_read_strictly()
     _check_unmodelled_protective_refused()
     _check_profile_read_strictly()
+    _check_unmodelled_families_refused_up_front()
+    _check_predict_refusals_are_one_line()
+    _check_refused_notes_never_cut()
     print("selftest[predict] OK -- chain arithmetic (gain/pol/delay/LR corner/PK), ledger row == anchors "
           "entry, a phase angle is realized at the row's configured reference (LPF on a sub, HPF "
           "otherwise; slope OFF keeps it), delivered AT the reference, capped by name, refused without "

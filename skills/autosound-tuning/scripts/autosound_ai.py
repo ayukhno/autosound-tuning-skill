@@ -765,12 +765,28 @@ def _write_free(folder, stamp, role, suffix, text, names=_REVIEW_NAMES):
             try:
                 os.remove(path)
             except OSError as exc:
+                # A review and a package now share the base, and the name the package's answer is saved under -- the
+                # package's less `-package` -- is the review's: the answer goes under another, printed (#134, batch 4's
+                # re-review N5).
+                answer = (f" -- so the answer to {base}-package.md is saved under another name: "
+                          f"{os.path.join(folder, _answer_name(folder, base))}" if names == _REVIEW_NAMES else "")
                 print(f">> {path} is written and stays under the base {base}, beside {', '.join(others)}: it was to "
-                      f"step aside to the next base and could not be removed ({exc})", file=sys.stderr)
+                      f"step aside to the next base and could not be removed ({exc}){answer}", file=sys.stderr)
                 return base
             continue
         return base
     raise FileExistsError(f"{folder}: no free name for {stamp}-{role} after 100 tries")
+
+
+def _answer_name(folder, base):
+    """The name in `folder` the answer to `<base>-package.md` is saved under: `<base>.md`, the package's less `-package`
+    -- or, when a review holds that name (a step-aside refused left both writers on one base, #134, batch 4's
+    re-review N5), the first free of `<base>-answer.md`, `<base>-answer-2.md`, ...: names no writer's base takes."""
+    name, k = base + ".md", 1
+    while os.path.exists(os.path.join(folder, name)):
+        name = f"{base}-answer.md" if k == 1 else f"{base}-answer-{k}.md"
+        k += 1
+    return name
 
 
 def keep_raw(route, sent, received):
@@ -1589,11 +1605,91 @@ def _check_step_aside_refused_remove():
                 os.environ[k] = v
 
 
+def _check_step_aside_names_the_answers_name():
+    """A step-aside refused leaves a review and a package on one base, and the name the package's answer is saved under
+    -- the package's less `-package` -- is the review's: so the answer goes under another name, and that name is
+    printed (#134, batch 4's re-review N5). The step-aside's line named both files and not that; the clipboard run
+    told the person to save the answer over the review."""
+    import contextlib
+    import io
+    real_dt, real_free, real_remove, real_copy = (globals()["datetime"], globals()["_free_base"], os.remove,
+                                                  globals()["copy_to_clipboard"])
+    saved = {k: os.environ.pop(k, None) for k in ("AUTOSOUND_PROJECT_DIR", "AUTOSOUND_REVIEW_RAW_DIR",
+                                                  "AUTOSOUND_CRITIC_VIA")}
+    saved_argv = sys.argv
+
+    class Frozen(real_dt):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2026, 10, 7, 1, 2, 3, tzinfo=tz)
+    failures = []
+    try:
+        for kind, role, other, mine in (("a review beside a package", "critic", "-package.md", ".md"),
+                                        ("a package beside a review", "ask", ".md", "-package.md")):
+            with tempfile.TemporaryDirectory() as project:
+                open(os.path.join(project, "project.json"), "w", encoding="utf-8").close()
+                os.environ["AUTOSOUND_PROJECT_DIR"] = project
+                folder = os.path.join(project, "process", "reviews")
+                os.makedirs(folder)
+                base = f"2026-10-07T01-02-03-{role}"
+                with open(os.path.join(folder, base + other), "x", encoding="utf-8") as fh:
+                    fh.write("the other writer's file")
+                held = os.path.join(folder, base + mine)
+                looks = []
+
+                def look(*args, **kw):              # the look saw the base free; the other writer took it before
+                    looks.append(args)
+                    return base if len(looks) == 1 else real_free(*args, **kw)
+
+                def refused(path, *args, **kw):
+                    if os.path.abspath(path) == os.path.abspath(held):
+                        raise PermissionError(13, "The process cannot access the file because it is being used by "
+                                                  "another process", path)
+                    return real_remove(path, *args, **kw)
+                err = io.StringIO()
+                globals()["datetime"], globals()["_free_base"], os.remove = Frozen, look, refused
+                globals()["copy_to_clipboard"] = lambda text: False
+                try:
+                    with contextlib.redirect_stderr(err), contextlib.redirect_stdout(io.StringIO()):
+                        if mine == ".md":
+                            _persist_review(role, "the critique", "m", "api")
+                        else:
+                            pkg = os.path.join(project, "question.md")
+                            with open(pkg, "w", encoding="utf-8") as fh:
+                                fh.write("Translate: stage")
+                            sys.argv = ["autosound_ai.py", role, pkg, "--via", "clipboard"]
+                            try:
+                                main()
+                            except SystemExit:
+                                pass
+                finally:
+                    globals()["datetime"], globals()["_free_base"], os.remove = real_dt, real_free, real_remove
+                    globals()["copy_to_clipboard"] = real_copy
+                    sys.argv = saved_argv
+                said = err.getvalue()
+                answer = os.path.join("process", "reviews", base + "-answer.md")
+                aside = next((ln for ln in said.splitlines() if "could not be removed" in ln), "")
+                if f"{base}-package.md is saved under another name: " not in aside \
+                        or not aside.endswith(os.sep + answer) \
+                        or (mine == "-package.md" and f"збережи її як {answer}" not in said):
+                    failures.append(f"{kind}: {said[-600:]}")
+    finally:
+        globals()["datetime"], globals()["_free_base"], os.remove = real_dt, real_free, real_remove
+        globals()["copy_to_clipboard"] = real_copy
+        sys.argv = saved_argv
+        for k, v in saved.items():
+            os.environ.pop(k, None)
+            if v is not None:
+                os.environ[k] = v
+    assert not failures, "\n  ".join(["the answer's name, over a step-aside refused:"] + failures)
+
+
 def _selftest():
     """Offline: a retired model becomes a CHOICE carrying the key's list (never a fall-through),
     the list is parsed from the API's shape, and a run with a key and no model stops on the list."""
     failures = []
-    for check in (_check_review_names_unique, _check_step_aside_refused_remove):
+    for check in (_check_review_names_unique, _check_step_aside_refused_remove,
+                  _check_step_aside_names_the_answers_name):
         try:
             check()
         except AssertionError as exc:
@@ -3582,7 +3678,13 @@ def main():
         print("✓ Пакет скопійовано в буфер обміну — встав його в будь-який ШІ-чат (Ctrl+V / Cmd+V).", file=sys.stderr)
     else:
         print("✗ У буфер не скопійовано — відкрий файл вище і скопіюй вручну.", file=sys.stderr)
-    answer = (package_rel or os.path.join("process", "reviews", os.path.basename(package_path))).replace("-package.md", ".md")
+    if package_rel and package_path.endswith("-package.md"):
+        # A free name: a review holds `<base>.md` when a step-aside was refused (#134, batch 4's re-review N5).
+        answer = os.path.join(os.path.dirname(package_rel), _answer_name(
+            os.path.dirname(package_path), os.path.basename(package_path)[: -len("-package.md")]))
+    else:
+        answer = (package_rel or os.path.join("process", "reviews", os.path.basename(package_path))).replace(
+            "-package.md", ".md")
     print(f"Коли відповідь буде: збережи її як {answer} у проекті і запиши:\n"
           f"   process.py <project>/process reviewer <vendor> <model> --review {answer} --mode clipboard",
           file=sys.stderr)

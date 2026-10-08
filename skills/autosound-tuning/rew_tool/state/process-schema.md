@@ -204,14 +204,12 @@ appended line is fsynced (and the folder, when the append made the file), so it 
   it records nothing and exits 1, `REW's measurement list was not read (<why>) -- nothing was
   recorded` (H I-6). It recorded every title as REW's verdict, `exists` null, and a
   `capture_verified` naming each in `bad`; old states may still hold such a null.
-- **Nothing is cleared over work that is only in the chat** (S-044). `handoff` answers one question
-  — is everything the NEXT session needs on disk — and REFUSES while it is not: no phase recorded,
-  an open capture round, a plan step left `todo`/`in_progress`, a done step whose evidence resolves
-  to nothing, no ledger snapshot, a `tuning-changelog` with no ▶️ CONTINUE block, or one it cannot read (another code
-  page, a file that cannot be opened: named, with the mend its cause allows, where it read as no changelog). It
-  writes nothing
-  either way (which evidence closes a step is a decision), and when it passes it prints the resume
-  line: what to say next, and what must stay open.
+- **Nothing is cleared over work that is only in the chat** (S-044). `handoff` answers one question — is everything the
+  NEXT session needs on disk — and REFUSES while it is not: no phase recorded, an open capture round, a plan step left
+  `todo`/`in_progress`, a done step whose evidence resolves to nothing, no ledger snapshot, a `tuning-changelog` with no
+  ▶️ CONTINUE block, or one it cannot read (another code page, a file that cannot be opened: named, with the mend its
+  cause allows, where it read as no changelog). It writes nothing either way (which evidence closes a step is a
+  decision), and when it passes it prints the resume line: what to say next, and what must stay open.
 - **A round says WHICH counter its version is, and a ledger version must exist** (TCC-022). The two
   are different counters and neither is derived from the other: a **series** `_N` numbers a set of
   measurements, a **ledger version** `v_NNN` is the configuration they were taken under. So the
@@ -433,8 +431,10 @@ that raises must not become a wall"), on the damaged projects most of all.
   raises refuses with `phase N is not entered: the intake check raised <type>: <message>`; a file the check found
   unreadable raises as itself, with its own repair, and a `project.json` that is there and cannot be read refuses as
   itself too, `phase N is not entered: <file> exists and cannot be read: ...` (#134, F M-5: it said the glossary
-  inside it was not produced). Otherwise it still gates on `missing`; gating on `complete`, with a parity test
-  against `contract.py check --gate`, is J3b (W-11).
+  inside it was not produced). So does a standalone `glossary.json`, `phase N is not entered: <file> <reason> --
+  <repair>` (batch 4's re-review N4): read as no glossary, it let the phase in beside `project.json`'s own glossary,
+  or was "not produced". Otherwise it still gates on `missing`; gating on `complete`, with a parity test against
+  `contract.py check --gate`, is J3b (W-11).
 - **The flaw-map gate** (leaving 0): a `project.json` that is there and cannot be read raises `Unreadable` with its
   repair (`git -C <project-dir> checkout HEAD -- project.json`, or `contract.py repair-encoding` for another code
   page). One holding an array stopped the gate with a traceback; a damaged one let the phase in with no map.

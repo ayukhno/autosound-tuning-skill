@@ -325,12 +325,16 @@ def processing_rate(project_dir):
     rate (the user's ruling, 2026-08-25): the snapshot's number is what was believed at bank time,
     and if the profile is later corrected, the sheet must follow the profile -- the sheet is what
     the Arbiter types into the DSP, and the DSP runs at the profile's rate.
+
+    Read as the profile's own reader reads it (`dsp_profile.load_profile`, #134, R58e): no profile, and a profile
+    that states no rate, are None; one that is there and cannot be read, or that a newer method wrote, raises its
+    `Unreadable` (`is_unreadable`), naming the file and its repair. It was read as None, and the sheet took the
+    snapshot's rate for the profile's -- the guess the ruling above refuses.
     """
     path = os.path.join(project_dir or "", "dsp_profile.json")
     try:
-        with open(path, encoding="utf-8") as fh:
-            data = json.load(fh)
-    except (OSError, ValueError):
+        data = _siblings().load("dsp_profile.py").load_profile(path)
+    except FileNotFoundError:
         return None
     body = data.get("dsp_profile") if isinstance(data.get("dsp_profile"), dict) else data
     if not isinstance(body, dict):
@@ -1323,9 +1327,17 @@ class PresetHistory:
         sheet that column. Read at render time, by `code`, exactly like any other consumer.
         """
         snap = self.load(version)
+        # A profile that cannot be read is said on the sheet, and no samples column is derived from a rate nobody read
+        # (#134, R58e): the sheet is what the Arbiter types in. No profile keeps the snapshot's rate, as before.
+        try:
+            rate, unread = processing_rate(self.project_dir), None
+        except Exception as exc:  # noqa: BLE001 -- matched by its attribute below; anything else still raises
+            if not getattr(type(exc), "is_unreadable", False):
+                raise
+            rate, unread = None, str(exc)
         return render_state(snap, channels=project_channels(self.project_dir),
                             current_target=current_target(self.project_dir, snap.get("preset", self.preset)),
-                            processing_rate_hz=processing_rate(self.project_dir))
+                            processing_rate_hz=rate, rate_unread=unread)
 
 
 def _diff_scalar(a, b):
@@ -1382,7 +1394,7 @@ def _fmt_opt(v, spec="g"):
     return "—" if v is None else str(v)
 
 
-def render_state(state, channels=None, current_target=None, processing_rate_hz=None):
+def render_state(state, channels=None, current_target=None, processing_rate_hz=None, rate_unread=None):
     """The human-applicable settings sheet, GENERATED from the source of truth.
 
     Never hand-edit this — edit the JSON and re-render. This is also the artifact the future
@@ -1392,11 +1404,15 @@ def render_state(state, channels=None, current_target=None, processing_rate_hz=N
     `current_target` is the active target pointer (`current_target(project_dir, preset)`); when given
     it is what the header shows, because that is the curve the Arbiter EQs against now. The snapshot's
     own `target` — what this version was designed against — is the fallback and stays in the JSON.
+
+    `rate_unread` is why the profile's rate could not be read (its file, reason and repair, #134, R58e): the sheet
+    says it, and its samples column stays empty -- `—` in every row -- rather than derived from the snapshot's rate.
     """
     # Samples derive from the DSP's PROCESSING rate (the profile) when the caller knows it; the
     # snapshot's own recorded rate is the fallback and is NAMED when they differ, because a silent
-    # difference here is a wrong number in every row of the samples column.
-    rate = processing_rate_hz if processing_rate_hz else state["sample_rate"]
+    # difference here is a wrong number in every row of the samples column. A profile nobody could read is no
+    # fallback case: its rate is unknown, not absent, and no samples are derived (R58e).
+    rate = None if rate_unread else (processing_rate_hz if processing_rate_hz else state["sample_rate"])
     snap_rate = state["sample_rate"]
     roles = state.get("roles") or {}
     channels = channels or {}
@@ -1418,6 +1434,8 @@ def render_state(state, channels=None, current_target=None, processing_rate_hz=N
         target_line += f" (this version designed against {designed})"
     meta = [
         target_line,
+        (f"processing rate: NOT READ — {rate_unread} — so no samples are derived (ms is canonical; the snapshot "
+         f"recorded {snap_rate:g}, and the sheet follows the profile's rate)") if rate_unread else
         f"processing rate: {rate:g} Hz (samples derived; ms is canonical)"
         + (f" — the snapshot recorded {snap_rate:g}; samples follow the PROFILE rate"
            if processing_rate_hz and snap_rate != processing_rate_hz else ""),
@@ -1454,7 +1472,8 @@ def render_state(state, channels=None, current_target=None, processing_rate_hz=N
         # `:g` on None raised TypeError and took the whole sheet down with it (a live project, 2026-08-25).
         # Render what is there, `—` for what is not, and say OFF where the row is switched off.
         ta = ch.get("ta_ms")
-        ta_smp = samples_for(ta, rate) if isinstance(ta, (int, float)) and not isinstance(ta, bool) else "—"
+        ta_smp = (samples_for(ta, rate) if rate and isinstance(ta, (int, float)) and not isinstance(ta, bool)
+                  else "—")
         flags = "".join(f" {flag.upper()}" for flag in ("off", "mute") if ch.get(flag))
         lines.append(
             f"| {ch_name} | {slot_of(ch_name)} | {_fmt_filter(ch.get('hp'))} | {_fmt_filter(ch.get('lp'))} "
@@ -1473,7 +1492,7 @@ def render_state(state, channels=None, current_target=None, processing_rate_hz=N
         lines.append("|---|---|---|---|---|---|---|---|---|")
         for name, row in rows.items():
             ta = row.get("ta_ms")
-            ta_smp = samples_for(ta, rate) if isinstance(ta, (int, float)) else "—"
+            ta_smp = samples_for(ta, rate) if rate and isinstance(ta, (int, float)) else "—"
             bands = eq_str(row.get("eq"))
             lines.append(
                 f"| {name} | {slot_of(name)} | {_fmt_opt(row.get('gain_db'))} "
@@ -1723,6 +1742,15 @@ def _utf8_damage(raw, appended):
     return None
 
 
+def _is_utf8(raw):
+    """Whether `raw` decodes as UTF-8 whole."""
+    try:
+        raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return False
+    return True
+
+
 def _json_in(body, page):
     """The text `page` makes of `body` when it is JSON there, else None."""
     try:
@@ -1792,7 +1820,7 @@ def _relined(raw, page):
     return b"".join(out), changed
 
 
-def encoding_survey(paths, unread=None):
+def encoding_survey(paths, unread=None, cut=None):
     """Which of `paths` are not UTF-8, and what each one could say instead.
 
     Returns one dict per DAMAGED file -- a clean set surveys to `[]`. `candidates` holds only the
@@ -1807,6 +1835,8 @@ def encoding_survey(paths, unread=None):
     every other line keeps its bytes; its entry carries `set_aside`, `[(number, text)]`, the lines no page makes JSON
     of (R56), which no candidate rewrites and `set_aside` takes out. A file that cannot be opened (held, a permission)
     is not surveyed -- never called UTF-8 either: it goes into `unread`, `[(path, why)]`, when the caller passes a list.
+    A file other than a journal cut inside its last character is no code page's (`_utf8_damage`): it goes into `cut`,
+    `[(path, its restore)]`, when the caller passes a list (#134, batch 4's re-review N4) -- left out, nothing named it.
     """
     found = []
     for path in paths:
@@ -1820,6 +1850,8 @@ def encoding_survey(paths, unread=None):
         appended = path.endswith(".jsonl")
         exc = _utf8_damage(raw, appended)
         if exc is None:
+            if cut is not None and not appended and not _is_utf8(raw):
+                cut.append((path, _project_io().restore_line(path)))     # a write cut off inside its last character
             continue                            # already UTF-8: nothing to repair
         entry = {"path": path, "byte": raw[exc.start], "position": exc.start, "reason": exc.reason, "candidates": []}
         if appended:
@@ -1855,16 +1887,27 @@ def _non_ascii_lines(text, limit=6):
     return out[:limit]
 
 
-def render_survey(found, where, repair_command, set_aside_command=None, unread=()):
+def render_survey(found, where, repair_command, set_aside_command=None, unread=(), cut=()):
     """The survey as a person reads it. `set_aside_command` is the command that takes out the journal lines no code
     page makes JSON of (R56); `unread` the files the survey could not open (m3): with any, it never says that every
-    file is UTF-8 -- the caller names them on stderr."""
+    file is UTF-8 -- the caller names them on stderr. `cut` the files cut inside their last character, each with its
+    restore (`encoding_survey`, #134, batch 4's re-review N4): named under "cut off", never offered a page."""
+    cut_lines = []
+    if cut:
+        cut_lines = ["", f"{len(cut)} file(s) under {where} are cut off inside their last character -- a write cut "
+                         f"off, which no code page mends; restore each from its history:"]
+        for path, restore in cut:
+            cut_lines += [path, f"    {restore}"]
     if not found:
         if unread:
-            return (f"the files the survey could read under {where} are UTF-8, but {len(unread)} could not be read "
-                    f"(each named on its own error line) -- run this again once they can be")
-        return (f"every file under {where} is UTF-8, or cut off in its last character (a cut write, which no code page "
-                f"mends) — nothing to repair")
+            head = (f"the files the survey could read under {where} are UTF-8{' or cut off (below)' if cut else ''}, "
+                    f"but {len(unread)} could not be read (each named on its own error line) -- run this again once "
+                    f"they can be")
+        elif cut:
+            head = f"no file under {where} is in another code page -- no page is offered"
+        else:
+            head = f"every file under {where} is UTF-8 — nothing to repair"
+        return "\n".join([head] + cut_lines)
     lines = [f"{len(found)} file(s) under {where} are NOT UTF-8.", ""]
     for e in found:
         lines.append(f"{e['path']}")
@@ -1919,7 +1962,7 @@ def render_survey(found, where, repair_command, set_aside_command=None, unread=(
         lines.append("")
         lines.append("That moves each such line, bytes kept and its number with it, into `<journal>.set-aside`; "
                      "every other line keeps its bytes. It is a run of its own, before or after a page's rewrite.")
-    return "\n".join(lines)
+    return "\n".join(lines + cut_lines)
 
 
 def said_unread(unread):
@@ -2261,12 +2304,13 @@ def _run(p, args):
         me = os.path.abspath(__file__)
         unread = []
         if args.codec is None:
-            found = encoding_survey(paths, unread)
+            cut = []
+            found = encoding_survey(paths, unread, cut)
             print(render_survey(
                 found, args.root,
                 lambda c: f"python3 {me} --root {args.root} repair-encoding "
                           + (" ".join(sorted(presets)) + " " if presets else "")
-                          + f"--from {c}", unread=unread))
+                          + f"--from {c}", unread=unread, cut=cut))
             return said_unread(unread)
         try:
             done = repair_encoding(paths, args.codec, unread)
@@ -2362,6 +2406,18 @@ def _config_cli(args):
         return 3
 
 
+def _bank_check(h, state):
+    """`validate`'s words for `state` stamped as `PresetHistory.snapshot` stamps it for `h` (its preset, this schema,
+    the project's revision), or None when the bank would take it."""
+    probe = copy.deepcopy(state)
+    probe.update(preset=h.preset, schema_version=SCHEMA_VERSION, project_rev=_project_rev(h.project_dir))
+    try:
+        validate(probe)
+    except ValueError as exc:
+        return str(exc)
+    return None
+
+
 def _variant_cli(h, args):
     """`variant new|list|switch` -- the moves a session used to script by hand (#58 P2)."""
     if args.action == "list":
@@ -2388,6 +2444,7 @@ def _variant_cli(h, args):
     state = h.load(base)
     for key in ("version", "created", "parent", "migrated_from"):
         state.pop(key, None)
+    as_banked = copy.deepcopy(state)
     if args.delta:
         # A delta it cannot read or apply is a refusal naming what is wrong, nothing banked (#134, H 22, T m10): a file
         # not there, not JSON, not an object, or a change `apply_delta` refuses ended in a traceback.
@@ -2417,15 +2474,21 @@ def _variant_cli(h, args):
             print(f"{refused}: {exc} -- nothing was banked", file=sys.stderr)
             return 1
     state["variant"] = args.arg
-    try:
-        v = h.snapshot(state, note=args.note or f"variant {args.arg} from {base}", place=False, parent=base)
-    except ValueError as exc:
-        # The bank validates what the delta made (a gain that is no number, a corner below 0 Hz): the delta's fault,
-        # said as such. The ledger's own refusals (`SnapshotError`) are `_main`'s to say.
-        if not args.delta or getattr(type(exc), "is_snapshot_error", False):
-            raise
-        print(f"error: variant new: --delta {args.delta}: {exc} -- nothing was banked", file=sys.stderr)
-        return 1
+    if args.delta:
+        # The version the delta makes is checked as the bank checks it, before the bank (#134, batch 4's re-review N3),
+        # and the base alone when it fails: a base banked under an older, looser check fails on its own, and was said
+        # as the delta's fault (`--delta <file>: <the check's words>`). A delta that mends the base's fault banks.
+        fault = _bank_check(h, state)
+        if fault is not None:
+            own = _bank_check(h, dict(as_banked, variant=args.arg))
+            if own is not None:
+                print(f"error: variant new: the base {base} does not pass the ledger's check on its own ({own}) -- the "
+                      f"delta is not what fails; nothing was banked", file=sys.stderr)
+            else:
+                print(f"error: variant new: --delta {args.delta}: the version it makes from {base} does not pass the "
+                      f"ledger's check ({fault}) -- nothing was banked", file=sys.stderr)
+            return 1
+    v = h.snapshot(state, note=args.note or f"variant {args.arg} from {base}", place=False, parent=base)
     print(f"{v}: variant {args.arg} from {base}, not in the slot -- `variant switch {h.preset} {v}` "
           f"puts it there")
     return 0
@@ -3023,6 +3086,143 @@ def _check_variant_delta_refused():
         shutil.rmtree(root, ignore_errors=True)
 
 
+def _check_variant_delta_blames_no_good_delta():
+    """`variant new --delta` never blames a good delta for its base (#134, batch 4's re-review N3). A base banked under
+    an older, looser check, which the bank's check now refuses, was said as `--delta <file>: <the check's words>`.
+    The version the delta makes is checked before the bank: when the base fails the check on its own, the refusal
+    names the base; a delta that mends the base's fault banks."""
+    import contextlib
+    import io
+    import shutil
+    import tempfile
+    root = tempfile.mkdtemp(prefix="autosound_variant_base_")
+    try:
+        h = PresetHistory(root, "SQ")
+        h.snapshot(_sample_state(), note="baseline")
+        loose = h.load("v_001")
+        loose["version"], loose["channels"]["sub"]["gain_db"] = "v_002", "-6"     # a gain banked as a word
+        with open(h._path("v_002"), "w", encoding="utf-8") as fh:
+            json.dump(loose, fh)
+        banked = h.versions()
+        failures = []
+        for label, change, rc_want, said in (
+                ("a good delta on a base the check refuses", {"w-L": {"gain_db": -3.0}}, 1,
+                 "error: variant new: the base v_002 does not pass the ledger's check on its own"),
+                ("a delta that mends the base", {"sub": {"gain_db": -6.0}}, 0, "variant B from v_002")):
+            path = os.path.join(root, "delta.json")
+            with open(path, "w", encoding="utf-8") as fh:
+                json.dump(change, fh)
+            out, err = io.StringIO(), io.StringIO()
+            try:
+                with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                    rc = _main(["--root", root, "variant", "new", "SQ", "B", "--from", "v_002", "--delta", path])
+            except Exception as exc:  # noqa: BLE001 -- a traceback is the failure under test
+                rc = f"raised {type(exc).__name__}: {exc}"
+            text = (out.getvalue() if rc_want == 0 else err.getvalue()).strip()
+            if rc != rc_want or said not in text or (rc_want and (f"--delta {path}" in text or "\n" in text
+                                                                 or "gain_db must be a number" not in text
+                                                                 or h.versions() != banked)):
+                failures.append(f"{label}: rc {rc!r}, said {text[-300:]!r}, versions {h.versions()}")
+        assert not failures, "\n  ".join(["a base's fault said as the delta's:"] + failures)
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def _check_sheet_says_an_unreadable_profile():
+    """The settings sheet's samples follow the profile's processing rate, and a `dsp_profile.json` that is there and
+    cannot be read -- cut off, a newer method's -- is said on the sheet, its file, its reason and its repair, with no
+    samples column computed from a rate nobody read (#134, R58e). `processing_rate` read the profile leniently: such a
+    profile was "no rate", and the column came from the snapshot's own rate, against the Arbiter's ruling of
+    2026-08-25 its docstring states. No profile still falls back to the snapshot's rate."""
+    import contextlib
+    import io
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_sheet_profile_")
+    try:
+        root = os.path.join(top, "state")
+        h = PresetHistory(root, "SQ", project_dir=top)
+        h.snapshot(_sample_state(), note="baseline")
+        path = os.path.join(top, "dsp_profile.json")
+
+        def sheet():
+            text = h.render()
+            row = next(ln for ln in text.splitlines() if ln.startswith("| sub |"))
+            rate = next(ln for ln in text.splitlines() if ln.startswith("- processing rate:"))
+            return rate, [c.strip() for c in row.split("|")][7], text
+
+        failures = []
+        rate, smp, _text = sheet()
+        if "96000 Hz" not in rate or smp != "480" or processing_rate(top) is not None:
+            failures.append(f"no profile: {rate!r}, samples {smp!r}")
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump({"dsp_profile": {"name": "X", "vendor": "Y", "dsp_processing_rate_hz": 48000}}, fh)
+        rate, smp, _text = sheet()
+        if "48000 Hz" not in rate or "samples follow the PROFILE rate" not in rate or smp != "240":
+            failures.append(f"a profile at 48000: {rate!r}, samples {smp!r}")
+        newer = _siblings().load("dsp_profile.py").SCHEMA_VERSION + 1
+        for label, raw, why in (
+                ("cut off", b'{"dsp_profile": {"name": "X", "dsp_processing_rate_hz": 480', "checkout HEAD -- "
+                                                                                            "dsp_profile.json"),
+                ("a newer method's", json.dumps({"schema_version": newer, "dsp_profile": {
+                    "dsp_processing_rate_hz": 48000}}).encode(), f"is schema v{newer}")):
+            with open(path, "wb") as fh:
+                fh.write(raw)
+            try:
+                rate, smp, text = sheet()
+            except Exception as exc:  # noqa: BLE001 -- a sheet that does not render is the failure under test
+                failures.append(f"{label}: raised {type(exc).__name__}: {exc}")
+                continue
+            if not rate.startswith(f"- processing rate: NOT READ — {path} ") or why not in rate or smp != "—" \
+                    or "| 480 |" in text:
+                failures.append(f"{label}: {rate!r}, samples {smp!r}")
+            try:
+                processing_rate(top)
+            except Exception as exc:  # noqa: BLE001 -- the kind is what is under test
+                if not getattr(type(exc), "is_unreadable", False):
+                    failures.append(f"{label}: processing_rate raised {type(exc).__name__}")
+            else:
+                failures.append(f"{label}: processing_rate read it")
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                rc = _main(["--root", root, "render", "SQ"])
+            if rc not in (0, None) or "processing rate: NOT READ" not in out.getvalue():
+                failures.append(f"{label}: `render` rc {rc!r}, {out.getvalue()[:200]!r}")
+        assert not failures, "\n  ".join(["the sheet over a profile it cannot read:"] + failures)
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_survey_names_a_cut_file():
+    """A file cut inside its last character is named by the survey, under "cut off", with its restore (#134, batch 4's
+    re-review N4). Batch 2's re-review took it out of the damaged files -- no code page mends a cut write -- and then
+    nothing named it: the survey said every file was UTF-8 "or cut off in its last character ... nothing to repair".
+    It is never offered a page."""
+    import contextlib
+    import io
+    import shutil
+    import tempfile
+    root = tempfile.mkdtemp(prefix="autosound_survey_cut_")
+    try:
+        h = PresetHistory(root, "SQ")
+        h.snapshot(_sample_state(), note="тест")
+        path = h._path("v_001")
+        with open(path, "rb") as fh:
+            whole = fh.read()
+        with open(path, "wb") as fh:
+            fh.write(whole[: whole.index("т".encode("utf-8")) + 1])          # inside `т`: a write cut off
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            rc = _main(["--root", root, "repair-encoding"])
+        said = out.getvalue()
+        assert rc == 0 and path in said and "cut off" in said and "checkout HEAD -- v_001.json" in said \
+            and "nothing to repair" not in said and "--from" not in said, (rc, said[-500:])
+        cut = []
+        assert encoding_survey([path], cut=cut) == [] and [c[0] for c in cut] == [path], cut
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def _selftest():
     failures = []
     for check in (_check_variant_delta_refused, _check_eq_refusals, _check_canonical_code_uses_the_loaded_naming,
@@ -3030,7 +3230,9 @@ def _selftest():
                   _check_survey_reads_a_torn_journal_as_torn, _check_repair_encoding_line_by_line,
                   _check_set_aside_what_no_page_reads, _check_banked_never_sealed,
                   _check_unreadable_seals_and_project_refused,
-                  _check_newer_version_refused, _check_snapshot_error_from_another_copy):
+                  _check_newer_version_refused, _check_snapshot_error_from_another_copy,
+                  _check_variant_delta_blames_no_good_delta, _check_sheet_says_an_unreadable_profile,
+                  _check_survey_names_a_cut_file):
         try:
             check()
         except AssertionError as exc:

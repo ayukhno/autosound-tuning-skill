@@ -339,7 +339,13 @@ def import_current_state(old_dir, new_dir, dry_run=False):
         snap["project_rev"] = 1
         snap["note"] = (f"imported from {os.path.relpath(path, old_dir)} in {old_dir} — "
                         f"the state this car was in when it moved to 3.0")
-        _state.validate(snap)  # before a single byte is written
+        try:
+            _state.validate(snap)  # before a single byte is written
+        except ValueError as exc:
+            # A version this method's check refuses is the import's refusal, naming its file (#134, batch 4's re-review
+            # N2): a bare `ValueError` named no file, and the command line takes no other `ValueError` for a refusal.
+            raise _state.SnapshotError(f"{path}: {exc} -- it does not pass this method's check as it stands, so "
+                                       f"nothing was imported") from exc
         report["snapshots"].append(f"{preset}/v_001.json (was {os.path.basename(path)})")
 
     if not dry_run:
@@ -438,10 +444,11 @@ def _main(argv=None):
         report = import_current_state(project_dir, new_dir, dry_run=dry_run)
     except Exception as exc:  # noqa: BLE001 -- matched below; anything else still raises
         # A refusal of the import -- `--into` over a `project.json` a newer method wrote (`Project.save`'s words), one
-        # that cannot be read, a ledger version that cannot be read -- is said in one line, exit 1 (#134, H 23, T m10).
-        # It ended in a traceback: nothing here caught it. A `ProjectError` is a `ValueError`, as is what the snapshot
-        # door raises for a file it cannot read.
-        if not (isinstance(exc, ValueError) or getattr(type(exc), "is_unreadable", False)
+        # that cannot be read, a ledger version that cannot be read or does not pass this method's check -- is said in
+        # one line, exit 1 (#134, H 23, T m10). It ended in a traceback: nothing here caught it. Those three kinds
+        # alone (batch 4's re-review N2): any other `ValueError` -- a `float()` on a malformed field, say -- is a bug,
+        # and raises with its traceback, where it was printed `error: could not convert ...` with no file named.
+        if not (isinstance(exc, _project.ProjectError) or getattr(type(exc), "is_unreadable", False)
                 or getattr(type(exc), "is_snapshot_error", False)):
             raise
         print(f"error: {exc}", file=sys.stderr)
@@ -507,11 +514,60 @@ def _check_import_refuses_newer_project():
         shutil.rmtree(new, ignore_errors=True)
 
 
+def _check_main_refuses_only_refusals():
+    """`migrate --into` says the import's refusals in one line -- a `ProjectError`, a version the ledger cannot read
+    (`is_snapshot_error`), a file that cannot be read (`is_unreadable`) -- and nothing else (#134, batch 4's re-review
+    N2): every `ValueError` was taken for one, so a bug's (a `float()` on a malformed field, say) was printed
+    `error: could not convert ...`, exit 1, no traceback and no file named. A 2.x version that does not pass this
+    method's check is a refusal of its own, and names its file."""
+    import contextlib
+    import io
+    import shutil
+    import tempfile
+    global migrate_snapshot
+    real = migrate_snapshot
+    old = tempfile.mkdtemp(prefix="autosound_migrate_refusals_old_")
+    new = tempfile.mkdtemp(prefix="autosound_migrate_refusals_new_")
+    try:
+        os.makedirs(os.path.join(old, "state", "SQ"))
+        version = os.path.join(old, "state", "SQ", "v_001.json")
+        row = {"helix_ch": "C", "hp": {"f": 70, "type": "BW", "slope": 12}, "lp": {"f": 270, "type": "BW", "slope": 12},
+               "gain_db": -7.8, "ta_ms": 5.38, "polarity": "NORM"}
+        failures = []
+
+        def run():
+            out, err = io.StringIO(), io.StringIO()
+            try:
+                with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                    rc = _main([old, "--into", new, "--dry-run"])
+            except Exception as exc:  # noqa: BLE001 -- what reaches the command line is what is under test
+                rc = f"raised {type(exc).__name__}: {exc}"
+            return rc, out.getvalue(), err.getvalue().strip()
+        _write_json(version, {"preset": "SQ", "version": "v_001", "sample_rate": 96000,
+                              "channels": {"w-L": dict(row, gain_db="loud")}})
+        rc, out, err = run()
+        if rc != 1 or out or "\n" in err or not err.startswith(f"error: {version}: ") or "gain_db" not in err:
+            failures.append(f"a version this method's check refuses: rc {rc!r}, said {err[-300:]!r}")
+
+        def bug(raw):
+            raise ValueError("could not convert string to float: 'x'")
+        migrate_snapshot = bug
+        _write_json(version, {"preset": "SQ", "version": "v_001", "sample_rate": 96000, "channels": {"w-L": row}})
+        rc, out, err = run()
+        if rc != "raised ValueError: could not convert string to float: 'x'":
+            failures.append(f"a bug's ValueError: rc {rc!r}, said {err[-300:]!r}")
+        assert not failures, "\n  ".join(["migrate's command line:"] + failures)
+    finally:
+        migrate_snapshot = real
+        shutil.rmtree(old, ignore_errors=True)
+        shutil.rmtree(new, ignore_errors=True)
+
+
 def _selftest():
     import tempfile
 
     failures = []
-    for check in (_check_import_refuses_newer_project,):
+    for check in (_check_import_refuses_newer_project, _check_main_refuses_only_refusals):
         try:
             check()
         except AssertionError as exc:

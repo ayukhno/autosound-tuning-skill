@@ -436,14 +436,17 @@ def session_report(verdicts, processing_rate_hz=None, ir_of=_rew_ir_of):
             # REW's list was not read (#134): neither control can be called there or missing -- the close of the
             # series included when it was never asked for (T I5: it read "<ctl1> present, <ctl3> missing").
             drift = {"ctl1": r["name"], "ctl3": partner, "not_read": True}
+        elif r["exists"] is False or (p is not None and p["exists"] is False):
+            # Every control REW does not hold is named (batch 4's re-review N7): with neither held the line named the
+            # close alone, and a ctl1 REW does not hold, beside a close nobody asked for, read "check <ctl3> beside
+            # <ctl1>" (batch 3's re-review O2: it said "<ctl1> present"). `not_asked`: the close was not checked.
+            gone = [name for name, row in ((r["name"], r), (partner, p)) if row is not None and row["exists"] is False]
+            drift = {"ctl1": r["name"], "ctl3": partner, "missing": " and ".join(gone)}
+            if p is None:
+                drift["not_asked"] = True
         elif p is None:
             # REW was read, but nobody asked it for the close of the series: not read, never "missing" (T I5).
             drift = {"ctl1": r["name"], "ctl3": partner, "not_read": True, "not_asked": True}
-        elif p["exists"] is False:
-            drift = {"ctl1": r["name"], "ctl3": partner, "missing": partner}
-        elif r["exists"] is False:
-            # REW holds no ctl1 (batch 3's re-review O2): it is the one missing -- the line said "<ctl1> present".
-            drift = {"ctl1": r["name"], "ctl3": partner, "missing": r["name"]}
         elif r.get("ambiguous") or p.get("ambiguous"):
             # REW holds a control more than once (H I-8): which one the drift is read on is not knowable.
             drift = {"ctl1": r["name"], "ctl3": partner, "ambiguous": r["name"] if r.get("ambiguous") else partner}
@@ -532,8 +535,10 @@ def render_session(report):
         lines.append(f"  drift: {d['ctl1']} -> {d['ctl3']} not read -- REW holds {d['ambiguous']} more than once: "
                      "rename so titles are unique")
     elif d.get("missing"):
-        # Only what is missing is said (O2): "<ctl1> present" was said of a ctl1 REW does not hold.
-        lines.append(f"  drift: {d['ctl1']} -> {d['ctl3']}: {d['missing']} missing -- no drift record")
+        # Only what is missing is said (O2): "<ctl1> present" was said of a ctl1 REW does not hold. Every control
+        # missing, and a close nobody asked for as that (N7).
+        lines.append(f"  drift: {d['ctl1']} -> {d['ctl3']}: {d['missing']} missing -- no drift record"
+                     + (f"; {d['ctl3']} was not among the titles checked" if d.get("not_asked") else ""))
     else:
         smp = d["delta_samples"]
         held = ("the time base HELD" if d["held"] else
@@ -1030,13 +1035,35 @@ def _check_drift_says_what_was_not_read():
     assert line == [f"  drift: {c1} -> {c3}: {c3} missing -- no drift record"], line
 
 
+def _check_drift_names_every_missing_control():
+    """The drift line names every control REW does not hold (#134, batch 4's re-review N7): with neither held it named
+    the close alone (`<ctl3> missing`), and a ctl1 REW does not hold, beside a close nobody asked for, read as "check
+    <ctl3> beside <ctl1>" -- a ctl1 that is not there."""
+    def row(name, exists=True, peak=None):
+        stats = {} if peak is None else {"peak_time_ms": peak, "capture_rate_hz": 48000, "live_mean_dB": 80.0}
+        return {"name": name, "exists": exists, "reachable": True, "applicable": True,
+                "valid": bool(exists and peak is not None), "stats": stats, "issues": []}
+    c1, c3 = "m-L-ctl1_1 (sw)", "m-L-ctl3_1 (sw)"
+    failures = []
+    for label, rows, want in (
+            ("neither held", [row(c1, exists=False), row(c3, exists=False)],
+             f"  drift: {c1} -> {c3}: {c1} and {c3} missing -- no drift record"),
+            ("ctl1 not held, the close not asked", [row(c1, exists=False)],
+             f"  drift: {c1} -> {c3}: {c1} missing -- no drift record; {c3} was not among the titles checked")):
+        line = [ln for ln in render_session(session_report(rows, ir_of=None)).splitlines() if "drift" in ln]
+        if line != [want]:
+            failures.append(f"{label}: {line}")
+    assert not failures, "\n  ".join(["a drift line that names one missing control:"] + failures)
+
+
 def _selftest():
     """Offline, REW never reached: REW's states through its readers stood in (`_rew_as`), REW's recorded answers
     replayed (`testdata/rew/`), the command line at a dead port, the drift record, the counts and the outlier rule."""
     failures = []
     for check in (_check_unreachable_state, _check_protocol_error_state, _check_ir_failure_on_a_sweep,
                   _check_recorded_no_impulse, _check_ambiguous_title, _check_drift_says_why, _check_counts_add_up,
-                  _check_command_line_bug_exits_70, _check_drift_says_what_was_not_read):
+                  _check_command_line_bug_exits_70, _check_drift_says_what_was_not_read,
+                  _check_drift_names_every_missing_control):
         try:
             check()
         except Exception as exc:  # noqa: BLE001 -- a check that raises is reported by name, like one that fails
