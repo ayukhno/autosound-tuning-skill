@@ -34,6 +34,8 @@ stdlib only, py3.9+.
 """
 from __future__ import annotations
 
+import contextlib
+import functools
 import json
 import math
 import os
@@ -67,6 +69,16 @@ def _siblings():
 def _project_io():
     """`rew_tool/project_io.py`: how this module writes the files it owns (skill #135)."""
     return _siblings().load("project_io.py")
+
+
+def _write_lock():
+    """`rew_tool/write_lock.py`: one writer at a time in a project (skill #141)."""
+    return _siblings().load("write_lock.py")
+
+
+def _hold(project_dir):
+    """The project's writer lock for a `with` (#141): `write_lock.hold`, waiting `AUTOSOUND_LOCK_TIMEOUT_S` for it."""
+    return _write_lock().hold(project_dir)
 
 
 # One number across every machine file (see `project.py`'s own note) -- this file's own shape did
@@ -191,7 +203,8 @@ class ProcessError(ValueError):
 # reason on stderr), usage. 69, 70 and 75 are sysexits' -- `EX_UNAVAILABLE`, `EX_SOFTWARE`, `EX_TEMPFAIL` -- and no
 # tool of the method returned them before (PLAN-AUDIT §8 M1): REW did not answer, and nothing was written; an
 # unexpected error, a bug, with its traceback on stderr above the line that names it -- where it exited 1 like a
-# refusal, or escaped as a traceback; the project busy, reserved for the lock (J2b, W-9), not raised here.
+# refusal, or escaped as a traceback; the project busy: another writer held the project's lock past the wait
+# (`write_lock.py`, #141), nothing written, safe to retry.
 EXIT_OK = 0
 EXIT_NO = 1
 EXIT_USAGE = 2
@@ -1045,6 +1058,21 @@ def covers_summary(covers, keep=COVERS_IN_NAME):
     return ", ".join(shown) + (f" +{rest}" if rest else "")
 
 
+def _locked(method):
+    """`method`, a writer of `Process`, under the project's writer lock (#141, J2b): its load, its change, its write and
+    its event as one step, so another writer -- TCC, a second command line -- cannot write in between and lose this
+    one's change or have its own lost. What must run with the lock free runs first (`Process._ready_to_hold`). A writer
+    that calls another (`capture_import` -> `start_capture`, `supersede_capture` -> `record_capture`) takes the lock
+    once: the hold is re-entrant within a thread. `enter_phase` and `check_captures` are not decorated: they read git,
+    `gh` or REW first, and take the hold themselves after."""
+    @functools.wraps(method)
+    def locked(self, *args, **kwargs):
+        self._ready_to_hold()
+        with _hold(self.project_dir):
+            return method(self, *args, **kwargs)
+    return locked
+
+
 class Process:
     """Read and advance one project's process state.
 
@@ -1066,6 +1094,9 @@ class Process:
         # A state change written and its event not yet appended (F M-7): `_write` sets it, `_append` clears it, and
         # says what landed when the append is refused in between.
         self._unjournaled = False
+        # The sha `_stamp` writes, asked of git before this writer's first hold (`_ready_to_hold`, #141): git is never
+        # asked with the project's lock held.
+        self._sha = None
 
     # -- paths --
     @property
@@ -1287,10 +1318,16 @@ class Process:
 
         Re-entry is normal (Phase 5 is explicitly cyclical), so this is not a one-way ratchet:
         entering an earlier phase again makes it current and leaves the later ones' history alone.
+
+        The gates run with the project's lock free (#141, J2b): the intake gate asks git and `gh`, for up to a minute
+        and a half, and no other writer waits that long behind it. Then, under the hold, the state is read again and
+        the phase entered into it as it is THEN -- a step another writer added meanwhile stays. A phase another writer
+        made active meanwhile refuses this one, nothing written: the gates answered for the phase they saw.
         """
         phase = str(phase)
         if phase not in PHASES:
             raise ProcessError(f"unknown phase {phase!r}; known: {', '.join(PHASES)}")
+        self._ready_to_hold()
         state = self.load(strict=True)  # a writer reads strictly itself (#136, R25): see `_write`
         previous = state.get("active_phase")
         # No exemptions. A project brought over from 2.x is a NEW project — `migrate.py --into`
@@ -1302,14 +1339,24 @@ class Process:
         _require_target(phase, previous, state)
         _require_flaw_map(phase, previous, self.project_dir)
         _require_profile_facts(phase, previous, self.project_dir)
-        if previous and previous != phase:
-            state["phases"][previous]["status"] = PHASE_DONE
-        state["phases"][phase]["status"] = PHASE_CURRENT
-        state["active_phase"] = phase
-        self._write(state)
-        self._append(EV_PHASE_ENTERED, phase=phase, previous=previous, note=note)
+        with _hold(self.project_dir):
+            state = self.load(strict=True)
+            now = state.get("active_phase")
+            if now != previous:
+                def said(key):
+                    return "no phase" if key is None else f"phase {key}"
+                raise ProcessError(f"phase {phase} is not entered: {said(now)} is active now, and its gates were "
+                                   f"checked with {said(previous)} active -- another writer moved the process "
+                                   f"meanwhile; nothing was written, run enter-phase {phase} again")
+            if previous and previous != phase:
+                state["phases"][previous]["status"] = PHASE_DONE
+            state["phases"][phase]["status"] = PHASE_CURRENT
+            state["active_phase"] = phase
+            self._write(state)
+            self._append(EV_PHASE_ENTERED, phase=phase, previous=previous, note=note)
         return state
 
+    @_locked
     def add_step(self, step_id, name, source=SOURCE_SKILL, phase=None, covers=None):
         # (skill #72) The name leads with the step's id -- `_named_by_id`, below the class.
         """Add a plan step. Instantiated from the phase template (`skill`) or situational
@@ -1361,6 +1408,7 @@ class Process:
         self._append(EV_STEP_ADDED, step=step_id, name=name, source=source, covers=covers)
         return entry
 
+    @_locked
     def start_attempt(self, step_id):
         """Begin (or re-begin) a step. A second call is attempt 2 — the redo is recorded, not
         hidden, so "we tried this twice" survives into the plan the Arbiter reads."""
@@ -1376,6 +1424,7 @@ class Process:
         self._append(EV_ATTEMPT_STARTED, step=step_id, attempt=entry["attempt"])
         return entry
 
+    @_locked
     def finish_step(self, step_id, evidence):
         """Mark a step done. `evidence` is required, and at least one item must RESOLVE (SCR-035).
 
@@ -1436,6 +1485,7 @@ class Process:
         self._append(EV_STEP_DONE, step=step_id, evidence=entry["evidence"])
         return entry
 
+    @_locked
     def skip_step(self, step_id, superseded_by=None, reason=None):
         """Supersede a step. It stays in the plan, dimmed — never removed (SCR-004).
 
@@ -1460,6 +1510,7 @@ class Process:
         self._append(EV_STEP_SKIPPED, step=step_id, superseded_by=superseded_by, reason=reason)
         return entry
 
+    @_locked
     def block_step(self, step_id, reason):
         """Mark a step blocked — waiting on a measurement, a part, the car being available."""
         state = self.load(strict=True)
@@ -1470,6 +1521,7 @@ class Process:
         self._append(EV_STEP_BLOCKED, step=step_id, reason=reason)
         return entry
 
+    @_locked
     def record_reviewer(self, vendor, model, phase=None, step=None, outcome=None,
                         review=None, mode=None):
         """Who reviewed, on what model, when — and WHAT THEY ARGUED (SCR-027).
@@ -1499,6 +1551,7 @@ class Process:
         return state["reviewer"]
 
     # -- capture rounds (SCR-034) --
+    @_locked
     def start_capture(self, version, expected=(), phase=None, note=None, step=None, origin=None, under=None,
                       level=None, level_read_as=None, plan=False, optional=(), start_method=None):
         """Open a capture round: what was asked for, at which `_N`, in which phase.
@@ -1718,6 +1771,7 @@ class Process:
             return None
         return rel
 
+    @_locked
     def reconcile_captures(self, rew_titles):
         """Close the open round's list against what REW holds, however it was captured (skill #77, rule 3).
 
@@ -1819,6 +1873,7 @@ class Process:
               "taken elsewhere, record where: `capture-start <N> --origin <project>:<their _N> …`."
         )
 
+    @_locked
     def record_capture(self, title, at=None):
         """A measurement was taken. Unplanned ones are recorded too, flagged as such.
 
@@ -1843,6 +1898,7 @@ class Process:
         )
         return round_
 
+    @_locked
     def capture_import(self, series, titles, binds, knobs, late=None):
         """Register measurements REW already holds as rounds of THIS project, one round per DSP state (#58 P3).
 
@@ -1904,6 +1960,7 @@ class Process:
             opened.append(round_["id"])
         return opened
 
+    @_locked
     def set_protective(self, channel, legs, source="user"):
         """Declare what was in the chain for one channel of the OPEN round, and that it was RAW.
 
@@ -1957,6 +2014,7 @@ class Process:
                      source=source, phase=round_["phase"], version=round_["version"])
         return round_
 
+    @_locked
     def amend_protective(self, capture_id, channel, legs, reason, source="user"):
         """Correct a CLOSED round's protective record, visibly as a correction (skill `#48`).
 
@@ -1991,6 +2049,7 @@ class Process:
                      legs=legs, source=source, amends=capture_id, reason=reason)
         return {"capture": capture_id, "channel": channel, "legs": legs, "reason": reason}
 
+    @_locked
     def set_knobs(self, controls):
         """The hardware controls as they stood for THIS round: `{name: position}`.
 
@@ -2016,6 +2075,7 @@ class Process:
                      phase=round_["phase"], version=round_["version"])
         return round_
 
+    @_locked
     def amend_knobs(self, capture_id, controls, reason):
         """Record the knobs for a CLOSED round, visibly as a correction (#56 item 9).
 
@@ -2040,6 +2100,7 @@ class Process:
 
     AMP_READ_AS = ("said", "measured")
 
+    @_locked
     def record_amp_gain(self, changes, read_as="said", note=None, amends=None):
         """The user turned an amplifier gain: `{channel: dB}`. Returns the record, with `open_round` when a round
         was open (its titles before this are at the old gain, so the re-measure belongs to a new series).
@@ -2308,6 +2369,7 @@ class Process:
         return out
 
     # -- listening verdicts (Phase 4) --
+    @_locked
     def record_listening_verdict(self, pairs, text=None, route=None, ledger_version=None, note=None):
         """Bank what the Arbiter heard: `pairs` = [(track_id, characteristic_id, "ok"|"bad"), ...]
         as ticked, `text` = their own words after editing (the two are kept apart on purpose -- the
@@ -2390,6 +2452,7 @@ class Process:
                 lines.append(line)
         return lines
 
+    @_locked
     def supersede_capture(self, title, corrected_to, reason=None):
         """A capture was recorded under the wrong title; the right one replaces it (S-039).
 
@@ -2432,6 +2495,7 @@ class Process:
         # The corrected title is a capture like any other -- same event, same `planned` test.
         return self.record_capture(corrected_to)
 
+    @_locked
     def skip_capture(self, title, reason):
         """A capture deliberately NOT taken, and why.
 
@@ -2487,8 +2551,15 @@ class Process:
         `session=True` adds the whole-session probe (Phase 0.6, `verify.session_report`) and
         records it on the round as `session` -- the ctl1->ctl3 drift is the DRIFT RECORD the
         capture sheet asks for, and it lives with the round it measured.
+
+        REW is read with the project's lock free (#141, J2b): the verdicts, the profile's rate and the session probe
+        are worked out on a strict read taken without the hold -- REW may take seconds a title -- and then merged,
+        under it, into the state as it is THEN, by title: a writer that wrote meanwhile keeps its change. The round
+        must still be the one the check was asked of, open: closed or replaced while REW was read, it is refused and
+        nothing is written -- its verdicts would land on a round that did not ask for them.
         """
-        state, round_ = self._require_capture()
+        self._ready_to_hold()
+        round_ = self._require_capture()[1]
         verifier = self._load_verifier() if verifier is None else verifier
         if verifier is None:
             # With the reason (H 12): what to install, or which file to mend, is in it.
@@ -2515,7 +2586,7 @@ class Process:
         if unread is not None:
             raise ProcessError(f"REW's measurement list was not read ({(unread.get('issues') or ['no answer'])[0]}) "
                                "-- nothing was recorded")
-        taken, checks = round_.setdefault("taken", {}), round_.setdefault("checks", {})
+        checked = []                                # (title, verified) in REW's order: merged under the hold, below
         for verdict in verdicts:
             title = verdict["name"]
             exists = verdict.get("exists")
@@ -2532,11 +2603,7 @@ class Process:
             }
             if verdict.get("ambiguous"):
                 verified["ambiguous"] = verdict["ambiguous"]   # REW holds it more than once (H I-8): rename it
-            checks[title] = dict(verified)          # every title checked, held or not (T-1)
-            if title in taken:
-                taken[title]["verified"] = verified
-            elif exists is True:                    # taken only when REW holds it (#77) -- never invented
-                taken[title] = {"at": _now(), "planned": title in round_.get("expected", []), "verified": verified}
+            checked.append((title, verified))
         # The capture rate vs the DSP's PROCESSING rate -- said ONCE per check, never a failure
         # (the user's ruling, 2026-08-25): a UMIK-1 captures at 48k under a 96k Helix, and if
         # capturing at the processing rate is impossible, we work with what there is. What must
@@ -2569,21 +2636,37 @@ class Process:
                              f"processes at {proc_rate:g} Hz -- fine, working with it. Delays in "
                              f"samples derive from the PROCESSING rate; the capture rate stays with "
                              f"the measurement")
+        session_probe = None
         if session and hasattr(verifier, "session_report"):
             probe = verifier.session_report(verdicts, processing_rate_hz=proc_rate if capture_rates else None)
-            round_["session"] = {"at": _now(), "spread": probe["spread"], "drift": probe["drift"],
-                                 "capture_rates_hz": probe["capture_rates_hz"], "rows": probe["rows"]}
-        self._write(state)
-        self._append(
-            EV_CAPTURE_VERIFIED,
-            capture=round_["id"],
-            step=round_.get("step"),
-            ok=sorted(v["name"] for v in verdicts if v.get("valid")),
-            bad=sorted(v["name"] for v in verdicts
-                       if not v.get("valid") and v.get("applicable", True) is not False),
-            not_applicable=sorted(v["name"] for v in verdicts if v.get("applicable", True) is False),
-            rate_note=rate_note,
-        )
+            session_probe = {"at": _now(), "spread": probe["spread"], "drift": probe["drift"],
+                             "capture_rates_hz": probe["capture_rates_hz"], "rows": probe["rows"]}
+        with _hold(self.project_dir):
+            state = self.load(strict=True)
+            live = state.get("capture") or {}
+            if live.get("id") != round_["id"] or live.get("closed"):
+                raise ProcessError(f"round {round_['id']} was closed or replaced while REW was read -- nothing was "
+                                   "written; run capture-check again")
+            taken, checks = live.setdefault("taken", {}), live.setdefault("checks", {})
+            for title, verified in checked:
+                checks[title] = dict(verified)          # every title checked, held or not (T-1)
+                if title in taken:
+                    taken[title]["verified"] = verified
+                elif verified["exists"] is True:        # taken only when REW holds it (#77) -- never invented
+                    taken[title] = {"at": _now(), "planned": title in live.get("expected", []), "verified": verified}
+            if session_probe is not None:
+                live["session"] = session_probe
+            self._write(state)
+            self._append(
+                EV_CAPTURE_VERIFIED,
+                capture=live["id"],
+                step=live.get("step"),
+                ok=sorted(v["name"] for v in verdicts if v.get("valid")),
+                bad=sorted(v["name"] for v in verdicts
+                           if not v.get("valid") and v.get("applicable", True) is not False),
+                not_applicable=sorted(v["name"] for v in verdicts if v.get("applicable", True) is False),
+                rate_note=rate_note,
+            )
         # Told AFTER the record is on disk, never before -- issue #21. This print used to sit
         # where `rate_note` is computed, and on a cp1252 console the warning glyph raised
         # `UnicodeEncodeError` between the verdicts and `_write`: the gate ran, the result was
@@ -2593,7 +2676,7 @@ class Process:
         # the moment it had something to say.
         if rate_note:
             print(f"  ⚠ {rate_note}")
-        return round_
+        return live
 
     def unusable_captures(self, state=None):
         """Expected captures of the open round that are missing, unchecked, or checked and bad.
@@ -2619,6 +2702,7 @@ class Process:
                 out.append(title)
         return out
 
+    @_locked
     def close_capture(self, reason=None):
         """Close the open round. What is neither taken nor skipped stays that way, on the record."""
         state, round_ = self._require_capture()
@@ -2677,6 +2761,7 @@ class Process:
             reason=reason,
         )
 
+    @_locked
     def record_decision(self, question, answer, step=None, phase=None, invalidates=None):
         """The Arbiter answered something, recorded as the answer rather than as prose about it.
 
@@ -2701,6 +2786,7 @@ class Process:
         )
         return {"question": question, "answer": answer, "step": step}
 
+    @_locked
     def record_session(self, harness, model, resumed=False, phase=None):
         """A working session began. Not a transition -- nothing in the current slice changes.
 
@@ -2732,6 +2818,7 @@ class Process:
         """
         return (self.last_session_event() or {}).get("type") == EV_SESSION_CLOSED
 
+    @_locked
     def reopen_session(self, reason):
         """Take a close back: `session_reopened` with its reason, after the close (S-084, hub #227).
 
@@ -2876,6 +2963,7 @@ class Process:
                       f"Clear the chat and say «продовжуй» in the new one.{keep}{_route_line(self.project_dir)}")
         return {"ok": not missing, "missing": missing, "phase": phase, "resume": resume, "warnings": warnings}
 
+    @_locked
     def set_target(self, preset, curve):
         """The active target curve for a preset — a pointer, the curve itself lives elsewhere."""
         state = self.load(strict=True)
@@ -2958,6 +3046,15 @@ class Process:
         # Owed from here: the event that goes with this change (`_append` says it, if it cannot be appended).
         self._unjournaled = True
 
+    def _ready_to_hold(self):
+        """What a writer does with the project's lock still free, before it takes it (#141): reads the wait -- an
+        `AUTOSOUND_LOCK_TIMEOUT_S` that is no number of seconds is a usage error (exit 2) before REW, git or `gh` is
+        asked -- and asks git for the sha `_stamp` writes, once per writer, so that git never runs under the lock. A
+        caller that takes the hold around this process's writes itself calls this first."""
+        _write_lock().timeout_s()
+        if getattr(self, "_sha", None) is None:
+            self._sha = _writer_sha()
+
     def _last_written_by(self):
         """The sha in the last header event, or None when the journal carries no header at all.
 
@@ -2984,7 +3081,10 @@ class Process:
         """
         if self._stamped:
             return
-        sha = _writer_sha()
+        # Asked before this writer's first hold (`_ready_to_hold`, #141); a caller that appends with no writer of
+        # its own around the append is asked here.
+        sha = getattr(self, "_sha", None)
+        sha = _writer_sha() if sha is None else sha
         last = self._last_written_by()     # strict: a journal that cannot be read refuses here, and is asked again
         self._stamped = True  # decided once read: one attempt per run, whatever it finds
         if sha == last:
@@ -3163,7 +3263,8 @@ _USAGE = """usage: process.py <process-dir> <command> [args]
   selftest                              this module's own gates, on a throwaway project
 
 exit  0 done · 1 refused · 2 usage · 69 REW did not answer, nothing written
-      · 70 unexpected error (a bug: the traceback is above it) · 75 project busy (reserved)
+      · 70 unexpected error (a bug: the traceback is above it)
+      · 75 project busy: another writer holds its lock, nothing written, safe to retry
 """
 
 #: The verbs that only DISPLAY (#136, the read rule): they write nothing and show a `process-state.json` that cannot
@@ -3691,6 +3792,7 @@ def _check_every_loader_shares():
                      ("state/state.py", _load_sibling("state/state.py")),
                      ("dsp_profile.py", _load_dsp_profile_module()),
                      ("provenance.py", _load_rew_tool_module("provenance")),
+                     ("write_lock.py", _write_lock()),
                      ("verify.py", verifier)):
         assert got is not None, f"{rel} did not load"
         assert got is sib.load(rel), f"{rel}: the loader ran a copy of its own"
@@ -4922,6 +5024,53 @@ def _check_project_bytes_leave_the_lock_out():
         assert got == ["docs/.autosound/x", "process/journal.jsonl"], f"the walk read {got}"
     finally:
         shutil.rmtree(top, ignore_errors=True)
+
+
+def _at_phase(top, phase):
+    """A `process/` folder in a new project under `top`, its state at `phase` -- written as it stands, by no writer: no
+    gate is crossed on the way and no lock is taken. What the lock's checks start from (#141)."""
+    state = _empty_state()
+    at = PHASES.index(phase)
+    for i, key in enumerate(PHASES):
+        state["phases"][key]["status"] = PHASE_DONE if i < at else PHASE_CURRENT if i == at else PHASE_TODO
+    state["active_phase"] = phase
+    return _state_dir_with(json.dumps(state, indent=2, ensure_ascii=False).encode("utf-8"), top)
+
+
+def _lock_holder(project_dir, signals):
+    """The other writer of `_check_a_held_lock_answers_75_with_nothing_written`, in a process of its own: it holds the
+    project's lock, says so (`<signals>/held`) and lets go when the parent says `go` -- or after a minute, so a parent
+    that broke cannot leave it holding. At the top level, so that `spawn` finds it: the child runs this file by its
+    path, and reaches `write_lock.py` by its path too, as every writer here does."""
+    import time
+    with _hold(project_dir):
+        with open(os.path.join(signals, "held"), "w", encoding="utf-8"):
+            pass
+        deadline = time.monotonic() + 60
+        while not os.path.exists(os.path.join(signals, "go")):
+            if time.monotonic() > deadline:
+                raise SystemExit("the parent never said go")
+            time.sleep(0.002)
+
+
+def _raised(call):
+    """The exception `call()` raised, or None."""
+    try:
+        call()
+    except Exception as exc:  # noqa: BLE001 -- returned to the check, which reads what it got
+        return exc
+    return None
+
+
+def _from_another_thread(write):
+    """`write()` run in another thread, as another writer of the project runs it, and waited for: what it raised, None,
+    or `never returned` past 30 s."""
+    import threading
+    out = []
+    t = threading.Thread(target=lambda: out.append(_raised(write)), daemon=True)
+    t.start()
+    t.join(30)
+    return out[0] if out else "never returned"
 
 
 def _run_main(argv):
@@ -6568,8 +6717,10 @@ def _check_close_checks_stage_refusals():
     round open. The state held at that stage -- the line said "the round closes on the record, unchecked" and the
     close went on over a read it could not make (or refused at the next one); and the checks' journal line refused
     after their state write landed -- "is written, but its journal line is not", cut to 160 characters with its line
-    to append lost, and the round closed. And a `rew_api.py` that cannot be loaded refuses the close before anything
-    is read or written, naming why and `--no-rew` (M1): it closed the round unchecked under "not read against REW"."""
+    to append lost, and the round closed. The project's lock held past the wait there is 75, the round open (#141): the
+    checks take their own hold, and a busy one is no reason to close unchecked. And a `rew_api.py` that cannot be loaded
+    refuses the close before anything is read or written, naming why and `--no-rew` (M1): it closed the round unchecked
+    under "not read against REW"."""
     import shutil
     import tempfile
     global _load_sibling
@@ -6627,6 +6778,22 @@ def _check_close_checks_stage_refusals():
                 failures.append(f"{what}: rc {rc}, closed {closed!r}, out {out.strip()[-160:]!r}, err {err.strip()[-200:]!r}")
             if patch[0] == "_append_event" and f"append this line to {Process(d).journal_path}" not in err:
                 failures.append(f"{what}: the line to append is not said: {err.strip()[-300:]!r}")
+        # The project's lock held past the wait at the checks (#141): 75 and its one line, the round left open -- never
+        # closed unchecked because another writer held the lock for a moment.
+        d = fresh()
+        busy = _write_lock().Busy(_write_lock().lock_path(os.path.dirname(d)), 0.3)
+
+        def busy_at_the_checks(self, *args, **kwargs):
+            raise busy
+        Process.check_captures = busy_at_the_checks
+        try:
+            rc, out, err = _run_main(["process.py", d, "capture-close"])
+        finally:
+            Process.check_captures = real_check
+        closed = Process(d).load()["capture"].get("closed")
+        if rc != EXIT_BUSY or err.strip().splitlines()[-1:] != [str(busy)] or "closes on the record" in out or closed:
+            failures.append(f"the lock held at the checks: rc {rc}, closed {closed!r}, out {out.strip()[-160:]!r}, "
+                            f"err {err.strip()[-200:]!r}")
         # A journal the close cannot append to is refused before a line is printed (batch 2's re-review, Out of Scope
         # 5): with REW down, "REW not reached ...: closing on the record alone" was printed, and then the close refused.
         if _mode_refuses("a journal capture-close cannot open, REW down"):
@@ -6765,6 +6932,324 @@ def _check_rate_note_reads_the_rule():
     assert not failures, "\n  ".join(["capture-check's rate note:"] + failures)
 
 
+def _check_every_writer_holds_the_lock():
+    """Every writer of `Process` holds the project's lock around its load, its change, its write and its event (#141,
+    J2b), read off the source: each public method that reaches `_write` or `_append` (`_writer_methods`) is decorated
+    `@_locked` -- or is one of the two that read REW, git or `gh` first and take the hold themselves after, in a
+    `with _hold(...)`. Those two are never decorated: that would hold the lock across what they read."""
+    import ast
+    with open(os.path.abspath(__file__), encoding="utf-8") as f:
+        src = f.read()
+    writers = _writer_methods(src)
+    cls = next(n for n in ast.parse(src).body if isinstance(n, ast.ClassDef) and n.name == "Process")
+    methods = {f.name: f for f in cls.body if isinstance(f, ast.FunctionDef)}
+    themselves = {"check_captures", "enter_phase"}
+
+    def holds(fn):
+        return any(isinstance(node, ast.With) and any(
+            isinstance(item.context_expr, ast.Call) and isinstance(item.context_expr.func, ast.Name)
+            and item.context_expr.func.id == "_hold" for item in node.items) for node in ast.walk(fn))
+    assert themselves <= writers, f"no longer writers here, or renamed: {sorted(themselves - writers)}"
+    bare, held_over = [], []
+    for name in sorted(writers):
+        decorated = any(isinstance(d, ast.Name) and d.id == "_locked" for d in methods[name].decorator_list)
+        if name in themselves:
+            if decorated:
+                held_over.append(name)
+            elif not holds(methods[name]):
+                bare.append(name)
+        elif not decorated:
+            bare.append(name)
+    assert not bare, f"{len(bare)} writer(s) of {len(writers)} take no hold: {bare}"
+    assert not held_over, f"decorated, so the lock is held across what they read first: {held_over}"
+
+
+def _check_a_held_lock_answers_75_with_nothing_written():
+    """Another writer holding the project's lock -- in a process of its own -- makes each writing verb wait
+    `AUTOSOUND_LOCK_TIMEOUT_S` and exit 75 (#141, J2b): its last line `busy: <the lock file> ...`, nothing written, safe
+    to retry. Each kind of writer: one `@_locked` (`add-step`), one that appends only (`decision`), `enter-phase` (its
+    hold after its gates), `session-close`'s stop, and `capture-close`'s close after its read of REW (REW is down here:
+    it closes on the record alone). The question `session-close --check` waits for nobody. Let go, the same command
+    lands."""
+    import multiprocessing
+    import shutil
+    import tempfile
+    import time
+    lock = _write_lock()
+    top = tempfile.mkdtemp(prefix="autosound_process_busy_")
+    signals = tempfile.mkdtemp(prefix="autosound_process_busy_signals_")
+    child, failures = None, []
+    try:
+        d = _at_phase(top, "2")
+        project = os.path.dirname(d)
+        Process(d).start_capture("1", expected=["a_1 (sw)"])        # the round capture-close closes
+        child = multiprocessing.get_context("spawn").Process(target=_lock_holder, args=(project, signals))
+        child.start()
+        deadline = time.monotonic() + 60
+        while not os.path.exists(os.path.join(signals, "held")):
+            assert time.monotonic() < deadline and child.is_alive(), f"the holder never held (exit {child.exitcode})"
+            time.sleep(0.002)
+        before = _project_bytes(d)
+        for argv in (["add-step", "2.7", "x"], ["decision", "keep 45 degrees?", "yes"], ["enter-phase", "2"],
+                     ["session-close"], ["capture-close"]):
+            r = _cli_env(d, argv, AUTOSOUND_LOCK_TIMEOUT_S="0.3")
+            last = (r.stderr.strip().splitlines() or [""])[-1]
+            if r.returncode != EXIT_BUSY or not last.startswith("busy: ") or lock.lock_path(project) not in last \
+                    or "Traceback" in r.stderr:
+                failures.append(f"{argv[0]}: rc {r.returncode}, said {r.stderr.strip()[-200:]!r}")
+            if _project_bytes(d) != before:
+                failures.append(f"{argv[0]}: wrote under another writer's lock")
+                before = _project_bytes(d)
+        r = _cli_env(d, ["session-close", "--check"], AUTOSOUND_LOCK_TIMEOUT_S="0.3")
+        if r.returncode != EXIT_NO or "OPEN ROUND cap_001" not in r.stdout:
+            failures.append(f"session-close --check: rc {r.returncode}, said {(r.stderr or r.stdout).strip()[-160:]!r}")
+        with open(os.path.join(signals, "go"), "w", encoding="utf-8"):
+            pass
+        child.join(60)
+        assert child.exitcode == 0, f"the holder failed: exit {child.exitcode}"
+        r = _cli_env(d, ["add-step", "2.7", "x"], AUTOSOUND_LOCK_TIMEOUT_S="0.3")
+        if r.returncode != EXIT_OK or "2.7" not in [s["id"] for s in Process(d).load()["plan"]]:
+            failures.append(f"let go, add-step did not land: rc {r.returncode}, said {r.stderr.strip()[-160:]!r}")
+    finally:
+        with open(os.path.join(signals, "go"), "w", encoding="utf-8"):
+            pass
+        if child is not None:
+            child.join(60)
+            if child.is_alive():
+                child.terminate()
+                child.join(10)
+        shutil.rmtree(top, ignore_errors=True)
+        shutil.rmtree(signals, ignore_errors=True)
+    assert not failures, f"{len(failures)} verb run(s) under a held lock:\n  " + "\n  ".join(failures)
+
+
+def _check_a_bad_timeout_is_a_usage_error():
+    """An `AUTOSOUND_LOCK_TIMEOUT_S` that is no number of seconds is a usage error (#141): exit 2, the variable named,
+    nothing written and the lock's folder not made -- said first, before REW, git or `gh` is asked: `capture-check`
+    answers 2 here, where REW, down, would have been its 69."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_process_bad_wait_")
+    failures = []
+
+    def refused(d, argv):
+        before = _project_bytes(d)
+        r = _cli_env(d, argv, AUTOSOUND_LOCK_TIMEOUT_S="soon")
+        if r.returncode != EXIT_USAGE or "AUTOSOUND_LOCK_TIMEOUT_S=soon" not in r.stderr \
+                or "usage: process.py" in r.stderr or "Traceback" in r.stderr:
+            failures.append(f"{' '.join(argv)}: rc {r.returncode}, said {r.stderr.strip()[-200:]!r}")
+        if _project_bytes(d) != before:
+            failures.append(f"{' '.join(argv)}: wrote")
+    try:
+        d = _at_phase(top, "2")
+        for argv in (["add-step", "2.7", "x"], ["decision", "keep 45 degrees?", "yes"], ["enter-phase", "2"],
+                     ["session-close"]):
+            refused(d, argv)
+        if os.path.exists(os.path.join(os.path.dirname(d), ".autosound")):
+            failures.append("the lock's folder was made")
+        Process(d).start_capture("1", expected=["a_1 (sw)"])
+        refused(d, ["capture-check"])
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, f"{len(failures)} run(s) with a wait that is no number:\n  " + "\n  ".join(failures)
+
+
+def _check_capture_check_reads_rew_unlocked():
+    """REW is read with the project's lock free (#141, J2b): `verify` and the session probe run before the hold, and a
+    writer that writes meanwhile -- a step added from another thread, which must not wait -- keeps its change: the
+    verdicts merge under the hold into the state as it is THEN, by title. A round closed or replaced while REW was read
+    is refused, nothing written: its verdicts would land on a round that did not ask for them."""
+    import io as _io
+    import shutil
+    import tempfile
+    lock = _write_lock()
+    saved = os.environ.get("AUTOSOUND_LOCK_TIMEOUT_S")
+    top = tempfile.mkdtemp(prefix="autosound_process_check_unlocked_")
+    failures = []
+
+    class Verifier:                  # REW holds `w-L_1 (sw)`, not `w-R_1 (sw)`; another writer writes while it answers
+        def __init__(self, d, meanwhile):
+            self.d, self.meanwhile, self.held, self.raised, self.after = d, meanwhile, [], [], None
+
+        def verify(self, titles):
+            self.held.append(lock.held_here(os.path.dirname(self.d)))
+            self.raised.append(_from_another_thread(self.meanwhile))
+            self.after = _project_bytes(self.d)
+            return [{"name": t, "exists": t == "w-L_1 (sw)", "reachable": True, "valid": t == "w-L_1 (sw)",
+                     "issues": [] if t == "w-L_1 (sw)" else ["REW holds no such title"], "stats": {"uuid": "u-" + t}}
+                    for t in titles]
+
+        def session_report(self, verdicts, processing_rate_hz=None):
+            self.held.append(lock.held_here(os.path.dirname(self.d)))
+            return {"spread": None, "drift": None, "capture_rates_hz": [], "rows": []}
+
+    def with_round():
+        d = os.path.join(tempfile.mkdtemp(dir=top), "process")
+        Process(d).enter_phase("-1")
+        Process(d).start_capture("1", expected=["w-L_1 (sw)", "w-R_1 (sw)"])
+        return d
+    try:
+        os.environ["AUTOSOUND_LOCK_TIMEOUT_S"] = "2"      # a hold taken across REW by mistake costs 2 s here, not 10
+        d = with_round()
+        v = Verifier(d, lambda: Process(d).add_step("-1.5", "added while REW was read", phase="-1"))
+        with contextlib.redirect_stdout(_io.StringIO()):
+            round_ = Process(d).check_captures(verifier=v, session=True)
+        state = Process(d).load(strict=True)
+        live = state.get("capture") or {}
+        taken = live.get("taken") or {}
+        verified = [e for e in Process(d).events() if e.get("type") == EV_CAPTURE_VERIFIED]
+        if v.held != [False, False] or v.raised != [None]:
+            failures.append(f"REW read under the lock: {v.held}; the other writer raised {v.raised}")
+        if "-1.5" not in [s["id"] for s in state["plan"]]:
+            failures.append("the step another writer added while REW was read is gone")
+        if sorted(live.get("checks") or {}) != ["w-L_1 (sw)", "w-R_1 (sw)"] or "w-R_1 (sw)" in taken \
+                or ((taken.get("w-L_1 (sw)") or {}).get("verified") or {}).get("ok") is not True \
+                or not live.get("session"):
+            failures.append(f"the round's verdicts: {json.dumps(live, ensure_ascii=False)[:300]}")
+        if round_ != live:
+            failures.append("check_captures returned another round than the one it wrote")
+        if not verified or verified[-1].get("ok") != ["w-L_1 (sw)"] or verified[-1].get("bad") != ["w-R_1 (sw)"]:
+            failures.append(f"capture_verified: {verified[-1:]}")
+        # The round gone while REW was read -- closed, or replaced by the next one: refused, nothing written.
+        want = "round cap_001 was closed or replaced while REW was read -- nothing was written; run capture-check again"
+        for what, meanwhile in (("closed", lambda q: q.close_capture("closed while REW was read")),
+                                ("replaced", lambda q: q.start_capture("2", expected=["w-L_2 (sw)"]))):
+            d = with_round()
+            v = Verifier(d, lambda d=d, meanwhile=meanwhile: meanwhile(Process(d)))
+            caught = _raised(lambda: Process(d).check_captures(verifier=v))
+            if not isinstance(caught, ProcessError) or str(caught) != want or v.raised != [None]:
+                failures.append(f"{what}: {type(caught).__name__}: {caught} (the other writer raised {v.raised})")
+            if _project_bytes(d) != v.after:
+                failures.append(f"{what}: wrote")
+    finally:
+        if saved is None:
+            os.environ.pop("AUTOSOUND_LOCK_TIMEOUT_S", None)
+        else:
+            os.environ["AUTOSOUND_LOCK_TIMEOUT_S"] = saved
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["capture-check and the lock:"] + failures)
+
+
+def _check_enter_phase_gates_run_unlocked():
+    """`enter_phase`'s gates run with the project's lock free (#141, J2b) -- the intake gate asks git and `gh`, for up
+    to a minute and a half -- and the phase is entered under the hold into the state as it is THEN: a step another
+    writer added meanwhile (from another thread, which must not wait) survives, and a phase another writer entered
+    meanwhile refuses this one, naming the phase now active, nothing written."""
+    import shutil
+    import tempfile
+    lock = _write_lock()
+    real_gate = globals()["_require_intake"]
+    saved = os.environ.get("AUTOSOUND_LOCK_TIMEOUT_S")
+    top = tempfile.mkdtemp(prefix="autosound_process_gates_unlocked_")
+    d = os.path.join(top, "process")
+    failures, seen, raised, after = [], [], [], []
+
+    def gate(meanwhile):
+        """An intake gate that asks nothing: it says whether the lock is held while it runs, and lets another writer
+        write. Once -- the other writer's own `enter_phase` passes it straight through."""
+        def run(phase, previous, project_dir):
+            if seen:
+                return
+            seen.append(lock.held_here(project_dir))
+            raised.append(_from_another_thread(meanwhile))
+            after.append(_project_bytes(d))
+        return run
+    try:
+        os.environ["AUTOSOUND_LOCK_TIMEOUT_S"] = "2"      # gates run under the lock by mistake cost 2 s here, not 10
+        Process(d).enter_phase("-1")
+        globals()["_require_intake"] = gate(lambda: Process(d).add_step("-1.5", "added while the gates ran",
+                                                                        phase="-1"))
+        caught = _raised(lambda: Process(d).enter_phase("0"))
+        state = Process(d).load(strict=True)
+        if seen != [False] or raised != [None] or caught is not None:
+            failures.append(f"the gates ran under the lock: {seen}; the other writer raised {raised}; enter_phase "
+                            f"raised {caught!r}")
+        if state["active_phase"] != "0" or "-1.5" not in [s["id"] for s in state["plan"]]:
+            failures.append(f"phase {state['active_phase']}, plan {[s['id'] for s in state['plan']]}: the step added "
+                            "while the gates ran is gone")
+        del seen[:], raised[:], after[:]
+        globals()["_require_intake"] = gate(lambda: Process(d).enter_phase("-1"))
+        caught = _raised(lambda: Process(d).enter_phase("0"))
+        if not isinstance(caught, ProcessError) or "phase -1" not in str(caught) \
+                or "nothing was written" not in str(caught) or raised != [None]:
+            failures.append(f"a phase entered meanwhile: {type(caught).__name__}: {caught} (the other writer raised "
+                            f"{raised})")
+        if not after or _project_bytes(d) != after[-1] or Process(d).load()["active_phase"] != "-1":
+            failures.append(f"written over the phase another writer entered: phase "
+                            f"{Process(d).load()['active_phase']}")
+    finally:
+        globals()["_require_intake"] = real_gate
+        if saved is None:
+            os.environ.pop("AUTOSOUND_LOCK_TIMEOUT_S", None)
+        else:
+            os.environ["AUTOSOUND_LOCK_TIMEOUT_S"] = saved
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["enter_phase and the lock:"] + failures)
+
+
+def _check_the_sha_is_asked_before_the_hold():
+    """Git is never asked under the project's lock (#141): the sha `_stamp` writes in the journal's header is asked of
+    `provenance` by a writer's first verb with the lock still free -- once, never again under the hold -- and the
+    journal line it stamps is written with the lock held. For each kind of writer, each a fresh `Process`: one
+    `@_locked`, one that appends only, the two that take the hold themselves, and `session-close`'s stop in `_main`."""
+    import io as _io
+    import shutil
+    import tempfile
+    lock = _write_lock()
+    prov = _load_rew_tool_module("provenance")
+    real_sha, real_event = prov.skill_sha, Process._append_event
+    top = tempfile.mkdtemp(prefix="autosound_process_sha_first_")
+    project, asked, written, failures = [None], [], [], []
+
+    class Verifier:
+        def verify(self, titles):
+            return [{"name": t, "exists": True, "reachable": True, "valid": True, "issues": [], "stats": {}}
+                    for t in titles]
+
+    def bare():
+        return os.path.join(tempfile.mkdtemp(dir=top), "process")
+
+    def at_minus_one():
+        d = bare()
+        Process(d).enter_phase("-1")
+        return d
+
+    def round_open():
+        d = at_minus_one()
+        Process(d).start_capture("1", expected=["a_1 (sw)"])
+        return d
+
+    def sha():
+        asked.append(lock.held_here(project[0]))
+        return "c" * 40
+
+    def event(self, event_type, payload):
+        written.append(lock.held_here(self.project_dir))
+        return real_event(self, event_type, payload)
+    try:
+        # Each project is made first, stamped with the real sha: what is under test is its next writer, a fresh one.
+        made = [(label, make(), first) for label, make, first in (
+            ("add_step", at_minus_one, lambda d: Process(d).add_step("-1.1", "a step")),
+            ("record_decision", at_minus_one, lambda d: Process(d).record_decision("keep 45 degrees?", "yes")),
+            ("enter_phase", bare, lambda d: Process(d).enter_phase("-1")),
+            ("check_captures", round_open, lambda d: Process(d).check_captures(verifier=Verifier())),
+            ("session-close", at_minus_one, lambda d: _run_main(["process.py", d, "session-close"])))]
+        prov.skill_sha, Process._append_event = sha, event
+        for label, d, first in made:
+            project[0] = os.path.dirname(os.path.abspath(d))
+            del asked[:], written[:]
+            with contextlib.redirect_stdout(_io.StringIO()):
+                caught = _raised(lambda: first(d))
+            heads = [e.get("skill_sha") for e in Process(d).events() if e.get("type") == EV_WRITTEN_BY]
+            if caught is not None or asked != [False] or not written or not all(written) or heads[-1:] != ["c" * 40]:
+                failures.append(f"{label}: the sha asked {asked} (True: under the lock), its lines written under the "
+                                f"lock {written}, the last header {heads[-1:]}, raised {caught!r}")
+    finally:
+        prov.skill_sha, Process._append_event = real_sha, real_event
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["the sha and the lock:"] + failures)
+
+
 def _selftest():
     """The refusals, exercised. This module is the one with the most of them — evidence must exist
     and must resolve (SCR-035), a round's captures must be usable (SCR-040), phase 0 must record a
@@ -6795,7 +7280,10 @@ def _selftest():
                   _check_rate_note_reads_the_rule, _check_evidence_verdicts_name_the_naming_load_error,
                   _check_capture_start_said_as_it_landed, _check_capture_start_held_names_the_close_that_landed,
                   _check_capture_start_held_leaves_the_open_rounds_plan, _check_says_what_it_did_not_check,
-                  _check_project_bytes_leave_the_lock_out):
+                  _check_project_bytes_leave_the_lock_out, _check_every_writer_holds_the_lock,
+                  _check_a_held_lock_answers_75_with_nothing_written, _check_a_bad_timeout_is_a_usage_error,
+                  _check_capture_check_reads_rew_unlocked, _check_enter_phase_gates_run_unlocked,
+                  _check_the_sha_is_asked_before_the_hold):
         try:
             check()
         except AssertionError as exc:
@@ -7785,35 +8273,40 @@ def _main(argv):
             # wrote `session_closed` on the VM; it stays as it is, because TCC calls it on the way out
             # and reads its exit code as the answer.
             check_only = "--check" in args
-            # Strict, before anything is written (#136): read as an empty process, an unreadable file had nothing
-            # open, and the plain form recorded a clean stop over a round or a step it could not see.
-            open_ = p.open_work(state=p.load(strict=True))
-            lines, owed = [], 0
-            round_ = open_["capture_round"]
-            if round_:
-                owed += 1
-                miss = round_["outstanding"]
-                lines.append(
-                    f"OPEN ROUND {round_['id']} at {round_['version']}: "
-                    f"{round_['taken']} taken, {round_['skipped']} skipped"
-                    + (f", {len(miss)} still expected ({', '.join(miss)})" if miss else "")
-                    + "\n    close it: capture-skip <title> <reason> for each one not coming, "
-                      "then capture-close"
-                    + "\n    why now: an open round's status lives in REW's measurement list and "
-                      "goes when REW does")
-            for entry in open_["steps_in_progress"]:
-                owed += 1
-                lines.append(
-                    f"STEP IN PROGRESS {entry['id']} {entry.get('name') or ''} "
-                    f"(attempt {entry['attempt']})"
-                    + (f"\n    covers: {', '.join(entry['covers'])}" if entry.get("covers") else "")
-                    + "\n    close it: done <id> <evidence that RESOLVES>, or block <id> <reason>, "
-                      "or skip <id> <reason>")
-            if not check_only and not owed:
-                # Only a CLEAN stop is an event, recorded before the report is printed (#134, F I-2): an append refused
-                # -- a journal that cannot be opened -- is the verb's refusal then, with nothing printed before it, as
-                # `check_captures` records before it tells (issue #21).
-                p._append(EV_SESSION_CLOSED)
+            # The stop reads what is open and records the close under the project's lock (#141): read apart, a round
+            # or a step another writer opened in between was stopped over. `--check` writes nothing, waits for nobody.
+            if not check_only:
+                p._ready_to_hold()
+            with contextlib.nullcontext() if check_only else _hold(p.project_dir):
+                # Strict, before anything is written (#136): read as an empty process, an unreadable file had nothing
+                # open, and the plain form recorded a clean stop over a round or a step it could not see.
+                open_ = p.open_work(state=p.load(strict=True))
+                lines, owed = [], 0
+                round_ = open_["capture_round"]
+                if round_:
+                    owed += 1
+                    miss = round_["outstanding"]
+                    lines.append(
+                        f"OPEN ROUND {round_['id']} at {round_['version']}: "
+                        f"{round_['taken']} taken, {round_['skipped']} skipped"
+                        + (f", {len(miss)} still expected ({', '.join(miss)})" if miss else "")
+                        + "\n    close it: capture-skip <title> <reason> for each one not coming, "
+                          "then capture-close"
+                        + "\n    why now: an open round's status lives in REW's measurement list and "
+                          "goes when REW does")
+                for entry in open_["steps_in_progress"]:
+                    owed += 1
+                    lines.append(
+                        f"STEP IN PROGRESS {entry['id']} {entry.get('name') or ''} "
+                        f"(attempt {entry['attempt']})"
+                        + (f"\n    covers: {', '.join(entry['covers'])}" if entry.get("covers") else "")
+                        + "\n    close it: done <id> <evidence that RESOLVES>, or block <id> <reason>, "
+                          "or skip <id> <reason>")
+                if not check_only and not owed:
+                    # Only a CLEAN stop is an event, recorded before the report is printed (#134, F I-2): an append
+                    # refused -- a journal that cannot be opened -- is the verb's refusal then, with nothing printed
+                    # before it, as `check_captures` records before it tells (issue #21).
+                    p._append(EV_SESSION_CLOSED)
             print("\n".join(lines) if lines else
                   "nothing open in the process record — round closed, no step left in progress")
             # Two carriers this module does not own, named rather than checked: saying "also do X"
@@ -8239,8 +8732,11 @@ def _main(argv):
                         # ...but never over a refusal (#134, batch 3's re-review O3): the state that cannot be read at
                         # this stage, and the checks' journal line refused after their state write landed, are this
                         # verb's refusal, whole, the round left open. They read as "checks not run", and the close went
-                        # on over a read it could not make, or over a state write whose event is missing.
-                        if getattr(type(exc), "is_unreadable", False) or getattr(type(exc), "state_written", False):
+                        # on over a read it could not make, or over a state write whose event is missing. So is the
+                        # project's lock held past the wait at the checks (#141): 75, safe to retry, the round open --
+                        # never a round closed unchecked because another writer held the lock for a moment.
+                        if getattr(type(exc), "is_unreadable", False) or getattr(type(exc), "state_written", False) \
+                                or getattr(type(exc), "is_busy", False):
                             raise
                         # Said as what happens (#134): the round is closing, so a check cannot be run on it again.
                         print(f"  checks not run on the taken captures ({type(exc).__name__}: {str(exc)[:160]}): "
@@ -8291,6 +8787,14 @@ def _main(argv):
         # one raised inside a verb is a bug, and its traceback is printed -- it exited 1, with no traceback.
         # Read off the exception's CLASS, never the instance (#134): on Python 3.9 an `HTTPError` built without a body
         # answers any attribute it lacks with `KeyError: 'file'`, which would crash this handler instead of naming it.
+        # The project's writer lock first (#141, `write_lock.py`), neither of its two a `ProcessError`: another writer
+        # held it past the wait -- 75, its one `busy:` line, nothing written, safe to retry -- or the wait,
+        # AUTOSOUND_LOCK_TIMEOUT_S, is no number of seconds: a usage error, said before anything was taken.
+        if getattr(type(exc), "is_busy", False):
+            return _write_lock().busy_exit(exc)
+        if getattr(type(exc), "exit_code", None) == EXIT_USAGE:
+            print(f"error: {exc}", file=sys.stderr)
+            return EXIT_USAGE
         if getattr(type(exc), "is_unreadable", False):
             if cmd == "handoff" and "--json" in args:
                 # Its own shape, the keys of its answer (#136): a front-end reads this verb's stdout, and an empty one
