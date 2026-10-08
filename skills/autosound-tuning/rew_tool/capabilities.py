@@ -60,6 +60,9 @@ NOT_ON_BOARD = {
     "project_io.py": "how the method writes the files rew_tool/CONTRACT.md item 8 lists -- replaced atomically, a "
                      "ledger version created exclusively, a journal line appended after a torn one (skill #135): a "
                      "library its writers call; its command line is its selftest, not a step a tuner takes",
+    "write_lock.py": "one writer at a time in a project (skill #141): the lock every writer of the method takes "
+                     "around its load, change and write -- a library its writers call; its command line is its "
+                     "selftest, not a step a tuner takes",
     "contract-guard.py": "the guard that holds contract 1 (skill #137): a maintainer's check, not a tuner's step",
     "atomic-write-check.py": "the scan that keeps temp names and moves inside project_io -- no fixed `.tmp` name, no "
                              "os.replace or os.rename but the named whole-file moves (skill #135); a file written in "

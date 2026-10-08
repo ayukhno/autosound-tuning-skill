@@ -64,6 +64,7 @@ skills/autosound-tuning/rew_tool/verdict.py selftest
 skills/autosound-tuning/rew_tool/verify_prediction.py --selftest
 skills/autosound-tuning/rew_tool/verify.py selftest
 skills/autosound-tuning/rew_tool/windows.py --selftest
+skills/autosound-tuning/rew_tool/write_lock.py --selftest
 skills/autosound-tuning/rew_tool/xover_candidates.py --selftest
 skills/autosound-tuning/rew_tool/xover_select.py --selftest
 skills/autosound-tuning/rew_tool/xover_wishes.py --selftest

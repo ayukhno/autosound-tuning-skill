@@ -4891,15 +4891,37 @@ def _mode_refuses(case):
 
 def _project_bytes(d):
     """`{path: bytes}` of every file in the project the `process/` folder `d` belongs to -- the state, the journal,
-    and what a verb writes beside them (a round's plan in `docs/plans/`)."""
+    and what a verb writes beside them (a round's plan in `docs/plans/`). Not the top `.autosound/`: the writer
+    lock's bookkeeping (write_lock.py), not the project's content."""
     top = os.path.dirname(os.path.abspath(d))
     out = {}
-    for folder, _, names in os.walk(top):
+    for folder, dirs, names in os.walk(top):
+        if folder == top and ".autosound" in dirs:
+            dirs.remove(".autosound")
         for name in names:
             path = os.path.join(folder, name)
             with open(path, "rb") as f:
                 out[os.path.relpath(path, top)] = f.read()
     return out
+
+
+def _check_project_bytes_leave_the_lock_out():
+    """`.autosound/` at the project's top is the writer lock's bookkeeping (write_lock.py, #141), made by whichever
+    writer takes the lock: `_project_bytes` leaves it out, so taking the lock never reads as a change to the project.
+    Only the top one: a `.autosound/` deeper down is the project's like any other folder."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_bytes_")
+    try:
+        for rel in ("process/journal.jsonl", ".autosound/write.lock", ".autosound/.gitignore", "docs/.autosound/x"):
+            path = os.path.join(top, *rel.split("/"))
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w", encoding="utf-8") as f:
+                f.write("x")
+        got = sorted(rel.replace(os.sep, "/") for rel in _project_bytes(os.path.join(top, "process")))
+        assert got == ["docs/.autosound/x", "process/journal.jsonl"], f"the walk read {got}"
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
 
 
 def _run_main(argv):
@@ -6772,7 +6794,8 @@ def _selftest():
                   _check_phase1_gate_names_an_unreadable_glossary, _check_capture_verbs_read_the_glossary_strictly,
                   _check_rate_note_reads_the_rule, _check_evidence_verdicts_name_the_naming_load_error,
                   _check_capture_start_said_as_it_landed, _check_capture_start_held_names_the_close_that_landed,
-                  _check_capture_start_held_leaves_the_open_rounds_plan, _check_says_what_it_did_not_check):
+                  _check_capture_start_held_leaves_the_open_rounds_plan, _check_says_what_it_did_not_check,
+                  _check_project_bytes_leave_the_lock_out):
         try:
             check()
         except AssertionError as exc:

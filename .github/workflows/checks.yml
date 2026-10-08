@@ -190,3 +190,7 @@ jobs:
       # these; here they are real. Its argv is scripts/selftests.txt's; stdlib only, so nothing to install.
       - name: atomic writes on Windows (project_io's selftest)
         run: python skills/autosound-tuning/rew_tool/project_io.py --selftest
+      # The project lock on the system whose lock is not flock (#141): msvcrt.locking on the lock file's first byte,
+      # a second process told busy, then let in. The author's Mac runs only the POSIX half. stdlib only.
+      - name: the project lock on Windows (write_lock's selftest)
+        run: python skills/autosound-tuning/rew_tool/write_lock.py --selftest

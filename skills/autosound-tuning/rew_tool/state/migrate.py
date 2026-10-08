@@ -796,9 +796,12 @@ def _two_x(old, preset="SQ", gain=-7.8):
 
 def _bytes_under(top):
     """`{relative path: bytes}` of every file under `top` -- nothing written is every byte of it the same. A link is
-    its target, `-> <target>`, read without following it: one to nothing has no bytes to read."""
+    its target, `-> <target>`, read without following it: one to nothing has no bytes to read. Not the top
+    `.autosound/`: the writer lock's bookkeeping (write_lock.py), not the project's content."""
     out = {}
-    for folder, _dirs, names in os.walk(top):
+    for folder, dirs, names in os.walk(top):
+        if folder == top and ".autosound" in dirs:
+            dirs.remove(".autosound")
         for name in names:
             path = os.path.join(folder, name)
             if os.path.islink(path):
@@ -807,6 +810,25 @@ def _bytes_under(top):
             with open(path, "rb") as fh:
                 out[os.path.relpath(path, top).replace(os.sep, "/")] = fh.read()
     return out
+
+
+def _check_bytes_under_leaves_the_lock_out():
+    """`.autosound/` at the top is the writer lock's bookkeeping (write_lock.py, #141), made by whichever writer takes
+    the lock: `_bytes_under` leaves it out, so taking the lock never reads as a change to the folder. Only the top
+    one: a `.autosound/` deeper down is the project's like any other folder."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_migrate_bytes_")
+    try:
+        for rel in ("project.json", ".autosound/write.lock", ".autosound/.gitignore", "state/.autosound/x"):
+            path = os.path.join(top, *rel.split("/"))
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write("x")
+        got = sorted(_bytes_under(top))
+        assert got == ["project.json", "state/.autosound/x"], f"the walk read {got}"
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
 
 
 def _check_into_a_project_refused():
@@ -1027,7 +1049,8 @@ def _selftest():
     failures = []
     for check in (_check_import_refuses_newer_project, _check_main_refuses_only_refusals,
                   _check_import_refusals_in_one_line, _check_import_reads_before_it_writes,
-                  _check_into_a_project_refused, _check_version_claimed_exclusively):
+                  _check_into_a_project_refused, _check_version_claimed_exclusively,
+                  _check_bytes_under_leaves_the_lock_out):
         try:
             check()
         except AssertionError as exc:
