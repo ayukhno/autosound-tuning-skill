@@ -53,7 +53,9 @@ SIGNING_KEY = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHLm4x1yz9JbFfBlxdQA8vR8yYMup
 SIGNED_FROM = "v3.0.64"
 SKIP_VERIFY_VAR = "AUTOSOUND_SKIP_TAG_VERIFY"
 
-_TAG_RE = re.compile(r"^v(\d+)\.(\d+)\.(\d+)$")
+# A release tag's two shapes (T-45, #142), always matched whole (`fullmatch`): ASCII digits -- `\d` takes any script's
+# -- and no trailing newline, which `$` lets through. `is_release_tag` below is the rule.
+_TAG_RE = re.compile(r"v([0-9]+)\.([0-9]+)\.([0-9]+)")
 
 
 class Refused(Exception):
@@ -76,18 +78,25 @@ def git(clone, *args, env=None, timeout=120):
     return run(["git", "-C", clone, *args], env=env, timeout=timeout)
 
 
-_CANDIDATE_RE = re.compile(r"^beta-v(\d+)\.(\d+)\.(\d+)-rc(\d+)$")
+_CANDIDATE_RE = re.compile(r"beta-v([0-9]+)\.([0-9]+)\.([0-9]+)-rc([0-9]+)")
+
+
+def is_release_tag(name):
+    """True for a release tag -- `vX.Y.Z`, or a candidate's `beta-vX.Y.Z-rcN` -- and for nothing else. The one rule
+    (T-45, #142), here as in install.sh's `is_release_tag` and install.ps1's `Test-ReleaseTag`;
+    `installer-consistency.py` holds the three to one table of names."""
+    return isinstance(name, str) and bool(_TAG_RE.fullmatch(name) or _CANDIDATE_RE.fullmatch(name))
 
 
 def release_key(tag):
     """The release a tag names: `v3.1.0` and `beta-v3.1.0-rc2` both name (3, 1, 0); None for anything else. A
     candidate is signed like a release (the installers verify both), so the signature rules read this, not the name."""
-    m = _TAG_RE.match(tag or "") or _CANDIDATE_RE.match(tag or "")
+    m = _TAG_RE.fullmatch(tag or "") or _CANDIDATE_RE.fullmatch(tag or "")
     return tuple(int(x) for x in m.groups()[:3]) if m else None
 
 
 def tag_key(tag):
-    m = _TAG_RE.match(tag or "")
+    m = _TAG_RE.fullmatch(tag or "")
     return tuple(int(x) for x in m.groups()) if m else None
 
 
@@ -114,7 +123,7 @@ def verify_tag(clone, tag, principal=None, key=None, signed_from=None, env=None)
     signed_from = signed_from or SIGNED_FROM
     if env.get(SKIP_VERIFY_VAR) == "1":
         return True, f"signature NOT checked: {SKIP_VERIFY_VAR}=1 is set (a developer's switch)"
-    if release_key(tag) is None:
+    if not is_release_tag(tag):
         return False, f"{tag!r} is not a release tag (vX.Y.Z or beta-vX.Y.Z-rcN), so there is no signature to check"
     if release_key(tag) < tag_key(signed_from):
         return True, f"{tag} predates signed tags (they start at {signed_from}): installed without a signature check"
@@ -185,8 +194,8 @@ def copy_tag(root, repo=None):
     names = [line.rsplit("/", 1)[-1] for line in out.splitlines() if rc == 0 and "refs/tags/" in line]
     if f"v{version}" in names:
         return f"v{version}"
-    candidates = [n for n in names if _CANDIDATE_RE.match(n)]
-    return max(candidates, key=lambda n: int(_CANDIDATE_RE.match(n).group(4))) if candidates else ""
+    candidates = [n for n in names if _CANDIDATE_RE.fullmatch(n)]
+    return max(candidates, key=lambda n: int(_CANDIDATE_RE.fullmatch(n).group(4))) if candidates else ""
 
 
 def verify_copy(root, repo=None, tag=None):
@@ -202,7 +211,7 @@ def verify_copy(root, repo=None, tag=None):
     root = os.path.abspath(root)
     version = copy_version(root)
     tag = tag or copy_tag(root, repo) or (f"v{version}" if version else "")
-    if release_key(tag) is None:
+    if not is_release_tag(tag):
         raise Refused(f"{root}: no release version in .claude-plugin/plugin.json ({version!r}), so no tag to check "
                       f"this copy against")
     with tempfile.TemporaryDirectory(prefix="autosound_verify_") as bare:

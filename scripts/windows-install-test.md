@@ -22,7 +22,8 @@ lines that did *not* appear.
 |---|---|---|
 | `version v3.0.16` (or newer) | the method's tag resolved | the tag glob or `ls-remote` is broken |
 | `version v0.1.13` (or newer) | **the app's tag resolved — this is SCR-054** | fell through to the default branch |
-| `could not read the app's releases` | **must NOT appear** | SCR-054's resolution failed; the run continues from the default branch, which is the old behaviour |
+| `could not read the method's release tags` | **must NOT appear** | the method's tags could not be read: the run stopped there, exit 1, nothing of the method changed (T-37) |
+| `could not read the app's release tags` | **must NOT appear** | the app's tags could not be read: the app is not installed -- no longer taken from its default branch (T-37) |
 | `would create "Autosound TCC" shortcuts…` | the shortcut step is reached | mode detection or `$TccExe` logic is wrong |
 
 ## 1a. The UPGRADE case — better than a fresh install, if you have a machine with an old build

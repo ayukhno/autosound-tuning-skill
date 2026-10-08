@@ -24,9 +24,11 @@ Do not publish vulnerability details publicly until a fix or coordinated disclos
 
 From `v3.0.64` every release tag is signed with the author's SSH key, and the installers (`install.sh`,
 `install.ps1`) and the update path TCC calls (`scripts/upkeep.py clone`) refuse to install a release tag that does
-not verify against it. Older tags predate signing and still install; the installer says so. The desktop app's tags
-are signed with the same key from TCC `v0.1.45`, and the installers check the app's tag the same way before `uv`
-installs it: one that does not verify is not installed, and the method's install goes on without it. The key:
+not verify against it. Older tags predate signing and still install; the installer says so. A name that is not a
+release -- a branch, a commit -- is installed only when it is named (`--skill-ref`, `--tcc-ref`), and said UNSIGNED;
+when no release tag can be read, the installers install nothing in its place. The desktop app's tags are signed with
+the same key from TCC `v0.1.45`, and the installers check the app's tag the same way before `uv` installs it: one
+that does not verify is not installed, and the method's install goes on without it. The key:
 
 - fingerprint `SHA256:nSazijzZf///QKgfVXJBRd2fl7QMd2Xu4uwjc7MGbSo` (ED25519)
 - in [`allowed_signers`](allowed_signers), so anyone can check a tag by hand -- the good answer is the line that

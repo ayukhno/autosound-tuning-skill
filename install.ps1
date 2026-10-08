@@ -113,8 +113,8 @@ function Stop-Installer {
 #   uv installer (irm | iex)      Invoke-Upstream returns the CHILD's exit code; `Have uv` after
 #   uv python install 3.12        `Test-Path $Py3` after; Warn naming what will not run
 #   uv tool install autosound-tcc return value read into `if` -- the one that always was
-#   git fetch / git checkout      both return values read, then HEAD vs FETCH_HEAD compared
-#   git clone                     `Test-Path <clone>\skills\autosound-tuning` after
+#   git fetch / git checkout      both return values read, then HEAD vs the tag's commit compared
+#   git init + fetch (new copy)   each return value read; HEAD vs the tag's commit after the checkout
 #   pip install -r requirements   `python3 -c "import numpy, scipy"` after -- the produce, not the code
 #   claude / agy / gh installers  `Have <tool>` after each; absence is a Warn, not a stop
 #   Remove-Item (the --uninstall  DELIBERATELY unchecked. The goal is "gone"; a file that was not
@@ -262,17 +262,26 @@ function Say  { param($m) Write-Host "  $m" }
 function Step { param($m) Write-Host ""; Write-Host "==> $m" -ForegroundColor Cyan }
 function Warn { param($m) Write-Host "  ! $m" -ForegroundColor Yellow }
 function Have { param($n) [bool](Get-Command $n -ErrorAction SilentlyContinue) }
+# Is $Name a release tag -- vX.Y.Z, or a candidate's beta-vX.Y.Z-rcN -- and nothing else? The one rule (T-45, #142),
+# here as in install.sh's is_release_tag and upkeep.py's is_release_tag; installer-consistency.py holds the three to one
+# table of names, reading these two patterns as .NET does. -cmatch: case kept. [0-9], not \d: \d takes any script's
+# digits. \z, not $: $ lets a trailing newline through.
+function Test-ReleaseTag {
+    param([string]$Name)
+    return ($Name -cmatch '^v[0-9]+\.[0-9]+\.[0-9]+\z' -or $Name -cmatch '^beta-v[0-9]+\.[0-9]+\.[0-9]+-rc[0-9]+\z')
+}
 # The newest tag on the beta channel (hub RELEASE-CHANNEL.md s11.2). A release sorts as
 # (X,Y,Z,1,0) and a candidate as (X,Y,Z,0,N): v3.1.0 above beta-v3.1.0-rc2, rc10 above rc2, and a
 # candidate for v3.1.0 above v3.0.49. [version] cannot say this -- it throws on a "beta-" name. A
-# name of neither shape is not installable and is dropped. Same order as newest_on_channel in
-# install.sh, which installer-consistency.py RUNS; this half is only read there, not run.
+# name of neither shape is not installable and is dropped: the two shapes are Test-ReleaseTag's, with
+# the numbers captured. Same order as newest_on_channel in install.sh, which installer-consistency.py
+# RUNS; this half is only read there, not run.
 function Select-NewestOnChannel {
     param([string[]]$Names)
     $keyed = @(foreach ($n in $Names) {
-        if ($n -match '^v(\d+)\.(\d+)\.(\d+)$') {
+        if ($n -cmatch '^v([0-9]+)\.([0-9]+)\.([0-9]+)\z') {
             [pscustomobject]@{ Name = $n; X = [int]$Matches[1]; Y = [int]$Matches[2]; Z = [int]$Matches[3]; R = 1; N = 0 }
-        } elseif ($n -match '^beta-v(\d+)\.(\d+)\.(\d+)-rc(\d+)$') {
+        } elseif ($n -cmatch '^beta-v([0-9]+)\.([0-9]+)\.([0-9]+)-rc([0-9]+)\z') {
             [pscustomobject]@{ Name = $n; X = [int]$Matches[1]; Y = [int]$Matches[2]; Z = [int]$Matches[3]; R = 0; N = [int]$Matches[4] }
         }
     })
@@ -897,13 +906,15 @@ if (Test-Path $Py3) {
 }
 
 # -- the tuning method -------------------------------------------------------------------------
-# Put a checkout of the method at $Dir on $Ref: move it when it is already a checkout, clone it
-# when there is none. ONE function for both copies -- the terminal's and the beta channel's
-# (autosound-hub #145) -- the mirror of checkout_method in install.sh. $true unless a clone failed;
-# a failed MOVE is warned about and leaves the copy where it was.
+# Put a checkout of the method at $Dir on $Ref (Sync-MethodCheckout, below): move it when it is already a checkout,
+# make one when there is none. ONE function for both copies -- the terminal's and the beta channel's
+# (autosound-hub #145) -- the mirror of checkout_method in install.sh. $true unless the copy is not on $Ref: a new
+# copy not made, or refused, or removed; an update refused for its signature, or put back. An update whose fetch
+# failed is warned about and leaves the copy where it was.
 # What can be said of $Ref by its name alone, each said on a line (skill #99, #101): $true -- settled, nothing to
-# check (a dry run, AUTOSOUND_SKIP_TAG_VERIFY=1, a branch named with -SkillRef or -TccRef, a tag before $SignedFrom);
-# $false -- its signature has to be checked. The mirror of settled_by_name in install.sh.
+# check (a dry run, AUTOSOUND_SKIP_TAG_VERIFY=1, a name that is not a release -- only ever one named with -SkillRef or
+# -TccRef: installed, and said UNSIGNED -- a tag before $SignedFrom); $false -- its signature has to be checked. The
+# mirror of settled_by_name in install.sh.
 function Test-SettledByName {
     param([string]$Ref, [string]$SignedFrom)
     if ($DryRun) { Say "would check the signature of $Ref"; return $true }
@@ -911,8 +922,8 @@ function Test-SettledByName {
         Warn "the signature of $Ref is NOT checked: AUTOSOUND_SKIP_TAG_VERIFY=1 is set (a developer's switch)"
         return $true
     }
-    $ver = ($Ref -replace '^beta-', '') -replace '-rc.*$', ''
-    if ($ver -notmatch '^v\d+\.\d+\.\d+$') { Say "$Ref is not a release tag -- no signature to check"; return $true }
+    if (-not (Test-ReleaseTag $Ref)) { Warn "$Ref is not a release: it is installed UNSIGNED, unchecked"; return $true }
+    $ver = ($Ref -replace '^beta-', '') -replace '-rc[0-9]+\z', ''
     if ([version]($ver -replace '^v', '') -lt [version]($SignedFrom -replace '^v', '')) {
         Say "$Ref predates signed tags (they start at $SignedFrom) -- installed without a signature check"
         return $true
@@ -1038,20 +1049,32 @@ function Save-LocalChanges {
     return $kept
 }
 
-# $script:SignatureRefused tells the caller that a copy was refused for its signature, not for the network.
+# Is HEAD in $Dir the commit $Rev names? Both asked of git; a HEAD it cannot name (nothing checked out yet) is not.
+# The mirror of head_is in install.sh.
+function Test-HeadIs {
+    param([string]$Dir, [string]$Rev)
+    $at   = "$(& git -C $Dir rev-parse --verify --quiet HEAD 2>$null)".Trim()
+    $want = "$(& git -C $Dir rev-parse --verify --quiet $Rev 2>$null)".Trim()
+    return [bool]($at -and $at -eq $want)
+}
+
+# $script:SignatureRefused tells the caller that a copy was refused for its signature, not for the network, and
+# $script:NotTheTag that HEAD was not $Ref after its checkout: a new copy is removed, an update put back.
 $script:SignatureRefused = $false
+$script:NotTheTag = $false
+# A copy is the tag it checked (T-45, #142) -- see checkout_method in install.sh. A release is fetched INTO refs/tags
+# and checked out from there, and HEAD is held to that tag's commit; any other name (a branch, a sha, named with
+# -SkillRef and installed UNSIGNED) is fetched by name and checked out from FETCH_HEAD. `${Ref}`, braced: "$Ref:refs"
+# would read as a scoped variable.
 function Sync-MethodCheckout {
     param([string]$Dir, [string]$Ref, [string]$What)
+    $spec = $Ref; $want = 'FETCH_HEAD^{commit}'
+    if (Test-ReleaseTag $Ref) { $spec = "+refs/tags/${Ref}:refs/tags/${Ref}"; $want = "refs/tags/${Ref}^{commit}" }
     if (Test-Path (Join-Path $Dir ".git")) {
-        # Fetch the ref BY NAME: the clone was made with --depth 1 --branch <tag>, so it holds
-        # that tag and nothing else; FETCH_HEAD is whatever was just fetched.
         # CHECKED, both of them, and the mirror of install.sh. Unchecked, a network blip or a
         # moved ref left the method on the previous version while this script printed
         # "updating to <ref>" and carried on -- the one failure mode where the user is told the
         # opposite of what happened (HUB-042).
-        # A TAG also lands in refs/tags; fetched by bare name it left `describe` a bare sha -- see
-        # checkout_method in install.sh. `${Ref}`, braced: "$Ref:refs" would read as a scoped variable.
-        $spec     = if ($Ref -match '^(beta-)?v\d') { "+refs/tags/${Ref}:refs/tags/${Ref}" } else { $Ref }
         $fetched  = Run { & git -C $Dir fetch --quiet --depth 1 origin $spec } "git fetch $Ref"
         if (-not $fetched) {
             Warn "could not fetch $Ref for $What -- it is STILL at $(& git -C $Dir describe --tags --always 2>$null)."
@@ -1064,37 +1087,71 @@ function Sync-MethodCheckout {
         if (@(& git -C $Dir status --porcelain --untracked-files=all 2>$null).Count -gt 0) {
             if (-not (Save-LocalChanges $Dir $What)) { return $true }
         }
-        $checked  = Run { & git -c advice.detachedHead=false -C $Dir checkout --quiet FETCH_HEAD } "git checkout FETCH_HEAD"
-        if (-not $DryRun) {
-            $at = (& git -C $Dir describe --tags --always 2>$null)
-            if (-not $checked) {
-                Warn "could not check out $Ref for $What -- it is STILL at $at; nothing was changed."
-            } elseif ((& git -C $Dir rev-parse HEAD 2>$null) -ne (& git -C $Dir rev-parse 'FETCH_HEAD^{commit}' 2>$null)) {
-                # What it was supposed to PRODUCE, not just that it exited 0 -- against the COMMIT:
-                # for an annotated tag FETCH_HEAD is the tag object (install.sh, 2026-09-14).
-                Warn "the update did not take: HEAD is not what was just fetched; $What is still at $at"
-            }
-        }
-        return $true
+        $was = "$(& git -C $Dir rev-parse --verify --quiet HEAD 2>$null)".Trim()
+        Run { & git -c advice.detachedHead=false -C $Dir checkout --quiet $want } "git checkout $want" | Out-Null
+        if ($DryRun -or (Test-HeadIs $Dir $want)) { return $true }
+        # Put back: the tree was clean before this checkout (local changes are kept above first), so --force drops
+        # only what a checkout that broke off left behind.
+        if ($was) { & git -c advice.detachedHead=false -C $Dir checkout --quiet --force $was 2>&1 | Out-Null }
+        Warn "the update did not take: HEAD was not $Ref after the checkout; $What is back at $(& git -C $Dir describe --tags --always 2>$null)."
+        $script:NotTheTag = $true
+        return $false
     }
-    if ($DryRun) { Say "would run: git clone --branch $Ref --depth 1 $SkillRepo $(Pretty $Dir)"; return $true }
-    # A shallow clone of an ANNOTATED tag makes git print "warning: refs/tags/vX.Y.Z <sha>
-    # is not a commit!" -- it is complaining that the tag OBJECT is not a commit, which is
-    # what an annotated tag is; HEAD lands on exactly what the tag peels to. Under Windows
-    # PowerShell that one line arrived as a red NativeCommandError block (2026-08-17).
-    # Everything else git says survives.
-    $prev = $ErrorActionPreference; $ErrorActionPreference = "SilentlyContinue"
-    $gitOut = @(& git -c advice.detachedHead=false clone --quiet --branch $Ref --depth 1 $SkillRepo $Dir 2>&1)
+    if ($DryRun) { Say "would fetch $Ref into $(Pretty $Dir), check it, and check it out"; return $true }
+    # Made here, so removed here when it fails -- never a folder that was at that path before: `git clone` refused one.
+    if ((Test-Path $Dir) -and @(Get-ChildItem -LiteralPath $Dir -Force -ErrorAction SilentlyContinue).Count -gt 0) {
+        Warn "$(Pretty $Dir) is there, and is not a checkout -- move it aside, then run this again"
+        return $false
+    }
+    # Under "Continue", as in Test-TccTag: git says every reason on stderr.
+    $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    $global:LASTEXITCODE = 0
+    $said = @(& git init --quiet $Dir 2>&1)
+    if ($LASTEXITCODE -eq 0) { $said = @(& git -C $Dir remote add origin $SkillRepo 2>&1) }
+    if ($LASTEXITCODE -eq 0) { $said = @(& git -C $Dir fetch --quiet --depth 1 origin $spec 2>&1) }
+    $rc = $LASTEXITCODE
     $ErrorActionPreference = $prev
-    $gitOut | ForEach-Object { "$_" } | Where-Object { $_ -and ($_ -notmatch 'is not a commit!') } | ForEach-Object { Write-Host "  $_" }
-    if (-not (Test-Path (Join-Path $Dir "skills\autosound-tuning"))) { return $false }
-    # A fresh copy is checked like an update, and removed when it fails: nothing unverified stays behind.
+    if ($rc -ne 0) {
+        $said | ForEach-Object { Write-Host "  $_" }
+        Remove-Item $Dir -Recurse -Force -ErrorAction SilentlyContinue
+        return $false
+    }
+    # Checked before anything of it is checked out (skill #99), and removed when it fails: nothing unverified stays.
     if (-not (Test-TagSignature $Dir $Ref)) {
         $script:SignatureRefused = $true
         Remove-Item $Dir -Recurse -Force -ErrorAction SilentlyContinue
         return $false
     }
-    return $true
+    $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    @(& git -c advice.detachedHead=false -C $Dir checkout --quiet $want 2>&1) | ForEach-Object { Write-Host "  $_" }
+    $ErrorActionPreference = $prev
+    if (Test-HeadIs $Dir $want) { return $true }
+    Warn "the new copy is not $Ref after its checkout -- it is removed; nothing was installed."
+    $script:NotTheTag = $true
+    Remove-Item $Dir -Recurse -Force -ErrorAction SilentlyContinue
+    return $false
+}
+
+# The method's version (T-37, #142) -- the mirror of pick_method_ref in install.sh: the name given with -SkillRef (a
+# name that is not a release is said UNSIGNED), or the newest release tag; $null when none could be read, and the
+# caller stops -- an empty ls-remote installed an unchecked `main`. The stop itself is the caller's: Stop-Installer's
+# `return` ends the script only from its top level.
+function Select-MethodRef {
+    param([string]$Given)
+    if ($Given) {
+        if (-not (Test-ReleaseTag $Given)) { Warn "$Given is not a release: it is installed UNSIGNED, unchecked" }
+        return $Given
+    }
+    $tags = @()
+    if (Have git) {
+        # Release-shaped tags only (skill #108): a `v3.x` sorted above every release and installed unchecked.
+        $tags = @((& git ls-remote --tags --refs $SkillRepo $SkillTagGlob 2>$null) |
+                  ForEach-Object { ($_ -split "/")[-1] } |
+                  Where-Object { Test-ReleaseTag $_ } |
+                  Sort-Object { [version]($_ -replace '^v', '') })
+    }
+    if ($tags.Count -gt 0) { return $tags[-1] }
+    return $null
 }
 
 Step "The tuning method"
@@ -1116,20 +1173,14 @@ if ($PluginRoot) {
         }
     }
 } else {
+# The newest 3.x tag unless one is named, by name rather than "main": main is where development
+# lands, and an installer should put you on a release unless you say otherwise. On EITHER channel:
+# this is the copy Claude Code in a terminal loads, and the terminal runs releases (autosound-hub
+# #145). A candidate goes into its own copy, below.
+$SkillRef = Select-MethodRef $SkillRef
 if (-not $SkillRef) {
-    # The newest 3.x tag, by name rather than "main": main is where development lands, and an
-    # installer should put you on a release unless you say otherwise. On EITHER channel: this is
-    # the copy Claude Code in a terminal loads, and the terminal runs releases (autosound-hub
-    # #145). A candidate goes into its own copy, below.
-    $tags = @()
-    if (Have git) {
-        # Release-shaped tags only (skill #108): a `v3.x` sorted above every release and installed unchecked.
-        $tags = @((& git ls-remote --tags --refs $SkillRepo $SkillTagGlob 2>$null) |
-                  ForEach-Object { ($_ -split "/")[-1] } |
-                  Where-Object { $_ -match '^v\d+\.\d+\.\d+$' } |
-                  Sort-Object { [version]($_ -replace '^v', '') })
-    }
-    if ($tags.Count -gt 0) { $SkillRef = $tags[-1] } else { $SkillRef = "main" }
+    Warn "could not read the method's release tags (no network?) -- nothing was installed or changed for the method; run again when GitHub answers, or name a tag with -SkillRef"
+    Stop-Installer 1; return
 }
 Say "version $SkillRef"
 $linkExists = Test-Path $SkillHome
@@ -1154,6 +1205,10 @@ if ((-not $linkExists) -or $isOurs) {
             Warn "stopped: $SkillRef is not a signed release of the method -- see above; the installed one is untouched"
             Stop-Installer 1; return
         }
+        if ($script:NotTheTag) {
+            Warn "stopped: the method could not be put on $SkillRef -- see above; it is back where it was"
+            Stop-Installer 1; return
+        }
     } else {
         Say "into ~\.claude\skills\autosound-tuning"
         if (-not $DryRun) { New-Item -ItemType Directory -Force -Path (Split-Path $SkillHome) | Out-Null }
@@ -1170,7 +1225,9 @@ if ((-not $linkExists) -or $isOurs) {
             Warn "stopped: $SkillRef is not a signed release of the method -- see above"
             Stop-Installer 1; return
         } elseif (-not $cloned) {
-            Warn "clone failed -- is the network up? Nothing below can use the method until it is here."
+            # A stop, as in install.sh: nothing below can use a method that is not here (T-44, #142).
+            Warn "clone failed -- see above"
+            Stop-Installer 1; return
         }
     }
 }
@@ -1191,7 +1248,7 @@ if ($Channel -eq "beta") {
     } else {
         Say "beta channel: $betaRef in $(Pretty $SkillBetaSrc) -- only an app that asks for beta runs it"
         if (-not (Sync-MethodCheckout $SkillBetaSrc $betaRef "the beta channel's copy")) {
-            Warn "the beta channel's copy did not clone, or its signature did not check out -- see above; the terminal's method is not affected"
+            Warn "the beta channel's copy is not on $betaRef -- see above; the terminal's method is not affected"
         }
     }
 }
@@ -1339,7 +1396,7 @@ if ($Mode -eq "tcc") {
                 } else {
                     $tccTags = @((& git ls-remote --tags --refs $TccRepo $TccTagGlob 2>$null) |
                                  ForEach-Object { ($_ -split "/")[-1] } |
-                                 Where-Object { $_ -match '^v\d+\.\d+\.\d+$' } |
+                                 Where-Object { Test-ReleaseTag $_ } |
                                  Sort-Object { [version]($_ -replace '^v', '') })
                 }
             }
@@ -1349,13 +1406,12 @@ if ($Mode -eq "tcc") {
             $TccSpec = "autosound-tcc[gui,claude] @ git+$TccRepo@$TccRef"
             Say "version $TccRef$tccHow"
             # Its signature, before uv sees it (skill #101). A tag that does not check out is not installed, and the
-            # method's install goes on without it.
+            # method's install goes on without it. A name that is not a release (-TccRef) is said UNSIGNED there.
             if (-not (Test-TccTag $TccRef)) { $TccRefused = "$TccRef could not be shown to be a signed release of TCC" }
         } else {
-            # No network, no git, or no tags yet. The default branch still installs, and saying so
-            # is better than stopping over a version number.
-            $TccSpec = "autosound-tcc[gui,claude] @ git+$TccRepo"
-            Warn "could not read the app's releases -- installing from the default branch instead, which has no signature to check"
+            # No tag could be read -- no network, no git: the app is not installed (T-37, #142). Its default branch was,
+            # with nothing checked. The method goes on without it, and the checks below count the app as missing.
+            $TccRefused = "could not read the app's release tags (no network?) -- run again when GitHub answers, or name a tag with -TccRef"
         }
         if (-not $TccRefused -and $script:TccSha -and -not (Test-TccTagStillAt $TccRef $script:TccSha)) {
             $TccRefused = "$TccRef changed after its signature was checked, or the server did not answer"

@@ -17,15 +17,18 @@ TCC ships in pieces, because two of them are hundreds of megabytes and both are 
 
 | you want | command |
 |---|---|
-| the window, driven by Claude (the usual one) | `uv tool install 'autosound-tcc[gui,claude] @ git+https://github.com/ayukhno/autosound-tcc@v1.1.0'` |
-| the window, driven by Gemini/Codex through `omp` | `uv tool install 'autosound-tcc[gui] @ git+https://github.com/ayukhno/autosound-tcc@v1.1.0'` |
-| no window — CLI and the MCP server only | `uv tool install 'autosound-tcc @ git+https://github.com/ayukhno/autosound-tcc@v1.1.0'` |
+| the window, driven by Claude (the usual one) | `uv tool install --python 3.12 'autosound-tcc[gui,claude] @ git+https://github.com/ayukhno/autosound-tcc@v1.1.2'` |
+| the window, driven by Gemini/Codex through `omp` | `uv tool install --python 3.12 'autosound-tcc[gui] @ git+https://github.com/ayukhno/autosound-tcc@v1.1.2'` |
+| no window — CLI and the MCP server only | `uv tool install --python 3.12 'autosound-tcc @ git+https://github.com/ayukhno/autosound-tcc@v1.1.2'` |
 
-**The `@v1.1.0` is not decoration.** Without it `uv` takes the repository's default branch, and
-the two ways into TCC — this command and `install.sh` — stop giving the same app: the installer
-resolves the newest `v*` tag through `ls-remote`, this page took whatever `main` happened to be
-(SCR-054, HUB-030). `scripts/installer-consistency.py` checks the tag written here against the
-installer's own, so a stale line here fails the suite rather than shipping a different build.
+**The `@v1.1.2` is not decoration.** Without it `uv` takes the repository's default branch, and
+the two ways into TCC — this command and `install.sh` — stop giving the same app: this page took
+whatever `main` happened to be (SCR-054, HUB-030). The tag is TCC's newest release when this
+version of the skill was made; the installers ask for the newest one each time they run, and check
+its signature, which this page does not. **Nor is `--python 3.12`:** without it `uv` takes
+whatever Python it finds, and an older one fails as a broken package. What
+`scripts/installer-consistency.py` checks here: the three lines name one tag, and each carries
+`--python 3.12` — not that the tag is the newest, which needs the network.
 
 Roughly 678 MB, 394 MB and 29 MB installed. Default to the first, since this command is being run
 from inside Claude Code. If `$ARGUMENTS` contains `cli`, use the third.

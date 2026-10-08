@@ -198,6 +198,16 @@ newest_on_channel() {
   ' | sort -n -k1,1 -k2,2 -k3,3 -k4,4 -k5,5 | tail -n 1 | awk '{print $6}'
 }
 
+# Is <name> a release tag -- `vX.Y.Z`, or a candidate's `beta-vX.Y.Z-rcN` -- and nothing else? The one rule (T-45,
+# #142), here as in install.ps1's Test-ReleaseTag and upkeep.py's is_release_tag; installer-consistency.py holds the
+# three to one table of names. ASCII digits and the whole name: matched in the C locale, since glibc's regex reads a
+# range such as [0-9] by the locale's collation, not by code point -- in a subshell, so the rest of the run keeps the
+# person's locale. newest_on_channel's awk keeps its own pair of patterns, the same two.
+is_release_tag() {  # is_release_tag <name>: 0 when it is a release tag
+  ( LC_ALL=C
+    [[ "$1" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || [[ "$1" =~ ^beta-v[0-9]+\.[0-9]+\.[0-9]+-rc[0-9]+$ ]] )
+}
+
 while [ $# -gt 0 ]; do
   case "$1" in
     --terminal)    MODE="terminal" ;;
@@ -843,8 +853,9 @@ fi
 
 # ── the tuning method ─────────────────────────────────────────────────────────
 # What can be said of <ref> by its name alone, each said on a line (skill #99, #101). 0 = settled, nothing to check:
-# a dry run, AUTOSOUND_SKIP_TAG_VERIFY=1, a branch named with --skill-ref or --tcc-ref, a tag before <first signed
-# tag>. 1 = its signature has to be checked. TCC's `_verdict_by_name`: the app's tag is fetched only when it must be.
+# a dry run, AUTOSOUND_SKIP_TAG_VERIFY=1, a name that is not a release (only ever one named with --skill-ref or
+# --tcc-ref: installed, and said UNSIGNED), a tag before <first signed tag>. 1 = its signature has to be checked.
+# TCC's `_verdict_by_name`: the app's tag is fetched only when it must be.
 settled_by_name() {  # settled_by_name <ref> <first signed tag>
   _sn_ref="$1"; _sn_from="$2"
   if [ "$DRY_RUN" = 1 ]; then say "  would check the signature of $_sn_ref"; return 0; fi
@@ -852,11 +863,14 @@ settled_by_name() {  # settled_by_name <ref> <first signed tag>
     warn "the signature of $_sn_ref is NOT checked: AUTOSOUND_SKIP_TAG_VERIFY=1 is set (a developer's switch)"
     return 0
   fi
+  # Only the rule's own "no" settles a name: any other failure of it goes on to the signature, which refuses.
+  _sn_rel=0; is_release_tag "$_sn_ref" || _sn_rel=$?
+  if [ "$_sn_rel" = 1 ]; then
+    warn "$_sn_ref is not a release: it is installed UNSIGNED, unchecked"
+    return 0
+  fi
+  [ "$_sn_rel" = 0 ] || return 1
   _sn_ver="${_sn_ref#beta-}"; _sn_ver="${_sn_ver%%-rc*}"
-  case "$_sn_ver" in
-    v[0-9]*.[0-9]*.[0-9]*) ;;
-    *) say "  $_sn_ref is not a release tag -- no signature to check"; return 0 ;;
-  esac
   if [ "$(printf '%s\n%s\n' "$_sn_from" "$_sn_ver" | sort -V | head -1)" != "$_sn_from" ]; then
     say "  $_sn_ref predates signed tags (they start at $_sn_from) -- installed without a signature check"
     return 0
@@ -938,22 +952,33 @@ keep_local() {  # keep_local <dir> <what>; 0 = kept and reset, 1 = left as it wa
   return 1
 }
 
-# Put a checkout of the method at <dir> on <ref>: move it when it is already a checkout, clone it
+# Is HEAD in <dir> the commit <rev> names? Both asked of git; a HEAD it cannot name (a copy with nothing checked out
+# yet) is not.
+head_is() {  # head_is <dir> <rev>
+  _hi_at="$(git -C "$1" rev-parse --verify --quiet HEAD 2>/dev/null)" || _hi_at=""
+  [ -n "$_hi_at" ] && [ "$_hi_at" = "$(git -C "$1" rev-parse --verify --quiet "$2" 2>/dev/null)" ]
+}
+
+# Put a checkout of the method at <dir> on <ref>: move it when it is already a checkout, make one
 # when there is none. ONE function for both copies -- the terminal's and the beta channel's
 # (autosound-hub #145) -- so a lesson learned on one cannot miss the other. <what> names the copy
-# in a warning. Returns 1 only when a clone fails; a failed MOVE is warned about and leaves the copy
-# where it was.
+# in a warning.
+#   A copy is the tag it checked (T-45, #142). A release is fetched INTO refs/tags/<ref> and checked out from there,
+# and HEAD is then held to that tag's commit: `git clone --branch <ref>` took a branch of the same name over the tag,
+# and the check read the tag. In refs/tags `describe` names it too: fetched by bare name, a tag stored no ref, and the
+# copy was named by a bare sha ("the terminal stays on bc6423e", Windows VM, 2026-09-14). Any other name -- a branch
+# or a sha, only ever one named with --skill-ref, and installed UNSIGNED -- is fetched by name and checked out from
+# FETCH_HEAD. Against the COMMIT (`^{commit}`): an annotated tag, every release, is a tag object that HEAD never equals.
+#   0 = done -- or, on an update, the fetch failed and the copy is where it was, said; 1 = no new copy was made (the
+# fetch failed, or something that is not a checkout is at <dir>); 2 = <ref>'s signature did not check out, nothing
+# of it checked out; 3 = HEAD was not <ref> after the checkout: a new copy is removed, an update put back.
 checkout_method() {
   _co_dir="$1"; _co_ref="$2"; _co_what="$3"
+  _co_spec="$_co_ref"; _co_want="FETCH_HEAD^{commit}"
+  if is_release_tag "$_co_ref"; then
+    _co_spec="+refs/tags/$_co_ref:refs/tags/$_co_ref"; _co_want="refs/tags/$_co_ref^{commit}"
+  fi
   if [ -d "$_co_dir/.git" ]; then
-    # Fetch the ref BY NAME. The checkout was made with `--depth 1 --branch <tag>`, so it contains
-    # that tag and nothing else; FETCH_HEAD is whatever was just fetched, so this handles a tag, a
-    # branch or a sha the same way (2026-08-13).
-    # A TAG also lands in refs/tags. Fetched by bare name it moved HEAD and stored no tag, so
-    # `describe` named the copy by a bare sha: "the terminal stays on bc6423e" on a machine that was
-    # on v3.0.52 (Windows VM, 2026-09-14). A branch or a sha is fetched as before.
-    _co_spec="$_co_ref"
-    case "$_co_ref" in v[0-9]*|beta-v[0-9]*) _co_spec="+refs/tags/$_co_ref:refs/tags/$_co_ref" ;; esac
     # CHECKED, both of them. Unchecked, a network blip or a moved ref left the method sitting on
     # the previous version while this script printed "updating to <ref>" and carried on -- the one
     # failure mode where the user is told the opposite of what happened (HUB-042).
@@ -969,43 +994,58 @@ checkout_method() {
     if [ -n "$(git -C "$_co_dir" status --porcelain --untracked-files=all 2>/dev/null)" ]; then
       keep_local "$_co_dir" "$_co_what" || return 0
     fi
-    if run git -c advice.detachedHead=false -C "$_co_dir" checkout --quiet FETCH_HEAD; then
-      # And verify what it was supposed to produce, not just that the command exited 0. Against the
-      # COMMIT: for an annotated tag -- every release -- FETCH_HEAD is the tag object, which HEAD
-      # never equals, so each update warned "the update did not take" when it had (Windows VM,
-      # 2026-09-14).
-      if [ "$DRY_RUN" = 0 ] &&
-         [ "$(git -C "$_co_dir" rev-parse HEAD 2>/dev/null)" != \
-           "$(git -C "$_co_dir" rev-parse "FETCH_HEAD^{commit}" 2>/dev/null)" ]; then
-        warn "the update did not take: HEAD is not what was just fetched."
-        warn "$_co_what is still at $(git -C "$_co_dir" describe --tags --always 2>/dev/null || echo unknown)"
-      fi
-    else
-      warn "could not check out $_co_ref for $_co_what -- it is STILL at" \
-           "$(git -C "$_co_dir" describe --tags --always 2>/dev/null || echo unknown); nothing was changed."
-    fi
-    return 0
+    _co_was="$(git -C "$_co_dir" rev-parse --verify --quiet HEAD 2>/dev/null)" || _co_was=""
+    run git -c advice.detachedHead=false -C "$_co_dir" checkout --quiet "$_co_want" || true
+    if [ "$DRY_RUN" = 1 ] || head_is "$_co_dir" "$_co_want"; then return 0; fi
+    # Put back: the tree was clean before this checkout (local changes are kept above first), so --force drops only
+    # what a checkout that broke off left behind.
+    [ -z "$_co_was" ] || git -c advice.detachedHead=false -C "$_co_dir" checkout --quiet --force "$_co_was" || true
+    warn "the update did not take: HEAD was not $_co_ref after the checkout; $_co_what is back at" \
+         "$(git -C "$_co_dir" describe --tags --always 2>/dev/null || echo unknown)."
+    return 3
   fi
-  # Not `run`, because this one call needs its stderr filtered. A shallow clone of an ANNOTATED
-  # tag makes git print `warning: refs/tags/vX.Y.Z <sha> is not a commit!` — it is complaining
-  # that the tag OBJECT is not a commit, which is what an annotated tag is. Verified harmless.
-  # Dropped because the word "warning" during a first install reads as something the person did
-  # wrong. Every other line of stderr survives, and a real failure still stops the script.
   if [ "$DRY_RUN" = 1 ]; then
-    say "  would run: git clone --branch $_co_ref --depth 1 $SKILL_REPO $(pretty "$_co_dir")"
+    say "  would fetch $_co_ref into $(pretty "$_co_dir"), check it, and check it out"
     return 0
   fi
-  _err="$(mktemp)"
-  if git -c advice.detachedHead=false clone --quiet --branch "$_co_ref" --depth 1 \
-       "$SKILL_REPO" "$_co_dir" 2>"$_err"; then
-    grep -v 'is not a commit!' "$_err" >&2 || true
-    rm -f "$_err"
-    # A fresh copy is checked like an update, and removed when it fails: nothing unverified stays behind.
-    verify_tag "$_co_dir" "$_co_ref" || { rm -rf "$_co_dir"; return 2; }
+  # Made here, so removed here when it fails -- never a folder that was at that path before: `git clone` refused one.
+  if [ -e "$_co_dir" ] && { [ ! -d "$_co_dir" ] || [ -n "$(ls -A "$_co_dir" 2>/dev/null)" ]; }; then
+    warn "$(pretty "$_co_dir") is there, and is not a checkout -- move it aside, then run this again"
+    return 1
+  fi
+  if ! git init --quiet "$_co_dir" || ! git -C "$_co_dir" remote add origin "$SKILL_REPO" \
+     || ! git -C "$_co_dir" fetch --quiet --depth 1 origin "$_co_spec"; then
+    rm -rf "$_co_dir"; return 1
+  fi
+  # Checked before anything of it is checked out (skill #99), and removed when it fails: nothing unverified stays.
+  verify_tag "$_co_dir" "$_co_ref" || { rm -rf "$_co_dir"; return 2; }
+  git -c advice.detachedHead=false -C "$_co_dir" checkout --quiet "$_co_want" || true
+  head_is "$_co_dir" "$_co_want" && return 0
+  warn "the new copy is not $_co_ref after its checkout -- it is removed; nothing was installed."
+  rm -rf "$_co_dir"
+  return 3
+}
+
+# The method's version (T-37, #142): the name given with --skill-ref, or the newest release tag. A release goes on to
+# its signature; any other name -- a branch, a sha -- is installed as it stands, and said. When no release tag can be
+# read and none was named, nothing is installed: an empty `ls-remote` (no network, a proxy) installed an unchecked
+# `main`, and moved a copy already verified onto it. The ref is all that goes to stdout -- the caller takes it with
+# $(...) -- and installer-consistency.py runs this with a `git` that has no network.
+pick_method_ref() {  # pick_method_ref <the --skill-ref name, or "">
+  if [ -n "$1" ]; then
+    is_release_tag "$1" || warn "$1 is not a release: it is installed UNSIGNED, unchecked"
+    printf '%s\n' "$1"
     return 0
   fi
-  cat "$_err" >&2; rm -f "$_err"
-  return 1
+  # Release-shaped tags only (skill #108): `sort -V` put a `v3.x` above every release.
+  _pm_ref="$(git ls-remote --tags --refs "$SKILL_REPO" "$SKILL_TAG_GLOB" 2>/dev/null \
+      | awk -F/ '{print $NF}' | newest_on_channel)" || _pm_ref=""
+  if [ -z "$_pm_ref" ]; then
+    warn "could not read the method's release tags (no network?) -- nothing was installed or changed for the" \
+         "method; run again when GitHub answers, or name a tag with --skill-ref"
+    exit 1
+  fi
+  printf '%s\n' "$_pm_ref"
 }
 
 step "The tuning method"
@@ -1025,16 +1065,13 @@ if [ -n "$PLUGIN_ROOT" ]; then
     echo "stopped: this plugin copy is not $SKILL_REF as its author signed it -- see above; nothing was installed" >&2
     exit 1
   fi
-elif [ -z "$SKILL_REF" ]; then
-  # The newest 3.x tag. Asked for by name rather than "main": main is where development lands,
-  # and an installer should put you on a release unless you say otherwise. On EITHER channel: this
-  # is the copy Claude Code in a terminal loads, and the terminal runs releases (autosound-hub
-  # #145). A candidate goes into its own copy, below.
-  # Release-shaped tags only (skill #108): `sort -V` put a `v3.x` above every release, and a name that is not a
-  # release passes the signature check as "not a release tag" -- a tag anyone with the token could push.
-  SKILL_REF="$(git ls-remote --tags --refs "$SKILL_REPO" "$SKILL_TAG_GLOB" 2>/dev/null \
-      | awk -F/ '{print $NF}' | newest_on_channel)" || SKILL_REF=""
-  [ -z "$SKILL_REF" ] && SKILL_REF="main"
+else
+  # The newest 3.x tag unless one is named. Asked for by name rather than "main": main is where
+  # development lands, and an installer should put you on a release unless you say otherwise. On
+  # EITHER channel: this is the copy Claude Code in a terminal loads, and the terminal runs releases
+  # (autosound-hub #145). A candidate goes into its own copy, below.
+  # $(...) is a subshell: the stop inside it has said why, and this carries its exit code out.
+  SKILL_REF="$(pick_method_ref "$SKILL_REF")" || exit $?
 fi
 if [ -z "$PLUGIN_ROOT" ]; then
 say "  version $SKILL_REF"
@@ -1053,8 +1090,9 @@ elif [ -d "$SKILL_HOME" ] && [ ! -L "$SKILL_HOME" ]; then
   warn "move it aside and re-run if you want this script to manage it."
 elif [ -d "$SKILL_SRC/.git" ]; then
   say "  already installed — updating to $SKILL_REF"
-  checkout_method "$SKILL_SRC" "$SKILL_REF" "the method" \
-    || { echo "stopped: $SKILL_REF is not a signed release of the method -- see above; the installed one is untouched" >&2; exit 1; }
+  _co_rc=0; checkout_method "$SKILL_SRC" "$SKILL_REF" "the method" || _co_rc=$?
+  if [ "$_co_rc" = 2 ]; then echo "stopped: $SKILL_REF is not a signed release of the method -- see above; the installed one is untouched" >&2; exit 1; fi
+  if [ "$_co_rc" != 0 ]; then warn "stopped: the method could not be put on $SKILL_REF -- see above; it is back where it was"; exit 1; fi
 else
   say "  into ~/.claude/skills/autosound-tuning"
   if [ "$DRY_RUN" = 0 ]; then mkdir -p "$(dirname "$SKILL_HOME")"; fi
@@ -1079,7 +1117,7 @@ if [ "$CHANNEL" = "beta" ]; then
   else
     say "  beta channel: $SKILL_BETA_REF in $(pretty "$SKILL_BETA_SRC") -- only an app that asks for beta runs it"
     checkout_method "$SKILL_BETA_SRC" "$SKILL_BETA_REF" "the beta channel's copy" \
-      || warn "the beta channel's copy did not clone, or its signature did not check out -- see above; the terminal's method is not affected"
+      || warn "the beta channel's copy is not on $SKILL_BETA_REF -- see above; the terminal's method is not affected"
   fi
 fi
 fi   # not --plugin
@@ -1276,13 +1314,12 @@ if [ "$MODE" = "tcc" ]; then
     TCC_SPEC="autosound-tcc[gui,claude] @ git+${TCC_REPO}@${TCC_REF}"
     say "  version $TCC_REF$TCC_REF_HOW"
     # Its signature, before uv sees it (skill #101). A tag that does not check out is not installed, and the
-    # method's install goes on without it.
+    # method's install goes on without it. A name that is not a release (--tcc-ref) is said UNSIGNED there.
     check_tcc_tag "$TCC_REF" || TCC_REFUSED="$TCC_REF could not be shown to be a signed release of TCC"
   else
-    # No network, or a repository with no tags yet. The default branch is still an install that
-    # works, and saying so is better than stopping over a version number.
-    TCC_SPEC="autosound-tcc[gui,claude] @ git+${TCC_REPO}"
-    warn "could not read the app's releases -- installing from the default branch instead, which has no signature to check"
+    # No tag could be read -- no network, a proxy: the app is not installed (T-37, #142). Its default branch was, with
+    # nothing checked. The method goes on without it, and the checks below count the app as missing.
+    TCC_REFUSED="could not read the app's release tags (no network?) -- run again when GitHub answers, or name a tag with --tcc-ref"
   fi
   if [ -z "$TCC_REFUSED" ] && [ -n "$TCC_SHA" ] && ! tcc_tag_still_at "$TCC_REF" "$TCC_SHA"; then
     TCC_REFUSED="$TCC_REF changed after its signature was checked, or the server did not answer"

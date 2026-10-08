@@ -89,9 +89,62 @@ CHANNEL_CASES = (
     ([], ""),
 )
 #: What install.ps1's `Select-NewestOnChannel` must still carry. Read, not run: there is no
-#: PowerShell on the author's Mac or in CI, so this half is shapes and sort key, not behaviour.
-PS1_CHANNEL_SHAPES = ("'^v(\\d+)\\.(\\d+)\\.(\\d+)$'", "'^beta-v(\\d+)\\.(\\d+)\\.(\\d+)-rc(\\d+)$'",
-                      "Sort-Object X, Y, Z, R, N")
+#: PowerShell on the author's Mac or in CI, so this half is shapes and sort key, not behaviour. The
+#: two shapes are the release-tag rule's (T-45): ASCII digits, the whole name, case kept.
+PS1_CHANNEL_SHAPES = ("-cmatch '^v([0-9]+)\\.([0-9]+)\\.([0-9]+)\\z'",
+                      "-cmatch '^beta-v([0-9]+)\\.([0-9]+)\\.([0-9]+)-rc([0-9]+)\\z'", "Sort-Object X, Y, Z, R, N")
+
+#: T-45 (#142): one rule for "is a release tag", answered alike by install.sh's `is_release_tag` (run), upkeep.py's
+#: `is_release_tag` (imported) and install.ps1's `Test-ReleaseTag` (read, applied as .NET reads it). `١` is
+#: ARABIC-INDIC DIGIT ONE, which `\d` takes in Python and .NET alike; the newline is one `$` lets through.
+TAG_RULE_CASES = (("v3.1.2", True), ("beta-v3.1.3-rc1", True), ("v3.1.2-x", False), ("v3.1", False),
+                  ("v3.1.2\n", False), ("v3.١.2", False), ("main", False), ("V3.1.2", False),
+                  # ...and an -rc only with beta-, beta- only with an -rc: two shapes, as newest_on_channel's awk pair.
+                  ("v3.1.2-rc1", False), ("beta-v3.1.3", False))
+
+#: T-37 (#142): the tags a stand-in `ls-remote` offers the method's pick, and the one it must install on stable.
+SELECTION_TAGS = ("v3.0.9", "v3.1.10", "v3.1.2", "beta-v3.1.3-rc1", "v3.1.2-x", "v03.1.1")
+#: ...and the stand-in: a `git` with no network. `ls-remote` prints a ref line for each name in the file $STUB_TAGS
+#: names (none when it is unset), or -- $STUB_RC not 0 -- git's own words for a remote it cannot reach, with that exit.
+#: Any other subcommand is not this test's to answer. Bytes, so the script keeps its "\n" line ends on Windows.
+NO_NETWORK_GIT = (b"#!/bin/sh\n"
+                  b"[ \"$1\" = ls-remote ] || { echo \"stub git: $1 is not asked here\" >&2; exit 99; }\n"
+                  b"if [ \"${STUB_RC:-0}\" != 0 ]; then\n"
+                  b"  echo \"fatal: unable to access 'https://github.com/ayukhno/autosound-tuning-skill.git/': "
+                  b"Could not resolve host: github.com\" >&2\n"
+                  b"  exit \"$STUB_RC\"\n"
+                  b"fi\n"
+                  b"[ -n \"${STUB_TAGS:-}\" ] || exit 0\n"
+                  b"while IFS= read -r t; do\n"
+                  b"  printf '0123456789abcdef0123456789abcdef01234567\\trefs/tags/%s\\n' \"$t\"\n"
+                  b"done < \"$STUB_TAGS\"\n")
+#: T-45 (#142): a `git` whose `checkout` answers 0 and does nothing -- a checkout that did not land. Everything else is
+#: the real git, which the script names in $REAL_GIT before this folder goes first on PATH.
+NO_CHECKOUT_GIT = (b"#!/bin/sh\n"
+                   b"for a in \"$@\"; do [ \"$a\" = checkout ] && exit 0; done\n"
+                   b"exec \"$REAL_GIT\" \"$@\"\n")
+
+
+def cut_functions(sh, names):
+    """`(text, missing)`: the named functions of install.sh, cut out as they stand -- one line (`say() { ...; }`), or
+    from `name() {` to the first `}` alone at column 0 -- and the names not found. A copy here would be a second
+    implementation, agreeing with this file while the installer drifted."""
+    cut, missing = [], []
+    for name in names:
+        m = (re.search(rf"^{name}\(\)[ \t]*\{{[^\n]*;[ \t]*\}}[ \t]*\n", sh, re.M)
+             or re.search(rf"^{name}\(\) \{{[^\n]*\n.*?^\}}\n", sh, re.M | re.S))
+        if m:
+            cut.append(m.group(0))
+        else:
+            missing.append(name)
+    return "".join(cut), missing
+
+
+def bash_literal(text):
+    """`text` as a bash `$'...'` word, every byte that is not a plain letter, digit, `.` or `-` as `\\xHH`: a newline
+    or a non-ASCII digit reaches the function exactly, through bash 3.2 too."""
+    return "$'" + "".join(chr(b) if (chr(b).isalnum() and b < 128) or chr(b) in ".-" else f"\\x{b:02x}"
+                          for b in text.encode("utf-8")) + "'"
 
 
 def _is_wsl_launcher(path, environ=os.environ):
@@ -168,8 +221,9 @@ def channel_order_problems(sh):
 UPKEEP = ROOT / "skills" / "autosound-tuning" / "scripts" / "upkeep.py"
 
 
-#: The functions of install.sh's signature check, cut out and run together: the method's tag and the app's (#99, #101).
-SIGNING_FUNCTIONS = ("settled_by_name", "verify_tag", "check_tcc_tag", "tcc_tag_still_at")
+#: The functions of install.sh's signature check, cut out and run together: the method's tag and the app's (#99, #101),
+#: and the release-tag rule they ask (T-45).
+SIGNING_FUNCTIONS = ("is_release_tag", "settled_by_name", "verify_tag", "check_tcc_tag", "tcc_tag_still_at")
 
 #: T-35 (#142): what the person's own git configuration may hold, and a `git` that is not git. Each answers "Good" one
 #: way or another; none of them is the author's signature. A fake `gpg.program` stands in for gpg: no real one runs,
@@ -289,14 +343,21 @@ def signing_problems(sh):
         return r.returncode, r.stdout.decode("utf-8", "replace") + r.stderr.decode("utf-8", "replace")
 
     out = []
+    # A name that is not a release is still installed when it is named -- and said UNSIGNED (T-37).
     cases = (("v3.0.64", "", 0, "signed by the skill's author"), ("v3.0.65", "", 1, "does not check out"),
              ("v3.0.66", "", 1, "does not check out"), ("v3.0.10", "", 0, "predates signed tags"),
-             ("main", "", 0, "not a release tag"), ("v3.0.66", "1", 0, "NOT checked"))
+             ("main", "", 0, "UNSIGNED"), ("v3.0.66", "1", 0, "NOT checked"))
     for ref, skip, want_rc, want_text in cases:
         rc, said = run(f'verify_tag "{repo_posix}" "{ref}" 2>&1\n', skip)
         if rc != want_rc or want_text not in said:
             out.append(f"install.sh verify_tag {ref}{' (skip)' if skip else ''}: exit {rc}, want {want_rc} "
                        f"and {want_text!r} -- said {said.strip()[-160:]!r}")
+    # Only the rule's own "no" settles a name as unsigned: a rule that fails some other way (here it is not there at
+    # all, exit 127) sends the name on to the signature, which refuses it -- it never installs unchecked (T-45).
+    rc, said = run(f'unset -f is_release_tag\nverify_tag "{repo_posix}" main 2>&1\n')
+    if rc != 1 or "UNSIGNED" in said or "does not check out" not in said:
+        out.append(f"install.sh verify_tag main with no release-tag rule to ask: exit {rc}, want 1 and 'does not "
+                   f"check out', never 'UNSIGNED' -- said {said.strip()[-160:]!r}")
     # T-35 (#142): a signature is the author's or nothing, whatever the person's git or GPG configuration says. A
     # sign-only helper as gpg.ssh.program (1Password's, for one) is not asked, so the good tag passes; an OpenPGP tag
     # the person's gpg calls good (git picks the verifier from the signature, not gpg.format) and a git that says
@@ -364,6 +425,265 @@ def ps1_stop_problems(ps1):
         elif re.search(r"\bStop-Installer\b", line) and not re.match(r"^\s*Stop-Installer \d+; return\s*$", line):
             out.append(f"install.ps1:{n}: Stop-Installer without `; return` on its line -- without "
                        f"the return the one-liner runs on past the stop")
+    return out
+
+
+def tag_rule_problems(sh, ps1):
+    """T-45 (#142): TAG_RULE_CASES answered alike by the three spellings of "is a release tag"; [] when they are.
+
+    install.sh's `is_release_tag` is cut out and RUN; upkeep.py's is imported by path; install.ps1's `Test-ReleaseTag`
+    is READ, and its patterns applied with Python's `re` the way .NET reads them -- which holds only while each pattern
+    is the ASCII class `[0-9]` (never `\\d`, which takes any script's digits in both engines) and ends in `\\z` (`$`
+    lets a trailing newline through in both): `\\z` becomes Python's `\\Z`, the same end of the string.
+    """
+    import importlib.util
+    out, names = [], [name for name, _ in TAG_RULE_CASES]
+    answers = {}
+    functions, missing = cut_functions(sh, ("is_release_tag",))
+    bash, why = find_bash()
+    if missing:
+        out.append("install.sh: no `is_release_tag() { ... }` -- the release-tag rule cannot be run")
+    elif not bash:
+        out.append(f"{why} -- install.sh's release-tag rule cannot be run, and unrun is not agreed")
+    else:
+        script = functions + "".join(f"if is_release_tag {bash_literal(name)}; then echo '{i} yes'; "
+                                     f"else echo '{i} no'; fi\n" for i, name in enumerate(names))
+        r = subprocess.run([bash, "-s"], input=script.encode("utf-8"), capture_output=True)
+        got = dict(line.split() for line in r.stdout.decode("utf-8", "replace").splitlines() if " " in line)
+        answers["install.sh"] = [got.get(str(i)) == "yes" if str(i) in got else None for i in range(len(names))]
+    try:
+        spec = importlib.util.spec_from_file_location("autosound_upkeep_rule", UPKEEP)
+        upkeep = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(upkeep)
+        answers["upkeep.py"] = [bool(upkeep.is_release_tag(name)) for name in names]
+    except Exception as exc:  # noqa: BLE001 -- a module that cannot answer is the finding, said with its reason
+        out.append(f"upkeep.py: no is_release_tag to ask ({type(exc).__name__}: {exc})")
+    fn = re.search(r"^function Test-ReleaseTag \{.*?^\}", ps1, re.M | re.S)
+    patterns = re.findall(r"-cmatch '([^']*)'", fn.group(0)) if fn else []
+    shapes_bad = [p for p in patterns if "\\d" in p or "[0-9]" not in p or not p.startswith("^") or not p.endswith("\\z")]
+    if not fn or not patterns:
+        out.append("install.ps1: no `function Test-ReleaseTag` with its `-cmatch` patterns -- the rule cannot be read")
+    elif shapes_bad or any(op != "cmatch" for op in re.findall(r"-(\w*match)\b", fn.group(0))):
+        out.append("install.ps1 Test-ReleaseTag: every pattern must be `-cmatch` (case kept), start in `^`, use the "
+                   "ASCII class [0-9] and end in \\z, or .NET does not read it as this check does -- "
+                   + ", ".join(shapes_bad or ["a match that is not -cmatch"]))
+    else:
+        compiled = [re.compile(p[:-2] + "\\Z") for p in patterns]
+        answers["install.ps1"] = [any(c.search(name) for c in compiled) for name in names]
+    for i, (name, want) in enumerate(TAG_RULE_CASES):
+        said = {where: got[i] for where, got in answers.items()}
+        if any(v != want for v in said.values()):
+            out.append(f"the release-tag rule answers {name!r} " + ", ".join(f"{k} {v}" for k, v in said.items())
+                       + f" -- want {want} (T-45)")
+    return out
+
+
+def selection_problems(sh, ps1):
+    """T-37 (#142): install.sh's `pick_method_ref` RUN with a `git` that has no network; [] when it answers right.
+
+    No tag readable and none named is a stop, exit 1, with nothing on stdout -- an empty `ls-remote` installed an
+    unchecked `main`, and moved a verified copy onto it on a re-run. A named branch goes on, said UNSIGNED; a named
+    release needs no network to be picked; and with tags readable the newest stable release wins whatever else the
+    remote offers. The ref is all that reaches stdout, since the caller takes it with $(...). The call sites in both
+    installers, and install.ps1's mirror, are READ: no `main` to fall back on, no app spec without a tag.
+    """
+    import tempfile
+    functions, missing = cut_functions(sh, ("say", "warn", "is_release_tag", "newest_on_channel", "pick_method_ref"))
+    if missing:
+        return [f"install.sh: no `{name}() {{ ... }}` -- the method's tag pick cannot be run" for name in missing]
+    bash, why = find_bash()
+    if not bash:
+        return [f"{why} -- install.sh's tag pick cannot be run, and unrun is not agreed"]
+    out = []
+    tmp = tempfile.mkdtemp(prefix="autosound_pick_")
+    try:
+        stub_dir, tags = Path(tmp, "stub-git"), Path(tmp, "tags")
+        stub_dir.mkdir()
+        (stub_dir / "git").write_bytes(NO_NETWORK_GIT)
+        (stub_dir / "git").chmod(0o755)
+        tags.write_bytes("".join(t + "\n" for t in SELECTION_TAGS).encode("utf-8"))
+        cases = (("", None, 0, 1, None, ("could not read the method's release tags", "nothing was installed"), ()),
+                 ("", None, 128, 1, None, ("could not read the method's release tags", "nothing was installed"), ()),
+                 ("main", None, 0, 0, "main", ("UNSIGNED",), ()),
+                 ("v3.0.33", None, 128, 0, "v3.0.33", (), ("UNSIGNED",)),
+                 ("", tags, 0, 0, "v3.1.10", (), ("UNSIGNED",)))
+        for given, offered, stub_rc, want_rc, want_ref, words, not_words in cases:
+            script = (f'set -euo pipefail\nexport PATH="$(cd "{stub_dir.as_posix()}" && pwd)":"/usr/bin:$PATH"\n'
+                      'SKILL_REPO="https://github.com/ayukhno/autosound-tuning-skill.git"\nSKILL_TAG_GLOB="v3.*"\n'
+                      + functions + f'ref="$(pick_method_ref "{given}")" || exit $?\nprintf "REF=[%s]\\n" "$ref"\n')
+            env = dict(os.environ, STUB_RC=str(stub_rc), STUB_TAGS=offered.as_posix() if offered else "")
+            r = subprocess.run([bash, "-s"], input=script.encode("utf-8"), capture_output=True, env=env)
+            got_out = r.stdout.decode("utf-8", "replace")
+            got_err = r.stderr.decode("utf-8", "replace")
+            want_out = f"REF=[{want_ref}]\n" if want_ref is not None else ""
+            if (r.returncode != want_rc or got_out != want_out or any(w not in got_err for w in words)
+                    or any(w in got_err for w in not_words)):
+                out.append(f"install.sh pick_method_ref {given or '(no --skill-ref)'}"
+                           f"{' with ' + ' '.join(SELECTION_TAGS) if offered else ''}, ls-remote exit {stub_rc}: "
+                           f"exit {r.returncode}, stdout {got_out.strip()!r}, want {want_rc} and {want_out.strip()!r}"
+                           + (f" saying {' + '.join(map(repr, words))}" if words else "")
+                           + (f" and never {' + '.join(map(repr, not_words))}" if not_words else "")
+                           + f" -- stderr {got_err.strip()[-200:]!r} (T-37)")
+    except OSError as exc:
+        out.append(f"the tag pick's fixtures could not be made ({exc}) -- unrun is not agreed")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    stop_ps1 = ("could not read the method's release tags (no network?) -- nothing was installed or changed for the "
+                "method; run again when GitHub answers, or name a tag with -SkillRef")
+    read = (("install.sh", 'SKILL_REF="$(pick_method_ref "$SKILL_REF")" || exit $?', True),
+            ("install.sh", 'SKILL_REF="main"', False),
+            ("install.sh", "could not read the app's release tags (no network?)", True),
+            ("install.ps1", "$SkillRef = Select-MethodRef $SkillRef", True),
+            ("install.ps1", stop_ps1, True),
+            ("install.ps1", '$SkillRef = "main"', False),
+            ("install.ps1", "could not read the app's release tags (no network?)", True))
+    texts = {"install.sh": sh, "install.ps1": ps1}
+    wrong = [f"{where} {'lacks' if must else 'still has'} {needle!r}" for where, needle, must in read
+             if (needle in texts[where]) != must]
+    wrong += [f"{where}: the app's spec without a tag ({m.group(0)!r}) -- uv takes the default branch, unchecked"
+              for where, pattern in (("install.sh", r"git\+\$\{TCC_REPO\}(?!@)"), ("install.ps1", r"git\+\$TccRepo(?!@)"))
+              for m in re.finditer(pattern, texts[where])]
+    # install.ps1's mirror is only read: it gives back a name it was given or read, or $null -- never one of its own.
+    pick_ps1 = re.search(r"^function Select-MethodRef \{.*?^\}", ps1, re.M | re.S)
+    if not pick_ps1 or not re.search(r"return \$null\s*\}\Z", pick_ps1.group(0)) or re.search(r"[\"']main[\"']",
+                                                                                               pick_ps1.group(0)):
+        wrong.append("install.ps1 Select-MethodRef does not end in `return $null`, or names `main` itself")
+    if wrong:
+        out.append("the installers still have a way to an unchecked `main` or default branch: " + "; ".join(wrong)
+                   + " (T-37)")
+    return out
+
+
+def checkout_problems(sh, ps1):
+    """T-45 (#142): install.sh's `checkout_method` RUN against a repository made here; [] when a copy is the tag it
+    checked.
+
+    The remote holds v3.0.64 signed by this test's author key, a branch of the same name on a later commit (`git clone
+    --branch` took the branch, and the check then read the tag), v3.0.66 unsigned and v3.0.67 signed on that later
+    commit, and `main`. A new copy is the tag's commit, detached, with `origin` set; an update lands on its tag; a tag
+    that does not check out leaves nothing; a named branch is checked out, said UNSIGNED. A checkout that did not land
+    (a `git` whose checkout does nothing) removes a new copy and puts an update back where it was, exit 3 either way.
+    A folder already at the path that is not a checkout is left exactly as it is. install.ps1's mirror is READ.
+    """
+    import tempfile
+    functions, missing = cut_functions(sh, ("say", "warn", "pretty", "run", "is_release_tag", "settled_by_name",
+                                            "verify_tag", "head_is", "checkout_method"))
+    if missing:
+        return [f"install.sh: no `{name}() {{ ... }}` -- the method's checkout cannot be run" for name in missing]
+    bash, why = find_bash()
+    if not bash:
+        return [f"{why} -- install.sh's checkout cannot be run, and unrun is not agreed"]
+    tmp = tempfile.mkdtemp(prefix="autosound_checkout_")
+    env = dict(os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t", GIT_COMMITTER_NAME="t",
+               GIT_COMMITTER_EMAIL="t@t", GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1",
+               GNUPGHOME=os.path.join(tmp, "gnupg"))
+    env.pop("AUTOSOUND_SKIP_TAG_VERIFY", None)
+
+    def git(*args, check=True):
+        r = subprocess.run(["git", *args], env=env, capture_output=True, text=True)
+        if check and r.returncode:
+            raise RuntimeError(f"git {' '.join(args)}: {r.stderr.strip()[:200]}")
+        return r.stdout.strip()
+    out = []
+    try:
+        os.makedirs(env["GNUPGHOME"], mode=0o700)
+        key = os.path.join(tmp, "author")
+        subprocess.run(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-C", "author", "-f", key], env=env,
+                       capture_output=True, check=True)
+        author = " ".join(Path(key + ".pub").read_text().split()[:2])
+        origin = os.path.join(tmp, "origin")
+        git("init", "-q", origin)
+        Path(origin, "a").write_text("a\n")
+        git("-C", origin, "add", "a")
+        git("-C", origin, "commit", "-q", "-m", "a")
+        signed = ("-C", origin, "-c", "gpg.format=ssh", "-c", f"user.signingkey={key}.pub", "tag", "-s")
+        git(*signed, "v3.0.64", "-m", "signed")
+        git("-C", origin, "tag", "-a", "v3.0.66", "-m", "unsigned")
+        Path(origin, "a").write_text("a\nb\n")
+        git("-C", origin, "commit", "-q", "-am", "b")
+        git(*signed, "v3.0.67", "-m", "signed")
+        first, later = git("-C", origin, "rev-parse", "v3.0.64^{commit}"), git("-C", origin, "rev-parse", "HEAD")
+        git("-C", origin, "update-ref", "refs/heads/v3.0.64", later)
+        git("-C", origin, "update-ref", "refs/heads/main", later)
+        stub_dir = Path(tmp, "no-checkout")
+        stub_dir.mkdir()
+        (stub_dir / "git").write_bytes(NO_CHECKOUT_GIT)
+        (stub_dir / "git").chmod(0o755)
+        occupied = Path(tmp, "occupied")
+        occupied.mkdir()
+        (occupied / "mine.txt").write_text("somebody's\n")
+    except (OSError, RuntimeError, subprocess.CalledProcessError) as exc:
+        shutil.rmtree(tmp, ignore_errors=True)
+        return [f"the checkout's fixtures could not be made ({exc}) -- unrun is not agreed"]
+    url = Path(origin).as_uri()
+
+    def run(where, ref, stub=False):
+        first_on_path = f'"$(cd "{stub_dir.as_posix()}" && pwd)":' if stub else ""
+        script = ('REAL_GIT="$(command -v git)"; export REAL_GIT\n'
+                  f'export PATH={first_on_path}"/usr/bin:$PATH"\n' + functions
+                  + f'DRY_RUN=0\nAUTOSOUND_SKIP_TAG_VERIFY=""\nSKILL_SIGNING_PRINCIPAL=author\n'
+                  f'SKILL_SIGNING_KEY="{author}"\nSKILL_SIGNED_FROM=v3.0.64\nSKILL_REPO="{url}"\n'
+                  f'checkout_method "{Path(where).as_posix()}" "{ref}" "the method"\n')
+        r = subprocess.run([bash, "-s"], input=script.encode("utf-8"), capture_output=True, env=env)
+        return r.returncode, (r.stdout + r.stderr).decode("utf-8", "replace")
+
+    def head(where):
+        return git("-C", where, "rev-parse", "--verify", "--quiet", "HEAD", check=False) if os.path.isdir(where) else ""
+
+    def the_tag(where, tag):
+        """`where` is a copy detached on `tag`'s commit, the tag in its refs/tags, `origin` the method's remote. Asked of
+        the refs, not of `describe`: fetch brings along any tag on the same commit (v3.0.66 here), and `describe`
+        names whichever is newer."""
+        at = git("-C", where, "rev-parse", "--verify", "--quiet", f"refs/tags/{tag}^{{commit}}", check=False)
+        return (bool(at) and head(where) == at
+                and not git("-C", where, "symbolic-ref", "--quiet", "HEAD", check=False)
+                and git("-C", where, "remote", "get-url", "origin", check=False) == url)
+
+    def where_is(where):
+        if not os.path.isdir(os.path.join(where, ".git")):
+            return "no copy"
+        branch = git("-C", where, "symbolic-ref", "--quiet", "--short", "HEAD", check=False)
+        return (f"HEAD {head(where)[:12]} ({git('-C', where, 'describe', '--tags', '--always', check=False)}"
+                f"{', on branch ' + branch if branch else ', detached'}"
+                f", origin {git('-C', where, 'remote', 'get-url', 'origin', check=False) or 'none'})")
+
+    copy = os.path.join(tmp, "copy")
+    steps = (
+        ("a new copy of v3.0.64, a branch of that name on another commit", copy, "v3.0.64", False, 0,
+         ("signed by the skill's author",), lambda: head(copy) == first and the_tag(copy, "v3.0.64")),
+        ("that copy updated to v3.0.67", copy, "v3.0.67", False, 0, ("signed by the skill's author",),
+         lambda: head(copy) == later and the_tag(copy, "v3.0.67")),
+        ("that copy updated to v3.0.64 by a checkout that does not land", copy, "v3.0.64", True, 3,
+         ("did not take",), lambda: head(copy) == later),
+        ("a new copy of v3.0.66, unsigned", os.path.join(tmp, "unsigned"), "v3.0.66", False, 2,
+         ("does not check out",), lambda: not os.path.exists(os.path.join(tmp, "unsigned"))),
+        ("a new copy of the branch main, named", os.path.join(tmp, "branch"), "main", False, 0, ("UNSIGNED",),
+         lambda: head(os.path.join(tmp, "branch")) == later),
+        ("a new copy of v3.0.64 by a checkout that does not land", os.path.join(tmp, "stuck"), "v3.0.64", True, 3,
+         ("removed",), lambda: not os.path.exists(os.path.join(tmp, "stuck"))),
+        ("a new copy into a folder that is there and is not a checkout", str(occupied), "v3.0.64", False, 1, (),
+         lambda: sorted(os.listdir(occupied)) == ["mine.txt"]),
+    )
+    for what, where, ref, stub, want_rc, words, state_ok in steps:
+        rc, said = run(where, ref, stub)
+        if rc != want_rc or any(w not in said for w in words) or not state_ok():
+            out.append(f"install.sh checkout_method, {what}: exit {rc}, {where_is(where)} -- want exit {want_rc}"
+                       + (f", saying {' + '.join(map(repr, words))}" if words else "")
+                       + f" -- said {said.strip()[-220:]!r} (T-45)")
+    shutil.rmtree(tmp, ignore_errors=True)
+    # install.ps1's mirror, READ: a new copy made the same way, HEAD held to the tag, and every failed copy a stop.
+    sync = re.search(r"^function Sync-MethodCheckout \{.*?^\}", ps1, re.M | re.S)
+    body = sync.group(0) if sync else ""
+    lacking = [n for n in ("init --quiet $Dir", "remote add origin $SkillRepo", "fetch --quiet --depth 1 origin $spec",
+                           "Test-HeadIs $Dir $want", "$script:NotTheTag = $true") if n not in body]
+    lacking += [f"a stop after {what}" for what, pattern in (
+        ("a failed new copy", r"elseif \(-not \$cloned\) \{[^{}]*Stop-Installer 1; return"),
+        ("an update that did not land", r"if \(\$script:NotTheTag\) \{[^{}]*Stop-Installer 1; return"))
+        if not re.search(pattern, ps1)]
+    lacking += [f"{name} still clones by --branch" for name, text in (("install.sh", sh), ("install.ps1", ps1))
+                if re.search(r"clone --quiet --branch", text)]
+    if lacking:
+        out.append("install.ps1's checkout is not the tag it checked -- " + "; ".join(lacking) + " (T-45)")
     return out
 
 
@@ -458,10 +778,10 @@ def main():
     else:
         checked.append("install.ps1 carries the same tag shapes and sort key (read, not run)")
     # 2d'. the STABLE pick keeps release-shaped tags only (skill #108): a `v3.x` sorted above every release and,
-    # being "not a release tag", was installed with no signature check.
+    # being "not a release tag", was installed with no signature check. install.ps1 filters through the one rule.
     raw_sh = [i + 1 for i, line in enumerate(sh.splitlines()) if "sort -V | tail -1" in line]
     raw_ps = [m.start() for m in re.finditer(r"Sort-Object \{ \[version\]", ps1)
-              if "Where-Object { $_ -match '^v\\d+\\.\\d+\\.\\d+$' }" not in ps1[max(0, m.start() - 160):m.start()]]
+              if "Where-Object { Test-ReleaseTag $_ }" not in ps1[max(0, m.start() - 160):m.start()]]
     if raw_sh or raw_ps:
         problems.append("a stable tag pick takes any name the glob matches: "
                         + (f"install.sh `sort -V | tail -1` at line(s) {raw_sh}" if raw_sh else "")
@@ -470,6 +790,22 @@ def main():
                            if raw_ps else "") + " (skill #108)")
     else:
         checked.append("the stable tag picks keep release-shaped tags only, in both installers (skill #108)")
+    # 2d''. one release-tag rule (T-45), and no tag readable is no install (T-37).
+    rule = tag_rule_problems(sh, ps1)
+    if rule:
+        problems.extend(rule)
+    else:
+        checked.append(f"one release-tag rule: install.sh's is_release_tag (run), upkeep.py's (imported) and "
+                       f"install.ps1's Test-ReleaseTag (read, as .NET reads it) answer {len(TAG_RULE_CASES)} names "
+                       f"alike (T-45)")
+    picked = selection_problems(sh, ps1)
+    if picked:
+        problems.extend(picked)
+    else:
+        checked.append("install.sh's pick_method_ref stops, exit 1, when no release tag can be read and none is named "
+                       "-- network down or refused -- installs a named branch said UNSIGNED, and picks v3.1.10 from "
+                       f"{len(SELECTION_TAGS)} offered names (run); neither installer has a `main` or an untagged app "
+                       "to fall back on (read) (T-37)")
 
     # 2e. the method's two checkouts (autosound-hub #145): the terminal's and the beta channel's. A
     # consumer runs the beta one BY PATH, so the two installers putting it in different places would
@@ -633,6 +969,14 @@ def main():
                        "-- each stand-in seen to run (T-35, run)")
         checked.append("install.sh's check_tcc_tag does the same for the app's tags from a bare fetch, hands on the "
                        "verified commit, refuses a tag it cannot fetch, and tcc_tag_still_at refuses a moved tag (run)")
+    landed = checkout_problems(sh, ps1)
+    if landed:
+        problems.extend(landed)
+    else:
+        checked.append("install.sh's checkout_method makes a copy that is the tag it checked -- a branch of the same "
+                       "name ignored, detached, origin set -- updates onto the tag, leaves nothing of a refused tag, "
+                       "removes a new copy or puts back an update whose checkout did not land, and leaves a folder "
+                       "that is not a checkout alone (run); install.ps1 the same (read) (T-45)")
     if "Test-TagSignature" not in ps1 or "gpg.ssh.allowedSignersFile" not in ps1:
         problems.append("install.ps1: no Test-TagSignature with gpg.ssh.allowedSignersFile -- the Windows half of #99")
     else:
@@ -773,9 +1117,13 @@ def main():
     else:
         checked.append("both installers take the plugin flag, verify the copy first and write it down last")
 
-    # And the app: `install-tcc.md` is the OTHER way into TCC, so it must pin too (SCR-054).
+    # And the app: `install-tcc.md` is the OTHER way into TCC, so it must pin too (SCR-054) -- the lines agree with each
+    # other, and each asks uv for Python 3.12 as the installers do (T-45): without it uv takes whatever Python it finds,
+    # and a 3.9 reads as a broken package. Which tag is newest is not checked here: that needs the network, and the
+    # installers resolve it when they run.
     tcc_doc = read(ROOT / "commands" / "install-tcc.md")
     tcc_refs = set(re.findall(r"autosound-tcc(@v[0-9.]+)?'", tcc_doc))
+    tcc_installs = re.findall(r"`(uv tool install [^`]*)`", tcc_doc)
     if not tcc_refs:
         problems.append("commands/install-tcc.md: no `uv tool install … autosound-tcc` line found")
     elif "" in tcc_refs:
@@ -784,8 +1132,12 @@ def main():
     elif len(tcc_refs) > 1:
         problems.append(f"commands/install-tcc.md: the lines pin different app versions — "
                         f"{sorted(tcc_refs)}")
+    elif not tcc_installs or any("--python 3.12" not in line for line in tcc_installs):
+        problems.append("commands/install-tcc.md: an install line has no `--python 3.12` -- uv takes whatever "
+                        "Python it finds, which the installers never let it do (T-45)")
     else:
-        checked.append(f"commands/install-tcc.md pins the app at {tcc_refs.pop().lstrip('@')}")
+        checked.append(f"commands/install-tcc.md pins the app at {tcc_refs.pop().lstrip('@')}, with --python 3.12 "
+                       f"on all {len(tcc_installs)} lines")
 
     for line in checked:
         print(f"  ok   {line}")

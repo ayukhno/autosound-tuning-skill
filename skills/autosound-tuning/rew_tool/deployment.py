@@ -9,9 +9,9 @@ HUB-002 put the sha into the files, HUB-006 is the half that has to reach a scre
 The method is deployed more than once ON PURPOSE, and that is not the fault:
 
   * a working tree on a moving branch, where the method is edited;
-  * an installed checkout at a TAG -- what `install.sh` makes: a `--depth 1 --branch <tag>` clone
-    in `~/.claude/skills/.autosound-tuning-src`, with `~/.claude/skills/autosound-tuning` symlinked
-    at its `skills/autosound-tuning` (install.sh:61, :774);
+  * an installed checkout at a TAG -- what `install.sh` makes: a shallow copy of the tag's commit,
+    detached, in `~/.claude/skills/.autosound-tuning-src`, with `~/.claude/skills/autosound-tuning`
+    symlinked at its `skills/autosound-tuning` (install.sh `checkout_method`);
   * a per-project pin -- a detached checkout a run holds still so its numbers stay reproducible;
   * a submodule, whose sha the consuming repository records for it (`autosound-tcc`);
   * a PLUGIN install from the catalog (`/plugin install`): a copy of the files at the catalog's commit in
