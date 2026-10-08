@@ -107,7 +107,7 @@ Będziesz potrzebować laptopa, mikrofonu pomiarowego, procesora DSP w aucie ora
 
 </details>
 
-Jak zakończyło się uruchomienie, widać w jego kodzie wyjścia: `0` gotowe · `1` zatrzymano — metoda nie została zainstalowana ani zmieniona · `2` błędna opcja dla `install.sh` albo nieprawidłowy `-Channel` lub `-Plugin` dla `install.ps1` (sam PowerShell odrzuca opcję, której nie zna, z `1`) · `3` zainstalowane, ale niegotowe, ostatnie linie wskazują, czego brakuje i co zrobić.
+Jak zakończyło się uruchomienie, widać w jego kodzie wyjścia: `0` gotowe · `1` zatrzymano przed końcem — odmowa, błąd lub przerwanie; to, co zrobiono wcześniej, zostaje, a ostatnie linie mówią, co (zatrzymanie przed krokiem metody pozostawia metodę taką, jaka była) · `2` błędna opcja dla `install.sh` albo nieprawidłowy `-Channel` lub `-Plugin` dla `install.ps1` (sam PowerShell odrzuca opcję, której nie zna, z `1`) · `3` zainstalowane, ale niegotowe, ostatnie linie wskazują, czego brakuje i co zrobić.
 
 ### Od instalacji do auta
 

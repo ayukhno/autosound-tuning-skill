@@ -380,9 +380,9 @@ broken_tool() {  # broken_tool <tool>: present, the tools installed, and it does
 clt_present() { if on_mac; then xcode-select -p >/dev/null 2>&1; else return 0; fi; }
 
 # ── how the run ends (#142) ───────────────────────────────────────────────────
-# The exit code a script reads: 0 ready · 1 stopped -- the method was not installed or not changed (the steps before
-# it, Apple's tools and Claude Code, may have run) · 2 a usage error, before anything ran · 3 installed, NOT ready, the
-# missing parts named. A stop and the end each write the receipt; a usage error writes none; from the consent on, the
+# The exit code a script reads: 0 ready · 1 stopped before the end -- a refusal, an error or an interruption: what was
+# done before it stays, and the last lines say what; a stop before the method's step leaves the method as it was · 2 a
+# usage error, before anything ran · 3 installed, NOT ready, the missing parts named. A stop and the end each write the receipt; a usage error writes none; from the consent on, the
 # receipt says `stopped` until one of them does (`going_ahead`).
 
 # <text> as a JSON string: `\` and `"` escaped, control characters dropped. sed, byte by byte, and not ${var//}: bash

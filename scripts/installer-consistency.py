@@ -124,8 +124,9 @@ NO_CHECKOUT_GIT = (b"#!/bin/sh\n"
                    b"for a in \"$@\"; do [ \"$a\" = checkout ] && exit 0; done\n"
                    b"exec \"$REAL_GIT\" \"$@\"\n")
 
-#: The installers' exit table (#142, audit T-44, J6a item 4): 0 ready · 1 stopped -- the method not installed or not
-#: changed (steps before it, Claude Code's, may have run) · 2 usage · 3 installed, NOT ready, the missing parts named.
+#: The installers' exit table (#142, audit T-44, J6a item 4): 0 ready · 1 stopped before the end -- a refusal, an error
+#: or an interruption; what was done before it stays, and a stop before the method's step leaves the method as it was ·
+#: 2 usage · 3 installed, NOT ready, the missing parts named.
 #: The receipt's fields in the order both installers write them: today's seven, then how the run ended.
 RECEIPT_FIELDS = ("installer", "installer_sha256", "method_ref", "mode", "at", "platform", "engine",
                   "installer_version", "status", "missing", "python")

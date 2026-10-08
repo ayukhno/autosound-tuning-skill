@@ -76,7 +76,7 @@ und unter Windows als zwei Zeilen:
 $i = irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.1.2/install.ps1
 & ([scriptblock]::Create($i)) -WithOmp -GitHub
 ```
-**Wie es endete**, steht im Exit-Code des Installers: `0` bereit · `1` gestoppt — die Methode wurde nicht installiert oder geändert · `2` eine falsche Option für `install.sh` oder ein ungültiges `-Channel` oder `-Plugin` für `install.ps1` (PowerShell selbst lehnt eine Option, die sie nicht kennt, mit `1` ab) · `3` installiert, aber nicht bereit, seine letzten Zeilen nennen, was fehlt und was zu tun ist.
+**Wie es endete**, steht im Exit-Code des Installers: `0` bereit · `1` gestoppt vor dem Ende — eine Ablehnung, ein Fehler oder eine Unterbrechung; was davor getan wurde, bleibt, und die letzten Zeilen sagen, was (ein Stopp vor dem Schritt der Methode lässt die Methode so, wie sie war) · `2` eine falsche Option für `install.sh` oder ein ungültiges `-Channel` oder `-Plugin` für `install.ps1` (PowerShell selbst lehnt eine Option, die sie nicht kennt, mit `1` ab) · `3` installiert, aber nicht bereit, seine letzten Zeilen nennen, was fehlt und was zu tun ist.
 
 **Bereits in Claude Code unterwegs?** Die Methode lässt sich auch als Plugin installieren:
 ```sh

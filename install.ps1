@@ -93,8 +93,9 @@ if ($Log) { try { Start-Transcript -Path $Log -Force | Out-Null; $AutosoundTrans
 # a bare `exit` anywhere else, and on a Stop-Installer call without its `; return`.
 $AutosoundRunAsFile = [bool]$PSCommandPath
 if (-not $AutosoundRunAsFile) { $global:AutosoundInstallExit = 0 }
-# The codes (#142), install.sh's: 0 ready -- 1 stopped, the method not installed or not changed (the steps before it,
-# Git, Claude Code, uv and Python, may have run) -- 2 a usage error -- 3 installed, NOT ready, the missing parts named.
+# The codes (#142), install.sh's: 0 ready -- 1 stopped before the end, a refusal, an error or an interruption: what was
+# done before it stays (Git, Claude Code, uv, Python, perhaps the method), and a stop before the method's step leaves
+# the method as it was -- 2 a usage error -- 3 installed, NOT ready, the missing parts named.
 # A stop (1) writes the receipt as `stopped`; the end writes its own before its 3; 0 and 2 here write none.
 function Stop-Installer {
     param([int]$Code)
