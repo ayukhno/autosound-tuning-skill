@@ -16,14 +16,15 @@ is this process's thread lock alone, and makes nothing. The writer's own first w
 hold makes the lock and takes it; two processes creating one new project at the same moment are not ordered by it.
 
 A folder that cannot be locked at all (some shared or cloud folders refuse every lock) is written WITHOUT the lock,
-and the writer says so on stderr once: two writers there can still lose a change, as before this module. Only
-another writer's lock is "held": on Windows, `LockFileEx`'s ERROR_LOCK_VIOLATION alone -- a share that refuses
-the lock any other way (access denied, not supported) is a folder that cannot lock (R21). A folder where the lock
-cannot even be MADE -- one this user may not write -- is refused, `Unwritable` (exit 1), before anything is
-taken.
+and the writer says so on stderr, once per process for each folder: two writers there can still lose a change, as
+before this module. Only another writer's lock is "held": on Windows, `LockFileEx`'s ERROR_LOCK_VIOLATION alone -- a
+share that refuses the lock any other way (access denied, not supported) is a folder that cannot lock (R21). A folder
+where the lock cannot even be MADE -- one this user may not write -- is refused, `Unwritable` (exit 1), before
+anything is taken.
 
-TCC reads this file as TEXT, never imports it, for the line below: a copy that declares it locks itself, and TCC takes
-no lock of its own around it (`core/project_lock.py` `locks_itself`).
+TCC reads this file as TEXT, never imports it, for the line below (`core/project_lock.py` `locks_itself`): a copy
+that declares it locks itself. Today's TCC keeps its own serialisation as it is -- `process/.process-write.lock`, held
+around the child it runs, a lock this module never takes (it would wait on its own parent).
 """
 PROTOCOL = 1
 
@@ -52,6 +53,7 @@ _HELD_ERRNOS = {errno.EAGAIN, errno.EWOULDBLOCK, errno.EACCES, getattr(errno, "E
 # Windows by what imported, not by `os.name`: project_io's selftest fakes `os.name = "nt"` on POSIX.
 _WINDOWS = fcntl is None
 _ERROR_LOCK_VIOLATION = 33               # LockFileEx's answer when another handle holds the byte: the one "held" there
+_NOTED = set()                           # the folders this process has said it writes without the lock (R22a)
 
 
 def _siblings():
@@ -240,10 +242,13 @@ def _held(exc, windows=_WINDOWS):
 
 
 def _let_go(fd):
+    """The OS lock let go. An unlock that fails is passed over: closing the file lets go of it all the same. The hold
+    closes it as it ends -- after the thread lock's release when the file was opened first, so a thread let in
+    between the two polls the OS lock until the close."""
     try:
         _os_unlock(fd)
     except OSError:
-        pass                             # closing the file, next, lets go of it all the same
+        pass
 
 
 class _Entry:
@@ -275,17 +280,29 @@ def _left(deadline):
     return min(max(0.0, deadline - time.monotonic()), threading.TIMEOUT_MAX)
 
 
+def _note_cannot_lock(project_dir, exc):
+    """Say on stderr that `project_dir` is written without the lock -- once per process for each folder (R22a): a
+    long-lived caller writing there again and again is told once."""
+    folder = os.path.abspath(project_dir)
+    key = os.path.normcase(os.path.realpath(folder))
+    with _ENTRIES_GUARD:
+        if key in _NOTED:
+            return
+        _NOTED.add(key)
+    print(f"note: {folder} cannot be locked ({exc.strerror or exc}) -- writing without the project lock; two writers "
+          f"at once can lose a change here", file=sys.stderr)
+
+
 def _take(fd, project_dir, path, start, deadline):
-    """The OS lock on `fd`, polled until `deadline`: True once taken, `Busy` past the deadline, False -- said once
-    on stderr -- where the folder cannot be locked at all."""
+    """The OS lock on `fd`, polled until `deadline`: True once taken, `Busy` past the deadline, False -- said on
+    stderr, once per process for each folder -- where the folder cannot be locked at all."""
     while True:
         try:
             _os_lock(fd)
             return True
         except OSError as exc:
             if not _held(exc):
-                print(f"note: {os.path.abspath(project_dir)} cannot be locked ({exc.strerror or exc}) -- writing "
-                      f"without the project lock; two writers at once can lose a change here", file=sys.stderr)
+                _note_cannot_lock(project_dir, exc)
                 return False
         now = time.monotonic()
         if now >= deadline:
@@ -815,6 +832,34 @@ def _check_a_share_refusing_the_lock_is_noted():
     return True
 
 
+def _check_the_note_once_per_folder():
+    """A folder that cannot lock is said once per process (#141, R22a): a long-lived caller writing there again and
+    again -- TCC, a batch of the form's answers -- is told once, not at every write. Another folder is told its own."""
+    import contextlib
+    import io
+    global _os_lock
+    real = _os_lock
+
+    def refuse(fd):
+        raise _refusal(errno.ENOLCK)
+
+    p, q = _scratch(), _scratch()
+    err = io.StringIO()
+    _os_lock = refuse
+    try:
+        with contextlib.redirect_stderr(err):
+            for folder in (p, p, q, p, q):
+                with hold(folder):
+                    assert held_here(folder), "not held here, without the OS lock"
+        lines = err.getvalue().splitlines()
+        assert len(lines) == 2, f"{len(lines)} note(s) for five holds on two folders: {lines}"
+        assert p in lines[0] and q in lines[1], f"the notes: {lines}"
+    finally:
+        _os_lock = real
+        _drop(p)
+        _drop(q)
+
+
 def _selftest():
     failures, seen = [], {}
     for check in (_check_protocol_line, _check_folder_ignores_itself, _check_reentrant_and_held_here,
@@ -822,7 +867,7 @@ def _selftest():
                   _check_a_wait_given_in_code_is_checked_too, _check_a_free_lock_with_zero_wait,
                   _check_a_folder_that_cannot_lock, _check_a_project_that_cannot_be_written,
                   _check_busy_exit_says_one_line, _check_a_missing_project_is_not_made, _check_which_refusals_are_held,
-                  _check_a_share_refusing_the_lock_is_noted):
+                  _check_a_share_refusing_the_lock_is_noted, _check_the_note_once_per_folder):
         try:
             seen[check.__name__] = check()
         except Exception as exc:  # noqa: BLE001 -- each check is reported by name; one failing must not hide the rest
@@ -853,7 +898,7 @@ def _selftest():
           f"folder takes the lock; only another writer's lock read as held (on Windows ERROR_LOCK_VIOLATION alone; "
           f"the table on every system{', and a share refusing LockFileEx written with the note' if share else ''}); "
           f"a folder that cannot be locked written "
-          f"without the lock, said in one note line; "
+          f"without the lock, said in one note line once per folder; "
           f"{'a project folder this user may not write refused as Unwritable, nothing taken or made; ' if unwritable else ''}"
           f"busy_exit says one line and returns 75")
     return 0
