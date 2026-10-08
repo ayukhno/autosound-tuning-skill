@@ -360,6 +360,12 @@ reveals a broken driver or wiring); without a rig, Fs from the datasheet with ma
   add-step 2.4 "the sheet: docs/sheets/<v_NNN>-<slot>.md and the EQ file to import"
   ```
 
+  **Review and banking, in the order `apply.py` keeps:** an EQ package banks 🟡 as it is accepted; a structural
+  move — polarity, a crossover edge, a delay of 0.5 ms or more, a gain step of 6 dB or more — banks 🟡 only with
+  its evidence and its review behind it (`apply.propose(…, evidence=…, reviewed=<the review file>)`, the file 2.3
+  review ends in), and without them as a 🟠 candidate, on the line and not in the slot. The Arbiter enters a
+  🟡 sheet, `attest` turns it 🟢, and a control measurement confirms it.
+
 ### Phase 3 · Car, a short session — *goal: verify the desk against what the mic hears, do what the desk can't (MMM), and lock*
 - **3.1** **enter and check entry**: the preset into the DSP per the sheet (EQ by file import); "entered"
   in the ledger. Levels from the passport. Two controls, from the tripod: *base* — `m-L (sw)` vs
