@@ -55,7 +55,7 @@ A map: decision → data → REW API function. The API is in `rew_tool/rew_api.p
 
 ## Decimated trace for the critic
 
-Export FR/phase from REW (or from `rew_tool`) as CSV, decimated to ~1/6–1/12 oct (tens-to-hundreds of points, not thousands). Columns: `Freq[Hz], SPL[dB], Phase[deg]`. Pass it as the second argument: `python3 scripts/autosound_ai.py critic <package.md> <trace.csv>`.
+Export FR/phase from REW (or from `rew_tool`) as CSV, decimated to ~1/6–1/12 oct (tens-to-hundreds of points, not thousands). Columns: `Freq[Hz], SPL[dB], Phase[deg]`. Pass it as the second argument: `python3 scripts/autosound_ai.py critic <package.md> <trace.csv> --record`.
 
 ## FSAF (REW 5.40+) — distortion under a real load, NOT a replacement for the sweep
 The stimulus = noise or music → TD+N under "combat" conditions of a dense spectrum (a sweep measures distortion with one tone). ✅ The question "does a breakup/hump actually DISTORT under music, or is it a harmless FR feature" (a joint with a "detail/air" complaint). ❌ NOT for linear resonances/reflections (λ/4, SBIR, diffraction — a gated sweep sees them just as well; "FSAF catches hidden reflections" = a myth) and NOT for an A/B against a sweep baseline (the method must match). Requirement: a shared replay/record clock (ECM8000+Scarlett+loopback ✅; UMIK-1 ❌). Level ≤ −14 dB (noise crest). Impedance/Qtc — a separate tab (sweep) → `impedance-ts.md`.

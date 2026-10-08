@@ -508,7 +508,7 @@ def _propose(history, delta, note, provenance, registry, allow_nonactive, eviden
         held = evidence_problems(evidence, project_dir)
         if not reviewed:
             held.append("no reviewer call behind it -- a structural change banks after one "
-                        "(`scripts/autosound_ai.py critic <package>`, then `reviewed=<the review file>`)")
+                        "(`scripts/autosound_ai.py critic <package> --record`, then `reviewed=<the review file>`)")
         elif not os.path.isfile(reviewed if os.path.isabs(str(reviewed))
                                 else os.path.join(project_dir or "", str(reviewed))):
             held.append(f"reviewed={reviewed!r}: no such review file")

@@ -144,8 +144,8 @@ TCC does not need it (§8 M6). It answers as `SKILL.md` documents, outside this 
 Before any verb runs, the script exits 2 when a project's `.critic-env` carries a key and git would take it (the file
 is tracked, or not ignored). It exits 1 when `--via`, `--model` or `--provider` is not valid, when
 `AUTOSOUND_CRITIC_VIA` is not valid and the run names no route of its own (`--via` or `--mode`), when no verb is
-given, or when the verb is unknown. Any verb also exits 1 on an exception the script does not catch, with Python's
-traceback on stderr. Then each verb answers:
+given, when the verb is unknown, or when `--record` is given to a verb other than `critic` and `advisor`. Any verb also
+exits 1 on an exception the script does not catch, with Python's traceback on stderr. Then each verb answers:
 
 | verb | exit codes |
 |---|---|
@@ -160,6 +160,13 @@ A 0 from `critic`, `advisor` or `ask` does not say the review was filed: `>> REV
 Outside a project, or when the file cannot be written, the review is printed and not filed, and the exit is still 0.
 On stderr: `>> REVIEW_FILE: <rel>`, `>> REVIEW_ROUTE: omp|api|cli`, `>> PACKAGE_FILE: <path>`. Reviews are written
 under `<project>/process/reviews/`.
+
+`--record` (W-9, #143) asks `critic` and `advisor` to record the review they file as the process's reviewer step --
+`critic_called` through `Process.record_reviewer`, under the project's writer lock, none added when a `critic_called`
+names the file already -- and to say so on stderr. Without it nothing is recorded, and stderr carries the line that
+records it by hand, runnable as it stands: `>> Запиши посилання: python3 <process.py> <project>/process reviewer
+<vendor> <model> --review <rel> --mode <mode>`. TCC's `call_critic` passes no `--record`: it records the call it ran,
+with its step, as before.
 
 `key move-shell`'s "no export found" is a stdout line that ends `у профілях оболонки не знайдено`:
 `· <VAR> у профілях оболонки не знайдено` with a provider, `· ключів у профілях оболонки не знайдено` without one

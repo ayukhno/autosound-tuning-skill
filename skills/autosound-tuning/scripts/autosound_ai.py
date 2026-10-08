@@ -12,8 +12,11 @@ autosound_ai.py — Універсальний кросплатформний і
   4. Перевірку оточення (Doctor mode).
 
 Використання:
-  python3 scripts/autosound_ai.py critic <package_file.md> [trace.csv]
-  python3 scripts/autosound_ai.py advisor <package_file.md> [trace.csv]
+  python3 scripts/autosound_ai.py critic <package_file.md> [trace.csv] --record
+  python3 scripts/autosound_ai.py advisor <package_file.md> [trace.csv] --record
+                                                      # --record: the review is recorded as the process's reviewer
+                                                      # step (critic_called); without it the line to record it by
+                                                      # hand is printed -- TCC's call_critic records its own
   python3 scripts/autosound_ai.py ask <question.md>   # просте питання чи переклад: без проекту й контракту
   python3 scripts/autosound_ai.py doctor
   python3 scripts/autosound_ai.py critic <package_file.md> [--via api|cli|omp|clipboard] --model <id> [--provider google|anthropic|openai]
@@ -2101,12 +2104,16 @@ def _check_the_template_teaches_titles_that_resolve():
 
 
 def _check_the_door_records_the_review():
-    """#143, G1: the door records the review it filed -- `critic_called` in the journal, through `Process.record_reviewer`
-    and its writer lock -- instead of printing `process.py ... reviewer <vendor> ...` for somebody to run, with
-    `<vendor>` left literal. Once per review file: a journal whose last `critic_called` already names the file (TCC's
-    `call_critic` records the call too) gets none added. A refusal -- the lock held, a state that cannot be read -- is
-    said, with the line to record it by hand, the vendor and the model filled in, and the review is still returned. An
-    `ask` is no review step (tcc#116): nothing recorded, nothing asked to be."""
+    """#143, G1, R46: asked to (`--record`), the door records the tuning review it filed -- `critic_called` in the
+    journal, through `Process.record_reviewer` and its writer lock -- once per review file: a journal where any
+    `critic_called` names the file already gets none added. Not asked, it records nothing and prints the line that
+    records it by hand -- runnable as printed: this copy's `process.py`, the project's own path, the vendor, the model
+    and `--mode` -- where it printed `process.py <project>/process reviewer <vendor> ...` with the placeholders
+    left in. TCC's `call_critic` does not ask: it records the call it ran, with its step, and the door cannot tell it
+    runs under TCC. A refusal -- the lock held, a state that cannot be read -- is said with that line, and the review
+    is still returned. A review filed in one project while the ledger in its prompt was another's is not recorded: the
+    line names the project it was filed in. An `ask` is no review step (tcc#116): nothing recorded, nothing asked to
+    be."""
     process_mod = _siblings().load("state/process.py")
     lock = _siblings().load("write_lock.py")
     import threading
@@ -2117,16 +2124,33 @@ def _check_the_door_records_the_review():
         def now(cls, tz=None):
             return cls(2026, 10, 9, 1, 2, 3, tzinfo=tz)
     top = tempfile.mkdtemp(prefix="autosound_ai_records_")
+    process_py = os.path.join(SKILL_DIR, "rew_tool", "state", "process.py")
     failures = []
 
-    def calls(project):
-        return process_mod.Process(os.path.join(project, "process")).events(kinds=(process_mod.EV_CRITIC_CALLED,))
+    def calls(project, rel=None):
+        events = process_mod.Process(os.path.join(project, "process")).events(kinds=(process_mod.EV_CRITIC_CALLED,))
+        return [e for e in events if rel is None or e.get("review") == rel]
+
+    def hand_line(said, project, rel, mode="api"):
+        """`(argv, None)`: the printed line that records `rel` by hand, runnable as it stands; or `(None, why)`."""
+        line = next((ln.split("Запиши посилання: ", 1)[1] for ln in said.splitlines() if "Запиши посилання: " in ln),
+                    None)
+        if line is None:
+            return None, f"no line to record {rel} by hand in {said[-300:]!r}"
+        argv = shlex.split(line) if os.name != "nt" else line.split()
+        want = ["python3", process_py, os.path.join(project, "process"), "reviewer", "gemini", "m", "--review", rel,
+                "--mode", mode]
+        if argv != want or "<project>" in line:
+            return None, f"not the runnable line for {rel}: {line!r}"
+        return argv, None
 
     try:
         project = os.path.join(top, "car")
         os.makedirs(os.path.join(project, "process"))
         with open(os.path.join(project, "project.json"), "w", encoding="utf-8") as fh:
             fh.write("{}")
+        other = os.path.join(top, "other-car")
+        os.makedirs(os.path.join(other, "rew_analitic"))
         state_path = os.path.join(project, "process", "process-state.json")
         state = process_mod._empty_state()
         state["active_phase"] = "1"
@@ -2136,31 +2160,47 @@ def _check_the_door_records_the_review():
         with _DoorScene() as scene:
             os.environ["AUTOSOUND_PROJECT_DIR"] = project
             globals()["datetime"] = Frozen
-            rel, err = scene.persist("critic", "the critique", "m", "api", vendor="gemini")
-            got = [(e.get("review"), e.get("vendor"), e.get("model"), e.get("mode")) for e in calls(project)]
-            if got != [(rel, "gemini", "m", "api")]:
-                failures.append(f"the first review: returned {rel!r}, the journal's critic_called {got!r}")
+            # Not asked (TCC's call): nothing recorded, and the line printed records it when run.
+            plain, err = scene.persist("critic", "an unrecorded critique", "m", "api", vendor="gemini")
+            argv, why = hand_line(err, project, plain)
+            if calls(project) or why:
+                failures.append(f"without --record: {len(calls(project))} critic_called; {why or 'its line printed'}")
+            else:
+                ran = subprocess.run([sys.executable] + argv[1:], capture_output=True, text=True, timeout=120)
+                got = [(e.get("vendor"), e.get("model"), e.get("mode")) for e in calls(project, plain)]
+                if ran.returncode or got != [("gemini", "m", "api")]:
+                    failures.append(f"the printed line, run: exit {ran.returncode}, recorded {got!r}, "
+                                    f"{ran.stderr.strip()[-200:]!r}")
+            # Asked: recorded once, and nothing left to run by hand.
+            rel, err = scene.persist("critic", "the critique", "m", "api", vendor="gemini", record=True)
+            got = [(e.get("vendor"), e.get("model"), e.get("mode")) for e in calls(project, rel)]
+            if got != [("gemini", "m", "api")]:
+                failures.append(f"with --record: returned {rel!r}, the journal's critic_called for it {got!r}")
             reviewer = process_mod.Process(os.path.join(project, "process")).load()["reviewer"] or {}
             if (reviewer.get("phase"), reviewer.get("review")) != ("1", rel):
                 failures.append(f"the state's reviewer: {reviewer!r}")
-            if "<vendor>" in err or "process.py <project>/process reviewer" in err:
+            if "Запиши посилання" in err:
                 failures.append(f"recorded, and still asked to be recorded: {err[-300:]!r}")
             # The same file a second time: nothing added.
             try:
-                _record_review_step(project, "gemini", "m", rel, "api")
+                if _record_review_step(project, "gemini", "m", rel, "api") is not False:
+                    failures.append("recording the same file again did not say it was there")
             except Exception as exc:  # noqa: BLE001 -- a raise is this check's finding
                 failures.append(f"recording the same file again raised {exc!r}")
-            if len(calls(project)) != 1:
-                failures.append(f"the same file recorded twice: {len(calls(project))} critic_called")
-            # TCC recorded the call before the door could: the door adds none.
-            second = os.path.join("process", "reviews", f"{stamp}-critic-2.md")
-            process_mod.Process(os.path.join(project, "process")).record_reviewer("google", "m", review=second,
-                                                                                  mode="api")
-            rel2, err = scene.persist("critic", "the second critique", "m", "api", vendor="gemini")
-            named = [e for e in calls(project) if e.get("review") == second]
-            if rel2 != second or len(named) != 1 or len(calls(project)) != 2:
-                failures.append(f"a call the journal already holds: returned {rel2!r}, {len(named)} event(s) name it, "
-                                f"{len(calls(project))} in all")
+            if len(calls(project, rel)) != 1:
+                failures.append(f"the same file recorded twice: {len(calls(project, rel))} critic_called name it")
+            # TCC recorded the call before the door, and another call after it: any `critic_called` naming the file
+            # holds it, not only the last.
+            third = os.path.join("process", "reviews", f"{stamp}-critic-3.md")
+            journal = process_mod.Process(os.path.join(project, "process"))
+            journal.record_reviewer("google", "m", review=third, mode="api")
+            journal.record_reviewer("google", "m", review=os.path.join("process", "reviews", "elsewhere.md"),
+                                    mode="api")
+            before = len(calls(project))
+            back, err = scene.persist("critic", "the third critique", "m", "api", vendor="gemini", record=True)
+            if back != third or len(calls(project, third)) != 1 or len(calls(project)) != before:
+                failures.append(f"a call the journal already holds, not last: returned {back!r}, "
+                                f"{len(calls(project, third))} event(s) name it, {len(calls(project)) - before} added")
             # Refused -- the lock held by another writer; a state that cannot be read: said, the line to run by hand,
             # and the review returned.
             entered, release = threading.Event(), threading.Event()
@@ -2174,27 +2214,41 @@ def _check_the_door_records_the_review():
             try:
                 entered.wait(30)
                 os.environ["AUTOSOUND_LOCK_TIMEOUT_S"] = "0"
-                busy, err_busy = scene.persist("critic", "under a held lock", "m", "api", vendor="gemini")
+                busy, err_busy = scene.persist("critic", "under a held lock", "m", "api", vendor="gemini",
+                                               record=True)
             finally:
                 os.environ.pop("AUTOSOUND_LOCK_TIMEOUT_S", None)
                 release.set()
                 thread.join(30)
             with open(state_path, "w", encoding="utf-8") as fh:
                 fh.write("{ cut off")
-            cut, err_cut = scene.persist("critic", "over a cut state", "m", "api", vendor="gemini")
+            cut, err_cut = scene.persist("critic", "over a cut state", "m", "api", vendor="gemini", record=True)
             with open(state_path, "w", encoding="utf-8") as fh:
                 json.dump(state, fh)
+            before = len(calls(project))
             for label, back, words in (("busy", busy, err_busy), ("a state that cannot be read", cut, err_cut)):
                 if not (isinstance(back, str) and os.path.isfile(os.path.join(project, back))):
                     failures.append(f"{label}: the review was not returned: {back!r}")
-                elif f"reviewer gemini m --review {back}" not in words:
-                    failures.append(f"{label}: no line to record it by hand: {words[-400:]!r}")
-            if len(calls(project)) != 2:
-                failures.append(f"a refused record wrote: {len(calls(project))} critic_called")
-            # `ask`: no review step.
-            asked, err = scene.persist("ask", "an answer", "m", "api", vendor="gemini")
-            if len(calls(project)) != 2 or "reviewer gemini" in err:
-                failures.append(f"ask: {len(calls(project))} critic_called, said {err[-300:]!r}")
+                elif hand_line(words, project, back)[1] or "Not recorded" not in words:
+                    failures.append(f"{label}: {hand_line(words, project, back)[1] or words[-300:]!r}")
+                elif calls(project, back):
+                    failures.append(f"{label}: a refused record wrote {len(calls(project, back))} critic_called")
+            # `ask`: no review step, whatever was asked.
+            asked, err = scene.persist("ask", "an answer", "m", "api", vendor="gemini", record=True)
+            if len(calls(project)) != before or "Запиши посилання" in err:
+                failures.append(f"ask: {len(calls(project)) - before} critic_called added, said {err[-300:]!r}")
+        # The ledger in the prompt was another project's -- `PROJECT_MIRROR` there, the review filed here: not
+        # recorded, and the line names the project the review was filed in.
+        with _DoorScene(PROJECT_MIRROR=os.path.join(other, "rew_analitic"), CWD=project) as scene:
+            globals()["datetime"] = Frozen
+            before = len(calls(project))
+            split, err = scene.persist("critic", "a split review", "m", "api", vendor="gemini", record=True)
+            if not isinstance(split, str) or len(calls(project)) != before \
+                    or os.path.isdir(os.path.join(other, "process")):
+                failures.append(f"a review filed apart from its ledger: returned {split!r}, "
+                                f"{len(calls(project)) - before} recorded here")
+            elif hand_line(err, project, split)[1]:
+                failures.append(f"a review filed apart from its ledger: {hand_line(err, project, split)[1]}")
     finally:
         globals()["datetime"] = real_dt
         shutil.rmtree(top, ignore_errors=True)
@@ -2204,8 +2258,10 @@ def _check_the_door_records_the_review():
 def _check_an_omp_review_names_its_vendor():
     """#143, G1: a review through omp is recorded under the vendor its selector names -- the model's maker where the
     model's name says it, else omp's own provider -- never `provider_for`'s historical default, google, which a whole
-    selector naming no maker gets. The record exists to show that the reviewer is ANOTHER vendor. omp is a stand-in
-    that answers; git, which the journal's header asks, runs."""
+    selector naming no maker gets. The record exists to show that the reviewer is ANOTHER vendor. And from the command
+    line (R46): `--record` asks for it; without it nothing is recorded and the line to record it by hand is printed;
+    `ask --record` is refused, nothing filed -- an ask is no review step. omp is a stand-in that answers; git, which
+    the journal's header asks, runs."""
     top = tempfile.mkdtemp(prefix="autosound_ai_omp_vendor_")
     process_mod = _siblings().load("state/process.py")
     real_run = subprocess.run
@@ -2232,12 +2288,27 @@ def _check_an_omp_review_names_its_vendor():
             for selector, vendor in (("openrouter/deepseek-r1", "openrouter"),
                                      ("google-antigravity/claude-opus-4", "anthropic"),
                                      ("google-antigravity/gemini-3.1-pro", "google")):
-                code, out, err = scene.run("critic", pkg, "--via", "omp", "--model", selector)
+                code, out, err = scene.run("critic", pkg, "--via", "omp", "--model", selector, "--record")
                 last = (process_mod.Process(os.path.join(project, "process")).events(
                     kinds=(process_mod.EV_CRITIC_CALLED,)) or [{}])[-1]
                 got = (last.get("vendor"), last.get("model"), last.get("mode"))
                 if code or "omp-pong" not in out or got != (vendor, selector, "omp"):
                     failures.append(f"{selector}: exit {code}, recorded {got!r}, {err.strip()[-200:]!r}")
+
+            def counted():
+                return len(process_mod.Process(os.path.join(project, "process")).events(
+                    kinds=(process_mod.EV_CRITIC_CALLED,)))
+            before = counted()
+            code, out, err = scene.run("critic", pkg, "--via", "omp", "--model", "openrouter/deepseek-r1")
+            line = next((ln for ln in err.splitlines() if "Запиши посилання: " in ln), "")
+            if code or counted() != before or " reviewer openrouter openrouter/deepseek-r1 --review " not in line \
+                    or not line.endswith(" --mode omp"):
+                failures.append(f"without --record: exit {code}, {counted() - before} recorded, said {line!r}")
+            filed = sorted(os.listdir(os.path.join(project, "process", "reviews")))
+            code, out, err = scene.run("ask", pkg, "--via", "omp", "--model", "openrouter/deepseek-r1", "--record")
+            if code != 1 or "--record" not in err or "omp-pong" in out \
+                    or sorted(os.listdir(os.path.join(project, "process", "reviews"))) != filed:
+                failures.append(f"ask --record: exit {code}, {err.strip()[-200:]!r}")
     finally:
         subprocess.run = real_run
         shutil.rmtree(top, ignore_errors=True)
@@ -3827,25 +3898,39 @@ def _review_target(what="Рецензію"):
     return here
 
 
+def _record_line(project, vendor, model, rel, mode):
+    """The command that records a filed review by hand (#143, R46): runnable as printed -- `python3`, this copy's
+    `process.py`, the project's `process/`, the vendor and the model, the review and its mode -- each quoted where the
+    shell needs it. What this run cannot know stays a placeholder: `<project>` when no project took the review,
+    `<vendor> <model>` when no model was named (a clipboard answer comes from whichever chat it was pasted into)."""
+    quote = (lambda s: subprocess.list2cmdline([s])) if sys.platform == "win32" else shlex.quote
+    process_py = os.path.join(SKILL_DIR, "rew_tool", "state", "process.py")
+    folder = quote(os.path.join(os.path.abspath(project), "process")) if project else "<project>/process"
+    who = f"{quote(vendor)} {quote(str(model))}" if vendor and model else "<vendor> <model>"
+    return f"python3 {quote(process_py)} {folder} reviewer {who} --review {quote(rel)} --mode {quote(mode)}"
+
+
 def _record_review_step(project, vendor, model, rel, mode):
     """Record the review filed at `rel` as the process's reviewer step (#143, G1): `critic_called` in the journal and
     the state's `reviewer`, through `Process(<project>/process).record_reviewer` -- `state/process.py` loaded by its
     path -- which takes the project's writer lock. The review call is over by then: no reviewer runs under the lock.
 
-    True when recorded; False when the journal's last `critic_called` names this file already -- TCC's `call_critic`
-    records the call it ran too. The look is not under the lock: the one other writer of this file's record (TCC)
-    learns its name from this run's own `REVIEW_FILE` line, after the run. A refusal raises as `record_reviewer`
-    raises it -- `is_busy`, `is_unreadable`, the lock's wait a usage error (`exit_code` 2), a `ProcessError`."""
+    True when recorded; False when a `critic_called` in the journal names this file already -- a review file's name is
+    never given twice, so any event naming it is this review's. The look is not under the lock: the one other writer
+    that could record this file (a hand run of the printed line) learns its name from this run's own output, after it.
+    A refusal raises as `record_reviewer` raises it -- `is_busy`, `is_unreadable`, the lock's wait a usage error
+    (`exit_code` 2), a `ProcessError`."""
     process_mod = _siblings().load("state/process.py")
     proc = process_mod.Process(os.path.join(project, "process"))
-    last = proc.events(kinds=(process_mod.EV_CRITIC_CALLED,))
-    if last and str(last[-1].get("review") or "").replace("\\", "/") == rel.replace("\\", "/"):
+    mine = rel.replace("\\", "/")
+    if any(str(e.get("review") or "").replace("\\", "/") == mine
+           for e in proc.events(kinds=(process_mod.EV_CRITIC_CALLED,))):
         return False
     proc.record_reviewer(vendor, model, review=rel, mode=mode)
     return True
 
 
-def _persist_review(role, text, model, mode, vendor=None):
+def _persist_review(role, text, model, mode, vendor=None, record=False):
     """Write the critique to `<project>/process/reviews/<ts>-<role>.md` and return its path (SCR-027).
 
     The reasoning used to exist only in the chat stream, so a session rendered from disk showed
@@ -3856,13 +3941,16 @@ def _persist_review(role, text, model, mode, vendor=None):
     A second that already holds a review or a package of this role gives `<ts>-<role>-2.md`, `-3`, ...
     (`_free_base`): never written over another (#135).
 
-    A tuning review is then recorded as the process's reviewer step (#143, G1; `_record_review_step`): the door
-    printed `process.py <project>/process reviewer <vendor> ...` for somebody to run, `<vendor>` literal, so the record
-    depended on a model obeying. `vendor` is the provider's name as `process.py reviewer` takes it (`provider_for` of
-    the model when not given). A refusal -- the lock held, a state that cannot be read -- is said, with that line, its
-    vendor and model filled in, to run once the project can be written; the review is returned all the same. An `ask`
-    is no review step: the journal's `critic_called` is the process's last reviewer (tcc#116), so nothing is recorded
-    and nothing asked to be.
+    A tuning review is the process's reviewer step. Asked to (`record`, the command line's `--record`; #143, G1, R46),
+    the door records it itself (`_record_review_step`). Not asked, it prints the line that records it by hand
+    (`_record_line`), runnable as printed: TCC's `call_critic` records the call it ran, with its step, and does not
+    ask -- the door cannot tell it runs under TCC, and both recording put every review in the journal twice. The door
+    printed `process.py <project>/process reviewer <vendor> ...`, placeholders left in. `vendor` is the provider's name
+    as `process.py reviewer` takes it (`provider_for` of the model when not given). A review filed in one project while
+    the ledger in its prompt was another's (`review_project_dir`) is not recorded: the line names where it was filed.
+    A refusal -- the lock held, a state that cannot be read -- is said, with that line, to run once the project can be
+    written; the review is returned all the same. An `ask` is no review step: the journal's `critic_called` is the
+    process's last reviewer (tcc#116), so nothing is recorded and nothing asked to be.
 
     Returns a PROJECT-RELATIVE path: it goes into the journal, and an absolute path from one
     machine is noise on another.
@@ -3887,6 +3975,17 @@ def _persist_review(role, text, model, mode, vendor=None):
     if role not in TUNING_TASKS:
         return rel
     vendor = vendor or provider_for(model)
+    by_hand = f">> Запиши посилання: {_record_line(project, vendor, model, rel, mode)}"
+    if not record:
+        print(by_hand, file=sys.stderr)
+        return rel
+    ledger_of = review_project_dir()
+    if os.path.normcase(os.path.realpath(ledger_of)) != os.path.normcase(os.path.realpath(project)):
+        print(f">> Not recorded in the journal: the ledger in this review's prompt is "
+              f"{os.path.abspath(ledger_of)}'s, and the review is filed in {os.path.abspath(project)} -- record it "
+              "there by hand if it is that project's review:", file=sys.stderr)
+        print(by_hand, file=sys.stderr)
+        return rel
     try:
         recorded = _record_review_step(project, vendor, model, rel, mode)
     except Exception as exc:  # noqa: BLE001 -- the review is filed and printed: its record is said, never the review lost
@@ -3898,8 +3997,7 @@ def _persist_review(role, text, model, mode, vendor=None):
             traceback.print_exc(file=sys.stderr)
         why = str(exc) if refusal else f"{type(exc).__name__}: {exc}"
         print(f">> Not recorded in the journal: {why}", file=sys.stderr)
-        print(f">> Запиши посилання: process.py <project>/process reviewer {vendor} {model} "
-              f"--review {rel}", file=sys.stderr)
+        print(by_hand, file=sys.stderr)
         return rel
     if recorded:
         print(f">> Recorded in the journal as the reviewer step (critic_called, {vendor} {model}): do not record it "
@@ -4072,7 +4170,7 @@ def _log_audit(role, model, pkg_file):
         pass
 
 
-def review_through_omp(role, binary, model, prompt, pkg_file, role_var):
+def review_through_omp(role, binary, model, prompt, pkg_file, role_var, record=False):
     """The round through omp, and through nothing else (hub #216, TCC-034).
 
     The Arbiter, 2026-09-27: «OMP потрібен не для чогось додаткового — його задача дати доступ до різних
@@ -4099,7 +4197,7 @@ def review_through_omp(role, binary, model, prompt, pkg_file, role_var):
         print(text)
         print(f"\n— [{role}: {model}]")
         print(">> REVIEW_ROUTE: omp", file=sys.stderr)
-        _persist_review(role, text, model, "omp", vendor=omp_vendor(model))
+        _persist_review(role, text, model, "omp", vendor=omp_vendor(model), record=record)
         _log_audit(role, model, pkg_file)
         return
     if kind == "bad_model":
@@ -4116,13 +4214,21 @@ def review_through_omp(role, binary, model, prompt, pkg_file, role_var):
     sys.exit(4)
 
 
+_USAGE = ("Використання: python3 scripts/autosound_ai.py [critic|advisor|ask|doctor] <package_file.md> [trace.csv] "
+          "[--via api|cli|omp|clipboard] [--model <id>] [--provider google|anthropic|openai] [--record]")
+
+
 def main():
     if len(sys.argv) < 2:
-        print("Використання: python3 scripts/autosound_ai.py [critic|advisor|ask|doctor] <package_file.md> [trace.csv] "
-              "[--via api|cli|omp|clipboard] [--model <id>] [--provider google|anthropic|openai]")
+        print(_USAGE)
         sys.exit(1)
-        
+
     argv = list(sys.argv)
+    # `--record` (#143, R46): a tuning review this run files is recorded as the process's reviewer step by the door
+    # itself. Asked for, never assumed: TCC's `call_critic` records the call it ran, with its step, after the run, and
+    # the door cannot tell it runs under TCC -- both recording put every review in the journal twice.
+    record = "--record" in argv
+    argv = [arg for arg in argv if arg != "--record"]
     # `--via api|cli|clipboard` -- the route for THIS run (#55 ask 3, hub #187). The choice between
     # a key and a CLI login used to be one machine-wide switch (critic-env's variant A or B), while
     # the right answer depends on where the run happens. `--mode clipboard` is the older spelling of
@@ -4153,6 +4259,9 @@ def main():
                 print(f"--model без назви моделі ({value!r}): --model <id>", file=sys.stderr)
                 sys.exit(1)
             RUN_PICK[flag[2:]] = value.lower() if flag == "--provider" else value
+    if len(argv) < 2:
+        print(_USAGE)
+        sys.exit(1)
     if via is None and os.environ.get("AUTOSOUND_CRITIC_VIA", "").strip():
         # The route for a run that names none (hub #236): TCC sets it for the sessions it starts, so a session that
         # runs the method itself follows the Arbiter's choice instead of trying the API whenever a key is found.
@@ -4169,6 +4278,12 @@ def main():
     mode = "clipboard" if via == "clipboard" else None
     sys.argv = argv
     role = sys.argv[1].lower()
+    if record and role not in TUNING_TASKS:
+        # A flag that cannot take effect is refused, never dropped: an ask is no review step (tcc#116), and the other
+        # verbs file none.
+        print(f"--record records a tuning review (critic, advisor) as the process's reviewer step: `{role}` files "
+              "none to record", file=sys.stderr)
+        sys.exit(1)
 
     if role in ("selftest", "--selftest"):
         sys.exit(_selftest())
@@ -4249,7 +4364,7 @@ def main():
     # 0. omp, when it was the pick: before the key, because an omp selector names a vendor too (hub #216).
     omp = omp_bin(via)
     if omp:
-        review_through_omp(role, omp, resolve_model(), compiled_prompt, pkg_file, role_var)
+        review_through_omp(role, omp, resolve_model(), compiled_prompt, pkg_file, role_var, record=record)
         return
 
     # 1. Спроба прямого API запиту (пріоритет)
@@ -4335,7 +4450,7 @@ def main():
             print(response_text)
             print(f"\n— [{role}: {got_model}]")
             print(">> REVIEW_ROUTE: api", file=sys.stderr)
-            _persist_review(role, response_text, got_model, "api", vendor=provider)
+            _persist_review(role, response_text, got_model, "api", vendor=provider, record=record)
             
             # Логування в аудит
             _log_audit(role, got_model, pkg_file)
@@ -4383,7 +4498,7 @@ def main():
             print(text)
             print(f"\n— [{role}: {model}]")
             print(">> REVIEW_ROUTE: cli", file=sys.stderr)
-            _persist_review(role, text, model, "cli", vendor=provider)
+            _persist_review(role, text, model, "cli", vendor=provider, record=record)
             _log_audit(role, model, pkg_file)
             return
         if kind == "bad_model":
@@ -4428,12 +4543,12 @@ def main():
         answer = (package_rel or os.path.join("process", "reviews", os.path.basename(package_path))).replace(
             "-package.md", ".md")
     if tuning:
-        # The answer comes later, by hand, so its record is the person's to make (#143, G1): the reviewer this run
-        # would have asked, filled in -- `<vendor> <model>` only where no model was named.
-        who = f"{provider} {model}" if model else "<vendor> <model>"
+        # The answer comes later, by hand, so its record is the person's to make (#143, G1, R46): the line to run then,
+        # with what this run knows filled in -- the project the package went into, the reviewer it would have asked
+        # (`<vendor> <model>` only where no model was named).
+        filed_in = package_path[: -len(package_rel)].rstrip("/\\") if package_rel else None
         print(f"Коли відповідь буде: збережи її як {answer} у проекті і запиши:\n"
-              f"   process.py <project>/process reviewer {who} --review {answer} --mode clipboard",
-              file=sys.stderr)
+              f"   {_record_line(filed_in, provider, model, answer, 'clipboard')}", file=sys.stderr)
     else:
         # An `ask` is no review step (tcc#116): its answer is filed, never recorded as the process's reviewer.
         print(f"Коли відповідь буде: збережи її як {answer} у проекті.", file=sys.stderr)

@@ -9,7 +9,7 @@ brew install --cask antigravity-cli            # the CLI (macOS; Windows → §1
 agy                                            # sign in once, in a real terminal (§1)
 printf 'GEMINI_CRITIC_MODEL=gemini-3.1-pro-high\n' > ~/.config/autosound/critic-env
 python3 scripts/autosound_ai.py doctor         # one command, diagnoses everything in §1–§3
-python3 scripts/autosound_ai.py critic package.md   # a real review
+python3 scripts/autosound_ai.py critic package.md --record   # a real review, recorded as the step
 ```
 
 **Where the key lives, and why there:** `~/.config/autosound/critic-env` — **outside every
@@ -79,9 +79,13 @@ call path; the difference is the question and its wording — the TASK block of 
 
 | Task | What it is for | How to call | Contract |
 |---|---|---|---|
-| **critic** | check a proposal (the round's default) | `python3 scripts/autosound_ai.py critic pkg.md [trace.csv]` | interaction + **tuning** (contract + context required, memory if present) |
-| **advisor** | search for a solution to an open question | `python3 scripts/autosound_ai.py advisor pkg.md` | the same |
+| **critic** | check a proposal (the round's default) | `python3 scripts/autosound_ai.py critic pkg.md [trace.csv] --record` | interaction + **tuning** (contract + context required, memory if present) |
+| **advisor** | search for a solution to an open question | `python3 scripts/autosound_ai.py advisor pkg.md --record` | the same |
 | **ask** | a plain question — translation, a letter's wording, a second opinion on a text | `python3 scripts/autosound_ai.py ask q.md` | interaction only (`assets/interaction-contract.md`); works before the intake |
+
+`--record` (critic, advisor) records the review it files as the process's reviewer step (`critic_called`); without
+it the run prints the line that records it by hand, runnable as it stands. TCC's `call_critic` does not pass it: TCC
+records the call it ran itself, with its step. An `ask` is no review step, and `ask --record` is refused.
 
 Nothing in the
 script names a model: with `GEMINI_CRITIC_MODEL` unset it prints `agy models` and stops (exit 3)
@@ -103,7 +107,7 @@ wait, or a higher tier said out loud), never a weaker model swapped in quietly.
 **Name a Pro tier** — a Flash reviewer praises and misses obvious problems, and asked to settle a question it endorsed both sides of it (field-observed — «Which model for which role» below); "don't praise" prompt text doesn't fix a too-weak model. ⚠️ agy Starter shares one weekly Flash+Pro quota — Pro burns it faster; when dry, wait or take the clipboard rung (§7). Names drift — which is exactly why none is kept here: `agy models` is the list, and `--doctor` smokes **the model you named** and prints that list beside it when agy does not know the name. Override per call with `--model` (§3 — a variable set in front of the
 command loses to any critic-env that pins one):
 ```bash
-python3 scripts/autosound_ai.py critic pkg.md --model gemini-3.1-pro-high  # slug id — agy ≥ 1.1.12 rejects the display label
+python3 scripts/autosound_ai.py critic pkg.md --record --model gemini-3.1-pro-high  # slug id — agy ≥ 1.1.12 rejects the display label
 ```
 
 ## 3. Pin config once — the KEY outside the project, the rest in it
@@ -388,7 +392,7 @@ for when that tool answers with a refusal.
    not a crash (§6); a minute or a model-group switch often costs less than changing channel.
    One retry is automatic: an agy answer cut off mid-stream ("The stream was interrupted") is run
    once more on the same rung before the script reports a failure (skill #68). A cut is not a refusal.
-1. **ANOTHER vendor than the one driving** — `python3 scripts/autosound_ai.py critic|advisor|ask`,
+1. **ANOTHER vendor than the one driving** — `python3 scripts/autosound_ai.py critic|advisor <pkg> --record` (or `ask`),
    through that vendor's key (§3) or its CLI. This is the recommended default: Generator one vendor,
    reviewer the other, which is what cross-vendor anti-anchoring means. Verify with `doctor`. From
    inside an agent session (TCC's included) the CLI runs without the session's markers (§3); a key
@@ -399,8 +403,9 @@ for when that tool answers with a refusal.
    answer for a **bulk one-off** (a real case: a 4-language README review the agentic CLI could not
    finish). `python3 scripts/autosound_ai.py critic pkg.md --mode clipboard` writes the PACKAGE as
    `process/reviews/<ts>-critic-package.md` and copies it; save the answer beside it as
-   `<ts>-critic.md` and record it (`process.py <project>/process reviewer <vendor> <model> --review
-   process/reviews/<ts>-critic.md --mode clipboard`) — the package itself is never filed as a review.
+   `<ts>-critic.md` and record it with the line the run printed (`python3 <skill>/rew_tool/state/process.py
+   <project>/process reviewer <vendor> <model> --review process/reviews/<ts>-critic.md --mode clipboard`, the
+   project and a named model filled in) — the package itself is never filed as a review.
 3. **The same vendor at a higher tier**, when no second vendor is available at all — weaker, because
    the blind spots are shared, and it must be said out loud in the round's record.
 4. **Claude in a SEPARATE session** — cross-session, TWO-PASS anti-anchoring (`review-loop.md`).
@@ -451,7 +456,7 @@ descend the ladder instead.
 4. **Завершіть авторизацію:**
    Після вставки коду та натискання `Enter` ви успішно увійдете в систему. Напишіть `/quit`, щоб вийти з інтерактивного режиму `agy`. 
    
-   Токен збережеться локально, і тепер виклики рецензента (`python3 scripts/autosound_ai.py critic <пакет>`) працюватимуть автоматично — з окремого термінала, не зсередини агент-сесії.
+   Токен збережеться локально, і тепер виклики рецензента (`python3 scripts/autosound_ai.py critic <пакет> --record`) працюватимуть автоматично — з окремого термінала, не зсередини агент-сесії.
 
 ## Which model for which role (updated 2026-08-01)
 

@@ -343,8 +343,8 @@ reveals a broken driver or wiring); without a rig, Fs from the datasheet with ma
   prediction is never compared against a steady measurement: those are two questions subtracted from
   each other, and on the `_60` woofer↔mid that looked like 5.2 dB of model error (hub `RES-006`).
 - **2.3** **the review**: one critic round on the round's full package (`phase_2_eq.md`'s gate — the second, after
-  the joints, only when 2.1 reworked them). Ends in the review file (`process.py reviewer … --review <path>`); a
-  refusal sends its package back to 2.1.
+  the joints, only when 2.1 reworked them). Ends in the review file, recorded as the step
+  (`autosound_ai.py critic <package> --record` files and records it); a refusal sends its package back to 2.1.
 - **2.4** **preset to disk**: the settings sheet, `docs/sheets/<v_NNN>-<slot>.md` (`apply.propose` writes it; skill #61) — what is entered in PC-Tool per channel (HPF/LPF,
   gain, delay, polarity, APF, EQ), old → new, samples for the DSP rate, a "why" per row; the EQ file in
   the DSP format to import; the predicted graph. Into the project (+git if configured).

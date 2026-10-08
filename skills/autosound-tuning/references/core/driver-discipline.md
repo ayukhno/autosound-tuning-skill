@@ -17,7 +17,7 @@ Don't ask the model to be disciplined — put the discipline at the moments the 
 
 ## 2. Solo self-critique: through the wrapper, never "in your head"
 
-In-context self-critique ("now imagine you are a strict judge…") shares every anchor of the proposal it judges — it produces praise, not review (`review-loop.md`, TWO-PASS rationale). In solo modes the **mandatory form of self-critique for a round package or a phase gate** is a **stateless call of the critic wrapper on your own package** (`python3 scripts/autosound_ai.py critic <package.md>` — clean context + the contract §4 objection format). In-prompt self-critique is acceptable only for routine micro-decisions that don't change DSP state.
+In-context self-critique ("now imagine you are a strict judge…") shares every anchor of the proposal it judges — it produces praise, not review (`review-loop.md`, TWO-PASS rationale). In solo modes the **mandatory form of self-critique for a round package or a phase gate** is a **stateless call of the critic wrapper on your own package** (`python3 scripts/autosound_ai.py critic <package.md> --record` — clean context + the contract §4 objection format, recorded as the step). In-prompt self-critique is acceptable only for routine micro-decisions that don't change DSP state.
 
 ## 3. Known driver behaviors (field-observed) → countermeasures
 
