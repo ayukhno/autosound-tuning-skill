@@ -2313,7 +2313,43 @@ def smoke(dotnet=None, echo=print):
 
 # ---------------------------------------------------------------- selftest (offline, no .NET)
 
+def _check_chebyshev_solo_refused_on_the_front():
+    """A solo whose recorded protective leg is a Chebyshev is refused, and the trade-off front's terms say so (#134,
+    R52; the final review's I-4): `chain_terms` keeps `de_embed_solos`' note `<ch>: REFUSED -- protective ... cannot
+    be taken out ...` beside the notes that say a protective was taken out. The refused solo is dropped from the chains
+    every candidate is read through, so that note is the one word that a channel is missing from the front -- dropped
+    too, the candidates were compared without it in silence. The solo with nothing in its chain is read as recorded."""
+    import numpy as np
+
+    import resonalyze_ir as _ri
+    d = tempfile.mkdtemp(prefix="autosound_engine_ch_solo_")
+    try:
+        fs, n, pre = 96000, 1 << 13, 1 << 11
+        for stem, prot in (("w_L", None), ("m_L", {"hz": 250.0, "family": "CH", "slopeDbPerOct": 12})):
+            x = np.zeros(n)
+            x[pre + 96] = 0.3
+            doc, _ = _ri.build_v7(x, fs, -pre / fs, low_hz=20.0, high_hz=20000.0,
+                                  rew_source={"protectiveHighPass": prot, "protectiveState": "raw" if prot else "bare"})
+            _ri.write_v7(doc, os.path.join(d, stem + ".json"))
+        flat = {"muted": False, "gain_db": 0.0, "polarity": "NORM", "ta_ms": 0.0, "hp": None, "lp": None, "eq": [],
+                "phase": None}
+        notes = chain_terms(d, {"w-L": dict(flat), "m-L": dict(flat)}).get("notes") or []
+        said = [x for x in notes if x.startswith("m-L: ")]
+        assert len(said) == 1 and said[0].startswith("m-L: REFUSED -- protective HP 250 Hz CH12 cannot be taken out") \
+            and "LR, BW or BE" in said[0], notes
+        assert not [x for x in notes if x.startswith("w-L: ")], f"a solo used as recorded made a note: {notes}"
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+
+
 def _selftest():
+    failures = []
+    for check in (_check_chebyshev_solo_refused_on_the_front,):
+        try:
+            check()
+        except AssertionError as exc:
+            failures.append(f"{check.__name__}: {exc}")
+    assert not failures, "\n".join(failures)
     assert driver_type("woofer", True) == "Midbass" and driver_type("woofer", False) == "Woofer"
     recorded = pin()["recorded"]
     assert recorded is None or recorded.startswith(ENGINE_PIN), (recorded, ENGINE_PIN)   # the constant follows the submodule
