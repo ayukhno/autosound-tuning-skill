@@ -101,7 +101,13 @@ def newest_tag(repo=SKILL_REPO, glob=SKILL_TAG_GLOB):
 
 def verify_tag(clone, tag, principal=None, key=None, signed_from=None, env=None):
     """`(ok, sentence)`. ok is True for a good signature, and for a tag that predates signing (the sentence says
-    which); False for anything else at or after `signed_from`. The switch skips it, visibly."""
+    which); False for anything else at or after `signed_from`. The switch skips it, visibly.
+
+    A good signature is one answer only (T-35, #142): git's exit 0 and ssh-keygen's line `Good "git" signature for
+    <principal> with ...`, whatever the person's git or GPG configuration says. ssh-keygen is named for the check, so
+    a sign-only helper set as `gpg.ssh.program` (1Password's, for one) is not asked to verify; and git picks the
+    verifier from the signature, not from `gpg.format`, so an OpenPGP tag that the person's own gpg calls good exits
+    0 with "Good" too -- and is not the author's. `env` is what git runs in."""
     env = os.environ if env is None else env
     principal, key = principal or SIGNING_PRINCIPAL, key or SIGNING_KEY
     signed_from = signed_from or SIGNED_FROM
@@ -115,10 +121,10 @@ def verify_tag(clone, tag, principal=None, key=None, signed_from=None, env=None)
         signers = os.path.join(tmp, "allowed_signers")
         with open(signers, "w", encoding="utf-8") as fh:
             fh.write(f'{principal} namespaces="git" {key}\n')
-        rc, out, err = git(clone, "-c", "gpg.format=ssh", "-c", f"gpg.ssh.allowedSignersFile={signers}",
-                           "verify-tag", tag)
+        rc, out, err = git(clone, "-c", "gpg.format=ssh", "-c", "gpg.ssh.program=ssh-keygen",
+                           "-c", f"gpg.ssh.allowedSignersFile={signers}", "verify-tag", tag, env=env)
     said = (err or out).strip()
-    if rc == 0 and "Good" in said:
+    if rc == 0 and re.search(rf'(?m)^Good "git" signature for {re.escape(principal)} with ', said):
         return True, f"{tag}: signature good ({principal})"
     reason = said.splitlines()[-1].rstrip(".") if said else f"git verify-tag exit {rc}"
     return False, (f"{tag}: the signature does not check out -- {reason}. Not installed: a release tag of this "
@@ -811,9 +817,93 @@ def _ok(cmd, got):
 
 
 # ── selftest ─────────────────────────────────────────────────────────────────────────────────────
+#: T-35 (#142): what the person's own git configuration may hold, and a `git` that is not git. Each answers "Good" one
+#: way or another; none of them is the author's signature. A fake `gpg.program` stands in for gpg: no real one runs,
+#: and no keyring is touched. Bytes, so a script keeps its "\n" line ends on Windows.
+_SIGN_ONLY_HELPER = b"#!/bin/sh\necho 'helper: sign-only (try -Y sign)' >&2\nexit 1\n"
+_FAKE_GPG = (b"#!/bin/sh\n"
+             b"cat >/dev/null\n"
+             b"echo '[GNUPG:] NEWSIG'\n"
+             b"echo '[GNUPG:] GOODSIG 0123456789ABCDEF Mallory <m@example.org>'\n"
+             b"echo '[GNUPG:] VALIDSIG 0123456789ABCDEF0123456789ABCDEF01234567 2026-10-08 0 0 0 0 0 1 0 "
+             b"0123456789ABCDEF0123456789ABCDEF01234567'\n"
+             b"echo '[GNUPG:] TRUST_ULTIMATE 0 pgp'\n"
+             b"echo 'gpg: Good signature from \"Mallory <m@example.org>\" [ultimate]' >&2\n"
+             b"exit 0\n")
+_STUB_GIT = (b"#!/bin/sh\n"
+             b"for a in \"$@\"; do\n"
+             b"  if [ \"$a\" = verify-tag ]; then echo 'Good signature from \"anyone\"' >&2; exit 0; fi\n"
+             b"done\n"
+             b"exec /usr/bin/git \"$@\"\n")
+#: A tag message that ends in an OpenPGP block -- any base64 body: git hands it to `gpg.program` as it is.
+_PGP_SIGNED_MESSAGE = (b"v3.0.67\n\n-----BEGIN PGP SIGNATURE-----\n\n"
+                       b"iQEzBAABCAAdFiEEASNFZ4mrze8BI0VniavN7wEjRWcFAmcFAAAACgkQASNFZ4mrze8AAA==\n=AAAA\n"
+                       b"-----END PGP SIGNATURE-----\n")
+
+
+def _signature_fixture(tmp, env, anchor, author_key):
+    """The T-35 cases' ground, under `tmp/t35`: a repo with v3.0.64 signed by the key at `author_key` (git is given
+    its `.pub`) and v3.0.67 whose message ends in an OpenPGP block; a sign-only helper named by `hostile.gitconfig`, a
+    fake gpg named by `pgp.gitconfig`, and `stub-git/git`. Runs no real gpg."""
+    base = os.path.join(tmp, "t35")
+    repo, stub_dir = os.path.join(base, "repo"), os.path.join(base, "stub-git")
+    os.makedirs(repo)
+    os.makedirs(stub_dir)
+
+    def sh(*cmd):
+        rc, out, err = run(list(cmd), env=env)
+        assert rc == 0, (cmd, out, err)
+
+    sh("git", "init", "-q", repo)
+    with open(os.path.join(repo, "a.txt"), "w", encoding="utf-8") as fh:
+        fh.write("one\n")
+    sh("git", "-C", repo, "add", "a.txt")
+    sh("git", "-C", repo, "commit", "-q", "-m", "one")
+    sh("git", "-C", repo, "-c", "gpg.format=ssh", "-c", f"user.signingkey={author_key}.pub", "tag", "-s", "v3.0.64",
+       "-m", "signed")
+    for name, body in (("pgp-message", _PGP_SIGNED_MESSAGE), ("sign-only.sh", _SIGN_ONLY_HELPER),
+                       ("fake-gpg.sh", _FAKE_GPG), (os.path.join("stub-git", "git"), _STUB_GIT)):
+        with open(os.path.join(base, name), "wb") as fh:
+            fh.write(body)
+        os.chmod(os.path.join(base, name), 0o755)
+    sh("git", "-C", repo, "tag", "-a", "v3.0.67", "-F", os.path.join(base, "pgp-message"))
+    configs = {"hostile": ('[gpg "ssh"]', "sign-only.sh"), "pgp": ("[gpg]", "fake-gpg.sh")}
+    for name, (section, program) in configs.items():
+        program = os.path.join(base, program).replace(os.sep, "/")   # forward slashes: a config's "\" escapes
+        with open(os.path.join(base, name + ".gitconfig"), "wb") as fh:
+            fh.write(f"{section}\n\tprogram = {program}\n".encode("utf-8"))
+    return {"repo": repo, "env": env, "anchor": anchor, "stub_dir": stub_dir,
+            "hostile": os.path.join(base, "hostile.gitconfig"), "pgp": os.path.join(base, "pgp.gitconfig")}
+
+
+def _check_a_signing_helper_is_not_asked(fx):
+    """A sign-only helper as the person's gpg.ssh.program (1Password's, for one) cannot verify: ssh-keygen does, and
+    the author's tag passes."""
+    ok, said = verify_tag(fx["repo"], "v3.0.64", env=dict(fx["env"], GIT_CONFIG_GLOBAL=fx["hostile"]), **fx["anchor"])
+    assert ok and "signature good" in said, said
+
+
+def _check_an_openpgp_good_is_not_the_authors(fx):
+    """git picks the verifier from the signature, not from gpg.format: an OpenPGP tag that the person's own gpg calls
+    good exits 0 with "Good" -- and is not the author's."""
+    ok, said = verify_tag(fx["repo"], "v3.0.67", env=dict(fx["env"], GIT_CONFIG_GLOBAL=fx["pgp"]), **fx["anchor"])
+    assert not ok and "does not check out" in said, said
+
+
+def _check_a_git_that_says_good_is_not_believed(fx):
+    """A `git` first on PATH that says "Good signature from" of any tag, with exit 0, is not the author's sentence.
+    POSIX only: on Windows a child is found on the parent's PATH, and a shell script is no program to it."""
+    if os.name == "nt":
+        return
+    path = fx["stub_dir"] + os.pathsep + fx["env"].get("PATH", os.defpath)
+    ok, said = verify_tag(fx["repo"], "v3.0.64", env=dict(fx["env"], PATH=path), **fx["anchor"])
+    assert not ok and "does not check out" in said, said
+
+
 def _selftest():
     """Offline, in temporary repositories: a signed tag passes, an unsigned or foreign-signed one is refused, an
-    old one predates signing; local changes become a patch that brings them back, and only then is the clone
+    old one predates signing; only the author's SSH signature is good, whatever the git configuration says (the
+    `_check_*` functions above); local changes become a patch that brings them back, and only then is the clone
     reset; the clone update lands the tag in refs/tags (describe names it) and refuses a dirty clone; tools are
     updated the way they were installed; pip is asked to upgrade."""
     tmp = tempfile.mkdtemp(prefix="autosound_upkeep_")
@@ -858,6 +948,16 @@ def _selftest():
     ok, said = verify_tag(origin, "v3.0.66", env=dict(env, **{SKIP_VERIFY_VAR: "1"}), **anchor)
     assert ok and "NOT checked" in said, said
     assert newest_tag(origin) == "v3.0.66", newest_tag(origin)
+    # T-35 (#142): a signature is the author's or nothing, whatever the person's git or GPG configuration says.
+    fx = _signature_fixture(tmp, env, anchor, os.path.join(tmp, "author"))
+    failures = []
+    for check in (_check_a_signing_helper_is_not_asked, _check_an_openpgp_good_is_not_the_authors,
+                  _check_a_git_that_says_good_is_not_believed):
+        try:
+            check(fx)
+        except AssertionError as exc:
+            failures.append(f"{check.__name__}: {exc}")
+    assert not failures, "\n".join(failures)
 
     # The clone, as the installer makes it: shallow, at a tag.
     clone = os.path.join(tmp, "clone")
@@ -1061,7 +1161,9 @@ def _selftest():
     assert got["ok"] and "--upgrade" in got["command"] and "--user" in got["command"], got
     shutil.rmtree(tmp, ignore_errors=True)
     print("selftest[upkeep] OK -- a signed tag passes, an unsigned or foreign-signed one is refused, one before "
-          f"{SIGNED_FROM} predates signing, the developer's switch says so; local changes (new files too) become a "
+          f"{SIGNED_FROM} predates signing, the developer's switch says so; only the author's SSH signature is good, "
+          "whatever the git config says (a signing helper, an OpenPGP Good, a git that says Good); local changes "
+          "(new files too) become a "
           "patch that brings them back, sent only when asked, and only then is the clone reset; the update lands "
           "the tag in refs/tags and refuses a dirty clone or a bad signature; each tool is updated the way it was "
           "installed and a missing one is not added; pip is asked to upgrade with the installers' flags")

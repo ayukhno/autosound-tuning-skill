@@ -171,6 +171,34 @@ UPKEEP = ROOT / "skills" / "autosound-tuning" / "scripts" / "upkeep.py"
 #: The functions of install.sh's signature check, cut out and run together: the method's tag and the app's (#99, #101).
 SIGNING_FUNCTIONS = ("settled_by_name", "verify_tag", "check_tcc_tag", "tcc_tag_still_at")
 
+#: T-35 (#142): what the person's own git configuration may hold, and a `git` that is not git. Each answers "Good" one
+#: way or another; none of them is the author's signature. A fake `gpg.program` stands in for gpg: no real one runs,
+#: and no keyring is touched. Bytes, so a script keeps its "\n" line ends on Windows.
+SIGN_ONLY_HELPER = b"#!/bin/sh\necho 'helper: sign-only (try -Y sign)' >&2\nexit 1\n"
+FAKE_GPG = (b"#!/bin/sh\n"
+            b"cat >/dev/null\n"
+            b"echo '[GNUPG:] NEWSIG'\n"
+            b"echo '[GNUPG:] GOODSIG 0123456789ABCDEF Mallory <m@example.org>'\n"
+            b"echo '[GNUPG:] VALIDSIG 0123456789ABCDEF0123456789ABCDEF01234567 2026-10-08 0 0 0 0 0 1 0 "
+            b"0123456789ABCDEF0123456789ABCDEF01234567'\n"
+            b"echo '[GNUPG:] TRUST_ULTIMATE 0 pgp'\n"
+            b"echo 'gpg: Good signature from \"Mallory <m@example.org>\" [ultimate]' >&2\n"
+            b"exit 0\n")
+STUB_GIT = (b"#!/bin/sh\n"
+            b"for a in \"$@\"; do\n"
+            b"  if [ \"$a\" = verify-tag ]; then echo 'Good signature from \"anyone\"' >&2; exit 0; fi\n"
+            b"done\n"
+            b"exec /usr/bin/git \"$@\"\n")
+#: An ssh-keygen older than OpenSSH 8.2, which has no -Y: git answers for it in a sentence of its own.
+OLD_SSH_KEYGEN = (b"#!/bin/sh\n"
+                  b"echo 'ssh-keygen: illegal option -- Y' >&2\n"
+                  b"echo 'usage: ssh-keygen [-q] [-b bits] [-C comment] [-f output_keyfile]' >&2\n"
+                  b"exit 1\n")
+#: A tag message that ends in an OpenPGP block -- any base64 body: git hands it to `gpg.program` as it is.
+PGP_SIGNED_MESSAGE = (b"v3.0.67\n\n-----BEGIN PGP SIGNATURE-----\n\n"
+                      b"iQEzBAABCAAdFiEEASNFZ4mrze8BI0VniavN7wEjRWcFAmcFAAAACgkQASNFZ4mrze8AAA==\n=AAAA\n"
+                      b"-----END PGP SIGNATURE-----\n")
+
 
 def signing_problems(sh):
     """Run install.sh's own signature check against tags made here (skill #99, #101); [] when it answers each right.
@@ -224,16 +252,35 @@ def signing_problems(sh):
         sh_run("git", "-C", repo, "tag", "-a", "v0.1.47", "-m", "unsigned")
         sh_run("git", "-C", repo, "tag", "v0.1.48")
         commit = sh_run("git", "-C", repo, "rev-parse", "HEAD").strip()
+        # T-35 (#142): a tag whose message ends in an OpenPGP block, the scripts above, and the git configs that
+        # name them -- each a file in this temp dir, its paths written with forward slashes for git on Windows.
+        Path(tmp, "pgp-message").write_bytes(PGP_SIGNED_MESSAGE)
+        sh_run("git", "-C", repo, "tag", "-a", "v3.0.67", "-F", os.path.join(tmp, "pgp-message"))
+        stub_dir, old_dir = Path(tmp, "stub-git"), Path(tmp, "old-openssh")
+        stub_dir.mkdir()
+        old_dir.mkdir()
+        for path, body in ((Path(tmp, "sign-only.sh"), SIGN_ONLY_HELPER), (Path(tmp, "fake-gpg.sh"), FAKE_GPG),
+                           (stub_dir / "git", STUB_GIT), (old_dir / "ssh-keygen", OLD_SSH_KEYGEN)):
+            path.write_bytes(body)
+            path.chmod(0o755)
+        hostile, pgp = Path(tmp, "hostile.gitconfig"), Path(tmp, "pgp.gitconfig")
+        hostile.write_bytes(f'[gpg "ssh"]\n\tprogram = {Path(tmp, "sign-only.sh").as_posix()}\n'.encode("utf-8"))
+        pgp.write_bytes(f'[gpg]\n\tprogram = {Path(tmp, "fake-gpg.sh").as_posix()}\n'.encode("utf-8"))
     except (OSError, RuntimeError) as exc:
         return [f"the signature check's fixtures could not be made ({exc}) -- unrun is not agreed"]
     repo_posix = Path(repo).as_posix()
 
-    def run(call, skip="", dry="0"):
-        script = (f'export PATH="/usr/bin:$PATH"\nsay() {{ printf "%s\\n" "$*"; }}\nwarn() {{ printf "! %s\\n" "$*"; }}\n'
+    def run(call, skip="", dry="0", config=os.devnull, first_on_path=None):
+        # A folder put first on PATH goes in as bash spells it: `cd` takes a Windows path, `pwd` answers in Git Bash's
+        # own form, which PATH's colons can carry.
+        first = f'"$(cd "{first_on_path.as_posix()}" && pwd)":' if first_on_path else ""
+        script = (f'export PATH={first}"/usr/bin:$PATH"\nsay() {{ printf "%s\\n" "$*"; }}\n'
+                  f'warn() {{ printf "! %s\\n" "$*"; }}\n'
                   f'DRY_RUN={dry}\nAUTOSOUND_SKIP_TAG_VERIFY="{skip}"\nSKILL_SIGNING_PRINCIPAL=author\n'
                   f'SKILL_SIGNING_KEY="{keys["author"]}"\nSKILL_SIGNED_FROM=v3.0.64\nTCC_SIGNED_FROM=v0.1.45\n'
                   f'TCC_REPO="{repo_posix}"\n' + functions + call)
-        r = subprocess.run([bash, "-s"], input=script.encode("utf-8"), capture_output=True, env=env)
+        r = subprocess.run([bash, "-s"], input=script.encode("utf-8"), capture_output=True,
+                           env=dict(env, GIT_CONFIG_GLOBAL=str(config)))
         return r.returncode, r.stdout.decode("utf-8", "replace") + r.stderr.decode("utf-8", "replace")
 
     out = []
@@ -245,6 +292,20 @@ def signing_problems(sh):
         if rc != want_rc or want_text not in said:
             out.append(f"install.sh verify_tag {ref}{' (skip)' if skip else ''}: exit {rc}, want {want_rc} "
                        f"and {want_text!r} -- said {said.strip()[-160:]!r}")
+    # T-35 (#142): a signature is the author's or nothing, whatever the person's git or GPG configuration says. A
+    # sign-only helper as gpg.ssh.program (1Password's, for one) is not asked, so the good tag passes; an OpenPGP tag
+    # the person's gpg calls good (git picks the verifier from the signature, not gpg.format) and a git that says
+    # "Good" of any tag are refused, though each exits 0 with "Good". Last, an ssh-keygen with no -Y is a machine that
+    # cannot check, said as such: its refusal is not called a bad signature.
+    t35_cases = ((hostile, None, "v3.0.64", 0, "signed by the skill's author", "a sign-only gpg.ssh.program"),
+                 (pgp, None, "v3.0.67", 1, "does not check out", "a gpg.program that calls an OpenPGP tag good"),
+                 (os.devnull, stub_dir, "v3.0.64", 1, "does not check out", "a git on PATH that says Good"),
+                 (os.devnull, old_dir, "v3.0.64", 1, "could not be checked here", "an ssh-keygen with no -Y"))
+    for config, first_on_path, ref, want_rc, want_text, what in t35_cases:
+        rc, said = run(f'verify_tag "{repo_posix}" "{ref}" 2>&1\n', config=config, first_on_path=first_on_path)
+        if rc != want_rc or want_text not in said:
+            out.append(f"install.sh verify_tag {ref} under {what}: exit {rc}, want {want_rc} and {want_text!r} "
+                       f"-- said {said.strip()[-160:]!r}")
     # The app's tags, through check_tcc_tag: (ref, the switch, a dry run, exit, words, the commit it hands on).
     tcc_cases = (("v0.1.45", "", "0", 0, "v0.1.45 is signed by TCC's author", commit),
                  ("v0.1.46", "", "0", 1, "does not check out", ""),
@@ -555,6 +616,9 @@ def main():
     if not sig:
         checked.append("install.sh's verify_tag passes a signed tag, refuses a foreign-signed and an unsigned one, "
                        "lets an older tag and a branch through, and says when the switch skips it")
+        checked.append("install.sh's verify_tag takes only the author's SSH signature: a sign-only gpg.ssh.program "
+                       "is not asked, an OpenPGP 'Good' and a git that says 'Good' are refused, and an ssh-keygen "
+                       "with no -Y is a machine that cannot check (T-35, run)")
         checked.append("install.sh's check_tcc_tag does the same for the app's tags from a bare fetch, hands on the "
                        "verified commit, refuses a tag it cannot fetch, and tcc_tag_still_at refuses a moved tag (run)")
     if "Test-TagSignature" not in ps1 or "gpg.ssh.allowedSignersFile" not in ps1:
@@ -569,6 +633,19 @@ def main():
                             "drops stderr there, so a good signature reads as refused")
         else:
             checked.append("install.ps1's Test-TagSignature reads git's stderr (not under SilentlyContinue)")
+    # T-35 (#142): one verifier, pinned, and one sentence accepted, in all three checks. install.sh's is RUN above; the
+    # other two are READ here -- no PowerShell on the author's Mac or in the Linux job, and upkeep's selftest runs its own.
+    read_halves = (("install.ps1", re.search(r"^function Test-TagSignature \{.*?^\}", ps1, re.M | re.S)),
+                   ("upkeep.py", re.search(r"^def verify_tag\(.*?(?=^\S)", up, re.M | re.S)))
+    t35_missing = [f"{where}: {needle}" for where, fn in read_halves
+                   for needle in ("gpg.ssh.program=ssh-keygen", 'Good "git" signature for ')
+                   if not fn or needle not in fn.group(0)]
+    if t35_missing:
+        problems.append("a signature check leaves the verifier to the person's git config or takes more than the "
+                        "author's sentence -- missing " + "; ".join(t35_missing) + " (T-35)")
+    else:
+        checked.append('install.ps1 and upkeep.py pin gpg.ssh.program=ssh-keygen and accept only `Good "git" signature '
+                       'for <principal> with`, as install.sh does (read, not run)')
     # ...and the app's tag, both installers (#101): checked before uv, held to its commit right before it. install.sh's
     # functions are RUN above; these are the calls that put them in the app's path, and install.ps1's half, READ.
     tcc_calls = (("install.sh", sh, ('check_tcc_tag "$TCC_REF"', 'tcc_tag_still_at "$TCC_REF" "$TCC_SHA"')),

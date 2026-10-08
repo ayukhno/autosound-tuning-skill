@@ -923,6 +923,10 @@ function Test-SettledByName {
 # Is $Ref, fetched into $Dir, a signed release (skill #99)? $true -- or it is settled by its name, above; $false --
 # nothing may be installed from it. $SignedFrom and $Whose are the method's unless given: the app's own tags pass
 # $TccSignedFrom and "TCC" (skill #101). The mirror of verify_tag in install.sh.
+#   A good signature is one answer only (T-35, #142): git's success and ssh-keygen's line 'Good "git" signature for
+# <principal> with ...', whatever the person's git or GPG configuration says. ssh-keygen is named for the check, so a
+# sign-only helper set as gpg.ssh.program is not asked to verify; and git picks the verifier from the signature, not
+# from gpg.format, so an OpenPGP tag the person's own gpg calls good says "Good" too.
 function Test-TagSignature {
     param([string]$Dir, [string]$Ref, [string]$SignedFrom = $SkillSignedFrom, [string]$Whose = "the skill")
     if (Test-SettledByName $Ref $SignedFrom) { return $true }
@@ -933,14 +937,16 @@ function Test-TagSignature {
     # reason on stderr -- the VM refused beta-v3.0.64-rc1 with no reason printed at all (2026-09-29).
     $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
     $global:LASTEXITCODE = 0
-    $out = @(& git -C $Dir -c gpg.format=ssh -c "gpg.ssh.allowedSignersFile=$signers" verify-tag $Ref 2>&1)
+    $out = @(& git -C $Dir -c gpg.format=ssh -c gpg.ssh.program=ssh-keygen -c "gpg.ssh.allowedSignersFile=$signers" verify-tag $Ref 2>&1)
     $rc = $LASTEXITCODE
     $ErrorActionPreference = $prev
     Remove-Item $signers -Force -ErrorAction SilentlyContinue
     $said = ($out | ForEach-Object { "$_" }) -join "`n"
-    if ($rc -eq 0 -and $said -match 'Good') { Say "OK   $Ref is signed by $Whose's author"; return $true }
-    # A git that cannot check is not a bad signature -- see install.sh. Case-sensitive, as install.sh's `case` is.
-    if ($said -cmatch 'gpg\.format|unknown option|-Y|cannot run ssh-keygen|cannot spawn ssh-keygen') {
+    # Case-sensitive (-cmatch; -match is not), as install.sh's grep and case are.
+    $good = '(?m)^Good "git" signature for ' + [regex]::Escape($SkillSigningPrincipal) + ' with '
+    if ($rc -eq 0 -and $said -cmatch $good) { Say "OK   $Ref is signed by $Whose's author"; return $true }
+    # A git that cannot check is not a bad signature -- git's own sentences, whole, as install.sh reads them.
+    if ($said -cmatch 'unsupported value for gpg\.format|ssh-keygen -Y find-principals/verify|illegal option -- Y|unknown option -- Y|cannot run ssh-keygen|cannot spawn ssh-keygen') {
         Warn "the signature of $Ref could not be checked here -- it is not installed:"
         $out | Select-Object -Last 2 | ForEach-Object { Write-Host "      $_" }
         Warn "this git ($(& git --version 2>$null)) may be too old to check one: 2.34 or newer is needed"

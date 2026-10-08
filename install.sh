@@ -867,22 +867,30 @@ settled_by_name() {  # settled_by_name <ref> <first signed tag>
 # Is <ref>, fetched into <dir>, a signed release (skill #99)? 0 = yes -- or it is settled by its name, above. 1 = it
 # is not, and nothing may be installed from it. <first signed tag> and <whose> are the method's unless given: the
 # app's own tags pass TCC_SIGNED_FROM and "TCC" (skill #101).
+#   A good signature is one answer only (T-35, #142): git's exit 0 and ssh-keygen's line `Good "git" signature for
+# <principal> with ...`, whatever the person's git or GPG configuration says. ssh-keygen is named for the check, so a
+# sign-only helper set as gpg.ssh.program (1Password's, for one) is not asked to verify; and git picks the verifier
+# from the signature, not from gpg.format, so an OpenPGP tag the person's own gpg calls good exits 0 with "Good" too.
 verify_tag() {  # verify_tag <dir> <ref> [<first signed tag> <whose>]
   _vt_dir="$1"; _vt_ref="$2"; _vt_from="${3:-$SKILL_SIGNED_FROM}"; _vt_whose="${4:-the skill}"
   settled_by_name "$_vt_ref" "$_vt_from" && return 0
   _vt_signers="$(mktemp)"
   printf '%s namespaces="git" %s\n' "$SKILL_SIGNING_PRINCIPAL" "$SKILL_SIGNING_KEY" > "$_vt_signers"
   _vt_rc=0
-  _vt_said="$(git -C "$_vt_dir" -c gpg.format=ssh -c gpg.ssh.allowedSignersFile="$_vt_signers" \
-                verify-tag "$_vt_ref" 2>&1)" || _vt_rc=$?
+  _vt_said="$(git -C "$_vt_dir" -c gpg.format=ssh -c gpg.ssh.program=ssh-keygen \
+                -c gpg.ssh.allowedSignersFile="$_vt_signers" verify-tag "$_vt_ref" 2>&1)" || _vt_rc=$?
   rm -f "$_vt_signers"
-  case "$_vt_rc:$_vt_said" in
-    0:*Good*) say "  ✓ $_vt_ref is signed by $_vt_whose's author"; return 0 ;;
-  esac
-  # A git that cannot check is not a bad signature (TCC's `_CANNOT_CHECK`): before 2.34 git does not know
-  # gpg.format=ssh, an old ssh-keygen has no -Y, and with no ssh-keygen git cannot run one. Refused all the same.
+  if [ "$_vt_rc" = 0 ] && printf '%s\n' "$_vt_said" \
+       | grep -q "^Good \"git\" signature for $SKILL_SIGNING_PRINCIPAL with "; then
+    say "  ✓ $_vt_ref is signed by $_vt_whose's author"; return 0
+  fi
+  # A git that cannot check is not a bad signature (TCC's `_CANNOT_CHECK`) -- git's own sentences, whole, never a
+  # word of them: a bare "-Y" matched a signing helper's text and blamed git's age. Before 2.34 git does not know
+  # gpg.format=ssh; from 2.34 it names an ssh-keygen older than OpenSSH 8.2 (which has no -Y) in a sentence of its
+  # own; with no ssh-keygen it cannot run one ("spawn" in Git for Windows). Refused all the same.
   case "$_vt_said" in
-    *gpg.format*|*"unknown option"*|*"-Y"*|*"cannot run ssh-keygen"*|*"cannot spawn ssh-keygen"*)
+    *"unsupported value for gpg.format"*|*"ssh-keygen -Y find-principals/verify"*|*"illegal option -- Y"*|\
+    *"unknown option -- Y"*|*"cannot run ssh-keygen"*|*"cannot spawn ssh-keygen"*)
       warn "the signature of $_vt_ref could not be checked here -- it is not installed:"
       printf '%s\n' "$_vt_said" | tail -2 | sed 's/^/      /' >&2
       warn "this git ($(git --version 2>/dev/null)) may be too old to check one: 2.34 or newer is needed"
