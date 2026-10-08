@@ -12,7 +12,7 @@ This phase acts as the final technical gate before proceeding to subjective list
 
 **Questions this phase answers:** does the measured system meet target/joint/symmetry criteria? do independent reviewers agree? is it stable enough to lock?
 
-**Required evidence:** the full verification MMM set (each `_final` channel, Ws/Ms/TWs, sw+Ws, L/R sides, `ALL_final`); independent Claude + Gemini analyses.
+**Required evidence:** the full verification MMM set (each `_final` channel, Ws/Ms/TWs, SW+Ws, L/R sides, `ALL_final`); independent Claude + Gemini analyses.
 
 **✅ Quality gate → Phase 4/5 (Technical Lock):** verification scans captured; **two independent (cross-vendor) verdicts**; **a minimum ear assessment passed** — **stage** (mono-center / EMMA) **and overall tonal balance** — with an honest read of the result logged and the **Arbiter satisfied** (or the dissatisfaction resolved by an adjustment / a step back); disagreements resolved or escalated to the Arbiter (Disagreement Table at 3/3); config backed up to `dsp-config/`, changelog and audit-trail updated; `dsp-state-current` re-rendered (generated, never edited).
 

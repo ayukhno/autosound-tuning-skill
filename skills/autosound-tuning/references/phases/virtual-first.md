@@ -80,11 +80,12 @@ gear **costs** you:
 
 None of these blocks the path; they widen the delta the verification must forgive.
 
-## The ledger is the one source of truth
+## The ledger is the record
 
-Every change to the DSP is written to the ledger at the moment it is entered; nothing is asked twice.
-A question to the user is warranted only when the alternative is a **guess** — an error is not a
-problem, it is fixed together. (This matters most for a car that is already tuned, where the whole current tune is
+Every change to the DSP is written to the ledger at the moment it is entered; nothing is asked twice —
+except the DSP screen before a delta: the ledger HEAD says what was banked, the screen what is set now
+(`process-control.md`). A question to the user is warranted only when the alternative is a **guess** — an
+error is not a problem, it is fixed together. (This matters most for a car that is already tuned, where the whole current tune is
 transcribed once from the PC-Tool screens.)
 
 ## The path, phase by phase (input → action → output)
@@ -93,9 +94,9 @@ Step names describe the action, not a command. The joint and L/R **phase** is th
 **set in 1.5 joints, checked on the prediction in 1.8 predict, and checked again in 2.2 check after EQ**.
 
 ### Phase −1 · Intake (desk) — *goal: decide nothing in the car, and be surprised by nothing*
-- **−1.1** log Phase −1; run the intake (`phase_-1_intake.md §0.5`); among its outputs, the dialogue
-  language (`project.json` `language.reply` + a recorded decision); read the current DSP settings
-  into the ledger; show the loss table above.
+- **−1.1** log Phase −1; *the dialogue language* — `project.json` `language.reply` + a recorded decision,
+  the step closed on `project.json` (`project-intake.md` §0); the intake (`phase_-1_intake.md §0.5`) then
+  reads the current DSP settings into the ledger and shows the loss table above.
 - **−1.2** *the reviewer channel*: one live `doctor` run once the profile is written, recorded
   (`project-intake.md` §0) — the step closes on rc 0 with the doctor's live-call line, or is blocked with
   what it said.
@@ -351,8 +352,8 @@ reveals a broken driver or wiring); without a rig, Fs from the datasheet with ma
   **The plan of Phase 2 on this path is these four steps and no more** (the Arbiter, skill #73: a ten-step plan
   that mixed this path with the iterative one measured, computed and wrote without moving). Each step is named
   for what it ENDS IN, which he sees — a version, a verdict, a review file, a sheet — never for a rule it follows;
-  the rules (Q ceiling, tolerance; ≤ 6 dB per band, and no boost unless `--allow-boost` AND the excess-phase
-  gate allow it — `eq_propose`, its packages cuts only) are the tools' and are not steps. A capture round, a
+  the rules (Q ceiling, tolerance; cuts only, ≤ 6 dB per band — `eq_propose` proposes no boost, `--allow-boost`
+  or not) are the tools' and are not steps. A capture round, a
   listening or a control series has no place in it: those are Phase 3's. As `add-step` lines:
 
   ```

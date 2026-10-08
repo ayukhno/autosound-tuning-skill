@@ -618,10 +618,12 @@ CHEAT_ROUTE = "where a ✗ goes"
 #: a pointer lands when its word starts its step's name here. Each name stands on its step's opening line in
 #: `virtual-first.md`, and the rule holds it there, so a renumber cannot leave the table behind unseen. The opening
 #: lines cite their neighbours as well (1.3 "without the wishes", 1.4 "BEFORE the delays", 1.5 "with the coarse
-#: EQ", 2.3 "the second"), so a pointer is held to its step's name, not to whatever its step's line says. −1.2 and
-#: −1.5 are named before anything points at them: the new DSP moved from −1.2 to −1.5 when the reviewer channel took
-#: −1.2 (the code's ids, `intake.py`), and a pointer left on the old number is named with the step its word starts.
+#: EQ", 2.3 "the second"), so a pointer is held to its step's name, not to whatever its step's line says. −1.1, −1.2
+#: and −1.5 are named before anything points at them: the new DSP moved from −1.2 to −1.5 when the reviewer channel
+#: took −1.2 (the code's ids, `intake.py`), and a pointer left on the old number is named with the step its word
+#: starts; −1.1 is the dialogue language, the decision `intake.py` records under it (the S1 review, Minor 7).
 STEP_NAMES = {
+    "-1.1": "dialogue language",
     "-1.2": "reviewer channel",
     "-1.3": "protective filters",
     "-1.5": "new DSP",
@@ -1085,7 +1087,7 @@ def _check_phrase_first_letter_in_either_case():
 #: neighbours some of those lines cite (1.3 "without the wishes", 1.4 "BEFORE the delays", 1.5 "with the coarse EQ",
 #: 2.3 "the second"), a phase-0 step, and the words a number that is no pointer meets there ("order", "project", "dB").
 _IDS_HOME = ("# V\n\n### Phase −1\n"
-             "- **−1.1** log Phase −1; run the intake.\n"
+             "- **−1.1** log Phase −1; *the dialogue language* — `project.json` + a recorded decision.\n"
              "- **−1.2** *the reviewer channel*: one live `doctor` run, recorded.\n"
              "- **−1.5** *new DSP* (only if not in the knowledge base): a profile.\n"
              "- **−1.3** channels → the glossary; **protective filters** for the capture.\n\n"

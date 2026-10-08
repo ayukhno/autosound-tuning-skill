@@ -25,7 +25,7 @@ This is the core technical execution phase — **the second part of EQ**. The fi
 
 ## 2a — L/R Pairs per Band, and What the Coarse Pass Left
 The per-driver resonance package is already banked (Phase 1 §5.5). 2a starts from **the L/R shape per pair** — left and right become one shape, broadly, on the louder side, Q ≤ 1, because what skews the stage is the L/R difference, not the distance from the target — and then takes whatever the coarse pass left on a channel, by the rules below.
-Linearize each individual channel to its own **per-band target** (from Phase 1 §5 / `target_bands.py`), using its **`<ch>_2 (rta)`** for the magnitude to EQ and its **`<ch>_2 (sw)`** excess-phase to decide what is EQ-able. **≤ 6 dB per band, and no boost unless `--allow-boost` AND the excess-phase gate allow it** (`eq_propose`; its packages are cuts only) — a band that asks for a bigger boost is a null or an install problem, not missing level (the excess-phase read says which). Calculate the correction from `analysis.py` **`compute_deviation`** (measured − target) — don't eyeball it; and **read the channel's current filters first** (`get_filters`/`get_equaliser`) — never assume it is raw (a real bug overwrote the user's manual notches).
+Linearize each individual channel to its own **per-band target** (from Phase 1 §5 / `target_bands.py`), using its **`<ch>_2 (rta)`** for the magnitude to EQ and its **`<ch>_2 (sw)`** excess-phase to decide what is EQ-able. **Cuts only, ≤ 6 dB per band** (`eq_propose`: neither part proposes a boost, `--allow-boost` or not) — a band that asks for a boost is a null or an install problem, not missing level (the excess-phase read says which). Calculate the correction from `analysis.py` **`compute_deviation`** (measured − target) — don't eyeball it; and **read the channel's current filters first** (`get_filters`/`get_equaliser`) — never assume it is raw (a real bug overwrote the user's manual notches).
 
 > **⚡ Mass read in one shot:** get the whole-batch picture with `python3 rew_tool.py analyze-batch "_2 (rta)"` — one consolidated deviation matrix (every `_2` driver vs its per-band target, band means + `anchor` + `ripple`), one review pass, ~5× fewer API round-trips than pulling each driver in the interactive REPL. Read the matrix first to see which channels need hygiene EQ; drill into a specific driver interactively only where a cell looks off (or the excess-phase decision is needed).
 
@@ -46,7 +46,7 @@ Linearize each individual channel to its own **per-band target** (from Phase 1 �
 > banked as one ledger version. Tolerance to the target is not a constant: **max(1 dB, 2σ(f))**, σ from the
 > ellipsoid's own spread. Commands: `rew_tool/ellipsoid.py` (σ(f), stays/moves, the Q ceiling) and
 > `rew_tool/eq_propose.py` (the packages, each with why, a listening id, a score before/after and its
-> `apply.propose` delta). Cuts only; a boost needs `--allow-boost` **and** the excess-phase gate.
+> `apply.propose` delta). Cuts only, `--allow-boost` or not.
 
 ### Rules of Action
 0. **Read how the pair is installed before matching it:** `channels[].install` (how each driver is installed, in the person's own words) and `hardware.description`. A tweeter aimed at one seat's ear is on-axis there and off-axis at every other seat. An L/R treble difference that follows the aim is the INSTALL, not the cabin. Say so, and do not EQ one side into the other's axis (W-2 A.7).
