@@ -35,9 +35,10 @@ not proposed here. What this module does say is when a package's bands reach int
 band (+-1 oct of its corner): `recheck_junctions` names the junction, and the delay there is
 re-read (`predict --align`) before the package is banked -- otherwise the delays stay.
 
-Budgets: <= 6 bands per channel, <= 6 dB per band, no boosts unless `--allow-boost` AND the
-excess-phase gate allows. Every package carries WHY (which gates said yes) and a score before /
-after on the scale where the curve is true (1/3-oct residual vs target, and L-R per band).
+Budgets: <= 6 bands per channel, <= 6 dB per band, and no boosts: the packages are cuts only, a
+boost path is not built (R74), so a dip is left out and said, and `--allow-boost` changes nothing
+yet -- taken, and said so on stderr. Every package carries WHY (which gates said yes) and a score
+before / after on the scale where the curve is true (1/3-oct residual vs target, and L-R per band).
 
 Where a channel PLAYS bounds everything it is given (skill #56 item 7): each channel's live band is
 read on its own curve (within LIVE_BAND_DB of its passband level, anchored on its ledger corners),
@@ -414,7 +415,9 @@ def package_res(f, group, codes, meas, targets, joints, ellipsoids, gates, allow
             elif excl[k]:
                 reason = "within an octave of a junction -- delay/polarity/APF territory (1.5 joints), not EQ"
             elif ft["kind"] == "dip":
-                reason = ("a dip: a boost needs --allow-boost and the excess-phase gate"
+                # The packages are cuts only (R74): no boost path is built, and `allow_boost` is not read here -- the
+                # reason named it, and sent the person round a loop.
+                reason = ("a dip: the packages do not boost -- a boost path is not built"
                           if fc < SCHROEDER_HZ else
                           "a dip above Schroeder: the position, not the car (Rayleigh statistics)")
             elif w < RES_WIDTH[0]:
@@ -974,7 +977,8 @@ def _main(argv=None):
     ap.add_argument("--ellipsoid", metavar="DIR", default=None, help="v7 dir with `<code>-pN.json` positions")
     ap.add_argument("--route", action="append", default=[], metavar="VIRTUAL=out1,out2")
     ap.add_argument("--preset", default=None)
-    ap.add_argument("--allow-boost", action="store_true")
+    ap.add_argument("--allow-boost", action="store_true",
+                    help="taken, and changes nothing: no package boosts yet (a boost path is not built)")
     ap.add_argument("--part", default="all", choices=PARTS,
                     help="1 = the coarse per-driver EQ (Phase 1, before the delays); 2 = pairs and tone (Phase 2); all")
     ap.add_argument("--accept", default=None, help="comma list of package ids to merge into eq-delta.json")
@@ -985,6 +989,11 @@ def _main(argv=None):
                          f"{LEFT_OUT_SHOWN} (skill #70); the JSON is the same either way")
     ap.add_argument("--selftest", action="store_true")
     args = ap.parse_args(argv)
+    if args.allow_boost:
+        # R74: the flag stays -- a person's command line may carry it; TCC never passes it -- and changes nothing, so
+        # it says so rather than seem to have let a boost through.
+        print("  ⚠ --allow-boost: no package boosts yet -- a boost path is not built, and every package is cuts "
+              "only", file=sys.stderr)
     # The response model is bound to THIS device's processing rate before anything is modelled.
     # Not inside a branch: the crossover model runs on every path, and a binding that happens only
     # where the delay grid is computed leaves the common case on a module constant (hub #28).
@@ -1258,6 +1267,32 @@ def _check_junction_band_names_its_step():
     assert not pk["bands"]["m-L"], pk["bands"]
 
 
+def _check_no_boost_path_said():
+    """The packages are cuts only, and what is said follows the code (R74): a dip below Schroeder is left out as "the
+    packages do not boost -- a boost path is not built", never as "a boost needs --allow-boost and the excess-phase
+    gate" -- a flag `package_res` never reads, which sent the person round a loop. `--allow-boost` stays (a person's
+    command line may carry it; TCC never passes it) and says on stderr that no package boosts yet; without it,
+    nothing is said."""
+    import contextlib
+    import io as _io
+    f = P.grid(20, 20000, 96)
+    meas = {"m-L": _db(dsp_math.peq_response(f, "PK", 150.0, -6.0, 4.0))}
+    for allow in (False, True):
+        pk = package_res(f, "mid", ["m-L"], meas, {"m-L": np.zeros_like(f)}, [], {}, {}, allow_boost=allow)
+        reasons = [lo["reason"] for lo in pk["left_out"] if abs(math.log2(lo["f"] / 150.0)) < 1 / 6]
+        assert reasons == ["a dip: the packages do not boost -- a boost path is not built"] and not pk["bands"]["m-L"], \
+            (allow, reasons, pk["bands"])
+    for argv, said in ((["--allow-boost"], True), ([], False)):
+        err = _io.StringIO()
+        with contextlib.redirect_stdout(_io.StringIO()), contextlib.redirect_stderr(err):
+            try:
+                main(argv)
+            except SystemExit:
+                pass                                 # no project: the usage error after the flag's note
+        note = "--allow-boost: no package boosts yet -- a boost path is not built, and every package is cuts only"
+        assert (note in err.getvalue()) is said, (argv, err.getvalue()[-300:])
+
+
 def _selftest():
     """Anchored to the definitions: a driver resonance is cut where it is, a comb is not boosted,
     a moving peak is not proposed, an L/R shelf difference goes to the pair package, a tonal
@@ -1266,7 +1301,7 @@ def _selftest():
     import ellipsoid as E
     failures = []
     for check in (_check_profile_read_strictly, _check_refusal_names_its_reason, _check_refused_notes_never_cut,
-                  _check_junction_band_names_its_step):
+                  _check_junction_band_names_its_step, _check_no_boost_path_said):
         try:
             check()
         except AssertionError as exc:
