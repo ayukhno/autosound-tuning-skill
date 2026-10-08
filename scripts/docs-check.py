@@ -1187,7 +1187,7 @@ def _check_step_ids():
         assert sum("routes to a bare" in c for c in bare) == 3, bare
         assert any("c16 routes to a bare 1.2" in c for c in bare), bare
         assert any("c17 routes to '4.2 levels'" in c and "there is no step 4.2" in c for c in bare), bare
-        # (d) a translation that still routes c01 to the old steps; a row it does not carry falls back to English
+        # (d) a translation that still routes c01 to the old steps
         stale = rule_step_ids(_ids_tree(tmp, uk=_IDS_UK.replace("(стіл 1.5 стики / 1.6 рівні)", "(стіл 1.3 / 1.4)")))
         assert len(stale) == 1 and "uk.md:5: c01 routes to 1.3, 1.4, the English to 1.5, 1.6" in stale[0], stale
         no_table = rule_step_ids(_ids_tree(tmp, uk="# Л\n\nнічого\n"))

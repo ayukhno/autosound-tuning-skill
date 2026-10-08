@@ -248,7 +248,8 @@ ignores the mode). The files, each with the bytes its old writer wrote:
 
 On Windows a move refused because a process holds the file open is retried for under a second (0.75 s), then raised,
 with the old file whole; `process.py` says it as a refusal, exit 1 (`<file> could not be written (...) -- close what
-holds it ...; it is as it was`). A `*.tmp` beside a file is a crash's leftover, never a file to read; a new project's
+holds it ...; it is as it was`; over a round `capture-start` supersedes: `...; the state is as it was, but <round>'s
+close (superseded) is in the journal already: ...`). A `*.tmp` beside a file is a crash's leftover, never a file to read; a new project's
 `.gitignore` ignores it. `scripts/atomic-write-check.py` holds this: outside `project_io.py`, no `.tmp` literal but
 two it names (neither is a temp name), and no `os.replace`, `os.rename` or `os.renames` but three named moves of whole
 files.
@@ -347,10 +348,11 @@ can still load a sibling that edits `sys.path`: `Process.enter_phase` loads `con
 loads `timebase.py`. From J1b (W-10), no module TCC imports, and no module those load, edits `sys.path` at import or
 at call time.
 
-The method's modules load their siblings through `rew_tool/siblings.py`, one module object per file under one lock
-(`siblings.load` adopts a copy already loaded, or waits for a load in progress); TCC's `reload_loaded()` drops
-`_autosound_<copy>_siblings` with that lock and its table, so drop it only when no method call is in flight, or a
-thread inside a load can run a file twice.
+A sibling the method loads lazily, or through a loader of its own, comes from `rew_tool/siblings.py`: one module
+object per file under one lock (`siblings.load` adopts a copy already loaded, or waits for a load in progress); the
+module-level sibling imports of the modules that put `rew_tool/` on `sys.path` (the W-10 rows above, `contract.py`)
+are not converted yet. TCC's `reload_loaded()` drops `_autosound_<copy>_siblings` with that lock and its table, so
+drop it only when no method call is in flight, or a thread inside a load can run a file twice.
 
 TCC also compares values that no name pins: naming's method tags `"sw"` and `"rta"`, rew_api's measurement kinds
 `"sweep"`, `"rta"` and `"impedance"`, and the journal's event names and fields. The shapes of returned values (the
@@ -450,6 +452,6 @@ path and the method's own raise different classes.
   names, and fails while that number has none, or while a frozen table is not the one its digest pins.
 - What the guard holds is the code against the frozen table, whatever `IMPORTABLE` says: a name of it renamed or
   removed in the code fails it, and so does a module of it dropped from `IMPORTABLE`. An edit of a frozen table
-  together with its digest, in one commit, passes it: that is caught by review, and held by a test on TCC's side
-  that keeps contract 1's table as TCC reads it.
+  together with its digest, in one commit, passes it: review alone catches that today. A test on TCC's side that
+  keeps contract 1's table as TCC reads it would hold it, and TCC keeps none yet.
 - Every change to an item is named in the CHANGELOG's `### Upgrading` note, with a line for TCC.

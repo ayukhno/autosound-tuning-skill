@@ -191,11 +191,12 @@ reads it, named with its repair, and is never read as empty (#136); contract 1 s
   fails; a new trailing parameter with a default does not. The table of contract 1 is frozen in the guard and pinned
   there by its digest, so a rename or a removal in the code fails even when `IMPORTABLE` is edited with it, an edit
   of the frozen table fails until its digest is edited too, and a bump fails until it freezes its own table with its
-  digest. That is where the guard stops: the table and its digest edited in one commit pass it -- review catches
-  that, and a test on TCC's side that keeps contract 1's table holds it (`CONTRACT.md` item 12). It also checks that every `_siblings()` copy is the text the guard holds, in a module that imports `os` and
-  `sys` at its top level; that no guaranteed module imports a sibling by its bare name inside a function, its command
-  line aside; that nothing calls `_siblings()` at import; and that each listed module loads by path from an empty
-  folder. Nine of the fifteen also leave `sys.path` alone, which CONTRACT.md's item 9 says and the guard holds.
+  digest. That is where the guard stops: the table and its digest edited in one commit pass it -- review alone
+  catches that today; a test on TCC's side that keeps contract 1's table would hold it, and TCC keeps none yet
+  (`CONTRACT.md` item 12). It also checks that every `_siblings()` copy is the text the guard holds, in a module that
+  imports `os` and `sys` at its top level; that no guaranteed module imports a sibling by its bare name inside a
+  function, its command line aside; that nothing calls `_siblings()` at import; and that each listed module loads by
+  path from an empty folder. Nine of the fifteen also leave `sys.path` alone, which CONTRACT.md's item 9 says and the guard holds.
 - **The files `rew_tool/CONTRACT.md` item 8 lists as replaced are now written atomically: a unique temp file, fsync,
   one move** (#135, audit T-8). That is `project.json`, `process-state.json` and the rest item 8 names: a crash or a
   second writer can no longer leave one of them half-written. Item 8 also names what is still written in place
@@ -548,7 +549,9 @@ reads it, named with its repair, and is never read as empty (#136); contract 1 s
     is written, but its journal line is not: ... once the journal can be written, append this line to ...: {...}`,
     where it was exit 70 with a traceback; an append refused with nothing written before it says `the <type> event was
     not recorded`, exit 1. A `process-state.json` whose replace is refused past the retries (Windows: a sync client, a
-    scanner) is exit 1, `... could not be written (...) -- close what holds it ...; it is as it was`, where it was 70.
+    scanner) is exit 1, `... could not be written (...) -- close what holds it ...; it is as it was` (over a round
+    `capture-start` supersedes: `...; the state is as it was, but <round>'s close (superseded) is in the journal
+    already: ...`), where it was 70.
     `session-close` records its close before it prints its report, so a refused close prints nothing first.
   - **A version banked without its seal** (F M-10) -- a bank whose seal write failed -- is reported by `verify_seals`
     and `state.py verify` (exit 3) as `banked, never sealed`, with the `seal` command, and `contract.py check`'s
@@ -1040,9 +1043,9 @@ reads it, named with its repair, and is never read as empty (#136); contract 1 s
   method module's `_siblings()` returns -- instead of loading it itself: `load` adopts a copy already loaded, or waits
   for a load in progress. TCC's `reload_loaded()` drops `_autosound_<copy>_siblings` with its lock and table: drop it
   only when no method call is in flight, or a thread inside a load can run a file twice. (`siblings.find_loaded` takes
-  no lock and can return a module that has not finished
-  running.) The `process.py` loaders return the shared object, not a copy of their own. The module-level sibling
-  `import`s elsewhere (`contract.py`, `verify.py`, ...) are not converted yet.
+  no lock and can return a module that has not finished running.) The `process.py` loaders return the shared object,
+  not a copy of their own. The module-level sibling `import`s elsewhere (`contract.py`, `verify.py`, ...) are not
+  converted yet.
 - **TCC:** contract 1 (#137). `CONTRACT_VERSION = 1` in `rew_tool/contract.py` is an int literal: read it from any tag
   with `ast` (`git show <tag>:skills/autosound-tuning/rew_tool/contract.py`), without running the file. For
   diagnostics, `python3 rew_tool/contract.py version [--json]` prints `{contract_version, format_version,

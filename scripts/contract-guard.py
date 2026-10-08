@@ -140,7 +140,7 @@ FROZEN = {
 #: tests m-6): `FROZEN` was held by nothing outside its own literal, so a name renamed in the code, in IMPORTABLE and in
 #: `FROZEN[1]` at once passed as "contract 1 holds". Now such an edit fails until this line is edited with it, in the
 #: same commit, as a changed digest a review sees. A speed bump, not a lock: the table and its digest edited together
-#: pass, and CONTRACT.md item 12 says so -- what holds contract 1's table then is review, and TCC's own test of it. A
+#: pass, and CONTRACT.md item 12 says so -- review alone holds contract 1's table then; TCC keeps no test of it yet. A
 #: bump to N+1 pins `FROZEN_SHA256[N+1]` with its table, and this line for N stays as it is.
 FROZEN_SHA256 = {
     1: "888c072264e8ff679310902432cfcac02e1866bbac69788dbf4b481a81ec6ed0",
@@ -633,8 +633,8 @@ def _check_frozen_table_held_by_its_digest():
     """Rule 6's table is held to its pinned digest (the final review's errors I1, tests m-6). Their probe renamed
     `get_fr` in the code, in IMPORTABLE and in the frozen table at once, and the guard said "contract 1 holds": nothing
     outside the table pinned it. Now that edit fails until the digest is edited with it, and so does a frozen table
-    with no digest. What the digest cannot see is held too, as CONTRACT.md item 12 says it: the table and its digest
-    edited in one commit pass -- that is review's to catch, and TCC's own test of contract 1's table."""
+    with no digest. What the digest cannot see, CONTRACT.md item 12 says: the table and its digest edited in one
+    commit pass -- review alone catches that today, and TCC keeps no test of contract 1's table yet."""
     with tempfile.TemporaryDirectory(prefix="contract_guard_digest_") as root:
         tool, scripts = os.path.join(root, "rew_tool"), os.path.join(root, "scripts")
         os.makedirs(tool)
