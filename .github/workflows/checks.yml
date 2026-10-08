@@ -130,13 +130,13 @@ jobs:
       - name: a synthetic set through both engines
         run: python skills/autosound-tuning/rew_tool/resonalyze_engine.py smoke
 
-  # The installers' exit contract on a machine as a person has it (#142, PLAN-AUDIT §3 J6a item 5): ubuntu-24.04's own
-  # /usr/bin/python3 -- no setup-python here -- is externally managed, so pip refuses the method's libraries there. A
-  # real `install.sh`, the method only, unattended: it must end 3, installed and NOT ready, with numpy named in its
-  # receipt -- not 0 and "Installed." over a python3 that cannot run the method. Real downloads (the method's signed
-  # tag, Claude Code), hence the time limit; not the reviewer's (`--no-reviewer`): a third party's download that fails
-  # says nothing about the exit contract. An install found READY fails too, naming why: the runner image changed, and
-  # this job no longer shows what it was written to show.
+  # The installers' exit contract on a machine as a person has it (#142, PLAN-AUDIT §3 J6a item 5): a stock Ubuntu
+  # 24.04's /usr/bin/python3 -- no setup-python here -- is externally managed (PEP 668), so pip refuses the method's
+  # libraries there. A real `install.sh`, the method only, unattended: it must end 3, installed and NOT ready, with numpy
+  # named in its receipt and in its verdict line -- not 0 and "Installed." over a python3 that cannot run the method.
+  # Real downloads (the method's signed tag, Claude Code), hence the time limit; not the reviewer's (`--no-reviewer`): a
+  # third party's download that fails says nothing about the exit contract. Claude Code's installer may be missing too
+  # (`| sh` under dash; next wave's pool) -- the job holds the verdict to the receipt, whatever else it names.
   installers-ubuntu:
     needs: gate
     if: needs.gate.outputs.run == 'true'
@@ -144,22 +144,39 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1     # v7
-      - name: install.sh on the runner's own python3 ends 3, numpy named in the receipt
+      # GitHub's image is not the stock one: its python3 carries no PEP 668 marker, and `pip install --user` took numpy
+      # there (CI 37845939761 ended "not ready" over Claude Code alone). The marker goes back where a stock Ubuntu 24.04
+      # has it -- the folder `sysconfig.get_path("stdlib")` names, which is where pip looks -- and a numpy the image
+      # already carries stops the job, naming the image: the install could not end "not ready" over it.
+      - name: the runner's python3 as a stock Ubuntu 24.04 has it -- externally managed, no numpy
         run: |
+          if /usr/bin/python3 -c "import numpy" 2>/dev/null; then
+            echo "::error::numpy already imports in /usr/bin/python3 on this runner image (${ImageOS:-?} ${ImageVersion:-?}) -- the install cannot end NOT ready over it, which is what this job holds it to"
+            exit 1
+          fi
+          stdlib="$(/usr/bin/python3 -c 'import sysconfig; print(sysconfig.get_path("stdlib"))')"
+          printf '%s\n' '[externally-managed]' \
+            'Error=To install Python packages system-wide, try apt install python3-xyz, where xyz is the package you are trying to install.' \
+            | sudo tee "$stdlib/EXTERNALLY-MANAGED" >/dev/null
+          echo "PEP 668's marker is in place: $stdlib/EXTERNALLY-MANAGED"
+      - name: install.sh on the runner's own python3 ends 3, numpy named in the receipt and in the verdict
+        run: |
+          set -o pipefail
+          log="$RUNNER_TEMP/install.log"
           rc=0
-          bash install.sh --terminal --no-engine --no-reviewer --yes || rc=$?
+          bash install.sh --terminal --no-engine --no-reviewer --yes 2>&1 | tee "$log" || rc=$?
           receipt="${XDG_DATA_HOME:-$HOME/.local/share}/autosound/install-receipt.json"
           echo "install.sh ended with exit $rc; its receipt, $receipt:"
           cat "$receipt" || true
           if [ "$rc" = 0 ]; then
-            echo "::error::install.sh ended READY (exit 0) on ubuntu-24.04's /usr/bin/python3 -- the runner image changed (numpy imports there now?), and this job expects 3: installed, NOT ready"
+            echo "::error::install.sh ended READY (exit 0) on an externally managed /usr/bin/python3 -- pip took the libraries anyway, and this job expects 3: installed, NOT ready"
             exit 1
           fi
           if [ "$rc" != 3 ]; then
             echo "::error::install.sh ended with exit $rc, not 3 (installed, NOT ready)"
             exit 1
           fi
-          /usr/bin/python3 - "$receipt" <<'PYEOF'
+          /usr/bin/python3 - "$receipt" "$log" <<'PYEOF'
           import json, sys
           with open(sys.argv[1], encoding="utf-8-sig") as fh:
               receipt = json.load(fh)
@@ -167,7 +184,15 @@ jobs:
           if status != "not ready" or not isinstance(missing, list) or "numpy" not in missing:
               print(f"::error::the receipt says status {status!r}, missing {missing!r} -- want 'not ready' with numpy")
               sys.exit(1)
-          print(f"exit 3, and the receipt says {status!r}, missing {missing}: the exit contract holds")
+          # The verdict on screen and the receipt are one record: the line `Installed, NOT ready: <names>` names the
+          # receipt's parts, in its order.
+          verdict = "Installed, NOT ready: "
+          with open(sys.argv[2], encoding="utf-8", errors="replace") as fh:
+              said = [line.rstrip("\r\n")[len(verdict):] for line in fh if line.startswith(verdict)]
+          if len(said) != 1 or said[0].split(", ") != missing:
+              print(f"::error::the run's verdict names {said!r}, and its receipt {missing!r} -- want one line naming the same parts")
+              sys.exit(1)
+          print(f"exit 3, the receipt says {status!r} and the verdict names {missing}: the exit contract holds")
           PYEOF
 
   # The installer triplet on Windows (hub TCC-010). v3.0.50's beta-channel order check ran `bash`, and
