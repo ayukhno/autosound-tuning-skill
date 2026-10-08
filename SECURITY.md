@@ -31,15 +31,16 @@ installs it: one that does not verify is not installed, and the method's install
 - fingerprint `SHA256:nSazijzZf///QKgfVXJBRd2fl7QMd2Xu4uwjc7MGbSo` (ED25519)
 - in [`allowed_signers`](allowed_signers), so anyone can check a tag by hand -- the good answer is the line that
   starts `Good "git" signature for ayukhno with`:
-  `git -c gpg.ssh.program=ssh-keygen -c gpg.ssh.allowedSignersFile=allowed_signers verify-tag v3.0.64`
+  `git -c gpg.ssh.program=ssh-keygen -c gpg.minTrustLevel=fully -c gpg.ssh.allowedSignersFile=allowed_signers verify-tag v3.0.64`
 
 The installers carry the same key as a constant rather than reading this repository's file, so a tag cannot vouch
 for itself. All three checks accept the author's SSH signature only, whatever the person's git or GPG configuration
 says: git's success and that one line, nothing else. They name `ssh-keygen` for the check, so a signing helper set as
-`gpg.ssh.program` (1Password's, for one) does not do the verifying; and a tag signed with an OpenPGP key is refused
-even when the person's own keyring vouches for it -- git picks the verifier from the signature, and says "Good" for
-that one too. `AUTOSOUND_SKIP_TAG_VERIFY=1` turns the check off for one run and says so in the log; it exists for
-development and is never needed to install a release.
+`gpg.ssh.program` (1Password's, for one) does not do the verifying; they hold `gpg.minTrustLevel` at `fully`, git's
+rating of a key in `allowed_signers`, so a stricter setting of the person's does not refuse every release; and a tag
+signed with an OpenPGP key is refused even when the person's own keyring vouches for it -- git picks the verifier from
+the signature, and says "Good" for that one too. `AUTOSOUND_SKIP_TAG_VERIFY=1` turns the check off for one run and
+says so in the log; it exists for development and is never needed to install a release.
 
 ## Encrypted reports
 

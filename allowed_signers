@@ -1,5 +1,5 @@
 # Who signs release tags of this skill (skill #99, hub #82 HUB-031). For people and for `git verify-tag`:
-#   git -c gpg.ssh.program=ssh-keygen -c gpg.ssh.allowedSignersFile=allowed_signers verify-tag v3.0.64
+#   git -c gpg.ssh.program=ssh-keygen -c gpg.minTrustLevel=fully -c gpg.ssh.allowedSignersFile=allowed_signers verify-tag v3.0.64
 # The good answer is the line that starts `Good "git" signature for ayukhno with` (SECURITY.md, T-35).
 # The installers and scripts/upkeep.py do NOT read this file -- they carry the same key as a constant, because a
 # tag's own copy of this file would vouch for itself. installer-consistency.py checks that all of them agree.

@@ -871,13 +871,15 @@ settled_by_name() {  # settled_by_name <ref> <first signed tag>
 # <principal> with ...`, whatever the person's git or GPG configuration says. ssh-keygen is named for the check, so a
 # sign-only helper set as gpg.ssh.program (1Password's, for one) is not asked to verify; and git picks the verifier
 # from the signature, not from gpg.format, so an OpenPGP tag the person's own gpg calls good exits 0 with "Good" too.
+# gpg.minTrustLevel is held at `fully`, git's rating of a key in allowed_signers: a person's `ultimate` made git refuse
+# every good release, with the Good line printed. It loosens nothing -- the sentence still decides.
 verify_tag() {  # verify_tag <dir> <ref> [<first signed tag> <whose>]
   _vt_dir="$1"; _vt_ref="$2"; _vt_from="${3:-$SKILL_SIGNED_FROM}"; _vt_whose="${4:-the skill}"
   settled_by_name "$_vt_ref" "$_vt_from" && return 0
   _vt_signers="$(mktemp)"
   printf '%s namespaces="git" %s\n' "$SKILL_SIGNING_PRINCIPAL" "$SKILL_SIGNING_KEY" > "$_vt_signers"
   _vt_rc=0
-  _vt_said="$(git -C "$_vt_dir" -c gpg.format=ssh -c gpg.ssh.program=ssh-keygen \
+  _vt_said="$(git -C "$_vt_dir" -c gpg.format=ssh -c gpg.ssh.program=ssh-keygen -c gpg.minTrustLevel=fully \
                 -c gpg.ssh.allowedSignersFile="$_vt_signers" verify-tag "$_vt_ref" 2>&1)" || _vt_rc=$?
   rm -f "$_vt_signers"
   if [ "$_vt_rc" = 0 ] && printf '%s\n' "$_vt_said" \
@@ -893,7 +895,8 @@ verify_tag() {  # verify_tag <dir> <ref> [<first signed tag> <whose>]
     *"unknown option -- Y"*|*"cannot run ssh-keygen"*|*"cannot spawn ssh-keygen"*)
       warn "the signature of $_vt_ref could not be checked here -- it is not installed:"
       printf '%s\n' "$_vt_said" | tail -2 | sed 's/^/      /' >&2
-      warn "this git ($(git --version 2>/dev/null)) may be too old to check one: 2.34 or newer is needed"
+      warn "this git ($(git --version 2>/dev/null)) or its ssh-keygen may be too old to check one:" \
+           "git 2.34 or newer, with OpenSSH 8.2 or newer, is needed"
       return 1 ;;
   esac
   warn "the signature of $_vt_ref does not check out -- it is not installed:"

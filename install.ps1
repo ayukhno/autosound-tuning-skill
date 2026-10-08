@@ -926,7 +926,8 @@ function Test-SettledByName {
 #   A good signature is one answer only (T-35, #142): git's success and ssh-keygen's line 'Good "git" signature for
 # <principal> with ...', whatever the person's git or GPG configuration says. ssh-keygen is named for the check, so a
 # sign-only helper set as gpg.ssh.program is not asked to verify; and git picks the verifier from the signature, not
-# from gpg.format, so an OpenPGP tag the person's own gpg calls good says "Good" too.
+# from gpg.format, so an OpenPGP tag the person's own gpg calls good says "Good" too. gpg.minTrustLevel is held at
+# `fully`, git's rating of a key in allowed_signers: a person's `ultimate` refused every good release.
 function Test-TagSignature {
     param([string]$Dir, [string]$Ref, [string]$SignedFrom = $SkillSignedFrom, [string]$Whose = "the skill")
     if (Test-SettledByName $Ref $SignedFrom) { return $true }
@@ -937,7 +938,7 @@ function Test-TagSignature {
     # reason on stderr -- the VM refused beta-v3.0.64-rc1 with no reason printed at all (2026-09-29).
     $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
     $global:LASTEXITCODE = 0
-    $out = @(& git -C $Dir -c gpg.format=ssh -c gpg.ssh.program=ssh-keygen -c "gpg.ssh.allowedSignersFile=$signers" verify-tag $Ref 2>&1)
+    $out = @(& git -C $Dir -c gpg.format=ssh -c gpg.ssh.program=ssh-keygen -c gpg.minTrustLevel=fully -c "gpg.ssh.allowedSignersFile=$signers" verify-tag $Ref 2>&1)
     $rc = $LASTEXITCODE
     $ErrorActionPreference = $prev
     Remove-Item $signers -Force -ErrorAction SilentlyContinue
@@ -949,7 +950,7 @@ function Test-TagSignature {
     if ($said -cmatch 'unsupported value for gpg\.format|ssh-keygen -Y find-principals/verify|illegal option -- Y|unknown option -- Y|cannot run ssh-keygen|cannot spawn ssh-keygen') {
         Warn "the signature of $Ref could not be checked here -- it is not installed:"
         $out | Select-Object -Last 2 | ForEach-Object { Write-Host "      $_" }
-        Warn "this git ($(& git --version 2>$null)) may be too old to check one: 2.34 or newer is needed"
+        Warn "this git ($(& git --version 2>$null)) or its ssh-keygen may be too old to check one: git 2.34 or newer, with OpenSSH 8.2 or newer, is needed"
         return $false
     }
     Warn "the signature of $Ref does not check out -- it is not installed:"
