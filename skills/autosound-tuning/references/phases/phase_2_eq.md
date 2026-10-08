@@ -15,9 +15,9 @@ This is the core technical execution phase — **the second part of EQ**. The fi
 
 > ⛔ **Entry precondition:** `enter-phase 2` refuses while the profile does not describe what the EQ can actually do — `parametric_eq` (and a tier's own `eq`, where its `fields` declare one). Filters are sized against those limits; inventing them is how a 30-band answer lands on a 10-band processor. `dsp_profile.py set-field`, then `finalize`.
 
-**✅ Quality gate → Phase 3:** peaks cut / nulls untouched; joints aligned by **summation** (APF/fine delay, not raw-delay shifts); summed groups match target; final target EQ on the **virtual layer** only; strict order 2a→2d held; **one critic checkpoint passed on the round's full package** (add a second, after 2b, only when joint alignment was reworked).
+**✅ Quality gate → Phase 3:** peaks cut / nulls untouched; joints aligned by **summation** (delay × polarity first, an all-pass only where a null remains); summed groups match target; final target EQ on the **virtual layer** only; strict order 2a→2d held; **one critic checkpoint passed on the round's full package** (add a second, after 2b, only when joint alignment was reworked).
 
-**⚠️ Failure modes:** boosting into nulls (non-min-phase → wasted headroom/distortion) · 30-band auto-banks (use minimal conscious EQ) · shifting raw channel delays for phase (breaks gross TA) · sneaking client taste in here (that's Phase 5).
+**⚠️ Failure modes:** boosting into nulls (non-min-phase → wasted headroom/distortion) · 30-band auto-banks (use minimal conscious EQ) · re-shifting a channel's delay in Phase 2 to chase phase (it breaks the TA set in 1.5 joints) · sneaking client taste in here (that's Phase 5).
 
 **🧩 Refs:** min-vs-non-min phase, summation → [`diagnostic-techniques.md`](references/core/diagnostic-techniques.md).
 
@@ -71,7 +71,7 @@ Align the relative phase response of the channels in their overlap regions — *
    $$\text{Midbass (Reference)} \longrightarrow \text{Subwoofer} \longrightarrow \text{Midrange} \longrightarrow \text{Tweeter}$$
    Then, align Left ↔ Right for mono summation. **Two subs:** align `sw-f` ↔ `sw-r` FIRST as a pair (their shared band, by summation on `SWs_N (sw)`), then treat `SWs` as the subwoofer above — `analyze-joints --from-state` already reads the pair as one member.
 4. **Tools & Methods:**
-   * Align joints using **All-pass filters (APF)** or Helix Phase controls rather than shifting raw channel delays, which can break the gross time arrival.
+   * **Joints: delay × polarity first** (`predict --align`, on the DSP's delay grid), an all-pass only where a null remains.
    * The sub-to-midbass joint (~60 Hz) yields the largest subjective SQ gain. Verify carefully.
    * The final verdict at any joint is determined by **SUMMATION** (uninverted vs. inverted polarity), not single-position phase values.
    * ⚠️ **Recurring mix-up (tripped twice — this skill and `manual_step-by-step`): summation ≠ "needs sweep."** The polarity/summation verdict is a **magnitude-only power-sum comparison** — `power-sum = 10·log10(10^(A/10)+10^(B/10))` vs the actual measured combined level, via **RTA/MMM** (`diagnostic-techniques.md §3, §9, §50`) — precisely *because* it's "a quick verdict without measuring phase" and avoids a single-mic-point combined **sweep** (comb-filtering from two spatially separate drivers, worse than the comb-filtering MMM/RTA exists to average out). **Sweep IS required**, but only for two *different* jobs at the joint: (a) Group Delay / phase rotation (`get_group_delay`, sweep-only — RTA has no phase key), and (b) the min- vs non-min-phase (excess-phase) decision on a dip. Don't let "phase is involved somewhere at this joint" generalize into "therefore evaluate the joint via sweep" — polarity/summation and GD/excess-phase are different questions with different required measurement types.
