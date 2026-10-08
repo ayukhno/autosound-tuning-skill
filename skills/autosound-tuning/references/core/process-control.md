@@ -79,12 +79,12 @@ reconciles against what is not there:
   transcript, which is exactly what `decision` was built to stop;
 * **a change agreed and not banked**, and **a session with no handoff line.**
 
-`process.py <project>/process session-close` is the one question — what is still open — and it
-answers with the commands that close each thing. It deliberately **reports and does not close**:
-which evidence ends a step, and whether a capture is skipped or still owed, are judgements with an
-argument behind them, and a tool that guessed would write a plausible wrong record. The trigger
-words, the full order and the in-car half live in `SKILL.md`'s Pre-Session & Resume block, beside
-the checklist that already existed for the hardware.
+`process.py <project>/process session-close --check` is the one question — what is still open —
+and it answers with the commands that close each thing. It deliberately **reports and does not
+close**: which evidence ends a step, and whether a capture is skipped or still owed, are judgements
+with an argument behind them, and a tool that guessed would write a plausible wrong record. The
+trigger words, the order and the in-car half have one home, `SKILL.md`'s Pre-Session & Resume item
+4, beside the checklist that already existed for the hardware.
 
 With nothing open, `session-close` **records** the stop (`session_closed`) — it is the stop, not a
 look. A session reconciling state on a Windows VM ran it to look and wrote the close (S-084, hub
