@@ -65,10 +65,11 @@ Rules:
 
 13. **`step-ids`** (#138, I-6). `virtual-first.md` is the one home of the step ids, and a pointer names its
     step after the number (`1.5 joints`): no id is two steps there; a pointer `<id> <word>` in `SKILL.md`, the
-    phase and core files and the English listening cheat sheet lands on a step whose opening line says the
-    word; the cheat sheet routes every ✗ that way, never by a bare number; and its translations route each row
-    to the same ids. A renumber left the routes on the old numbers, and a listening ✗ re-opened the crossover choice
-    instead of the joint delay.
+    phase and core files and the English listening cheat sheet lands on the step whose name the word starts --
+    `STEP_NAMES`, a table held to each step's opening line, since those lines cite their neighbours too; the cheat
+    sheet routes every ✗ that way, never by a bare number; and its translations route each row to the same ids. A
+    renumber left the routes on the old numbers, and a listening ✗ re-opened the crossover choice instead of the
+    joint delay.
 
 Rules 9-12 read a phrase as a reader does (`_phrase`): across a wrapped line and inline markup, in the
 case it is given, as whole words. Their cases, and rule 13's, are `_check_*` functions, run through one
@@ -602,13 +603,35 @@ STEP_HOME = os.path.join(SKILL, "references", "phases", "virtual-first.md")
 #: The listening cheat sheet, whose last column sends a failed verdict to a step, and that column's header.
 CHEAT_SHEET = os.path.join(SKILL, "references", "patterns", "listening-cheat-sheet.md")
 CHEAT_ROUTE = "where a ✗ goes"
-_STEP_BULLET = re.compile(r"^- \*\*([−-]?\d+\.\d)\*\*")
-#: A step id in running text, one digit after the point as the steps are numbered -- and not a piece of a longer
-#: number or a version (`2.8.3`, `v3.1`, `1.01`), a section (`§0.5`), a range's inside (`−2.3..−3.8`), or a signed,
-#: compared or Q value (`+1.2`, `±0.5`, `Q 0.7`).
-_STEP_REF = re.compile(r"(?<![\w.+±§/×$−-])(?<!Q )([−-]?\d+\.\d)(?![\d.])")
-#: The word after an id, the article before it read through: `1.5 joints`, `1.7 the trade-off front`.
-_STEP_WORD = re.compile(r"[ \t]+(?:(?:the|a|an)[ \t]+)?([A-Za-z][A-Za-z'’-]*)")
+#: The name of each step a pointer names, as the pointer writes it after the number (`1.5 joints`, `1.4 coarse EQ`):
+#: a pointer lands when its word starts its step's name here. Each name stands on its step's opening line in
+#: `virtual-first.md`, and the rule holds it there, so a renumber cannot leave the table behind unseen. The opening
+#: lines cite their neighbours as well (1.3 "without the wishes", 1.4 "BEFORE the delays", 1.5 "with the coarse
+#: EQ", 2.3 "the second"), so a pointer is held to its step's name, not to whatever its step's line says.
+STEP_NAMES = {
+    "-1.3": "protective filters",
+    "1.2": "wishes",
+    "1.3": "crossovers",
+    "1.4": "coarse EQ",
+    "1.5": "joints",
+    "1.6": "levels",
+    "1.7": "trade-off front",
+    "1.8": "predict",
+    "2.1": "second part of EQ",
+    "2.2": "check after EQ",
+    "2.3": "review",
+    "2.4": "sheet",
+    "3.3": "fine EQ over MMM",
+}
+#: A step id as the bullets write it: a digit or two after the point (`1.5`, `1.10`), never a leading zero there.
+_ID = r"[−-]?\d+\.(?:[1-9]\d|\d)"
+_STEP_BULLET = re.compile(r"^- \*\*(" + _ID + r")\*\*")
+#: A step id in running text -- after a "/" too (`1.5 joints/1.6 levels`), and at the end of a sentence (`back to
+#: 1.3.`) -- and not a piece of a longer number or a version (`2.8.3`, `v3.1`, `1.01`, `3.0.x`), a section (`§0.5`),
+#: a range's inside (`−2.3..−3.8`), or a signed, compared or Q value (`+1.2`, `±0.5`, `Q 0.7`).
+_STEP_REF = re.compile(r"(?<![\w.+±§×$−-])(?<!Q )(" + _ID + r")(?!\d|\.[\w.])")
+#: The word after an id, an article before it read through in any case: `1.5 joints`, `1.7 the trade-off front`.
+_STEP_WORD = re.compile(r"[ \t]+(?:(?i:the|an?)[ \t]+)?([A-Za-z][A-Za-z'’-]*)")
 #: Words a step's first line holds that name no step: the small words of a sentence, units, and the content words
 #: met around a number that is not a pointer ("in the 0.2 → 0.5 order below", "a new 3.0 project").
 _NOT_A_STEP_NAME = frozenset("""
@@ -628,10 +651,10 @@ def _translation(name: str) -> bool:
 
 def _step_heads(text: str) -> dict:
     """Each step id of `virtual-first.md` -> [(line, head)]: the line that opens each `- **<id>**` bullet, after the id,
-    its code spans left out. That line is where a step says what it is (`**joints bottom-up** …`, `**tripod down.** …
-    Fine EQ over MMM`); the lines under it describe the work and cite other steps by their names -- 1.3's paragraph
-    on the per-driver way says "1.5 joints" and "1.6 levels" -- so they cannot tell a step from the steps it points
-    at. U+2212 reads as `-`, so `−1.1` and `-1.1` are one id."""
+    its code spans left out. That line carries the step's name (`**joints bottom-up** …`, `**tripod down.** … Fine EQ
+    over MMM`), and `STEP_NAMES` is held to it; it can cite a neighbour too (1.4's says "BEFORE the delays"), and the
+    lines under it cite other steps freely -- 1.3's paragraph on the per-driver way says "1.5 joints" and "1.6
+    levels". U+2212 reads as `-`, so `−1.1` and `-1.1` are one id."""
     steps = {}
     for n, line in enumerate(text.splitlines(), 1):
         m = _STEP_BULLET.match(line)
@@ -642,7 +665,7 @@ def _step_heads(text: str) -> dict:
 
 
 def _step_names(steps: dict) -> set:
-    """The words a pointer names a step by: the words of the lines that open the steps, less the words that name
+    """The words that make an id a pointer: the words of the lines that open the steps, less the words that name
     nothing. A step id followed by any other word (`1.5 dB`, `0.4 shows`) is not a pointer."""
     names = set()
     for heads in steps.values():
@@ -651,14 +674,25 @@ def _step_names(steps: dict) -> set:
     return names - _NOT_A_STEP_NAME
 
 
-def _step_says(steps: dict, sid: str, word: str) -> str | None:
-    """None when step `sid` exists and the line that opens it holds `word` as a whole word, in any case; else why."""
+def _says(head: str, name: str) -> bool:
+    """`head` holds `name` as whole words, in any case, its bold (`**`) read through."""
+    words = r"\s+".join(re.escape(w) for w in name.split())
+    return re.search(r"(?<![\w'’-])" + words + r"(?![\w'’-])", head.replace("*", ""), re.I) is not None
+
+
+def _step_named(steps: dict, sid: str, word: str) -> str | None:
+    """None when step `sid` exists and `word` starts its name in `STEP_NAMES`; else why not -- naming the step whose
+    name the word does start, when there is one."""
     if sid not in steps:
         return f"there is no step {sid} in {STEP_HOME}"
-    whole = re.compile(r"(?<![\w'’-])" + re.escape(word) + r"(?![\w'’-])", re.I)
-    if not any(whole.search(head) for _, head in steps[sid]):
-        return f"the line that opens step {sid} in {STEP_HOME} does not say '{word}'"
-    return None
+    name = STEP_NAMES.get(sid)
+    if name is None:
+        return (f"step {sid} has no name in docs-check.py's STEP_NAMES; give it the one its opening line in "
+                f"{STEP_HOME} says, and its pointers are held to it")
+    if word == name.split()[0].lower():
+        return None
+    other = next((s for s, n in STEP_NAMES.items() if n.split()[0].lower() == word), None)
+    return f"step {sid} is '{name}'" + (f"; '{STEP_NAMES[other]}' is step {other}" if other else "")
 
 
 def _route_cells(path: str):
@@ -690,10 +724,12 @@ def rule_step_ids(root: str) -> list[str]:
     joints to 1.3, which is now the crossover choice, and a later step was numbered 1.7 twice. A bare number cannot
     be checked and a renumber moves it silently, so a pointer says its step's name after the number (`1.5 joints`),
     and here: (a) no id is two steps in `virtual-first.md`; (b) a pointer written `<id> <word>` in `SKILL.md`, the
-    phase and core files and the English cheat sheet resolves -- the id is a step, and the word is on the line
-    that opens its bullet, where the step names itself (a word counts as a pointer's when it names a step: it
-    stands on some step's opening line); (c) every route cell of the English cheat sheet names its steps that
-    way, never a bare number; (d) each translated cheat sheet routes every row to the same ids as the English one.
+    phase and core files and the English cheat sheet resolves -- the id is a step, and the word starts the name
+    `STEP_NAMES` gives it; the table is held to `virtual-first.md`, each name on its step's opening line, and a
+    word another step's name starts is named as that step's (a word counts as a pointer's when it stands on some
+    step's opening line, so `1.5 dB` is not one); (c) every route cell of the English cheat sheet names its steps
+    that way, never a bare number; (d) each translated cheat sheet routes every row to the same ids as the English
+    one.
     """
     text = _read(root, STEP_HOME)
     if text is None:
@@ -702,6 +738,14 @@ def rule_step_ids(root: str) -> list[str]:
     bad = [f"{STEP_HOME}:{n}: step {sid} again (first at line {heads[0][0]}) — one id, two steps: a pointer, an "
            f"`add-step` id or a journal line naming it cannot say which"
            for sid, heads in steps.items() for n, _ in heads[1:]]
+    for sid, name in STEP_NAMES.items():
+        if sid not in steps:
+            bad.append(f"{STEP_HOME}: has no step {sid}, which docs-check.py's STEP_NAMES names '{name}' — the table "
+                       f"follows the steps, or every pointer to {sid} is read against a step that is gone")
+        elif not any(_says(head, name) for _, head in steps[sid]):
+            bad.append(f"{STEP_HOME}:{steps[sid][0][0]}: step {sid}'s opening line does not say '{name}', its name "
+                       f"in docs-check.py's STEP_NAMES — the table follows the steps, and every pointer is read "
+                       f"against it")
     names, phases = _step_names(steps), {sid.split(".")[0] for sid in steps}
 
     files = [os.path.join(root, SKILL, "SKILL.md"), os.path.join(root, CHEAT_SHEET)]
@@ -721,7 +765,7 @@ def rule_step_ids(root: str) -> list[str]:
                 sid, word = m.group(1).replace("−", "-"), _STEP_WORD.match(line, m.end())
                 if sid.split(".")[0] not in phases or word is None or word.group(1).lower().rstrip("'’-") not in names:
                     continue
-                why = _step_says(steps, sid, word.group(1).lower().rstrip("'’-"))
+                why = _step_named(steps, sid, word.group(1).lower().rstrip("'’-"))
                 if why:
                     bad.append(f"{rel}:{n}: '{m.group(1)} {word.group(1)}' does not land on its step — {why}")
 
@@ -930,78 +974,169 @@ def _check_one_path_banner():
         assert len(stray) == 1 and "phase_0_baseline.md:9:" in stray[0], stray
 
 
-def _check_step_ids():
-    """Rule 13 (#138, I-6): a step id is one step, a pointer `<id> <word>` lands on a step that says the word, a
-    route names its steps, and a translation routes where the English does."""
-    home = ("# V\n\n### Phase −1\n"
-            "- **−1.1** log Phase −1; run the intake.\n"
-            "- **−1.3** channels → the glossary; **protective filters** for the capture.\n\n"
-            "### Phases 1–2\n"
-            "- **1.1** de-embed the protectives; the joint analysis reads the round.\n"
-            "- **1.3** **crossovers — the variants**: the best the maths finds first.\n"
-            "  - **The engine is not required.** Without it the joints are read at 1.5 joints, by hand.\n"
-            "- **1.5** **joints bottom-up**: delay × polarity per junction.\n"
-            "- **1.6** **levels, and how the scene is centred**: cut-only.\n"
-            "- **1.7** **The variants as a TRADE-OFF FRONT**: four terms each.\n"
-            "- **1.8** **predict the sums, describe the variants, and the tuner chooses** (`predict`).\n"
-            "- **2.1** **the second part of EQ, in this order**, as packages.\n\n"
-            "### Phase 3\n- **3.3** **tripod down.** MMM handheld. Fine EQ over MMM as today.\n")
-    header = "| id | label | where a ✗ goes |\n|---|---|---|\n"
-    sheet = ("# L\n\n`route` is the step a ✗ goes to (desk 1.5 joints, 1.6 levels; 3.3 fine EQ over MMM; "
-             "−1.3 protective filters).\n\n" + header +
-             "| c01 | centre | L/R level, arrival, polarity (desk 1.5 joints / 1.6 levels) |\n"
-             "| c16 | dynamics | not EQ; the protection filters (−1.3 protective filters) |\n"
-             "| c17 | +6 dB | the LOUDER verdict (EMMA Judge Book 2024 §4.5) |\n")
-    uk = ("# Л\n\n" + header + "| c01 | центр | рівні L/R, час, полярність (стіл 1.5 стики / 1.6 рівні) |\n"
-          "| c16 | динаміка | не EQ; захисні фільтри (-1.3 захисні фільтри) |\n")
-    prose = ("Its order: 1.3 crossovers → 1.5 joints → 1.6 levels → 1.7 the trade-off front → 1.8 predict.\n\n"
-             "### 2.5 Levels by geometry\n\nNot pointers: a +1.2 PK, Q 0.7 all-pass, 1.5 dB, v3.1 levels, §0.5 step "
-             "3, 2.8.3 levels, the drift pair in 0.4 shows it, in the 0.2 → 0.5 order below, a new 3.0 project, "
-             "3.3/2.1 ms, −2.3..−3.8 levels.\n")
-    good = {STEP_HOME: home, CHEAT_SHEET: sheet, CHEAT_SHEET[:-3] + ".uk.md": uk,
-            os.path.join(SKILL, "SKILL.md"): ("# S\n\n`predict --align` (1.5 joints) · `eq_propose` (2.1 second part "
-                                              "/ 3.3 fine EQ over MMM)\n"),
-            os.path.join(SKILL, "references", "phases", "phase_1_foundation.md"): prose,
-            os.path.join(SKILL, "references", "core", "estimator-scope.md"): "| settled after it (1.5 joints) |\n"}
-    with _scratch() as tmp:
-        def ids_tree(**changed) -> str:
-            files = dict(good)
-            for rel, text in changed.items():
-                files[{"home": STEP_HOME, "sheet": CHEAT_SHEET, "uk": CHEAT_SHEET[:-3] + ".uk.md",
-                       "skill": os.path.join(SKILL, "SKILL.md"),
-                       "tooling": os.path.join(SKILL, "references", "tooling", "rew-tool-docs.md")}[rel]] = text
-            return _fixture(tmp, files)
+#: Rule 13's fixture, `virtual-first.md` as the real file opens its steps: each step's name on its first line, the
+#: neighbours some of those lines cite (1.3 "without the wishes", 1.4 "BEFORE the delays", 1.5 "with the coarse EQ",
+#: 2.3 "the second"), a phase-0 step, and the words a number that is no pointer meets there ("order", "project", "dB").
+_IDS_HOME = ("# V\n\n### Phase −1\n"
+             "- **−1.1** log Phase −1; run the intake.\n"
+             "- **−1.3** channels → the glossary; **protective filters** for the capture.\n\n"
+             "### Phase 0\n"
+             "- **0.7** mark the protectives on the round; the `.mdat` into the project; finish the passport.\n\n"
+             "### Phases 1–2\n"
+             "- **1.1** de-embed the protectives; the joint analysis reads the round.\n"
+             "- **1.2** **the tuner's wishes first, in free words**.\n"
+             "- **1.3** **crossovers — the variants**: **the best the maths finds first, without the wishes**.\n"
+             "  - **The engine is not required.** Without it the joints are read at 1.5 joints, by hand.\n"
+             "- **1.4** **coarse EQ per driver — BEFORE the delays**: cuts of a few dB, zero boosts.\n"
+             "- **1.5** **joints bottom-up, with the coarse EQ in the chains**: delay × polarity per junction.\n"
+             "- **1.6** **levels, and how the scene is centred**: cut-only.\n"
+             "- **1.7** **The variants as a TRADE-OFF FRONT**: four terms each.\n"
+             "- **1.8** **predict the sums, describe the variants, and the tuner chooses** (`predict`).\n"
+             "- **2.1** **the second part of EQ, in this order**, as packages.\n"
+             "- **2.2** **check after EQ**: predict again.\n"
+             "- **2.3** **the review**: one critic round (the second, after the joints).\n"
+             "- **2.4** **preset to disk**: the settings sheet.\n\n"
+             "### Phase 3\n- **3.3** **tripod down.** MMM handheld. Fine EQ over MMM as today.\n")
+_IDS_HEADER = "| id | label | where a ✗ goes |\n|---|---|---|\n"
+_IDS_SHEET = ("# L\n\n`route` is the step a ✗ goes to (desk 1.5 joints, 1.6 levels; 3.3 fine EQ over MMM; "
+              "−1.3 protective filters).\n\n" + _IDS_HEADER +
+              "| c01 | centre | L/R level, arrival, polarity (desk 1.5 joints / 1.6 levels) |\n"
+              "| c16 | dynamics | not EQ; the protection filters (−1.3 protective filters) |\n"
+              "| c17 | +6 dB | the LOUDER verdict (EMMA Judge Book 2024 §4.5) |\n")
+_IDS_UK = ("# Л\n\n" + _IDS_HEADER + "| c01 | центр | рівні L/R, час, полярність (стіл 1.5 стики / 1.6 рівні) |\n"
+           "| c16 | динаміка | не EQ; захисні фільтри (-1.3 захисні фільтри) |\n")
+#: Numbers in running text that are no pointers -- each held by one exclusion, which the fixture above makes matter:
+#: a unit, a word that names no step, a word the stop list takes out, the inside of a range.
+_IDS_NOT_POINTERS = ("Not pointers: a +1.2 PK, Q 0.7 all-pass, 1.5 dB, v3.1 levels, §0.5 step 3, 2.8.3 levels, the "
+                     "drift pair in 0.4 shows it, in the 0.2 → 0.5 order below, a new 3.0 project, 3.3/2.1 ms, "
+                     "−2.3..−3.8 levels and −0.5..−1.8 levels.\n")
+_IDS_FILES = {
+    "home": STEP_HOME, "sheet": CHEAT_SHEET, "uk": CHEAT_SHEET[:-3] + ".uk.md",
+    "skill": os.path.join(SKILL, "SKILL.md"),
+    "phase1": os.path.join(SKILL, "references", "phases", "phase_1_foundation.md"),
+    "phase4": os.path.join(SKILL, "references", "phases", "phase_4_listening.md"),
+    "core": os.path.join(SKILL, "references", "core", "estimator-scope.md"),
+    "tooling": os.path.join(SKILL, "references", "tooling", "rew-tool-docs.md")}
 
-        assert rule_step_ids(ids_tree()) == [], rule_step_ids(ids_tree())
+
+def _ids_tree(tmp: str, **changed) -> str:
+    """Rule 13's fixture tree under `tmp`, a file of it replaced by name (`home=`, `sheet=`, `phase4=`, ...)."""
+    files = {"home": _IDS_HOME, "sheet": _IDS_SHEET, "uk": _IDS_UK,
+             "skill": "# S\n\n`predict --align` (1.5 joints) · `eq_propose` (2.1 second part / 3.3 fine EQ over MMM)\n",
+             "phase1": ("Its order: 1.3 crossovers → 1.5 joints → 1.6 levels → 1.7 the trade-off front → 1.8 predict."
+                        "\n\n### 2.5 Levels by geometry\n\n" + _IDS_NOT_POINTERS),
+             "core": "| settled after it (1.5 joints) |\n", **changed}
+    return _fixture(tmp, {_IDS_FILES[name]: text for name, text in files.items()})
+
+
+def _step_ids_said(line: str) -> list:
+    """What rule 13 says of the fixture with `line` added to a phase file -- the place a pointer is read in."""
+    with _scratch() as tmp:
+        return rule_step_ids(_ids_tree(tmp, phase4=f"# Phase 4\n\nThe fix goes to {line}.\n"))
+
+
+def _check_step_ids():
+    """Rule 13 (#138, I-6): a step id is one step, a pointer `<id> <word>` lands on the step whose name the word
+    starts, a route names its steps, and a translation routes where the English does."""
+    with _scratch() as tmp:
+        assert rule_step_ids(_ids_tree(tmp)) == [], rule_step_ids(_ids_tree(tmp))
         # (a) one id, two steps -- the second 1.7 the renumber left; a U+2212 minus and an ASCII one are one id
-        twice = rule_step_ids(ids_tree(home=home.replace("- **1.8**", "- **1.7**") + "- **-1.1** again.\n"))
+        twice = rule_step_ids(_ids_tree(tmp, home=_IDS_HOME.replace("- **1.8**", "- **1.7**") + "- **-1.1** again.\n"))
         assert sum("again (first at line" in c for c in twice) == 2, twice
-        assert any(":14: step 1.7 again (first at line 13)" in c for c in twice), twice
-        assert any(":19: step -1.1 again (first at line 4)" in c for c in twice), twice
-        # (b) a pointer whose step does not say its word on the line that opens it -- 1.3's own paragraph says
-        # "joints", citing 1.5 --, and as a whole word (`joint` is not `joints`); one with no such step; an article
-        # read through; a file outside the four places is not read
-        moved = rule_step_ids(ids_tree(
-            skill="# S\n\n`predict --align` (1.3 joints) · 1.9 joints · 1.5 the levels · 1.5 joint · −1.3 protective filters\n",
+        assert any(":19: step 1.7 again (first at line 18)" in c for c in twice), twice
+        assert any(":27: step -1.1 again (first at line 4)" in c for c in twice), twice
+        # (b) a pointer whose word is another step's name -- 1.3's own paragraph says "joints", citing 1.5 --, and a
+        # whole name (`joint` is not `joints`); one with no such step; an article read through; a file outside the
+        # four places is not read
+        moved = rule_step_ids(_ids_tree(
+            tmp, skill="# S\n\n`predict --align` (1.3 joints) · 1.9 joints · 1.5 the levels · 1.5 joint · "
+                       "−1.3 protective filters\n",
             tooling="# T\n\n`--align` (1.3 joints as a command)\n"))
-        assert any("SKILL.md:3: '1.3 joints'" in c and "step 1.3" in c and "does not say 'joints'" in c
-                   for c in moved), moved
+        assert any("SKILL.md:3: '1.3 joints'" in c and "step 1.3 is 'crossovers'" in c
+                   and "'joints' is step 1.5" in c for c in moved), moved
         assert any("'1.9 joints'" in c and "there is no step 1.9" in c for c in moved), moved
-        assert any("'1.5 levels'" in c and "does not say 'levels'" in c for c in moved), moved
-        assert any("'1.5 joint'" in c and "does not say 'joint'" in c for c in moved), moved
+        assert any("'1.5 levels'" in c and "step 1.5 is 'joints'" in c for c in moved), moved
+        assert any("'1.5 joint'" in c and "step 1.5 is 'joints'" in c for c in moved), moved
         assert len(moved) == 4 and not any("rew-tool-docs.md" in c for c in moved), moved
         # (c) the routes as they stood before the rule: bare numbers, and a word that names no step
-        old = header + ("| c01 | centre | L/R level, arrival, polarity (desk 1.3 / 1.4) |\n"
-                        "| c16 | dynamics | the protection filters (1.2 shows) |\n| c17 | loud | (4.2 levels) |\n")
-        bare = rule_step_ids(ids_tree(sheet="# L\n\n" + old, uk="# Л\n\n" + header))
+        old = _IDS_HEADER + ("| c01 | centre | L/R level, arrival, polarity (desk 1.3 / 1.4) |\n"
+                             "| c16 | dynamics | the protection filters (1.2 shows) |\n| c17 | loud | (4.2 levels) |\n")
+        bare = rule_step_ids(_ids_tree(tmp, sheet="# L\n\n" + old, uk="# Л\n\n" + _IDS_HEADER))
         assert sum("routes to a bare" in c for c in bare) == 3, bare
         assert any("c16 routes to a bare 1.2" in c for c in bare), bare
         assert any("c17 routes to '4.2 levels'" in c and "there is no step 4.2" in c for c in bare), bare
         # (d) a translation that still routes c01 to the old steps; a row it does not carry falls back to English
-        stale = rule_step_ids(ids_tree(uk=uk.replace("(стіл 1.5 стики / 1.6 рівні)", "(стіл 1.3 / 1.4)")))
+        stale = rule_step_ids(_ids_tree(tmp, uk=_IDS_UK.replace("(стіл 1.5 стики / 1.6 рівні)", "(стіл 1.3 / 1.4)")))
         assert len(stale) == 1 and "uk.md:5: c01 routes to 1.3, 1.4, the English to 1.5, 1.6" in stale[0], stale
-        assert any("no table" in c for c in rule_step_ids(ids_tree(uk="# Л\n\nнічого\n"))), "a translation's table"
-        assert any("missing" in c for c in rule_step_ids(_fixture(tmp, {CHEAT_SHEET: sheet}))), "the steps' home"
+        no_table = rule_step_ids(_ids_tree(tmp, uk="# Л\n\nнічого\n"))
+        assert any("no table" in c for c in no_table), no_table
+        assert any("missing" in c for c in rule_step_ids(_fixture(tmp, {CHEAT_SHEET: _IDS_SHEET}))), "the steps' home"
+
+
+def _check_step_ids_off_by_one():
+    """Rule 13: the coarse EQ's number moved one step on lands on the joints, whose opening line says "with the coarse
+    EQ in the chains" -- the word is another step's name, and is named."""
+    said = _step_ids_said("1.5 coarse EQ")
+    assert len(said) == 1 and "'1.5 coarse'" in said[0] and "step 1.5 is 'joints'" in said[0] \
+        and "'coarse EQ' is step 1.4" in said[0], said
+
+
+def _check_step_ids_wishes_on_crossovers():
+    """Rule 13: 1.3's opening line says "without the wishes"; the wishes are 1.2."""
+    said = _step_ids_said("1.3 wishes")
+    assert len(said) == 1 and "step 1.3 is 'crossovers'" in said[0] and "'wishes' is step 1.2" in said[0], said
+
+
+def _check_step_ids_delays_on_coarse_eq():
+    """Rule 13: 1.4's opening line says "BEFORE the delays"; the delays are set in 1.5 joints, and "delays" starts no
+    step's name."""
+    said = _step_ids_said("1.4 delays")
+    assert len(said) == 1 and "'1.4 delays'" in said[0] and "step 1.4 is 'coarse EQ'" in said[0], said
+
+
+def _check_step_ids_second_on_review():
+    """Rule 13: 2.3's opening line says "the second" (review); the second part of EQ is 2.1."""
+    said = _step_ids_said("2.3 second part")
+    assert len(said) == 1 and "step 2.3 is 'review'" in said[0] and "'second part of EQ' is step 2.1" in said[0], said
+
+
+def _check_step_ids_after_a_slash():
+    """Rule 13: an id written right after "/" is read -- "1.5 joints/1.4 levels" -- and so is the bare one there."""
+    said = _step_ids_said("1.5 joints/1.4 levels")
+    assert len(said) == 1 and "'1.4 levels'" in said[0] and "step 1.4 is 'coarse EQ'" in said[0], said
+    with _scratch() as tmp:
+        bare = rule_step_ids(_ids_tree(tmp, sheet=_IDS_SHEET.replace("(desk 1.5 joints / 1.6 levels)",
+                                                                       "(desk 1.5 joints/1.6)")))
+    assert any("c01 routes to a bare 1.6" in c for c in bare), bare
+
+
+def _check_step_ids_read_as_written():
+    """Rule 13: an article in capitals is read through ("1.6 The joints"), an id with two digits after the point is an
+    id ("1.10 joints"), and a route that ends its sentence is still a route ("back to 1.3.")."""
+    said = _step_ids_said("1.6 The joints")
+    assert len(said) == 1 and "'1.6 joints'" in said[0] and "step 1.6 is 'levels'" in said[0], said
+    said = _step_ids_said("1.10 joints")
+    assert len(said) == 1 and "'1.10 joints'" in said[0] and "there is no step 1.10" in said[0], said
+    with _scratch() as tmp:
+        ended = rule_step_ids(_ids_tree(tmp, sheet=_IDS_SHEET.replace("(−1.3 protective filters) |",
+                                                                        "and back to 1.3. |")))
+    assert any("c16 routes to a bare 1.3" in c for c in ended), ended
+
+
+def _check_step_names_held():
+    """Rule 13: the table of names follows the steps. A renumber that swaps two steps leaves each name on the other's
+    line, a step the table names can go, and a pointer can name a step the table has no name for -- each is said."""
+    with _scratch() as tmp:
+        swapped = _IDS_HOME.replace("- **1.5** **joints", "- **1.x** **joints").replace(
+            "- **1.6** **levels", "- **1.5** **levels").replace("- **1.x**", "- **1.6**")
+        parted = rule_step_ids(_ids_tree(tmp, home=swapped))
+        assert any(":17: step 1.5's opening line does not say 'joints'" in c for c in parted), parted
+        assert any(":16: step 1.6's opening line does not say 'levels'" in c for c in parted), parted
+        no_sheet = _IDS_HOME.replace("- **2.4** **preset to disk**: the settings sheet.\n", "")
+        gone = rule_step_ids(_ids_tree(tmp, home=no_sheet))
+        assert len(gone) == 1 and "has no step 2.4" in gone[0] and "'sheet'" in gone[0], gone
+    said = _step_ids_said("0.7 mark")
+    assert len(said) == 1 and "step 0.7 has no name" in said[0], said
 
 
 def _selftest() -> int:
@@ -1171,7 +1306,9 @@ def _selftest() -> int:
         # -- rules 9-13 (#138): each a `_check_*` of its own, and one loop that collects every failure
         failures = []
         for check in (_check_plugin_route, _check_owner_sentence, _check_arrivals, _check_one_path_banner,
-                      _check_step_ids):
+                      _check_step_ids, _check_step_ids_off_by_one, _check_step_ids_wishes_on_crossovers,
+                      _check_step_ids_delays_on_coarse_eq, _check_step_ids_second_on_review,
+                      _check_step_ids_after_a_slash, _check_step_ids_read_as_written, _check_step_names_held):
             try:
                 check()
             except AssertionError as exc:
@@ -1199,9 +1336,11 @@ def _selftest() -> int:
           "lower-case 'must inspect the summation' is not), and so is a phase file or the quirks file left "
           "without the sentence that the tools read arrivals; a phase file that opens 'If Phase −1 chose', a "
           "banner copy edited alone and all four banners deleted at once are each named; a step id held by two "
-          "steps, a pointer whose step does not say its word or does not exist, a route by a bare number and a "
-          "translation routing a row elsewhere are each named, while a value, a version, a section and a heading's "
-          "number are not pointers; the five rules' checks report every failure in one run")
+          "steps, a pointer whose word does not start its step's name (one step off, a neighbour its step's opening "
+          "line cites, after a slash, behind a capital article) or whose step does not exist (1.10 too), a name table "
+          "parted from the steps, a route by a bare number (one ending its sentence too) and a translation routing "
+          "a row elsewhere are each named, while a value, a unit, a version, a section, a range, a word no step is "
+          "named by and a heading's number are not pointers; the rules' checks report every failure in one run")
     return 0
 
 
