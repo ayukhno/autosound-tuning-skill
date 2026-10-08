@@ -45,8 +45,9 @@ Rules:
 
 9. **`plugin-route`** (#138, I-1). Since 3.1.0 the plugin is a supported route: the catalogue
    (`.claude-plugin/marketplace.json`) installs the release, and `/autosound-tuning:setup` brings what
-   the method runs on. No document may still say the plugin is "pinned at 2.8.3" while the catalogue
-   installs another release — a session that believed it told a plugin user to uninstall.
+   the method runs on. No document of the skill, and no front page (`README*`, `FAQ*`, `ADVANCED.md`),
+   may still say the plugin is "pinned at 2.8.3" unless the catalogue entry's `version` is 2.8.3 — a
+   session that believed it told a plugin user to uninstall.
 
 10. **`owner-sentence`** (#138, I-11). Nothing about the owner's symptom line gates phase 0 (the
     Arbiter's ruling, 2026-09-08, skill #22): the gate stands on evidence. No document, and not
@@ -62,12 +63,17 @@ Rules:
     2026-09-09): line 5 of `phase_0`…`phase_3` is one banner, the same in all four, saying the order of
     work is `virtual-first.md`'s; none of the four may say "If Phase −1 chose".
 
+Rules 9-12 read a phrase as a reader does (`_phrase`): across a wrapped line and inline markup, in the
+case it is given, as whole words. Their cases are `_check_*` functions, run through one loop that
+collects every failure.
+
 Run: `scripts/docs-check.py` (from anywhere), `--selftest` for the checker's own mechanics.
 stdlib only.
 """
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import re
@@ -119,13 +125,20 @@ def _section(text: str, heading: str) -> str:
     return rest[: end.start()] if end else rest
 
 
+#: What may stand between two words of one sentence: spaces and inline markup (`**`, a backtick), or ONE line break
+#: with a quote's `>` and the indent after it. A blank line ends the sentence.
+_PHRASE_GAP = r"(?:[ \t*`]+|[ \t*`]*\n[ \t>*`]*)"
+
+
 def _phrase(phrase: str) -> re.Pattern:
-    """`phrase` as a reader reads it: across a line break and the markup inside a sentence (`**`, a backtick), in
-    either letter case, with either apostrophe and either minus sign. A search for the bytes misses the same
+    """`phrase` as a reader reads it, and no more: across a wrapped line and the markup inside a sentence, with either
+    apostrophe and either minus sign -- but in the case it is given, and as whole words (anchored like `\\b` at both
+    ends, as look-arounds, so a phrase that ends in punctuation still holds). A search for the bytes misses the same
     sentence wrapped, or with one word in bold: `installation.md` said "pinned at" on one line and "**2.8.3**" on
-    the next."""
+    the next. And a search that ignores case or word edges finds sentences nobody wrote: a lessons file's "you must
+    inspect the summation" is not the rule "MUST inspect", and "pinned at 2.8.30" is not "pinned at 2.8.3"."""
     words = (re.escape(w).replace("'", "['’]").replace("−", "[−-]") for w in phrase.split())
-    return re.compile(r"[\s*`]+".join(words), re.I)
+    return re.compile(r"(?<!\w)" + _PHRASE_GAP.join(words) + r"(?!\w)")
 
 
 def _hits(path: str, phrase: str) -> list[int]:
@@ -421,6 +434,15 @@ def rule_protective_floor(root: str) -> list[str]:
 #: The plugin catalogue, and the sentence the documents carried while it stayed on 2.8.3 (until 3.1.0).
 PLUGIN_CATALOGUE = os.path.join(".claude-plugin", "marketplace.json")
 PLUGIN_PINNED_OLD = "pinned at 2.8.3"
+#: The catalogue entry's `version` while the sentence was true: the 2.8.3 pin was `ref "2.x"`, `version "2.8.3"`
+#: (`git show 01cb9c9:.claude-plugin/marketplace.json`), so the version is the field that says it, not the ref.
+PLUGIN_PINNED_VERSION = "2.8.3"
+
+
+def _front_pages(root: str) -> list[str]:
+    """The pages a user reads before the skill: `README*.md`, `FAQ*.md` and `ADVANCED.md` at the repository root."""
+    return [os.path.join(root, name) for name in sorted(os.listdir(root))
+            if name.endswith(".md") and (name.startswith(("README", "FAQ")) or name == "ADVANCED.md")]
 
 
 def rule_plugin_route(root: str) -> list[str]:
@@ -429,28 +451,30 @@ def rule_plugin_route(root: str) -> list[str]:
     From 2026-09-16 to 3.1.0 the catalogue's entry stayed on 2.8.3, and `installation.md` sent a plugin user to the
     installer and offered to uninstall the plugin. 3.1.0 moved the catalogue to the release (`ref` v3.x) and gave the
     plugin `/autosound-tuning:setup`, and the documents kept the old sentence: a session that read them told a
-    plugin user to remove a working install. So the sentence is held to the file it describes, read the way
-    `rule_install_ref` reads the front page: no catalogue in the tree, nothing to compare.
+    plugin user to remove a working install. So the sentence is held to the file it describes: the catalogue entry's
+    `version`. Read are the skill's documents and the front pages a user meets first (`README*`, `FAQ*`,
+    `ADVANCED.md`), the way `rule_install_ref` reads the front page: no catalogue in the tree, nothing to compare.
     """
     raw = _read(root, PLUGIN_CATALOGUE)
     if raw is None:
         return []
     try:
-        plugins = json.loads(raw).get("plugins") or []
-        refs = sorted({str(p["source"]["ref"]) for p in plugins
-                       if isinstance(p, dict) and isinstance(p.get("source"), dict) and p["source"].get("ref")})
+        entries = [p for p in json.loads(raw).get("plugins") or [] if isinstance(p, dict)]
+        versions = [str(p.get("version") or "") for p in entries]
+        refs = [str(p["source"].get("ref") or "") if isinstance(p.get("source"), dict) else "" for p in entries]
     except (ValueError, AttributeError, TypeError) as exc:
         return [f"{PLUGIN_CATALOGUE}: cannot be read ({exc}) — which release the plugin installs is unknown, so "
                 f"'{PLUGIN_PINNED_OLD}' cannot be checked against it"]
-    if "v2.8.3" in refs:
+    if PLUGIN_PINNED_VERSION in versions:
         return []                      # the catalogue IS on 2.8.3: the sentence is true
+    installs = ", ".join(f"{v or '?'} (ref {r or '?'})" for v, r in zip(versions, refs)) or "no plugin entry"
     bad = []
-    for path in _md_files(root):
+    for path in _md_files(root) + _front_pages(root):
         rel = os.path.relpath(path, root)
         for n in _hits(path, PLUGIN_PINNED_OLD):
             bad.append(f"{rel}:{n}: says the plugin is '{PLUGIN_PINNED_OLD}', but {PLUGIN_CATALOGUE} installs "
-                       f"{', '.join(refs) or 'no pinned release'} — the plugin is a supported route "
-                       f"(`/autosound-tuning:setup`), and a session reading this tells its user to remove it")
+                       f"{installs} — the plugin is a supported route (`/autosound-tuning:setup`), and a session "
+                       f"reading this tells its user to remove it")
     return bad
 
 
@@ -593,6 +617,146 @@ def run(root: str) -> int:
     print(f"docs OK — {len(RULES)} rule(s) checked by the phrase a reader would look for: "
           + ", ".join(n for n, _ in RULES))
     return 0
+
+
+@contextlib.contextmanager
+def _scratch():
+    """A folder of its own for one `_check_*`'s trees, removed when the check ends, passed or failed."""
+    import shutil
+    import tempfile
+    tmp = tempfile.mkdtemp(prefix="docs_check_")
+    try:
+        yield tmp
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def _fixture(tmp: str, files: dict) -> str:
+    """A tree of its own under `tmp`, holding `files` (a path relative to the tree -> its text)."""
+    import tempfile
+    root = tempfile.mkdtemp(dir=tmp)
+    for rel, body in files.items():
+        path = os.path.join(root, rel)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(body)
+    return root
+
+
+def _check_plugin_route():
+    """Rule 9 (#138, I-1): 'pinned at 2.8.3' is named while the catalogue installs another release -- in the skill's
+    documents and on the front pages, wrapped and in bold too -- and passes while the catalogue really pins 2.8.3."""
+    with _scratch() as tmp:
+        def plugin_tree(doc: str, catalogue: str | None, front: dict | None = None) -> str:
+            files = {os.path.join(SKILL, "references", "tooling", "installation.md"): doc, **(front or {})}
+            if catalogue is not None:
+                files[PLUGIN_CATALOGUE] = catalogue
+            return _fixture(tmp, files)
+
+        def catalogue(version: str, ref: str, sha: str) -> str:
+            """The catalogue's own shape -- 2.8.3's is `git show 01cb9c9:.claude-plugin/marketplace.json`."""
+            return json.dumps({"plugins": [{"name": "autosound-tuning", "version": version, "source": {
+                "source": "url", "url": "https://github.com/ayukhno/autosound-tuning-skill.git", "ref": ref,
+                "sha": sha}}]})
+
+        release = catalogue("3.1.1", "v3.1.1", "e8dabf7145dea459a9f3c591c0828c9dbeb51669")
+        pin_283 = catalogue("2.8.3", "2.x", "255d6c8aa174711bf7b95e1aa6a5523d218928a3")
+
+        # the regression as `installation.md` carried it: wrapped, the number in bold
+        pinned = "# I\n\n* **As a Claude Code plugin**: that catalogue entry is pinned at\n  **2.8.3**, not 3.x.\n"
+        stale_route = rule_plugin_route(plugin_tree(pinned, release))
+        assert any("installation.md:3:" in c and "3.1.1 (ref v3.1.1)" in c for c in stale_route), stale_route
+        supported = "# I\n\n* **As a Claude Code plugin:** supported — run `/autosound-tuning:setup` once.\n"
+        assert rule_plugin_route(plugin_tree(supported, release)) == []
+        # while the catalogue IS on 2.8.3 (`ref "2.x"`, `version "2.8.3"`) the sentence is true; with no catalogue
+        # there is nothing to hold it to
+        assert rule_plugin_route(plugin_tree(pinned, pin_283)) == [], rule_plugin_route(plugin_tree(pinned, pin_283))
+        assert rule_plugin_route(plugin_tree(pinned, None)) == []
+        # a catalogue that cannot be read is said, never taken for one that pins nothing
+        assert any("cannot be read" in c for c in rule_plugin_route(plugin_tree(supported, "{"))), "unread catalogue"
+        # the front pages tell the route too: README*, FAQ* and ADVANCED.md, a quoted line wrapped as well
+        front = {"README.md": "# R\n\nThe plugin is pinned at 2.8.3.\n", "FAQ.md": "# F\n\n> it is pinned at\n> 2.8.3\n",
+                 "ADVANCED.md": "# A\n\nThe catalogue is pinned at **2.8.3**.\n"}
+        on_front = rule_plugin_route(plugin_tree(supported, release, front))
+        assert sorted(c.split(":")[0] for c in on_front) == ["ADVANCED.md", "FAQ.md", "README.md"], on_front
+        # whole words of one sentence: another number, another word, a paragraph break are not the sentence
+        near = ("# I\n\nThe 2.x line was pinned at 2.8.30 once; the copy got unpinned at 2.8.3.\n\n"
+                "It is pinned at\n\n2.8.3 opens another paragraph.\n")
+        assert rule_plugin_route(plugin_tree(near, release)) == [], rule_plugin_route(plugin_tree(near, release))
+
+
+def _check_owner_sentence():
+    """Rule 10 (#138, I-11): the owner's sentence gates nothing -- in the documents and in project.py's text."""
+    with _scratch() as tmp:
+        def owner_tree(skill_md: str, project_py: str) -> str:
+            return _fixture(tmp, {os.path.join(SKILL, "SKILL.md"): skill_md, PROJECT_PY: project_py})
+
+        owed = ("# S\n\nIt invents no fact and it does NOT close the phase-0 gate — the owner's own sentence is "
+                "still owed.\n")
+        # the usage text as `project.py` wraps it: the phrase split across a line and a column of spaces
+        wrapped = ('USAGE = """\n  catch-up   the draft is a marked placeholder and the phase-0 gate\n'
+                   "             still wants the owner's own\n             sentence. Run it when a project is opened\n"
+                   '"""\n\n# a fill that pretended otherwise would close the gate on nobody’s words\n')
+        said = rule_owner_sentence(owner_tree(owed, wrapped))
+        assert any("SKILL.md:3:" in c and "sentence is still owed" in c for c in said), said
+        assert any("project.py:3:" in c and "still wants the owner's own sentence" in c for c in said), said
+        assert any("project.py:7:" in c and "nobody's words" in c for c in said), said
+        optional = ("# S\n\nIt invents no fact. The owner's symptom line is optional — a communication line for the "
+                    "finished tune; nothing about it gates phase 0 (the Arbiter's ruling, 2026-09-08).\n")
+        assert rule_owner_sentence(owner_tree(optional, 'USAGE = """catch-up  invents no fact"""\n')) == []
+
+
+def _check_arrivals():
+    """Rule 11 (#138, I-20): the tools read arrivals, the GUI is the cross-check -- never by hand."""
+    with _scratch() as tmp:
+        def arrival_tree(phase1: str, quirks: str, diagnostic: str) -> str:
+            return _fixture(tmp, dict(zip(ARRIVAL_FILES, (phase1, quirks, diagnostic))))
+
+        by_tool = ("* The tools read arrivals (`predict --align`, `windows.py`, `analyze-joints`); the REW GUI is "
+                   "the cross-check when a tool says ILL-POSED or UNVERIFIED.\n")
+        by_hand = rule_arrivals(arrival_tree(
+            "# P\n\n**Gate:** arrival TA set from **manually-inspected IR onsets**.\n" + by_tool,
+            "# Q\n\n* **⚠️ MANUALLY INSPECT IMPULSE GRAPHS — REW NATIVE DELAY ESTIMATES ARE FIXED:**\n" + by_tool,
+            "# D\n\n  * **we MUST inspect the impulse response graphs manually in the REW GUI**\n"))
+        assert any("phase_1_foundation.md:3:" in c and "manually-inspected" in c for c in by_hand), by_hand
+        assert any("rew-api-quirks.md:3:" in c and "MANUALLY INSPECT" in c for c in by_hand), by_hand
+        assert any("diagnostic-techniques.md:3:" in c and "MUST inspect" in c for c in by_hand), by_hand
+        # the sentence deleted from the two files that carry it is named: a tidy-up leaves nothing saying who reads
+        said_nothing = rule_arrivals(arrival_tree("# P\n", "# Q\n", "# D\n"))
+        assert sum("does not say" in c for c in said_nothing) == 2, said_nothing
+        by_tools = arrival_tree("# P\n\n" + by_tool, "# Q\n\n" + by_tool, "# D\n\n" + by_tool)
+        assert rule_arrivals(by_tools) == [], rule_arrivals(by_tools)
+        # the phrase in the case it is given: a lessons file's lower-case "must inspect the summation" is advice
+        summation = arrival_tree("# P\n\n" + by_tool, "# Q\n\n" + by_tool,
+                                 "# D\n\n- At a joint you must inspect the summation at the joint, not the onsets.\n")
+        assert rule_arrivals(summation) == [], rule_arrivals(summation)
+
+
+def _check_one_path_banner():
+    """Rule 12 (#138, I-12 interim): one path, one banner on line 5 of the four phase files."""
+    banner = "> 🗺️ " + ONE_PATH_BANNER
+    with _scratch() as tmp:
+        def banner_tree(line5: dict | None = None, extra: str = "") -> str:
+            return _fixture(tmp, {
+                rel: (f"# Phase\n\nWhat this phase is for.\n\n{(line5 or {}).get(rel, banner)}\n\n"
+                      f"> On virtual-first, this phase is ...\n" + (extra if rel == ONE_PATH_FILES[0] else ""))
+                for rel in ONE_PATH_FILES})
+
+        assert rule_one_path_banner(banner_tree()) == [], rule_one_path_banner(banner_tree())
+        chose = ("> 🗺️ **Virtual-first?** If Phase −1 chose the virtual-first path (one capture session → design at "
+                 "the desk), the ORDER of work in Phases 0–3 changes — the phase numbers do not.")
+        two_paths = rule_one_path_banner(banner_tree({rel: chose for rel in ONE_PATH_FILES}))
+        assert sum(f"says '{TWO_PATHS}'" in c for c in two_paths) == 4, two_paths
+        assert sum("is not the one-path banner" in c for c in two_paths) == 4, two_paths
+        # one copy edited alone drifts from the other three, and is the one named
+        drift = rule_one_path_banner(banner_tree({ONE_PATH_FILES[2]: banner + " Read it first."}))
+        assert len(drift) == 1 and "phase_2_eq.md:5: differs" in drift[0], drift
+        # all four banners deleted leave line 5 the same in each (blank) -- still named, four times
+        gone = rule_one_path_banner(banner_tree({rel: "" for rel in ONE_PATH_FILES}))
+        assert sum("is not the one-path banner" in c for c in gone) == 4, gone
+        # the old opening anywhere in a phase file, with an ASCII minus as well
+        stray = rule_one_path_banner(banner_tree(extra="\nIf Phase -1 chose the iterative path, read on.\n"))
+        assert len(stray) == 1 and "phase_0_baseline.md:9:" in stray[0], stray
 
 
 def _selftest() -> int:
@@ -759,104 +923,14 @@ def _selftest() -> int:
         moved_code = rule_protective_floor(floor_tree("HPF ≥ 1.1×Fs @ ≥24 dB/oct\n", margin="1.2"))
         assert any("1.1×Fs" in c for c in moved_code), "the gate is the home: a doc left behind is named"
 
-        # -- rule 9: the plugin is a route once the catalogue left 2.8.3 (#138, I-1)
-        def plugin_tree(doc: str, catalogue: str | None):
-            root = tempfile.mkdtemp(dir=tmp)
-            tooling = os.path.join(root, SKILL, "references", "tooling")
-            os.makedirs(tooling)
-            open(os.path.join(tooling, "installation.md"), "w", encoding="utf-8").write(doc)
-            if catalogue is not None:
-                os.makedirs(os.path.join(root, ".claude-plugin"))
-                open(os.path.join(root, PLUGIN_CATALOGUE), "w", encoding="utf-8").write(catalogue)
-            return root
-
-        def catalogue(ref: str) -> str:
-            return json.dumps({"plugins": [{"name": "autosound-tuning", "source": {"source": "url", "ref": ref}}]})
-
-        # the regression as `installation.md` carried it: wrapped, the number in bold
-        pinned = "# I\n\n* **As a Claude Code plugin**: that catalogue entry is pinned at\n  **2.8.3**, not 3.x.\n"
-        stale_route = rule_plugin_route(plugin_tree(pinned, catalogue("v3.1.1")))
-        assert any("installation.md:3:" in c and "v3.1.1" in c for c in stale_route), stale_route
-        supported = "# I\n\n* **As a Claude Code plugin:** supported — run `/autosound-tuning:setup` once.\n"
-        assert rule_plugin_route(plugin_tree(supported, catalogue("v3.1.1"))) == []
-        # while the catalogue IS on 2.8.3 the sentence is true; with no catalogue there is nothing to hold it to
-        assert rule_plugin_route(plugin_tree(pinned, catalogue("v2.8.3"))) == []
-        assert rule_plugin_route(plugin_tree(pinned, None)) == []
-        # a catalogue that cannot be read is said, never taken for one that pins nothing
-        assert any("cannot be read" in c for c in rule_plugin_route(plugin_tree(supported, "{"))), "unread catalogue"
-
-        # -- rule 10: the owner's sentence gates nothing (#138, I-11) -- in the documents and in project.py's text
-        def owner_tree(skill_md: str, project_py: str):
-            root = tempfile.mkdtemp(dir=tmp)
-            os.makedirs(os.path.join(root, SKILL, "rew_tool"))
-            open(os.path.join(root, SKILL, "SKILL.md"), "w", encoding="utf-8").write(skill_md)
-            open(os.path.join(root, PROJECT_PY), "w", encoding="utf-8").write(project_py)
-            return root
-
-        owed = ("# S\n\nIt invents no fact and it does NOT close the phase-0 gate — the owner's own sentence is "
-                "still owed.\n")
-        # the usage text as `project.py` wraps it: the phrase split across a line and a column of spaces
-        wrapped = ('USAGE = """\n  catch-up   the draft is a marked placeholder and the phase-0 gate\n'
-                   "             still wants the owner's own\n             sentence. Run it when a project is opened\n"
-                   '"""\n\n# a fill that pretended otherwise would close the gate on nobody’s words\n')
-        said = rule_owner_sentence(owner_tree(owed, wrapped))
-        assert any("SKILL.md:3:" in c and "sentence is still owed" in c for c in said), said
-        assert any("project.py:3:" in c and "still wants the owner's own sentence" in c for c in said), said
-        assert any("project.py:7:" in c and "nobody's words" in c for c in said), said
-        optional = ("# S\n\nIt invents no fact. The owner's symptom line is optional — a communication line for the "
-                    "finished tune; nothing about it gates phase 0 (the Arbiter's ruling, 2026-09-08).\n")
-        assert rule_owner_sentence(owner_tree(optional, 'USAGE = """catch-up  invents no fact"""\n')) == []
-
-        # -- rule 11: the tools read arrivals, the GUI is the cross-check (#138, I-20)
-        def arrival_tree(phase1: str, quirks: str, diagnostic: str):
-            root = tempfile.mkdtemp(dir=tmp)
-            for rel, body in zip(ARRIVAL_FILES, (phase1, quirks, diagnostic)):
-                os.makedirs(os.path.dirname(os.path.join(root, rel)), exist_ok=True)
-                open(os.path.join(root, rel), "w", encoding="utf-8").write(body)
-            return root
-
-        by_tool = ("* The tools read arrivals (`predict --align`, `windows.py`, `analyze-joints`); the REW GUI is "
-                   "the cross-check when a tool says ILL-POSED or UNVERIFIED.\n")
-        by_hand = rule_arrivals(arrival_tree(
-            "# P\n\n**Gate:** arrival TA set from **manually-inspected IR onsets**.\n" + by_tool,
-            "# Q\n\n* **⚠️ MANUALLY INSPECT IMPULSE GRAPHS — REW NATIVE DELAY ESTIMATES ARE FIXED:**\n" + by_tool,
-            "# D\n\n  * **we MUST inspect the impulse response graphs manually in the REW GUI**\n"))
-        assert any("phase_1_foundation.md:3:" in c and "manually-inspected" in c for c in by_hand), by_hand
-        assert any("rew-api-quirks.md:3:" in c and "MANUALLY INSPECT" in c for c in by_hand), by_hand
-        assert any("diagnostic-techniques.md:3:" in c and "MUST inspect" in c for c in by_hand), by_hand
-        # the sentence deleted from the two files that carry it is named: a tidy-up leaves nothing saying who reads
-        said_nothing = rule_arrivals(arrival_tree("# P\n", "# Q\n", "# D\n"))
-        assert sum("does not say" in c for c in said_nothing) == 2, said_nothing
-        by_tools = arrival_tree("# P\n\n" + by_tool, "# Q\n\n" + by_tool, "# D\n\n" + by_tool)
-        assert rule_arrivals(by_tools) == [], rule_arrivals(by_tools)
-
-        # -- rule 12: one path, one banner on line 5 of the four phase files (#138, I-12 interim)
-        banner = "> 🗺️ " + ONE_PATH_BANNER
-
-        def banner_tree(line5: dict | None = None, extra: str = ""):
-            root = tempfile.mkdtemp(dir=tmp)
-            for rel in ONE_PATH_FILES:
-                os.makedirs(os.path.dirname(os.path.join(root, rel)), exist_ok=True)
-                body = (f"# Phase\n\nWhat this phase is for.\n\n{(line5 or {}).get(rel, banner)}\n\n"
-                        f"> On virtual-first, this phase is ...\n" + (extra if rel == ONE_PATH_FILES[0] else ""))
-                open(os.path.join(root, rel), "w", encoding="utf-8").write(body)
-            return root
-
-        assert rule_one_path_banner(banner_tree()) == [], rule_one_path_banner(banner_tree())
-        chose = ("> 🗺️ **Virtual-first?** If Phase −1 chose the virtual-first path (one capture session → design at "
-                 "the desk), the ORDER of work in Phases 0–3 changes — the phase numbers do not.")
-        two_paths = rule_one_path_banner(banner_tree({rel: chose for rel in ONE_PATH_FILES}))
-        assert sum(f"says '{TWO_PATHS}'" in c for c in two_paths) == 4, two_paths
-        assert sum("is not the one-path banner" in c for c in two_paths) == 4, two_paths
-        # one copy edited alone drifts from the other three, and is the one named
-        drift = rule_one_path_banner(banner_tree({ONE_PATH_FILES[2]: banner + " Read it first."}))
-        assert len(drift) == 1 and "phase_2_eq.md:5: differs" in drift[0], drift
-        # all four banners deleted leave line 5 the same in each (blank) -- still named, four times
-        gone = rule_one_path_banner(banner_tree({rel: "" for rel in ONE_PATH_FILES}))
-        assert sum("is not the one-path banner" in c for c in gone) == 4, gone
-        # the old opening anywhere in a phase file, with an ASCII minus as well
-        stray = rule_one_path_banner(banner_tree(extra="\nIf Phase -1 chose the iterative path, read on.\n"))
-        assert len(stray) == 1 and "phase_0_baseline.md:9:" in stray[0], stray
+        # -- rules 9-12 (#138): each a `_check_*` of its own, and one loop that collects every failure
+        failures = []
+        for check in (_check_plugin_route, _check_owner_sentence, _check_arrivals, _check_one_path_banner):
+            try:
+                check()
+            except AssertionError as exc:
+                failures.append(f"{check.__name__}: {exc}")
+        assert not failures, "\n".join(failures)
 
         # and the tree itself, which is the point of the whole file
         assert run(ROOT) == 0, "the tree must be clean, or the selftest measures a fake"
@@ -871,13 +945,15 @@ def _selftest() -> int:
           "is lost too, a declaration buried below the head and a file that claims both are each "
           "named; a mapped file, its translation and an honest off-map declaration are not; a "
           "protective floor that drifted from the gate's constants, in a document or in the gate, "
-          "is named; a document saying the plugin is pinned at 2.8.3 while the catalogue installs 3.x is "
-          "named, wrapped and in bold too, and a catalogue that cannot be read is said; a document or "
+          "is named; a document or a front page saying the plugin is pinned at 2.8.3 while the catalogue "
+          "installs 3.x is named, wrapped, quoted and in bold too, while the real 2.8.3 pin, another number, "
+          "another word and a paragraph break are not, and a catalogue that cannot be read is said; a document or "
           "project.py's text saying the phase-0 gate still waits for the owner's own sentence is named, "
-          "wrapped across a column of spaces too; an arrival to be inspected by hand in the GUI is named, and "
-          "so is a phase file or the quirks file left without the sentence that the tools read arrivals; a phase "
-          "file that opens 'If Phase −1 chose', a banner copy edited alone and all four banners deleted at once "
-          "are each named")
+          "wrapped across a column of spaces too; an arrival to be inspected by hand in the GUI is named (a "
+          "lower-case 'must inspect the summation' is not), and so is a phase file or the quirks file left "
+          "without the sentence that the tools read arrivals; a phase file that opens 'If Phase −1 chose', a "
+          "banner copy edited alone and all four banners deleted at once are each named; the four rules' "
+          "checks report every failure in one run")
     return 0
 
 
