@@ -490,8 +490,10 @@ def seed(source, target, *, include_findings=False, copy_profile=True, note=DEFA
         # Another writer holding the new project's lock past the wait (#141, R14) is said in the lock's own sentence --
         # the lock file, nothing written, safe to retry -- with no class name in front: TCC's new-project dialog
         # shows this text as it is. So is an AUTOSOUND_LOCK_TIMEOUT_S that is no number of seconds (R25), which the
-        # command line answers with 2.
-        lock_said = getattr(type(exc), "is_busy", False) or getattr(type(exc), "exit_code", None) == 2
+        # command line answers with 2, and a new folder that cannot be made -- under a parent this user may not write
+        # -- in the lock's own refusal (`write_lock.Unwritable`, `is_unreadable`).
+        lock_said = (getattr(type(exc), "is_busy", False) or getattr(type(exc), "exit_code", None) == 2
+                     or getattr(type(exc), "is_unreadable", False))
         said = str(exc) if lock_said else f"{type(exc).__name__}: {exc}"
         return Seeded(False, problem=said)
     result.written.append("project.json")
@@ -728,14 +730,24 @@ def _check_a_bad_wait_is_a_usage_error():
 def _check_a_seed_makes_its_new_folder():
     """A seed still makes the new project where its folder is not there yet (#141, R23): the lock makes no project
     folder -- a hold on a missing one is this process's thread lock alone -- and the seed's first write, `project.json`,
-    makes it. The counterpart of the verbs that make nothing on a missing folder."""
+    makes it. The counterpart of the verbs that make nothing on a missing folder. Under a parent this user may not
+    write it refuses as the lock does (`write_lock.make_folder`): `problem` the refusal sentence, no class name before
+    it -- TCC's dialog shows it as it is -- and nothing made. It was a raw PermissionError's."""
     import tempfile
+    import project
     with tempfile.TemporaryDirectory() as tmp:
         src = _source_project(os.path.join(tmp, "old-car"))
         dst = os.path.join(tmp, "not-there-yet")
         out = seed(src, dst, today=date(2026, 10, 8))
         assert out.ok and os.path.isfile(os.path.join(dst, "project.json")), out.problem
         assert out.written[0] == "project.json", out.written
+        if project._mode_refuses("a seed under a parent this user may not write", "project_seed"):
+            with project._under_a_read_only_parent(tmp) as new:
+                out = seed(src, new, today=date(2026, 10, 8))
+                made = sorted(os.listdir(os.path.dirname(new)))
+            assert not out.ok and out.problem == project._cannot_be_made(new), \
+                f"under a parent this user may not write: ok {out.ok}, problem {out.problem!r}"
+            assert made == [], f"under a parent this user may not write: made {made}"
 
 
 def _selftest():

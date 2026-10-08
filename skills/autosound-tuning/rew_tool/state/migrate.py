@@ -783,7 +783,8 @@ def _check_import_reads_before_it_writes():
     it wrote the new `project.json` and the ledger, and read the old `dsp_profile.json` after them, so a profile it
     refused -- cut off, a newer method's, one that holds a `project.json` -- left a project half made, and the refusal
     did not say what had landed. Now each refuses with the new folder as it was: not even made, when it was not
-    there. A profile that reads is carried in, as before."""
+    there. A profile that reads is carried in, as before. A new folder under a parent this user may not write is
+    refused as the lock refuses one it cannot make (#141): one line, exit 1, nothing made."""
     import contextlib
     import io
     import json
@@ -830,6 +831,20 @@ def _check_import_reads_before_it_writes():
         made = sorted(n for n in os.listdir(new) if n != ".autosound")
         if rc != 0 or made != ["dsp_profile.json", "project.json", "state"]:
             failures.append(f"a profile that reads: rc {rc!r}, new folder {sorted(os.listdir(new))}")
+        # The new folder under a parent this user may not write: refused as the lock refuses (`write_lock.make_folder`),
+        # one line, exit 1, nothing made. It was a raw PermissionError's traceback.
+        if _project._mode_refuses("--into under a parent this user may not write", "migrate"):
+            with _project._under_a_read_only_parent(top) as new:
+                out, err = io.StringIO(), io.StringIO()
+                try:
+                    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                        rc = _main([old, "--into", new])
+                except Exception as exc:  # noqa: BLE001 -- a traceback is a failure under test
+                    rc = f"raised {type(exc).__name__}: {exc}"
+                made = sorted(os.listdir(os.path.dirname(new)))
+            if rc != 1 or err.getvalue() != f"error: {_project._cannot_be_made(new)}\n" or out.getvalue() or made:
+                failures.append(f"under a parent this user may not write: rc {rc!r}, said {err.getvalue()[-300:]!r}, "
+                                f"made {made}")
         assert not failures, "\n  ".join(["an import refused after it wrote:"] + failures)
     finally:
         shutil.rmtree(old, ignore_errors=True)

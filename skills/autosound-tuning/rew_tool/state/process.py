@@ -3074,7 +3074,9 @@ class Process:
         # The journal too, before the state (F M-7): every write here is followed by its event, and one refused after
         # the write left the change in the state with no line in the journal.
         self._require_journal()
-        os.makedirs(self.dir, exist_ok=True)  # first real write is what creates `process/`
+        # The first real write is what creates `process/` -- and the project folder too, where `enter-phase -1` starts
+        # a project: one this user cannot make is the lock's own refusal, one line, exit 1 (#141), never a bug's 70.
+        _write_lock().make_folder(self.dir)
         # A temp of this writer's own, then one move (skill #135): a crash mid-write would otherwise leave truncated
         # JSON, and the next session would read an empty process and think nothing had happened; a fixed temp name
         # was shared by every writer of the file (audit T-8).
@@ -3183,7 +3185,7 @@ class Process:
     def _append_event(self, event_type, payload):
         event = {"at": _now(), "type": event_type}
         event.update({k: v for k, v in payload.items() if v is not None})
-        os.makedirs(self.dir, exist_ok=True)
+        _write_lock().make_folder(self.dir)          # as `_write`: one that cannot be made is `Unwritable` (#141)
         # After a torn last line the event starts on a fresh one instead of being glued to it and lost (audit T-14).
         _project_io().append_line(self.journal_path, json.dumps(event, ensure_ascii=False))
         return event
@@ -7724,7 +7726,8 @@ def _check_a_new_project_still_starts():
     writes that file first -- and, with none, the intake's own `enter-phase -1`, which starts the project, as
     `session-start` does in a project folder that is there (R19, `_check_session_start_starts_a_project`). The intake
     starts one where the project folder is not there yet either, making it: the lock makes nothing there (R23), the
-    first write does. Any other verb there first is refused, exit 1, "not a project yet", and nothing is made."""
+    first write does -- and under a parent this user may not write refuses as the lock does, one line, exit 1. Any
+    other verb there first is refused, exit 1, "not a project yet", and nothing is made."""
     import shutil
     import tempfile
     top = tempfile.mkdtemp(prefix="autosound_process_new_project_")
@@ -7740,6 +7743,22 @@ def _check_a_new_project_still_starts():
         if rc != EXIT_OK or Process(d).load(strict=True).get("active_phase") != "-1":
             failures.append(f"enter-phase -1 on a project folder that is not there: rc {rc}, said "
                             f"{err.strip()[-200:]!r}")
+        # ...and under a parent this user may not write it refuses as the lock does (`write_lock.make_folder`): one
+        # line, exit 1, nothing made. It was a bug's 70, its traceback from the folder's making.
+        if _mode_refuses("enter-phase -1 under a parent this user may not write, met for real"):
+            ro = os.path.join(top, "ro")
+            os.makedirs(ro)
+            os.chmod(ro, 0o555)
+            try:
+                new = os.path.join(ro, "new")
+                rc, out, err = _run_main(["process.py", os.path.join(new, "process"), "enter-phase", "-1"])
+                want = (f"error: {new} cannot be made (Permission denied), so nothing was written -- this user may "
+                        "not write there: give it access (its owner and mode, `ls -l`) and run again")
+                if rc != EXIT_NO or err.strip().splitlines() != [want] or out.strip() or os.listdir(ro):
+                    failures.append(f"enter-phase -1 under a parent this user may not write: rc {rc}, said "
+                                    f"{err.strip().splitlines()[-2:]}, made {sorted(os.listdir(ro))}")
+            finally:
+                os.chmod(ro, 0o755)
         for n, argv in enumerate(a for a in _WRITING_RUNS if a != ["enter-phase", "-1"] and a[0] != "session-start"):
             proj = os.path.join(top, f"first-{n}")
             os.makedirs(proj)

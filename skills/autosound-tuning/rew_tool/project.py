@@ -916,7 +916,9 @@ class Project:
         with _hold(self.dir):
             rev = self.load().get("project_rev")
             data["project_rev"] = (rev if isinstance(rev, int) and not isinstance(rev, bool) and rev >= 0 else 0) + 1
-            os.makedirs(self.dir, exist_ok=True)
+            # The project folder, where this is its first write: one this user cannot make is the lock's own refusal,
+            # one line, exit 1 (#141) -- it was a raw OSError, a traceback.
+            _write_lock().make_folder(self.dir)
             io_.atomic_write_json(self.path, data, indent=2, sort_keys=True, ensure_ascii=False)
         return data
 
@@ -2112,11 +2114,15 @@ with lock.hold(sys.argv[2], timeout_s=30):
 
 @contextlib.contextmanager
 def _held_elsewhere(project_dir):
-    """The project's writer lock, held by another process for the block (#141, J2b): what a second writer meets."""
+    """The project's writer lock, held by another process for the block (#141, J2b): what a second writer meets. The
+    project folder must be there: on one that is not, that process holds its own thread lock alone (R23), which no
+    writer here would meet -- refused at once, saying so."""
     import shutil
     import subprocess
     import tempfile
     import time
+    assert os.path.isdir(project_dir), (f"{project_dir} is not there: another process holding its lock would hold its "
+                                        "own thread lock alone (#141, R23) -- make the folder first")
     signals = tempfile.mkdtemp(prefix="autosound_lock_signals_")
     lock_py = os.path.join(os.path.dirname(os.path.realpath(__file__)), "write_lock.py")
     child = subprocess.Popen([sys.executable, "-c", _LOCK_HOLDER, lock_py, project_dir, signals],
@@ -2142,6 +2148,37 @@ def _held_elsewhere(project_dir):
         if not child.stderr.closed:
             child.stderr.close()
         shutil.rmtree(signals, ignore_errors=True)
+
+
+def _mode_refuses(case, who="project"):
+    """True where a folder's mode refuses this user -- POSIX, not root -- so `case`, which needs that, runs. Elsewhere
+    `case` is said not checked here, one line naming `who`, and skipped: root writes into a read-only folder all the
+    same, and Windows keeps no POSIX mode."""
+    if os.name == "posix" and os.geteuid() != 0:
+        return True
+    print(f"{who}: {case} was not checked here -- "
+          + ("run as root, whom no file mode refuses" if os.name == "posix" else "Windows keeps no POSIX mode"))
+    return False
+
+
+@contextlib.contextmanager
+def _under_a_read_only_parent(top):
+    """The path of a project folder that is not there, in `<top>/ro`, a folder this user may not write for the block
+    (#141): where a creator's first write cannot make the project folder. Its mode comes back after the block."""
+    ro = os.path.join(top, "ro")
+    os.makedirs(ro)
+    os.chmod(ro, 0o555)
+    try:
+        yield os.path.join(ro, "new")
+    finally:
+        os.chmod(ro, 0o755)
+
+
+def _cannot_be_made(path):
+    """What a creator says of a project folder it cannot make under a parent this user may not write (#141): the
+    lock's own refusal, `write_lock.Unwritable`, in its words."""
+    return (f"{path} cannot be made (Permission denied), so nothing was written -- this user may not write there: "
+            "give it access (its owner and mode, `ls -l`) and run again")
 
 
 def _another_writer_tries(project_dir):
@@ -2601,8 +2638,9 @@ def _check_a_missing_project_makes_nothing():
     gone (#141, R23): no folder, no `.autosound/`, the verb's own exit and its one line. The lock made
     `<typo>/.autosound/` under verbs that went on to say "nothing was written"; base made nothing. The creator still
     creates: `set-channel` makes the folder and its `project.json` -- the lock nothing, a hold on a missing folder being
-    this process's thread lock alone -- and the next write there takes the lock, making `.autosound/`. Looked for by
-    name: `_files_in` leaves `.autosound/` out."""
+    this process's thread lock alone -- and the next write there takes the lock, making `.autosound/`. Under a parent
+    this user may not write it refuses as the lock does (`write_lock.make_folder`): one line, exit 1, nothing made.
+    Looked for by name: `_files_in` leaves `.autosound/` out."""
     import shutil
     import tempfile
     top = tempfile.mkdtemp(prefix="autosound_project_gone_")
@@ -2637,9 +2675,42 @@ def _check_a_missing_project_makes_nothing():
         rc, out, err = _run_cli(_main, ["project.py", new, "set-channel", "w-L", "role=woofer"])
         if rc != 0 or not os.path.isfile(_write_lock().lock_path(new)):
             failures.append(f"the next write there took no lock: rc {rc}, made {sorted(os.listdir(new))}")
+        # The creator under a parent this user may not write: the lock's own refusal, one line, exit 1, nothing made.
+        # It was a traceback from the folder's making.
+        if _mode_refuses("set-channel under a parent this user may not write"):
+            with _under_a_read_only_parent(top) as new:
+                rc, out, err = _run_cli(_main, ["project.py", new, "set-channel", "m-L", "role=mid"])
+                said = (out + err).strip().splitlines()
+                if rc != 1 or said != [f"error: {_cannot_be_made(new)}"] or os.listdir(os.path.dirname(new)):
+                    failures.append(f"set-channel under a parent this user may not write: rc {rc}, said "
+                                    f"{said[-3:]}, made {sorted(os.listdir(os.path.dirname(new)))}")
     finally:
         shutil.rmtree(top, ignore_errors=True)
     assert not failures, "\n  ".join(["a project folder that is not there:"] + failures)
+
+
+def _check_held_elsewhere_needs_its_folder():
+    """`_held_elsewhere`, another process holding the project's lock, refuses a project folder that is not there (#141,
+    R23): that process would hold its own thread lock alone, which no writer here meets, and a check built on it would
+    pass for no reason. It says why at once, with nothing made; the folder made, it holds."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_project_held_gone_")
+    try:
+        gone = os.path.join(top, "gone")
+        caught = _raised_by(lambda: _enter_held_elsewhere(gone))
+        assert isinstance(caught, AssertionError) and "is not there" in str(caught), \
+            f"held elsewhere on a folder that is not there: {caught!r}"
+        assert os.listdir(top) == [], f"made {sorted(os.listdir(top))}"
+        os.makedirs(gone)
+        assert _raised_by(lambda: _enter_held_elsewhere(gone)) is None, "not held once the folder is there"
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _enter_held_elsewhere(project_dir):
+    with _held_elsewhere(project_dir):
+        pass
 
 
 def _check_rename_channel_takes_no_facts_of_its_own():
@@ -2787,7 +2858,7 @@ def _selftest():
                   _check_two_writers_lose_nothing, _check_save_counts_from_the_disk,
                   _check_update_changes_under_the_lock, _check_update_writes_only_whole_facts,
                   _check_a_held_lock_answers_75, _check_catch_up_holds_once, _check_a_missing_project_makes_nothing,
-                  _check_rename_channel_takes_no_facts_of_its_own,
+                  _check_held_elsewhere_needs_its_folder, _check_rename_channel_takes_no_facts_of_its_own,
                   _check_a_bad_timeout_is_a_usage_error, _check_record_change_into_a_mistyped_folder,
                   _check_record_change_asks_git_with_the_lock_free, _check_no_load_and_save_outside_update):
         try:

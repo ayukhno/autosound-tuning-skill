@@ -2162,7 +2162,8 @@ def _check_a_missing_project_makes_nothing():
     """A verb that does not create a project makes nothing on a project folder that is not there (#141, R23): no folder,
     no `.autosound/`, and the verb's own refusal -- its `IntakeError` in its traceback's last line, exit 1 from the
     command line -- which says "Nothing was written". The lock made `<typo>/.autosound/` under that sentence. The
-    creator still creates: `set-car` makes the folder and its `project.json`."""
+    creator still creates: `set-car` makes the folder and its `project.json`; under a parent this user may not write
+    it refuses as the lock does, the sentence the last line of its traceback, nothing made."""
     import shutil
     import tempfile
     top = tempfile.mkdtemp(prefix="autosound_intake_gone_")
@@ -2186,6 +2187,17 @@ def _check_a_missing_project_makes_nothing():
         made = sorted(os.listdir(new)) if os.path.isdir(new) else None
         if rc != 0 or (project.Project(new).load().get("car") or {}).get("make") != "VW" or made != ["project.json"]:
             failures.append(f"set-car on a new folder: rc {rc}, said {(out + err).strip()[-200:]!r}, made {made}")
+        # Under a parent this user may not write the creator refuses as the lock does (`write_lock.make_folder`):
+        # its traceback kept (R12), the refusal sentence its last line, exit 1, nothing made. That line was a raw
+        # PermissionError's.
+        if project._mode_refuses("set-car under a parent this user may not write", "intake"):
+            with project._under_a_read_only_parent(top) as new:
+                rc, out, err = project._run_cli(_main, ["set-car", new, "VW", "Passat", "B8", "sedan"])
+                last = (err.strip().splitlines() or [""])[-1]
+                if rc != "raised" or not last.endswith(".Unwritable: " + project._cannot_be_made(new)) \
+                        or os.listdir(os.path.dirname(new)):
+                    failures.append(f"set-car under a parent this user may not write: rc {rc}, said {last!r}, made "
+                                    f"{sorted(os.listdir(os.path.dirname(new)))}")
     finally:
         shutil.rmtree(top, ignore_errors=True)
     assert not failures, "\n  ".join(["a project folder that is not there:"] + failures)
