@@ -134,8 +134,9 @@ jobs:
   # /usr/bin/python3 -- no setup-python here -- is externally managed, so pip refuses the method's libraries there. A
   # real `install.sh`, the method only, unattended: it must end 3, installed and NOT ready, with numpy named in its
   # receipt -- not 0 and "Installed." over a python3 that cannot run the method. Real downloads (the method's signed
-  # tag, Claude Code, the reviewer), hence the time limit. An install found READY fails too, naming why: the runner
-  # image changed, and this job no longer shows what it was written to show.
+  # tag, Claude Code), hence the time limit; not the reviewer's (`--no-reviewer`): a third party's download that fails
+  # says nothing about the exit contract. An install found READY fails too, naming why: the runner image changed, and
+  # this job no longer shows what it was written to show.
   installers-ubuntu:
     needs: gate
     if: needs.gate.outputs.run == 'true'
@@ -146,7 +147,7 @@ jobs:
       - name: install.sh on the runner's own python3 ends 3, numpy named in the receipt
         run: |
           rc=0
-          bash install.sh --terminal --no-engine --yes || rc=$?
+          bash install.sh --terminal --no-engine --no-reviewer --yes || rc=$?
           receipt="${XDG_DATA_HOME:-$HOME/.local/share}/autosound/install-receipt.json"
           echo "install.sh ended with exit $rc; its receipt, $receipt:"
           cat "$receipt" || true
