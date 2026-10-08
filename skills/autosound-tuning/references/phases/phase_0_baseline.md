@@ -2,7 +2,7 @@
 
 This phase establishes the raw baseline measurement of the car's current acoustic response and prepares the target curves for comparison.
 
-> 🗺️ **Virtual-first?** If Phase −1 chose the virtual-first path (one capture session → design at the desk), the ORDER of work in Phases 0–3 changes — the phase numbers do not. Read [`virtual-first.md`](references/phases/virtual-first.md) alongside this file; it is the one home of that path. This file stays the authority on the iterative fallback and on every gate.
+> 🗺️ **One path.** The order of work is [`virtual-first.md`](references/phases/virtual-first.md)'s; the sections of this file marked *iterative* apply only when its Degradation section routes here. This file stays the authority on every gate.
 
 > On virtual-first, Phase 0 is the ONE disciplined **capture session** (handheld levels → RTA + ellipsoid → tripod solos, tripod untouched until Phase 3): [`capture-session-sheet.md`](references/phases/capture-session-sheet.md).
 

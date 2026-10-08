@@ -2,7 +2,7 @@
 
 This phase acts as the final technical gate before proceeding to subjective listening or surround integration.
 
-> 🗺️ **Virtual-first?** If Phase −1 chose the virtual-first path (one capture session → design at the desk), the ORDER of work in Phases 0–3 changes — the phase numbers do not. Read [`virtual-first.md`](references/phases/virtual-first.md) alongside this file; it is the one home of that path. This file stays the authority on the iterative fallback and on every gate.
+> 🗺️ **One path.** The order of work is [`virtual-first.md`](references/phases/virtual-first.md)'s; the sections of this file marked *iterative* apply only when its Degradation section routes here. This file stays the authority on every gate.
 
 > On virtual-first, Phase 3 is the short car session that VERIFIES the desk: enter the preset → the entry control (`verify_prediction --entry`, 1–2 solos) → all sums from the tripod → predicted/measured delta (≤ 1 dB trusted, otherwise a warning and on) → MMM fine EQ (`eq_propose --rta`; what cuts and what booms by `ear_suspects`, settled by A/B) → lock. Detail in [`virtual-first.md`](references/phases/virtual-first.md) §"Phase 3".
 

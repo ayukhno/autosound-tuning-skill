@@ -58,6 +58,10 @@ Rules:
     `diagnostic-techniques.md` may not tell the reader to inspect onsets by hand, and the first two
     must say "The tools read arrivals".
 
+12. **`one-path-banner`** (#138, I-12 interim). One path, virtual-first with degradation (decided
+    2026-09-09): line 5 of `phase_0`…`phase_3` is one banner, the same in all four, saying the order of
+    work is `virtual-first.md`'s; none of the four may say "If Phase −1 chose".
+
 Run: `scripts/docs-check.py` (from anywhere), `--selftest` for the checker's own mechanics.
 stdlib only.
 """
@@ -515,6 +519,53 @@ def rule_arrivals(root: str) -> list[str]:
     return bad
 
 
+#: The four phase files of the one path, the line that opens each with the same banner, and the banner itself.
+ONE_PATH_FILES = tuple(os.path.join(SKILL, "references", "phases", name) for name in
+                       ("phase_0_baseline.md", "phase_1_foundation.md", "phase_2_eq.md", "phase_3_control.md"))
+ONE_PATH_LINE = 5
+ONE_PATH_BANNER = ("**One path.** The order of work is [`virtual-first.md`](references/phases/virtual-first.md)'s; "
+                   "the sections of this file marked *iterative* apply only when its Degradation section routes here. "
+                   "This file stays the authority on every gate.")
+#: How the four banners began while the path was a choice Phase −1 made.
+TWO_PATHS = "If Phase −1 chose"
+
+
+def rule_one_path_banner(root: str) -> list[str]:
+    """The four phase files open with one banner: the order of work is virtual-first's (#138, I-12 interim).
+
+    One path, virtual-first with degradation, was decided on 2026-09-09 (review §9 item 3), and the four phase files
+    still opened with "If Phase −1 chose the virtual-first path ...": a choice the method no longer offers. Until the
+    iterative text moves out of them (S3), each says the same thing on the same line -- the order of work is
+    `virtual-first.md`'s, the sections marked *iterative* apply only when its Degradation section routes there, and
+    the phase file stays the authority on every gate. The banner is held here and the four lines against each other,
+    character for character, so neither a copy edited alone nor all four deleted at once passes.
+    """
+    bad, lines = [], {}
+    for rel in ONE_PATH_FILES:
+        path = os.path.join(root, rel)
+        if not os.path.isfile(path):
+            bad.append(f"{rel}: missing — it is one of the four phase files that open with the one-path banner")
+            continue
+        rows = open(path, encoding="utf-8").read().splitlines()
+        line = rows[ONE_PATH_LINE - 1] if len(rows) >= ONE_PATH_LINE else ""
+        if ONE_PATH_BANNER in line:
+            lines[rel] = line
+        else:
+            bad.append(f"{rel}:{ONE_PATH_LINE}: is not the one-path banner ('{ONE_PATH_BANNER[:42]}…') — the order "
+                       f"of work is virtual-first.md's, and line {ONE_PATH_LINE} of each phase file says so")
+        for n in _hits(path, TWO_PATHS):
+            bad.append(f"{rel}:{n}: says '{TWO_PATHS}' — Phase −1 chooses no path: there is one, virtual-first "
+                       f"with degradation (decided 2026-09-09)")
+    if len(set(lines.values())) > 1:
+        common = max(set(lines.values()), key=list(lines.values()).count)
+        same = ", ".join(os.path.basename(r) for r, line in lines.items() if line == common)
+        for rel, line in lines.items():
+            if line != common:
+                bad.append(f"{rel}:{ONE_PATH_LINE}: differs from line {ONE_PATH_LINE} of {same} — the phase files "
+                           f"carry one banner, character for character")
+    return bad
+
+
 RULES = [("data-not-instructions", rule_data_not_instructions),
          ("phase-source", rule_phase_source),
          ("references-orphans", rule_references_orphans),
@@ -525,7 +576,8 @@ RULES = [("data-not-instructions", rule_data_not_instructions),
          ("protective-floor", rule_protective_floor),
          ("plugin-route", rule_plugin_route),
          ("owner-sentence", rule_owner_sentence),
-         ("arrivals", rule_arrivals)]
+         ("arrivals", rule_arrivals),
+         ("one-path-banner", rule_one_path_banner)]
 
 
 def run(root: str) -> int:
@@ -778,6 +830,34 @@ def _selftest() -> int:
         by_tools = arrival_tree("# P\n\n" + by_tool, "# Q\n\n" + by_tool, "# D\n\n" + by_tool)
         assert rule_arrivals(by_tools) == [], rule_arrivals(by_tools)
 
+        # -- rule 12: one path, one banner on line 5 of the four phase files (#138, I-12 interim)
+        banner = "> 🗺️ " + ONE_PATH_BANNER
+
+        def banner_tree(line5: dict | None = None, extra: str = ""):
+            root = tempfile.mkdtemp(dir=tmp)
+            for rel in ONE_PATH_FILES:
+                os.makedirs(os.path.dirname(os.path.join(root, rel)), exist_ok=True)
+                body = (f"# Phase\n\nWhat this phase is for.\n\n{(line5 or {}).get(rel, banner)}\n\n"
+                        f"> On virtual-first, this phase is ...\n" + (extra if rel == ONE_PATH_FILES[0] else ""))
+                open(os.path.join(root, rel), "w", encoding="utf-8").write(body)
+            return root
+
+        assert rule_one_path_banner(banner_tree()) == [], rule_one_path_banner(banner_tree())
+        chose = ("> 🗺️ **Virtual-first?** If Phase −1 chose the virtual-first path (one capture session → design at "
+                 "the desk), the ORDER of work in Phases 0–3 changes — the phase numbers do not.")
+        two_paths = rule_one_path_banner(banner_tree({rel: chose for rel in ONE_PATH_FILES}))
+        assert sum(f"says '{TWO_PATHS}'" in c for c in two_paths) == 4, two_paths
+        assert sum("is not the one-path banner" in c for c in two_paths) == 4, two_paths
+        # one copy edited alone drifts from the other three, and is the one named
+        drift = rule_one_path_banner(banner_tree({ONE_PATH_FILES[2]: banner + " Read it first."}))
+        assert len(drift) == 1 and "phase_2_eq.md:5: differs" in drift[0], drift
+        # all four banners deleted leave line 5 the same in each (blank) -- still named, four times
+        gone = rule_one_path_banner(banner_tree({rel: "" for rel in ONE_PATH_FILES}))
+        assert sum("is not the one-path banner" in c for c in gone) == 4, gone
+        # the old opening anywhere in a phase file, with an ASCII minus as well
+        stray = rule_one_path_banner(banner_tree(extra="\nIf Phase -1 chose the iterative path, read on.\n"))
+        assert len(stray) == 1 and "phase_0_baseline.md:9:" in stray[0], stray
+
         # and the tree itself, which is the point of the whole file
         assert run(ROOT) == 0, "the tree must be clean, or the selftest measures a fake"
     finally:
@@ -795,7 +875,9 @@ def _selftest() -> int:
           "named, wrapped and in bold too, and a catalogue that cannot be read is said; a document or "
           "project.py's text saying the phase-0 gate still waits for the owner's own sentence is named, "
           "wrapped across a column of spaces too; an arrival to be inspected by hand in the GUI is named, and "
-          "so is a phase file or the quirks file left without the sentence that the tools read arrivals")
+          "so is a phase file or the quirks file left without the sentence that the tools read arrivals; a phase "
+          "file that opens 'If Phase −1 chose', a banner copy edited alone and all four banners deleted at once "
+          "are each named")
     return 0
 
 

@@ -2,7 +2,7 @@
 
 This is the core technical execution phase — **the second part of EQ**. The first part, the coarse per-driver resonance package, and the joint delays computed with it in the chains are Phase 1's (`phase_1_foundation.md` §5.5; `virtual-first.md` 1.4–1.5). The order here is the user's decision of 2026-09-17 and it **MUST** be held: **2a** the L/R pairs per band, and what the coarse pass left per channel → **2b** the junctions of each side, then the sub with the mids — the delays re-checked only where a step's EQ touched a junction's band, otherwise left → **2c** each side whole, then everything together → **2d** the final tone to target, then the centre under everything, then the rear.
 
-> 🗺️ **Virtual-first?** If Phase −1 chose the virtual-first path (one capture session → design at the desk), the ORDER of work in Phases 0–3 changes — the phase numbers do not. Read [`virtual-first.md`](references/phases/virtual-first.md) alongside this file; it is the one home of that path. This file stays the authority on the iterative fallback and on every gate.
+> 🗺️ **One path.** The order of work is [`virtual-first.md`](references/phases/virtual-first.md)'s; the sections of this file marked *iterative* apply only when its Degradation section routes here. This file stays the authority on every gate.
 
 
 ## 🎯 Goal-node

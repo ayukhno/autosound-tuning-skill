@@ -2,7 +2,7 @@
 
 This phase establishes the physical foundation of the tune: the tuner's wishes checked, the crossovers as variants, band-specific targets, the coarse per-driver EQ, and the levels and delays computed with it — the tuner choosing at the end (the order the user set on 2026-09-17, `docs/DESIGN-2026-09-17-phase1-variants.md`).
 
-> 🗺️ **Virtual-first?** If Phase −1 chose the virtual-first path (one capture session → design at the desk), the ORDER of work in Phases 0–3 changes — the phase numbers do not. Read [`virtual-first.md`](references/phases/virtual-first.md) alongside this file; it is the one home of that path. This file stays the authority on the iterative fallback and on every gate.
+> 🗺️ **One path.** The order of work is [`virtual-first.md`](references/phases/virtual-first.md)'s; the sections of this file marked *iterative* apply only when its Degradation section routes here. This file stays the authority on every gate.
 
 > On virtual-first, Phases 1–2 are one desk sitting that ends in a **predicted sum** (`predict.py`; the junctions by `predict --align`, the virtual tier through `--route`, the EQ as packages by `eq_propose` with `ellipsoid` for what stays) before anything is entered into the DSP — see [`virtual-first.md`](references/phases/virtual-first.md) §"Phases 1–2". Its order: the wishes (1.2) → the variants, best first (1.3) → coarse EQ per driver (1.4) → the joints with that EQ in the chains, front and sub first (1.5) → levels and how the scene is centred (1.6) → the sums predicted, the variants described, the tuner chooses (1.7). Phase 2 is the second part of EQ.
 
