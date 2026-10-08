@@ -533,6 +533,48 @@ def _check_text_and_json():
         _drop(d)
 
 
+def _check_binary_temp():
+    """#135's Windows half (the final review's I-2): every temp is opened binary -- `O_BINARY`, Windows' flag; POSIX
+    has none and needs none -- so a byte written is the byte read back. A descriptor `os.open` gives is otherwise in
+    the C runtime's text mode, which turns each "\\n" written into "\\r\\n": a copy of bytes would not be the
+    original's, a text with the platform's ending would get "\\r\\r\\n", and `newline=""` would not keep the text's
+    own. Two halves: each create asks for the flag -- on POSIX one is lent to `os` for the look and taken off before
+    the real open, so the line is held here too -- and what each writer wrote reads back byte for byte, the half that
+    bites where the flag is real: CI runs this selftest on Windows."""
+    d = _scratch()
+    real_open = os.open
+    had = hasattr(os, "O_BINARY")
+    flag = os.O_BINARY if had else 0x8000           # Windows' value, lent where the platform has none
+    asked = []
+
+    def recording(path, flags, *args, **kwargs):
+        if flags & os.O_CREAT:                       # a create; the folder's own open for its fsync is not one
+            asked.append((os.path.basename(path), bool(flags & flag)))
+        return real_open(path, flags if had else flags & ~flag, *args, **kwargs)
+    data = b"a\nb\r\nc\rd\x1a\n\x00\xff end\n"
+    try:
+        if not had:
+            os.O_BINARY = flag
+        os.open = recording
+        try:
+            atomic_write_bytes(os.path.join(d, "bytes.bin"), data)
+            create_exclusive(os.path.join(d, "v_001.json"), "one\ntwo\r\nthree\n", newline="")
+            atomic_write_text(os.path.join(d, "lf.txt"), "x\ny\n", newline="\n")
+            atomic_write_text(os.path.join(d, "crlf.txt"), "x\ny\n", newline="\r\n")
+        finally:
+            os.open = real_open
+            if not had:
+                del os.O_BINARY
+        assert len(asked) >= 4 and all(binary for _name, binary in asked), \
+            f"a temp opened without O_BINARY -- text mode on Windows: {asked}"
+        for name, want in (("bytes.bin", data), ("v_001.json", b"one\ntwo\r\nthree\n"), ("lf.txt", b"x\ny\n"),
+                           ("crlf.txt", b"x\r\ny\r\n")):
+            got = _read_bytes(os.path.join(d, name))
+            assert got == want, f"{name}: written {want!r}, read back {got!r}"
+    finally:
+        _drop(d)
+
+
 def _check_foreign_tmp():
     """A `<path>.tmp` beside the target -- another writer's, or the temp this method used before #135 -- survives a
     write byte for byte, and no two temp names are the same."""
@@ -1163,7 +1205,8 @@ def _check_two_writers_one_reader():
 
 def _selftest():
     failures, seen = [], {}
-    for check in (_check_text_and_json, _check_foreign_tmp, _check_replace_fails_clean, _check_write_fails_clean,
+    for check in (_check_text_and_json, _check_binary_temp, _check_foreign_tmp, _check_replace_fails_clean,
+                  _check_write_fails_clean,
                   _check_replace_retry, _check_private_mode, _check_create_exclusive, _check_append_line,
                   _check_durable, _check_append_refused, _check_read_json, _check_newer_schema,
                   _check_every_writer_moves, _check_two_writers_one_reader):
@@ -1176,7 +1219,8 @@ def _selftest():
         print(f"project_io selftest FAILED -- {len(failures)} check(s)")
         return 1
     reads = seen["_check_two_writers_one_reader"]
-    print(f"project_io selftest OK -- text, JSON and bytes land with the old sites' bytes; a foreign <file>.tmp is "
+    print(f"project_io selftest OK -- text, JSON and bytes land with the old sites' bytes, every temp opened binary "
+          f"(O_BINARY) and read back as written; a foreign <file>.tmp is "
           f"left alone and no temp name repeats; a failed move, a write failing with its bytes in the temp and a "
           f"Ctrl-C there leave the old file whole and no temp behind; a held move is retried on Windows only; a "
           f"private file is private from its first byte, its mode set again before the move; an exclusive create "

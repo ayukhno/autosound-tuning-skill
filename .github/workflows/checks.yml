@@ -184,3 +184,9 @@ jobs:
           a._KEYSTORE_CACHE.clear()
           assert a.keystore_get("GEMINI_API_KEY") == v and a.shell_exports() == [], said
           print("DPAPI round trip and the registry move: OK")
+      # The atomic writers on the system they were made for (#135's Windows half, the final review's I-2): the retry of a
+      # move a holder refuses, no folder fsync, the temp opened binary (`O_BINARY` -- in text mode every "\n" written
+      # becomes "\r\n"), and two writers racing a reader that holds the file. The author's Mac fakes `os.name` for
+      # these; here they are real. Its argv is scripts/selftests.txt's; stdlib only, so nothing to install.
+      - name: atomic writes on Windows (project_io's selftest)
+        run: python skills/autosound-tuning/rew_tool/project_io.py --selftest
