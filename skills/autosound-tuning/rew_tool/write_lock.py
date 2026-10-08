@@ -120,9 +120,10 @@ class Unwritable(Exception):
         return f"{self.path} {self.reason}" + (f" -- {self.repair}" if self.repair else "")
 
 
-def _repair_for(exc):
-    """The repair for `exc`, an `OSError` met making the lock's folder or file: the one its cause allows. Said here,
-    not loaded from `project_io`: this module loads no sibling (TCC reads it as text; the writers load it by path)."""
+def _repair_for(exc, windows=_WINDOWS):
+    """The repair for `exc`, an `OSError` met making the lock's folder or file: the one its cause allows, access
+    named where `windows` or POSIX keeps it (a parameter, so that both run on every system). Said here, not loaded
+    from `project_io`: this module loads no sibling (TCC reads it as text; the writers load it by path)."""
     if exc.errno in (errno.EEXIST, errno.ENOTDIR):
         return "a file stands where a folder of its path belongs: move that file aside and run again"
     if exc.errno == errno.EISDIR:
@@ -130,7 +131,8 @@ def _repair_for(exc):
     if exc.errno == errno.EROFS:
         return "the disk is read-only: work on a copy of the project on a disk this user can write"
     if exc.errno in (errno.EACCES, errno.EPERM):
-        return "this user may not write there: give it access (its owner and mode, `ls -l`) and run again"
+        where = "the folder's Properties, Security tab" if windows else "its owner and mode, `ls -l`"
+        return f"this user may not write there: give it access ({where}) and run again"
     return "check the disk and the folder it is on (a network share, a sync client's folder) and run again"
 
 
@@ -395,6 +397,11 @@ def _enter(project_dir, **kw):
         pass
 
 
+def _raise_inside(project_dir):
+    with hold(project_dir, timeout_s=0):
+        raise RuntimeError("inside")
+
+
 def _refusal(err, winerror=None):
     """An `OSError` as the OS lock raises it: `err` its errno, and `winerror` the Windows error that `ctypes.WinError`
     sets beside the errno it maps it to -- set here as an attribute, which any system's `OSError` can carry, so the
@@ -403,6 +410,11 @@ def _refusal(err, winerror=None):
     if winerror is not None:
         exc.winerror = winerror
     return exc
+
+
+def _a_held_refusal():
+    """What `_os_lock` raises on this system when another writer holds the lock."""
+    return _refusal(errno.EACCES, _ERROR_LOCK_VIOLATION) if _WINDOWS else _refusal(errno.EWOULDBLOCK)
 
 
 def _probe(project_dir):
@@ -860,18 +872,160 @@ def _check_the_note_once_per_folder():
         _drop(q)
 
 
-def _selftest():
+def _check_an_error_inside_lets_go():
+    """An error inside the hold is its caller's, and lets everything go -- the owner, the thread lock, the OS lock and
+    the file: another thread gets in at once, a second descriptor gets the OS lock, and this thread holds again with no
+    wait. A hold that let go of the owner alone would keep every other writer out until the process ended."""
+    p = _scratch()
+    try:
+        caught = _raised(lambda: _raise_inside(p))
+        assert isinstance(caught, RuntimeError) and str(caught) == "inside", f"the error became {caught!r}"
+        assert not held_here(p), "held here after an error inside"
+        other = []
+        t = threading.Thread(target=lambda: other.append(_raised(lambda: _enter(p, timeout_s=0))), daemon=True)
+        t.start()
+        t.join(60)
+        assert other == [None], f"another thread was kept out after an error inside: {other}"
+        refused = _probe(p)
+        assert refused is None, f"the OS lock was kept after an error inside: {refused!r}"
+        again = _raised(lambda: _enter(p, timeout_s=0))
+        assert again is None, f"this thread could not hold again: {again!r}"
+    finally:
+        _drop(p)
+
+
+def _check_one_deadline():
+    """One deadline covers both waits (#141): a hold that queued 0.6 s behind another thread has what is left of its
+    1 s for the OS lock, not a fresh second -- Busy at 1 s, never at 1.6. The OS lock is faked as held, so only the
+    deadline ends the wait."""
+    global _os_lock
+    real = _os_lock
+    p = _scratch()
+    held, go, errors = threading.Event(), threading.Event(), []
+
+    def holder():
+        try:
+            with hold(p, timeout_s=0):
+                held.set()
+                go.wait(60)
+                time.sleep(0.6)
+        except Exception as exc:  # noqa: BLE001 -- carried to the main thread, which names it
+            errors.append(exc)
+            held.set()
+
+    def still_held(fd):
+        raise _a_held_refusal()
+
+    t = threading.Thread(target=holder, daemon=True)
+    t.start()
+    try:
+        assert held.wait(60) and not errors, f"the other thread never held the lock: {errors}"
+        _os_lock = still_held
+        go.set()
+        caught = _raised(lambda: _enter(p, timeout_s=1.0))
+        assert getattr(type(caught), "is_busy", False) is True, f"not busy: {caught!r}"
+        assert 0.9 <= caught.waited_s < 1.4, f"Busy after {caught.waited_s:.2f}s of a 1 s wait"
+    finally:
+        _os_lock = real
+        go.set()
+        t.join(60)
+        _drop(p)
+
+
+def _check_a_file_where_the_lock_folder_belongs():
+    """A FILE named `.autosound` in the project: the lock's folder cannot be made, and `hold` refuses with `Unwritable`
+    -- `.path` that file, the EEXIST repair -- before anything is taken, the file as it was. No file mode is involved,
+    so it is met on every system and as root."""
+    p = _scratch()
+    try:
+        blocker = os.path.join(p, LOCK_DIR)
+        with open(blocker, "w", encoding="utf-8") as f:
+            f.write("a file, not the lock's folder\n")
+        caught = _raised(lambda: _enter(p, timeout_s=0))
+        assert getattr(type(caught), "is_unreadable", False) is True, f"no refusal: {caught!r}"
+        assert caught.path == blocker, f"path {caught.path!r}"
+        assert caught.repair == "a file stands where a folder of its path belongs: move that file aside and run " \
+                               "again", f"repair {caught.repair!r}"
+        assert caught.reason.startswith("cannot be made for the project's writer lock (") \
+            and caught.reason.endswith("), so nothing was written"), f"reason {caught.reason!r}"
+        assert not held_here(p), "held here after the refusal"
+        with open(blocker, encoding="utf-8") as f:
+            assert f.read() == "a file, not the lock's folder\n", "the file was changed"
+        os.remove(blocker)
+        after = []                                   # nothing was taken: another thread gets in at once
+        t = threading.Thread(target=lambda: after.append(_raised(lambda: _enter(p, timeout_s=0))), daemon=True)
+        t.start()
+        t.join(60)
+        assert after == [None], f"not let in once the file was moved aside: {after}"
+    finally:
+        _drop(p)
+
+
+def _check_refusals_are_no_oserror_or_valueerror():
+    """`Busy`, `BadTimeout` and `Unwritable` subclass neither `OSError` nor `ValueError`: the command lines catch those
+    two by class BEFORE they read the lock's refusals by attribute (project.py, state/apply.py, setup_import.py,
+    dsp_profile.py's set-setting), so a refusal under either base would be said as their own error, exit 1 or 2 or 3,
+    never 75."""
+    under = [f"{cls.__name__} < {base.__name__}" for cls in (Busy, BadTimeout, Unwritable)
+             for base in (OSError, ValueError) if issubclass(cls, base)]
+    assert not under, f"caught by class before its attribute is read: {under}"
+
+
+def _check_the_access_repair_fits_the_system():
+    """A folder this user may not write is repaired where that system keeps its access: `ls -l` on POSIX, the folder's
+    Security tab on Windows -- never `ls -l` to a Windows user."""
+    denied = _refusal(errno.EACCES)
+    posix, windows = _repair_for(denied, windows=False), _repair_for(denied, windows=True)
+    assert posix == "this user may not write there: give it access (its owner and mode, `ls -l`) and run again", \
+        f"POSIX: {posix!r}"
+    assert "ls -l" not in windows and "Security" in windows, f"Windows: {windows!r}"
+
+
+def _check_a_broken_check_shows_its_traceback():
+    """A check that breaks -- any error but an AssertionError -- is reported with its traceback (CI's Windows step has
+    only this output to read); a check that fails, with its message alone. Both are counted, and neither hides the
+    next."""
+    def broken():
+        raise KeyError("missing")
+
+    def failed():
+        raise AssertionError("not so")
+
+    def passed():
+        return True
+
+    failures, seen = _run_checks((broken, failed, passed))
+    assert len(failures) == 2 and seen == {"passed": True}, f"{failures} / {seen}"
+    assert failures[0].startswith("broken: KeyError: 'missing'\nTraceback (most recent call last):") \
+        and failures[0].rstrip().endswith("KeyError: 'missing'"), f"the broken check said {failures[0]!r}"
+    assert failures[1] == "failed: AssertionError: not so", f"the failed check said {failures[1]!r}"
+
+
+def _run_checks(checks):
+    """Each check run, every failure collected: (failures, {name: what it returned}). A check that fails says its
+    message; one that BREAKS -- any error but an AssertionError -- says its traceback too, all that CI's Windows step
+    leaves to read."""
+    import traceback
     failures, seen = [], {}
-    for check in (_check_protocol_line, _check_folder_ignores_itself, _check_reentrant_and_held_here,
-                  _check_another_thread_waits, _check_another_process_is_busy, _check_timeout_from_the_environment,
-                  _check_a_wait_given_in_code_is_checked_too, _check_a_free_lock_with_zero_wait,
-                  _check_a_folder_that_cannot_lock, _check_a_project_that_cannot_be_written,
-                  _check_busy_exit_says_one_line, _check_a_missing_project_is_not_made, _check_which_refusals_are_held,
-                  _check_a_share_refusing_the_lock_is_noted, _check_the_note_once_per_folder):
+    for check in checks:
         try:
             seen[check.__name__] = check()
+        except AssertionError as exc:
+            failures.append(f"{check.__name__}: AssertionError: {exc}")
         except Exception as exc:  # noqa: BLE001 -- each check is reported by name; one failing must not hide the rest
-            failures.append(f"{check.__name__}: {type(exc).__name__}: {exc}")
+            failures.append(f"{check.__name__}: {type(exc).__name__}: {exc}\n{traceback.format_exc().rstrip()}")
+    return failures, seen
+
+
+def _selftest():
+    failures, seen = _run_checks((
+        _check_protocol_line, _check_folder_ignores_itself, _check_reentrant_and_held_here, _check_another_thread_waits,
+        _check_another_process_is_busy, _check_timeout_from_the_environment, _check_a_wait_given_in_code_is_checked_too,
+        _check_a_free_lock_with_zero_wait, _check_a_folder_that_cannot_lock, _check_a_project_that_cannot_be_written,
+        _check_busy_exit_says_one_line, _check_a_missing_project_is_not_made, _check_which_refusals_are_held,
+        _check_a_share_refusing_the_lock_is_noted, _check_the_note_once_per_folder, _check_an_error_inside_lets_go,
+        _check_one_deadline, _check_a_file_where_the_lock_folder_belongs, _check_refusals_are_no_oserror_or_valueerror,
+        _check_the_access_repair_fits_the_system, _check_a_broken_check_shows_its_traceback))
     if failures:
         print("\n".join(failures))
         print(f"write_lock selftest FAILED -- {len(failures)} check(s)")
@@ -893,14 +1047,16 @@ def _selftest():
           f"(spawned) process holding it make a hold wait its deadline and answer Busy -- exit 75, the lock file "
           f"named, nothing taken -- and get in once it is let go; {ENV_TIMEOUT} read at every call (unset 10 s), "
           f"a value that is no number of seconds exit 2 naming it, before anything is made, and a wait given in "
-          f"code held to the same; a free lock taken at once with no wait; a hold on a missing project makes "
-          f"nothing -- the thread lock alone, Busy to another thread, re-entrant -- and the next hold on the made "
-          f"folder takes the lock; only another writer's lock read as held (on Windows ERROR_LOCK_VIOLATION alone; "
-          f"the table on every system{', and a share refusing LockFileEx written with the note' if share else ''}); "
-          f"a folder that cannot be locked written "
-          f"without the lock, said in one note line once per folder; "
+          f"code held to the same; one deadline over both waits; a free lock taken at once with no wait; a hold on a "
+          f"missing project makes nothing -- the thread lock alone, Busy to another thread, re-entrant -- and the "
+          f"next hold on the made folder takes the lock; only another writer's lock read as held (on Windows "
+          f"ERROR_LOCK_VIOLATION alone; the table on every system"
+          f"{', and a share refusing LockFileEx written with the note' if share else ''}); a folder that cannot be "
+          f"locked written without the lock, said in one note line once per folder; an error inside lets every lock "
+          f"go; a file where the lock's folder belongs refused as Unwritable (EEXIST); "
           f"{'a project folder this user may not write refused as Unwritable, nothing taken or made; ' if unwritable else ''}"
-          f"busy_exit says one line and returns 75")
+          f"the access repair fits the system; the refusals are no OSError or ValueError; busy_exit says one line and "
+          f"returns 75; a check that breaks shows its traceback")
     return 0
 
 
