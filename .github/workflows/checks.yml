@@ -144,10 +144,14 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1     # v7
-      # GitHub's image is not the stock one: its python3 carries no PEP 668 marker, and `pip install --user` took numpy
-      # there (CI 37845939761 ended "not ready" over Claude Code alone). The marker goes back where a stock Ubuntu 24.04
-      # has it -- the folder `sysconfig.get_path("stdlib")` names, which is where pip looks -- and a numpy the image
-      # already carries stops the job, naming the image: the install could not end "not ready" over it.
+      # GitHub's image is not the stock one: its /etc/pip.conf sets `break-system-packages = true` (actions/runner-images,
+      # images/ubuntu/scripts/build/install-python.sh), and pip honours that over PEP 668's marker -- `pip install --user`
+      # took numpy there with the marker in place (CI 37845939761, 37853340329 ended "not ready" over Claude Code alone).
+      # So pip runs here as on a stock Ubuntu 24.04: no config file (PIP_CONFIG_FILE=/dev/null) and
+      # PIP_BREAK_SYSTEM_PACKAGES unset, in this check and in the install below. The marker is written where a stock one
+      # has it only if it is missing (the folder `sysconfig.get_path("stdlib")` names, where pip looks); a numpy the image
+      # already carries stops the job, naming the image; and pip itself must refuse a `--user` install before the run --
+      # one it would take stops the job, printing what overrides PEP 668.
       - name: the runner's python3 as a stock Ubuntu 24.04 has it -- externally managed, no numpy
         run: |
           if /usr/bin/python3 -c "import numpy" 2>/dev/null; then
@@ -155,16 +159,31 @@ jobs:
             exit 1
           fi
           stdlib="$(/usr/bin/python3 -c 'import sysconfig; print(sysconfig.get_path("stdlib"))')"
-          printf '%s\n' '[externally-managed]' \
-            'Error=To install Python packages system-wide, try apt install python3-xyz, where xyz is the package you are trying to install.' \
-            | sudo tee "$stdlib/EXTERNALLY-MANAGED" >/dev/null
-          echo "PEP 668's marker is in place: $stdlib/EXTERNALLY-MANAGED"
+          if [ -f "$stdlib/EXTERNALLY-MANAGED" ]; then
+            echo "PEP 668's marker is there: $stdlib/EXTERNALLY-MANAGED"
+          else
+            printf '%s\n' '[externally-managed]' \
+              'Error=To install Python packages system-wide, try apt install python3-xyz, where xyz is the package you are trying to install.' \
+              | sudo tee "$stdlib/EXTERNALLY-MANAGED" >/dev/null
+            echo "PEP 668's marker was missing, and is written where a stock Ubuntu 24.04 has it: $stdlib/EXTERNALLY-MANAGED"
+          fi
+          rc=0
+          said="$(env -u PIP_BREAK_SYSTEM_PACKAGES PIP_CONFIG_FILE=/dev/null /usr/bin/python3 -m pip install --user --dry-run numpy 2>&1)" || rc=$?
+          if [ "$rc" = 0 ] || ! printf '%s\n' "$said" | grep 'externally-managed-environment' >/dev/null; then
+            echo "::error::pip would take numpy for /usr/bin/python3 with no config file and PIP_BREAK_SYSTEM_PACKAGES unset (exit $rc) -- PEP 668 does not hold on this runner image (${ImageOS:-?} ${ImageVersion:-?}), so the install cannot end NOT ready. What pip said, the PIP_ variables, and pip's configuration:"
+            printf '%s\n' "$said" | tail -n 8
+            env | grep -i '^PIP_' || echo "(no PIP_ variable is set)"
+            /usr/bin/python3 -m pip config debug || true
+            exit 1
+          fi
+          echo "pip refuses a --user install into /usr/bin/python3 (externally-managed-environment): PEP 668 holds"
       - name: install.sh on the runner's own python3 ends 3, numpy named in the receipt and in the verdict
         run: |
           set -o pipefail
           log="$RUNNER_TEMP/install.log"
           rc=0
-          bash install.sh --terminal --no-engine --no-reviewer --yes 2>&1 | tee "$log" || rc=$?
+          env -u PIP_BREAK_SYSTEM_PACKAGES PIP_CONFIG_FILE=/dev/null \
+            bash install.sh --terminal --no-engine --no-reviewer --yes 2>&1 | tee "$log" || rc=$?
           receipt="${XDG_DATA_HOME:-$HOME/.local/share}/autosound/install-receipt.json"
           echo "install.sh ended with exit $rc; its receipt, $receipt:"
           cat "$receipt" || true
