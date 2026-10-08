@@ -478,7 +478,18 @@ def save_new_dsp(project_dir, answers):
     `answers`: {"tiers": {tier: {"count", "letters", "fields"}}, "eq": {"bands", "types",
     "file_import"}, "crossover": {"types", "slopes", "independent"}, "delay": {"step_ms", "max_ms"},
     "presets": {"count", "input_switches"}, "rate"}.
+
+    One writer's from its first read to its last field (#141, R20): the project's lock is held over the read of what
+    the processor is, the draft or profile of another processor set aside, the draft started and every field set.
+    The set-aside ran with no lock, and each later write took it for itself: a lock held past the wait moved the old
+    draft aside, then said "nothing was written".
     """
+    with project._hold(project_dir):
+        return _save_new_dsp(project_dir, answers)
+
+
+def _save_new_dsp(project_dir, answers):
+    """`save_new_dsp`'s work, under its hold."""
     st = dsp_state(project_dir)
     if not st["new"]:
         raise IntakeError("the base is asked only for a processor the skill has no profile of; this "
@@ -818,17 +829,21 @@ def save_controls(project_dir, positions, source="user"):
     `{name: position}`; a position is free text ("4/4", "7", "ON"). A blank one is skipped, not
     written as blank. What a step is WORTH is a separate fact (`set-control-mapping`), and where a
     knob stood FOR A CAPTURE belongs to the round (`process.py capture-knobs`) -- RES-007.
+
+    Every knob under one hold of the project's lock (#141, R20): another writer cannot land between two, and a lock
+    held past the wait is met before the first, so its "nothing was written" is true.
     """
     handle = project.Project(project_dir)
     written = {}
-    for name, pos in (positions or {}).items():
-        name, pos = str(name or "").strip(), str(pos if pos is not None else "").strip()
-        if not name:
-            raise IntakeError("a knob needs its name — nothing was written for it")
-        if not pos:
-            continue
-        handle.set_hardware_control(name, pos, source=source)
-        written[name] = pos
+    with project._hold(project_dir):
+        for name, pos in (positions or {}).items():
+            name, pos = str(name or "").strip(), str(pos if pos is not None else "").strip()
+            if not name:
+                raise IntakeError("a knob needs its name — nothing was written for it")
+            if not pos:
+                continue
+            handle.set_hardware_control(name, pos, source=source)
+            written[name] = pos
     return written
 
 
@@ -2038,6 +2053,111 @@ def _check_composite_writers_hold_once():
     assert not failures, "reached with the project's lock free:\n  " + "\n  ".join(failures)
 
 
+def _check_save_controls_holds_once():
+    """The knobs the form saves are written under one hold of the project's lock (#141, R20): another writer -- a
+    thread, through the real lock -- that tries once a knob is in cannot get in until the last one is written, and one
+    that holds the lock first leaves the save busy with no knob written. Each knob took the lock for itself, so a busy
+    at the second said "nothing was written" over the first. Then it lets go."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_intake_knobs_once_")
+    real, tried, failures = project.Project.set_hardware_control, [], []
+
+    def watched(self, name, value, source=None):
+        if tried or name != "SubRC":                    # a knob is in: another writer tries before the next one
+            tried.append(project._another_writer_tries(proj))
+        return real(self, name, value, source=source)
+    try:
+        for name in ("car", "held"):
+            project.Project(os.path.join(top, name)).save({"schema_version": project.SCHEMA_VERSION, "channels": []})
+        proj = os.path.join(top, "car")
+        knobs = {"SubRC": "4/4", "RearRC": "2", "Bass": "7"}
+        project.Project.set_hardware_control = watched
+        try:
+            written = save_controls(proj, knobs)
+        finally:
+            project.Project.set_hardware_control = real
+        if len(tried) != 2 or not all(getattr(type(t), "is_busy", False) for t in tried):
+            failures.append(f"another writer got in between the knobs: {tried}")
+        on_disk = {k: project.fact_value(v) for k, v in
+                   ((project.Project(proj).load().get("hardware") or {}).get("controls") or {}).items()}
+        if written != knobs or on_disk != knobs:
+            failures.append(f"the knobs did not land: {written} / {on_disk}")
+        let_go = project._another_writer_tries(proj)
+        if let_go is not None:
+            failures.append(f"not let go after the knobs: {let_go!r}")
+        proj = os.path.join(top, "held")
+        before = project._files_in(proj)
+        with project._held_elsewhere(proj), project._env(AUTOSOUND_LOCK_TIMEOUT_S="0.2"):
+            busy = project._raised_by(lambda: save_controls(proj, knobs))
+        if not getattr(type(busy), "is_busy", False) or project._files_in(proj) != before:
+            failures.append(f"under another writer's lock: {busy!r}, written: {project._files_in(proj) != before}")
+    finally:
+        project.Project.set_hardware_control = real
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["the knobs' one hold:"] + failures)
+
+
+def _check_save_new_dsp_holds_once():
+    """A new processor's base is written under one hold of the project's lock (#141, R20) -- the draft or profile of
+    another processor set aside, the draft started, each field set: another writer -- a thread, through the real lock
+    -- that tries once a part is in cannot get in until the last field is written, and one that holds the lock first
+    leaves the save busy with nothing landed, the old draft where it was. The set-aside ran with no lock at all, and
+    each later part took it for itself: under a held lock the old draft was moved, then the save said busy."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_intake_new_dsp_once_")
+    real_field, real_aside, tried, failures = dsp_profile.set_field, _set_aside, [], []
+    answers = {"tiers": {"channels": {"count": "4", "letters": True, "fields": ["hp", "lp", "ta_ms"]}},
+               "delay": {"step_ms": "0.02", "max_ms": "10"}, "rate": 48000}
+    old = {"dsp_profile": {"name": "Old", "vendor": "Oldco", "groups": []}}
+
+    def fixture(name):
+        proj = os.path.join(top, name)
+        project.Project(proj).save({"schema_version": project.SCHEMA_VERSION, "channels": [],
+                                    "dsp": {"vendor": "Acme", "model": "X8"}})
+        with open(dsp_profile.draft_path(proj), "w", encoding="utf-8") as fh:
+            json.dump(old, fh)
+        return proj
+
+    def watched(fn):
+        def call(*args, **kwargs):                      # another writer tries before each part
+            tried.append(project._another_writer_tries(proj))
+            return fn(*args, **kwargs)
+        return call
+    try:
+        proj = fixture("car")
+        dsp_profile.set_field = watched(real_field)
+        globals()["_set_aside"] = watched(real_aside)
+        try:
+            save_new_dsp(proj, answers)
+        finally:
+            dsp_profile.set_field = real_field
+            globals()["_set_aside"] = real_aside
+        if len(tried) < 3 or not all(getattr(type(t), "is_busy", False) for t in tried):
+            failures.append(f"another writer got in between the parts: {tried}")
+        draft = dsp_profile._unwrap(dsp_profile.load_draft(proj))
+        aside = [n for n in os.listdir(proj) if ".replaced-" in n]
+        if draft.get("vendor") != "Acme" or len(aside) != 1:
+            failures.append(f"the base did not land: vendor {draft.get('vendor')!r}, set aside {aside}")
+        let_go = project._another_writer_tries(proj)
+        if let_go is not None:
+            failures.append(f"not let go after the base: {let_go!r}")
+        proj = fixture("held")
+        before = project._files_in(proj)
+        with project._held_elsewhere(proj), project._env(AUTOSOUND_LOCK_TIMEOUT_S="0.2"):
+            busy = project._raised_by(lambda: save_new_dsp(proj, answers))
+        if not getattr(type(busy), "is_busy", False):
+            failures.append(f"under another writer's lock: {busy!r}")
+        if project._files_in(proj) != before:
+            failures.append(f"landed under another writer's lock: {sorted(set(project._files_in(proj)) ^ set(before))}")
+    finally:
+        dsp_profile.set_field = real_field
+        globals()["_set_aside"] = real_aside
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["the new processor's one hold:"] + failures)
+
+
 def _check_no_load_and_save_outside_update():
     """No function here loads `project.json` and saves it itself (#141, J2b): each write goes through `Project.update`
     or a `Project` writer, which hold the project's lock across the read and the write. Read off the source
@@ -2053,7 +2173,8 @@ def _selftest():
     failures = []
     for check in (_check_change_dsp_sets_an_unreadable_profile_aside, _check_gate_shut_over_an_unreadable_file,
                   _check_set_car_waits_for_the_lock, _check_a_bad_timeout_is_a_usage_error,
-                  _check_composite_writers_hold_once, _check_no_load_and_save_outside_update):
+                  _check_composite_writers_hold_once, _check_save_controls_holds_once,
+                  _check_save_new_dsp_holds_once, _check_no_load_and_save_outside_update):
         try:
             check()
         except AssertionError as exc:
@@ -2391,8 +2512,10 @@ def _selftest():
           "`missing` reports prose as unreadable rather than as a gap; a processor change sets a profile "
           "that cannot be read aside unread and byte for byte, saying where, and the gate list reports "
           "that profile (#136); under another writer's lock set-car and every other writer answer 75 with "
-          "one busy line, writing nothing, a bad AUTOSOUND_LOCK_TIMEOUT_S is exit 2 making nothing, every "
-          "other refusal keeps its traceback, and no function loads and saves outside Project.update (#141).")
+          "one busy line, writing nothing, the knobs and a new processor's base (its set-aside too) are written "
+          "under one hold, no writer between two of their writes, a bad AUTOSOUND_LOCK_TIMEOUT_S is exit 2 "
+          "making nothing, every other refusal keeps its traceback, and no function loads and saves outside "
+          "Project.update (#141).")
     return 0
 
 

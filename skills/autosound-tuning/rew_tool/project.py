@@ -1076,11 +1076,11 @@ class Project:
         phase 0 (the Arbiter's ruling, 2026-09-08): `contract.py check --phase0-gate` stands on
         evidence.
 
-        Returns what changed (or would, when `write` is false). Each of the three fills reads and writes under
-        the project's lock as one step of its own (#141): none decides on what another one read.
+        Returns what changed (or would, when `write` is false). Each of the three fills reads and writes as one step of
+        its own (#141): none decides on what another one read. A writing run holds the project's lock once over all
+        three (R20): another writer cannot land between two fills, and a lock held past the wait is met before the
+        first, so its "nothing was written" is true. A dry run only reads, and takes no lock.
         """
-        done = {"renamed": self.migrate_fields(write=write),
-                "tiers": self.backfill_tiers(write=write)}
         drafted = []
 
         def add_drafts(data):
@@ -1095,7 +1095,10 @@ class Project:
                 entry["symptom"] = draft
             return None if drafted else UNCHANGED
 
-        self._change(add_drafts, write)
+        with _hold(self.dir) if write else contextlib.nullcontext():
+            done = {"renamed": self.migrate_fields(write=write),
+                    "tiers": self.backfill_tiers(write=write)}
+            self._change(add_drafts, write)
         done["symptom_drafts"] = drafted
         return done
 
@@ -2140,6 +2143,29 @@ def _held_elsewhere(project_dir):
         shutil.rmtree(signals, ignore_errors=True)
 
 
+def _another_writer_tries(project_dir):
+    """Another writer -- a thread of this process, through the real lock -- tries the project's writer lock once, now,
+    with no wait (#141): None when it got in (and let go at once), else what kept it out, `Busy` while this thread
+    holds the lock. What a check calls from inside a writer, between its parts, to see whether the lock is held
+    across them."""
+    import threading
+    lock = _write_lock()
+    got = []
+
+    def attempt():
+        try:
+            with lock.hold(project_dir, timeout_s=0):
+                pass
+        except Exception as exc:  # noqa: BLE001 -- returned to the check, which reads what it got
+            got.append(exc)
+        else:
+            got.append(None)
+    t = threading.Thread(target=attempt, daemon=True)
+    t.start()
+    t.join(30)
+    return got[0] if got else "never returned"
+
+
 def _files_in(folder):
     """`{relative path: bytes}` of every file under `folder` but the lock's own `.autosound/` (#141): what a write
     refused under another writer's lock leaves as it was."""
@@ -2507,6 +2533,74 @@ def _check_a_held_lock_answers_75():
     assert not failures, f"{len(failures)} run(s) under a held lock:\n  " + "\n  ".join(failures)
 
 
+def _check_catch_up_holds_once():
+    """`catch-up` takes the project's lock once, over its three fills (#141, R20): another writer -- a thread, through
+    the real lock -- that tries once a fill is in cannot get in until the last one is written, and one that holds the
+    lock first leaves the verb busy with nothing filled. Each fill took the lock for itself, so another writer could
+    land between two, and a busy at the second or the third said write_lock's "nothing was written" over what the
+    first had filled. Then it lets go: another writer gets in at once. A dry run takes no lock."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_project_catch_up_once_")
+    real, calls, tried, failures = Project._change, [], [], []
+
+    def fixture(name):
+        folder = os.path.join(top, name)
+        os.makedirs(os.path.join(folder, "state", "SQ"))
+        with open(os.path.join(folder, "state", "SQ", "v_001.json"), "w", encoding="utf-8") as fh:
+            json.dump({"channels": {"w-L": {"gain_db": 0.0}}}, fh)
+        Project(folder).save({"schema_version": SCHEMA_VERSION, "dsp": {"sample_rate_hz": 96000},
+                              "channels": [{"code": "w-L"}],
+                              "acoustics": {"flaws": [{"kind": "cabin_null", "f_hz": 32, "level_db": -11.0,
+                                                       "action": "leave", "why": "a cabin null", "channels": ["w-L"],
+                                                       "evidence": ["w-L_2 (sw)"]}]}})
+        return folder
+
+    def watched(self, fn, write):
+        calls.append(write)
+        if len(calls) > 1:                              # a fill is in: another writer tries before the next one
+            tried.append(_another_writer_tries(self.dir))
+        return real(self, fn, write)
+    try:
+        folder = fixture("car")
+        Project._change = watched
+        try:
+            done = Project(folder).catch_up()
+        finally:
+            Project._change = real
+        kept_out = [t for t in tried if getattr(type(t), "is_busy", False)]
+        if len(calls) != 3 or len(kept_out) != 2:
+            failures.append(f"another writer got in between the fills: {tried}")
+        if not (done["renamed"] and done["tiers"] and done["symptom_drafts"]):
+            failures.append(f"a fill did not land: {done}")
+        let_go = _another_writer_tries(folder)
+        if let_go is not None:
+            failures.append(f"not let go after the fills: {let_go!r}")
+        folder = fixture("held")
+        before = _files_in(folder)
+        with _held_elsewhere(folder), _env(AUTOSOUND_LOCK_TIMEOUT_S="0.2"):
+            busy = _raised_by(lambda: Project(folder).catch_up())
+        if not getattr(type(busy), "is_busy", False):
+            failures.append(f"under another writer's lock: {busy!r}")
+        if _files_in(folder) != before:
+            failures.append("filled under another writer's lock")
+        if Project(folder).catch_up(write=False)["tiers"] != {"w-L": "channels"} or _files_in(folder) != before:
+            failures.append("a dry run wrote, or would fill nothing")
+    finally:
+        Project._change = real
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["catch-up's one hold:"] + failures)
+
+
+def _raised_by(call):
+    """The exception `call()` raised, or None: a check reads what it got by its attributes, never by its class."""
+    try:
+        call()
+    except Exception as exc:  # noqa: BLE001 -- returned to the check, which reads what it got
+        return exc
+    return None
+
+
 def _check_a_bad_timeout_is_a_usage_error():
     """An AUTOSOUND_LOCK_TIMEOUT_S that is no number of seconds is a usage error (#141): exit 2, one line naming it, no
     traceback, and nothing written or made -- not the lock's `.autosound/` either: the wait is read before anything is
@@ -2620,7 +2714,7 @@ def _selftest():
     for check in (_check_record_change_refuses_unreadable, _check_save_refuses_newer, _check_load_reads_a_bom,
                   _check_two_writers_lose_nothing, _check_save_counts_from_the_disk,
                   _check_update_changes_under_the_lock, _check_update_writes_only_whole_facts,
-                  _check_a_held_lock_answers_75,
+                  _check_a_held_lock_answers_75, _check_catch_up_holds_once,
                   _check_a_bad_timeout_is_a_usage_error, _check_record_change_into_a_mistyped_folder,
                   _check_record_change_asks_git_with_the_lock_free, _check_no_load_and_save_outside_update):
         try:
@@ -3342,7 +3436,8 @@ def _selftest():
           f"own process journal; under the project's writer lock (#141) two writers at once lost none of their 80 "
           f"channels (project_rev 80), save counts the revision from the disk (stale 3 over 7 -> 8; an unreadable "
           f"file refused), update loads-changes-saves as one step (UNCHANGED writes nothing), every writing verb "
-          f"answers 75 with one busy line under another's lock while the reads wait for nobody, a bad "
+          f"answers 75 with one busy line under another's lock while the reads wait for nobody, catch-up holds it "
+          f"once over its three fills (no writer between two; busy before the first, nothing filled), a bad "
           f"AUTOSOUND_LOCK_TIMEOUT_S is exit 2 making nothing, record-change into a mistyped folder makes nothing, "
           f"and no function loads and saves outside update. root={root}")
     return 0

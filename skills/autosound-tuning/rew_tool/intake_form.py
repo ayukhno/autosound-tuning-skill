@@ -1421,22 +1421,38 @@ def apply_save(project_dir, payload):
 
     Every refusal comes from `intake`/`project` and is handed back verbatim: the page must say the
     method's words ("a slot needs its tier in the same breath"), not a paraphrase of them.
+
+    One answer, one hold of the project's lock (#141, R20): an answer that writes more than once -- the goal's up to
+    three fields, the knobs -- is written whole or not at all under another writer's lock, so the busy line's "nothing
+    was written" is true of it. A batch holds the lock answer by answer, not across them.
     """
     if "batch" in payload:
         # ONE Save sends every changed answer at once (round 4). Each goes through its own writer,
         # in the order the page sent them (the processor before its tiers, the tiers before the
         # slots); a refusal is reported for that answer and does not stop the ones after it —
         # every writer is atomic, so what was written is whole and what was refused is untouched.
-        results, errors = [], []
+        # But a lock another writer held past the wait (#141, R20): the answers after that one get its busy line
+        # untried -- each of them would wait as long again, K answers hanging K x AUTOSOUND_LOCK_TIMEOUT_S.
+        results, errors, busy = [], [], None
         for i, item in enumerate(payload["batch"] or []):
+            if busy is not None:
+                errors.append({"index": i, "error": busy})
+                continue
             try:
                 results.append(apply_save(project_dir, item))
             except Exception as exc:  # noqa: BLE001 -- a refusal (`_refusal`) is reported; anything else raises
                 if not _refusal(exc):
                     raise
                 errors.append({"index": i, "error": str(exc)})
+                if getattr(type(exc), "is_busy", False):
+                    busy = str(exc)
         return {"results": results, "errors": errors}
+    with project._hold(project_dir):
+        return _one_answer(project_dir, payload)
 
+
+def _one_answer(project_dir, payload):
+    """`apply_save` of one answer, under its hold."""
     if "field" in payload:
         value = payload.get("value")
         if isinstance(value, list):
@@ -1727,6 +1743,93 @@ def _check_save_answers_under_a_held_lock():
     assert not failures, "\n  ".join(["a save under the project's lock:"] + failures)
 
 
+def _check_an_answer_holds_once():
+    """One answer is written under one hold of the project's lock (#141, R20): the goal's up to three writes, the
+    knobs' several, each answer of a batch on its own. Another writer -- a thread, through the real lock -- that tries
+    once a write of the answer is in cannot get in until its last one is written. Each write took the lock for itself,
+    so a busy at the goal's second said "nothing was written" over its first. Then it lets go."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_form_answer_once_")
+    real_save, real_knob, tried, failures = intake.save, project.Project.set_hardware_control, [], []
+    try:
+        root = os.path.join(top, "car")
+        project.Project(root).save({"schema_version": project.SCHEMA_VERSION, "channels": []})
+        writes = []
+
+        def save(project_dir, field_id, value):
+            writes.append(field_id)
+            if len(writes) > 1:                         # a write is in: another writer tries before the next one
+                tried.append(project._another_writer_tries(root))
+            return real_save(project_dir, field_id, value)
+
+        def knob(self, name, value, source=None):
+            writes.append(name)
+            if len(writes) > 1:
+                tried.append(project._another_writer_tries(root))
+            return real_knob(self, name, value, source=source)
+        intake.save, project.Project.set_hardware_control = save, knob
+        try:
+            got = apply_save(root, {"goal": {"choices": ["EMMA", "enjoyment"], "text": "warm"}})
+            if sorted(got["goal"]) != ["formats", "purpose", "wishes"]:
+                failures.append(f"the goal did not land: {got}")
+            del writes[:]
+            got = apply_save(root, {"controls": {"SubRC": "4/4", "RearRC": "2"}})
+            if got["controls"] != {"SubRC": "4/4", "RearRC": "2"}:
+                failures.append(f"the knobs did not land: {got}")
+        finally:
+            intake.save, project.Project.set_hardware_control = real_save, real_knob
+        if len(tried) != 3 or not all(getattr(type(t), "is_busy", False) for t in tried):
+            failures.append(f"another writer got in between an answer's writes: {tried}")
+        let_go = project._another_writer_tries(root)
+        if let_go is not None:
+            failures.append(f"not let go after the answer: {let_go!r}")
+    finally:
+        intake.save, project.Project.set_hardware_control = real_save, real_knob
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["an answer's one hold:"] + failures)
+
+
+def _check_a_busy_batch_waits_once():
+    """A batch under another writer's lock waits once (#141, R20): its first answer meets the held lock and is said
+    busy, and every answer after it gets that same line without being tried -- the lock asked once, not once per
+    answer. Each answer waited AUTOSOUND_LOCK_TIMEOUT_S on its own: K answers hung about K x 10 s before the page
+    heard anything. Nothing is written."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_form_busy_batch_")
+    real_hold, asked, failures = project._hold, [], []
+
+    def hold(project_dir):
+        asked.append(project_dir)
+        return real_hold(project_dir)
+    try:
+        root = os.path.join(top, "car")
+        project.Project(root).save({"schema_version": project.SCHEMA_VERSION, "channels": []})
+        busy = f"busy: {project._write_lock().lock_path(root)} is held by another writer -- nothing was written, " \
+               "safe to retry"
+        batch = [{"car": {"make": "VW", "model": "Passat", "generation": "B8", "body": "sedan"}},
+                 {"field": "project.language", "value": "uk"},
+                 {"goal": {"choices": ["EMMA"], "text": "warm"}}]
+        before = project._files_in(root)
+        project._hold = hold
+        try:
+            with project._held_elsewhere(root), project._env(AUTOSOUND_LOCK_TIMEOUT_S="0.2"):
+                got = apply_save(root, {"batch": batch})
+        finally:
+            project._hold = real_hold
+        if got["results"] or [(e["index"], e["error"]) for e in got["errors"]] != [(0, busy), (1, busy), (2, busy)]:
+            failures.append(f"the batch's answers: {got}")
+        if len(asked) != 1:
+            failures.append(f"the lock was asked {len(asked)} time(s) for one busy batch")
+        if project._files_in(root) != before:
+            failures.append("written under another writer's lock")
+    finally:
+        project._hold = real_hold
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["a busy batch:"] + failures)
+
+
 def _check_unreadable_gate_file_named():
     """The page's gate stays shut over a gate file that is there and cannot be read -- a `glossary.json` cut off --
     and says the file, why and its repair with the page's refusals (#134, batch 4's re-review N4): the gate read "no
@@ -1762,7 +1865,7 @@ def _selftest():
 
     failures = []
     for check in (_check_unreadable_profile_shown_and_refused, _check_unreadable_gate_file_named,
-                  _check_save_answers_under_a_held_lock):
+                  _check_save_answers_under_a_held_lock, _check_an_answer_holds_once, _check_a_busy_batch_waits_once):
         try:
             check()
         except Exception as exc:  # noqa: BLE001 -- a check that raises is reported by name, like one that fails
@@ -2039,8 +2142,9 @@ def _selftest():
           "from the network (one link out: NTT), and every write goes through intake's own writers; "
           "a profile that cannot be read is shown on the page with its repair, and a save through it is refused "
           "as that answer's, the rest going in (#136); a save under another writer's lock is answered with its "
-          "busy line -- 400 alone, each answer's error in a batch -- nothing written, and a bad "
-          "AUTOSOUND_LOCK_TIMEOUT_S is said the same way (#141, R14)")
+          "busy line -- 400 alone, each answer's error in a batch, the answers after a busy one given its line "
+          "untried, the lock asked once -- nothing written, and a bad AUTOSOUND_LOCK_TIMEOUT_S is said the same "
+          "way (#141, R14); an answer is written under one hold, no writer between two of its writes (R20)")
     return 0
 
 
