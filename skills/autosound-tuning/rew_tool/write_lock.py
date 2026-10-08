@@ -7,18 +7,20 @@ writer answers `Busy` -- exit 75, "busy, nothing written, safe to retry" -- havi
 never held across REW, git, `gh` or any other subprocess: the slow part runs first, then the hold, a fresh load,
 the merge and the write.
 
-POSIX: `fcntl.flock` on the file. Windows: `msvcrt.locking` on its first byte. Both are tried without blocking and
-polled, so one deadline covers this process's threads and the other processes. Re-entrant within a thread: a writer
-that calls another writer (capture-import -> start/record/close) takes it once.
+POSIX: `fcntl.flock` on the file. Windows: `LockFileEx` on its first byte, through ctypes. Both are tried without
+blocking and polled, so one deadline covers this process's threads and the other processes. Re-entrant within a
+thread: a writer that calls another writer (capture-import -> start/record/close) takes it once.
 
 The lock never makes the project folder (R23). A hold on a folder that is not there -- a mistyped path, one gone --
 is this process's thread lock alone, and makes nothing. The writer's own first write makes the folder, and the next
 hold makes the lock and takes it; two processes creating one new project at the same moment are not ordered by it.
 
 A folder that cannot be locked at all (some shared or cloud folders refuse every lock) is written WITHOUT the lock,
-and the writer says so on stderr once: two writers there can still lose a change, as before this module. A folder
-where the lock cannot even be MADE -- one this user may not write -- is refused, `Unwritable` (exit 1), before
-anything is taken.
+and the writer says so on stderr once: two writers there can still lose a change, as before this module. Only
+another writer's lock is "held": on Windows, `LockFileEx`'s ERROR_LOCK_VIOLATION alone -- a share that refuses
+the lock any other way (access denied, not supported) is a folder that cannot lock (R21). A folder where the lock
+cannot even be MADE -- one this user may not write -- is refused, `Unwritable` (exit 1), before anything is
+taken.
 
 TCC reads this file as TEXT, never imports it, for the line below: a copy that declares it locks itself, and TCC takes
 no lock of its own around it (`core/project_lock.py` `locks_itself`).
@@ -35,9 +37,11 @@ from contextlib import ExitStack, contextmanager
 
 try:
     import fcntl
-except ImportError:                      # Windows: msvcrt's byte-range lock instead
+except ImportError:                      # Windows: LockFileEx on the file's first byte, through ctypes
     fcntl = None
+    import ctypes
     import msvcrt
+    from ctypes import wintypes
 
 LOCK_DIR = ".autosound"
 LOCK_FILE = "write.lock"
@@ -45,6 +49,9 @@ ENV_TIMEOUT = "AUTOSOUND_LOCK_TIMEOUT_S"
 DEFAULT_TIMEOUT_S = 10.0
 _POLL_S = 0.05
 _HELD_ERRNOS = {errno.EAGAIN, errno.EWOULDBLOCK, errno.EACCES, getattr(errno, "EDEADLOCK", errno.EDEADLK)}
+# Windows by what imported, not by `os.name`: project_io's selftest fakes `os.name = "nt"` on POSIX.
+_WINDOWS = fcntl is None
+_ERROR_LOCK_VIOLATION = 33               # LockFileEx's answer when another handle holds the byte: the one "held" there
 
 
 def _siblings():
@@ -180,25 +187,55 @@ def _prepare(project_dir):
         pass                             # there already -- another writer may have made it a moment ago
 
 
-if fcntl is not None:
+if not _WINDOWS:
     def _os_lock(fd):
         fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
 
     def _os_unlock(fd):
         fcntl.flock(fd, fcntl.LOCK_UN)
 else:
+    # LockFileEx, not msvcrt.locking (R21): the C runtime under `locking` gives a holder (ERROR_LOCK_VIOLATION) and a
+    # share that refuses locks (ERROR_ACCESS_DENIED, ERROR_NETWORK_ACCESS_DENIED, ERROR_LOCK_FAILED) one EACCES, and
+    # only the Windows error, which ctypes keeps, tells them apart.
+    _LOCKFILE_FAIL_IMMEDIATELY = 0x1
+    _LOCKFILE_EXCLUSIVE_LOCK = 0x2
+
+    class _Overlapped(ctypes.Structure):
+        """OVERLAPPED (minwinbase.h): where the locked bytes start, zeroed -- the file's first byte. Its union of
+        Offset/OffsetHigh with a pointer is laid out as the two DWORDs: the same size and place on 32 and 64 bits."""
+        _fields_ = [("Internal", ctypes.c_size_t), ("InternalHigh", ctypes.c_size_t), ("Offset", wintypes.DWORD),
+                    ("OffsetHigh", wintypes.DWORD), ("hEvent", wintypes.HANDLE)]
+
+    _kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)    # its own: the argtypes below touch no one else's
+    _LockFileEx = _kernel32.LockFileEx
+    _LockFileEx.argtypes = (wintypes.HANDLE, wintypes.DWORD, wintypes.DWORD, wintypes.DWORD, wintypes.DWORD,
+                            ctypes.POINTER(_Overlapped))
+    _LockFileEx.restype = wintypes.BOOL
+    _UnlockFileEx = _kernel32.UnlockFileEx
+    _UnlockFileEx.argtypes = (wintypes.HANDLE, wintypes.DWORD, wintypes.DWORD, wintypes.DWORD,
+                              ctypes.POINTER(_Overlapped))
+    _UnlockFileEx.restype = wintypes.BOOL
+
     def _os_lock(fd):
-        os.lseek(fd, 0, os.SEEK_SET)
-        msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+        """The file's first byte, exclusive, refused at once when held: an `OSError` carrying `.winerror`."""
+        first = _Overlapped()
+        if not _LockFileEx(msvcrt.get_osfhandle(fd), _LOCKFILE_EXCLUSIVE_LOCK | _LOCKFILE_FAIL_IMMEDIATELY, 0, 1, 0,
+                           ctypes.byref(first)):
+            raise ctypes.WinError(ctypes.get_last_error())
 
     def _os_unlock(fd):
-        os.lseek(fd, 0, os.SEEK_SET)
-        msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+        first = _Overlapped()
+        if not _UnlockFileEx(msvcrt.get_osfhandle(fd), 0, 1, 0, ctypes.byref(first)):
+            raise ctypes.WinError(ctypes.get_last_error())
 
 
-def _held(exc):
-    """Does this refusal of `_os_lock` mean another writer holds the lock? Any other one is a folder that cannot
-    be locked at all."""
+def _held(exc, windows=_WINDOWS):
+    """Does this refusal of `_os_lock` mean another writer holds the lock? Any other one is a folder that cannot be
+    locked at all. Windows: `LockFileEx`'s ERROR_LOCK_VIOLATION alone, read off `.winerror` -- its errno is EACCES, as
+    a share's refusal's is. POSIX: EWOULDBLOCK, or an errno some systems give a held lock. `windows` is a parameter
+    so that both systems' table runs on each."""
+    if windows:
+        return getattr(exc, "winerror", None) == _ERROR_LOCK_VIOLATION
     return isinstance(exc, BlockingIOError) or exc.errno in _HELD_ERRNOS
 
 
@@ -339,6 +376,16 @@ def _raised(call):
 def _enter(project_dir, **kw):
     with hold(project_dir, **kw):
         pass
+
+
+def _refusal(err, winerror=None):
+    """An `OSError` as the OS lock raises it: `err` its errno, and `winerror` the Windows error that `ctypes.WinError`
+    sets beside the errno it maps it to -- set here as an attribute, which any system's `OSError` can carry, so the
+    table of both systems runs on each."""
+    exc = OSError(err, os.strerror(err))
+    if winerror is not None:
+        exc.winerror = winerror
+    return exc
 
 
 def _probe(project_dir):
@@ -713,13 +760,69 @@ def _check_a_missing_project_is_not_made():
         _drop(top)
 
 
+def _check_which_refusals_are_held():
+    """Which refusal of the OS lock means another writer holds it (#141, R21): a pure function, so both systems' table
+    runs on each. POSIX as before -- EWOULDBLOCK, and EACCES that some systems give a held lock, are held; ENOLCK,
+    ENOTSUP, EINVAL are a folder that cannot lock. Windows: `LockFileEx`'s ERROR_LOCK_VIOLATION (33) alone is held;
+    ERROR_ACCESS_DENIED (5), ERROR_NOT_SUPPORTED (50), ERROR_NETWORK_ACCESS_DENIED (65), ERROR_INVALID_FUNCTION (1) are
+    a share that cannot lock, and so is a refusal with no Windows error at all. The C runtime under `msvcrt.locking`
+    mapped 33 and 5 and 65 to one EACCES, read as held: a share refusing locks answered 75 for ever."""
+    posix = ((errno.EAGAIN, True), (errno.EWOULDBLOCK, True), (errno.EACCES, True), (errno.ENOLCK, False),
+             (getattr(errno, "ENOTSUP", errno.EOPNOTSUPP), False), (errno.EINVAL, False), (errno.EIO, False))
+    windows = ((33, errno.EACCES, True), (5, errno.EACCES, False), (50, errno.EINVAL, False),
+               (65, errno.EACCES, False), (1, errno.EINVAL, False), (None, errno.EACCES, False))
+    wrong = [f"POSIX {errno.errorcode[err]}: held={not want}" for err, want in posix
+             if _held(_refusal(err), windows=False) is not want]
+    wrong += [f"Windows winerror {code} ({errno.errorcode[err]}): held={not want}" for code, err, want in windows
+              if _held(_refusal(err, code), windows=True) is not want]
+    assert not wrong, f"read wrong: {wrong}"
+
+
+def _check_a_share_refusing_the_lock_is_noted():
+    """Windows only: `LockFileEx` refused with ERROR_ACCESS_DENIED -- a share that refuses locks, faked at the call --
+    is a folder that cannot lock (#141, R21): the note, and the hold goes ahead at once, not Busy after its wait. The
+    call is asked for the first byte, exclusive, failing at once. Elsewhere it is not checked, and the OK line says so
+    (False)."""
+    if not _WINDOWS:
+        return False
+    import contextlib
+    import io
+    global _LockFileEx
+    real, asked = _LockFileEx, []
+
+    def refuse(handle, flags, reserved, low, high, overlapped):
+        asked.append((flags, reserved, low, high, overlapped._obj.Offset, overlapped._obj.OffsetHigh))
+        ctypes.set_last_error(5)                       # ERROR_ACCESS_DENIED
+        return 0
+
+    p = _scratch()
+    err = io.StringIO()
+    _LockFileEx = refuse
+    try:
+        start = time.monotonic()
+        with contextlib.redirect_stderr(err):
+            with hold(p, timeout_s=5):
+                assert held_here(p), "not held here, without the OS lock"
+        took = time.monotonic() - start
+        assert took < 2, f"a share refusing the lock was waited for {took:.1f}s, as if held"
+        assert asked and set(asked) == {(3, 0, 1, 0, 0, 0)}, f"LockFileEx was asked {asked}"
+        lines = err.getvalue().splitlines()
+        assert len(lines) == 1 and lines[0].startswith(f"note: {p} cannot be locked ("), f"stderr: {lines}"
+        assert "without the project lock" in lines[0], f"the note: {lines[0]!r}"
+    finally:
+        _LockFileEx = real
+        _drop(p)
+    return True
+
+
 def _selftest():
     failures, seen = [], {}
     for check in (_check_protocol_line, _check_folder_ignores_itself, _check_reentrant_and_held_here,
                   _check_another_thread_waits, _check_another_process_is_busy, _check_timeout_from_the_environment,
                   _check_a_wait_given_in_code_is_checked_too, _check_a_free_lock_with_zero_wait,
                   _check_a_folder_that_cannot_lock, _check_a_project_that_cannot_be_written,
-                  _check_busy_exit_says_one_line, _check_a_missing_project_is_not_made):
+                  _check_busy_exit_says_one_line, _check_a_missing_project_is_not_made, _check_which_refusals_are_held,
+                  _check_a_share_refusing_the_lock_is_noted):
         try:
             seen[check.__name__] = check()
         except Exception as exc:  # noqa: BLE001 -- each check is reported by name; one failing must not hide the rest
@@ -735,6 +838,10 @@ def _selftest():
     if not unwritable:
         print("write_lock: a project folder this user may not write was not checked here -- "
               + ("run as root, whom no file mode refuses" if os.name == "posix" else "Windows keeps no POSIX mode"))
+    share = seen["_check_a_share_refusing_the_lock_is_noted"]
+    if not share:
+        print("write_lock: LockFileEx refused by a share (ERROR_ACCESS_DENIED, faked at the call) was not checked "
+              "here -- Windows only; the table of which refusals are held ran")
     print(f"write_lock selftest OK -- PROTOCOL = 1 on a line of its own, as TCC's probe reads it; a hold makes "
           f".autosound/write.lock and a .gitignore of '*'{' (git add -A stages nothing from it)' if git else ''}; "
           f"re-entrant in a thread, the OS lock kept until the outer hold ends; another thread and another "
@@ -743,7 +850,9 @@ def _selftest():
           f"a value that is no number of seconds exit 2 naming it, before anything is made, and a wait given in "
           f"code held to the same; a free lock taken at once with no wait; a hold on a missing project makes "
           f"nothing -- the thread lock alone, Busy to another thread, re-entrant -- and the next hold on the made "
-          f"folder takes the lock; a folder that cannot be locked written "
+          f"folder takes the lock; only another writer's lock read as held (on Windows ERROR_LOCK_VIOLATION alone; "
+          f"the table on every system{', and a share refusing LockFileEx written with the note' if share else ''}); "
+          f"a folder that cannot be locked written "
           f"without the lock, said in one note line; "
           f"{'a project folder this user may not write refused as Unwritable, nothing taken or made; ' if unwritable else ''}"
           f"busy_exit says one line and returns 75")
