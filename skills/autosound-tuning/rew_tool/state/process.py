@@ -1061,12 +1061,15 @@ def covers_summary(covers, keep=COVERS_IN_NAME):
 def _locked(method):
     """`method`, a writer of `Process`, under the project's writer lock (#141, J2b): its load, its change, its write and
     its event as one step, so another writer -- TCC, a second command line -- cannot write in between and lose this
-    one's change or have its own lost. What must run with the lock free runs first (`Process._ready_to_hold`). A writer
-    that calls another (`capture_import` -> `start_capture`, `supersede_capture` -> `record_capture`) takes the lock
-    once: the hold is re-entrant within a thread. `enter_phase` and `check_captures` are not decorated: they read git,
-    `gh` or REW first, and take the hold themselves after."""
+    one's change or have its own lost. What must run with the lock free runs first (`Process._ready_to_hold`), and
+    before that the folder is checked to be a project's (`Process._require_home`): the hold makes the project's
+    `.autosound/`, so a refusal there must come first. A writer that calls another (`capture_import` ->
+    `start_capture`, `supersede_capture` -> `record_capture`) takes the lock once: the hold is re-entrant within a
+    thread. `enter_phase` and `check_captures` are not decorated: they read git, `gh` or REW first, and take the hold
+    themselves after."""
     @functools.wraps(method)
     def locked(self, *args, **kwargs):
+        self._require_home(method.__name__)
         self._ready_to_hold()
         with _hold(self.project_dir):
             return method(self, *args, **kwargs)
@@ -1097,6 +1100,12 @@ class Process:
         # The sha `_stamp` writes, asked of git before this writer's first hold (`_ready_to_hold`, #141): git is never
         # asked with the project's lock held.
         self._sha = None
+        # The events still owed after the one being appended, `[(type, payload)]`, when one state write owes two
+        # (`start_capture` superseding a round, #141): a refusal of the first names them too (`_append_refused`).
+        self._owed_after = []
+        # `(path, reason)` of the plan file the last `start_capture` wrote -- reason None once it is written -- for
+        # `capture-start` to say (S-101): one that could not be written was said nowhere.
+        self._plan_written = None
 
     # -- paths --
     @property
@@ -1322,11 +1331,14 @@ class Process:
         The gates run with the project's lock free (#141, J2b): the intake gate asks git and `gh`, for up to a minute
         and a half, and no other writer waits that long behind it. Then, under the hold, the state is read again and
         the phase entered into it as it is THEN -- a step another writer added meanwhile stays. A phase another writer
-        made active meanwhile refuses this one, nothing written: the gates answered for the phase they saw.
+        made active meanwhile refuses this one, nothing written: the gates answered for the phase they saw. A folder
+        that is no project's is refused before the gates (#141, R46): `enter-phase -1` alone starts a project where
+        none is yet.
         """
         phase = str(phase)
         if phase not in PHASES:
             raise ProcessError(f"unknown phase {phase!r}; known: {', '.join(PHASES)}")
+        self._require_home(f"enter-phase {phase}")
         self._ready_to_hold()
         state = self.load(strict=True)  # a writer reads strictly itself (#136, R25): see `_write`
         previous = state.get("active_phase")
@@ -1703,43 +1715,36 @@ class Process:
             "skipped": {},
             "note": note,
         }
-        # A round still open closes only now, past every refusal above (#134, H I-3): the close is an event in the
-        # append-only journal, and a `--plan` refused after it left the journal saying the round closed while the state
-        # held it open -- and the next round closed it a second time.
-        landed = None
+        # A round still open closes only now, past every refusal above (#134, H I-3), and in this one state write: its
+        # close goes to the journal after the write (#141, J2b). Appended before it, a `--plan` refused after the close
+        # left the journal saying the round closed while the state held it open, and a write a holder refused said
+        # "it is as it was" over that journal -- the retry closed the round there a second time (part A's re-review,
+        # N-1; W-8's review).
+        closed = None
         if previous and not previous.get("closed"):
-            self._close_capture(state, previous, reason="superseded")
-            # The close is in the journal before the state is written -- the order is W-9's (J2b) -- so a write refused
-            # below says so, never "it is as it was" of the journal (part A's re-review, N-1).
-            landed = (f"{previous['id']}'s close (superseded) is in the journal already: the state holds "
-                      f"{previous['id']} open, and opening the round again closes it in the journal a second time -- "
-                      f"that order is W-9's (J2b)")
+            closed = self._close_capture(state, previous, reason="superseded")
         state["capture"] = round_
         # One state write, the plan path in it (the final review's M3). The round went in first and its plan path in a
         # second write, and that one refused -- a Windows holder past the retries -- said "it is as it was" over a
         # state holding the round, with no `capture_issued`: the next round closed it as superseded. The plan FILE goes
         # down once the round is recorded (part A's re-review, N-3): written before the move, a move a holder refused
         # left the plan of a round that never opened, over the open round's own on the same series. Best effort, as
-        # ever: the round is the record, and the file is where he reads it.
+        # ever: the round is the record, and the file is where he reads it -- said either way by `capture-start`.
         round_["plan_path"] = self._capture_plan_path(round_)
-        self._write(state, landed=landed)
-        self._append(
-            EV_CAPTURE_ISSUED,
-            capture=round_["id"],
-            phase=round_["phase"],
-            version=round_["version"],
-            version_kind=kind,
-            origin=origin,
-            under=round_["under"],
-            level=level_rec,
-            expected=expected,
-            groups=groups,
-            optional=optional,
-            setup=setup,
-            step=step,
-            note=note,
-        )
-        self._write_capture_plan(round_)
+        self._write(state)
+        issued = dict(capture=round_["id"], phase=round_["phase"], version=round_["version"], version_kind=kind,
+                      origin=origin, under=round_["under"], level=level_rec, expected=expected, groups=groups,
+                      optional=optional, setup=setup, step=step, note=note)
+        if closed is not None:
+            # Two lines owed to the one write, the close's first: refused, it names the round's own too (F M-7).
+            self._owed_after = [(EV_CAPTURE_ISSUED, issued)]
+            try:
+                self._append(EV_CAPTURE_CLOSED, **closed)
+            finally:
+                self._owed_after = []
+            self._unjournaled = True              # the round's own line is owed still
+        self._append(EV_CAPTURE_ISSUED, **issued)
+        self._plan_written = self._write_capture_plan(round_)
         return round_
 
     @staticmethod
@@ -1753,7 +1758,9 @@ class Process:
     def _write_capture_plan(self, round_):
         """The round's list as a file the person can take to the car, at its `plan_path` (skill #61). Best effort: the
         round is the record, this is where he reads it -- written once the round is recorded, so a round a refusal
-        never opened leaves no file, and never rewrites the open round's. Returns the path or None."""
+        never opened leaves no file, and never rewrites the open round's. Returns `(path, None)` once written, the path
+        absolute, or `(path, reason)` when it could not be: the caller says that (S-101) -- it returned None, and
+        `start_capture` dropped it, so a round opened with no word of its plan."""
         label = self._capture_plan_label(round_)
         rel = round_.get("plan_path") or self._capture_plan_path(round_)
         path = os.path.join(self.project_dir, *rel.split("/"))
@@ -1767,9 +1774,9 @@ class Process:
                 fh.write("\n".join(render_round_list(round_)) + "\n")
                 if round_.get("note"):
                     fh.write(f"\n{round_['note']}\n")
-        except OSError:
-            return None
-        return rel
+        except OSError as exc:
+            return path, str(exc)
+        return path, None
 
     @_locked
     def reconcile_captures(self, rew_titles):
@@ -2556,8 +2563,10 @@ class Process:
         are worked out on a strict read taken without the hold -- REW may take seconds a title -- and then merged,
         under it, into the state as it is THEN, by title: a writer that wrote meanwhile keeps its change. The round
         must still be the one the check was asked of, open: closed or replaced while REW was read, it is refused and
-        nothing is written -- its verdicts would land on a round that did not ask for them.
+        nothing is written -- its verdicts would land on a round that did not ask for them. A folder that is no
+        project's is refused first, before REW is read (#141, R46).
         """
+        self._require_home("check_captures")
         self._ready_to_hold()
         round_ = self._require_capture()[1]
         verifier = self._load_verifier() if verifier is None else verifier
@@ -2703,12 +2712,19 @@ class Process:
         return out
 
     @_locked
-    def close_capture(self, reason=None):
-        """Close the open round. What is neither taken nor skipped stays that way, on the record."""
-        state, round_ = self._require_capture()
-        self._close_capture(state, round_, reason=reason)
+    def close_capture(self, reason=None, round_id=None):
+        """Close the open round. What is neither taken nor skipped stays that way, on the record.
+
+        The state is written first, the close's event after it (#141, J2b; W-8's review): the event went first, and a
+        state write a holder refused said "it is as it was" over a journal that said closed -- the retry closed the
+        round there a second time. `round_id`, given, is the round the caller read: `capture-close` reads it before
+        REW, then takes the lock three times -- the reconcile, the checks, the close -- and another writer may close or
+        replace the round between them (R7). Another round open, or none, the close is refused, naming both, nothing
+        written: it closed the round open by then, one that verb never read against REW nor checked."""
+        state, round_ = self._require_capture(round_id)
+        event = self._close_capture(state, round_, reason=reason)
         self._write(state)
-        self._unjournaled = False                # its event went first: this write owes the journal no line
+        self._append(EV_CAPTURE_CLOSED, **event)
         return round_
 
     def capture_outstanding(self, state=None):
@@ -2719,9 +2735,17 @@ class Process:
             return []
         return _outstanding(round_)
 
-    def _require_capture(self):
+    def _require_capture(self, round_id=None):
+        """`(state, its open round)`, read strictly: every caller writes (#136, R25). `round_id`, given, is the round
+        the caller read before (`capture-close`, #141, R7): another open now, or none, is refused naming both --
+        another writer closed or replaced it since -- and nothing is written."""
         state = self.load(strict=True)  # every caller writes (#136, R25)
         round_ = state.get("capture")
+        if round_id is not None and (not round_ or round_.get("id") != round_id or round_.get("closed")):
+            now = (f"{round_['id']} is the open round now" if round_ and not round_.get("closed")
+                   else "no round is open now")
+            raise ProcessError(f"round {round_id} was closed or replaced after capture-close read it ({now}) -- "
+                               "nothing was written")
         if not round_ or round_.get("closed"):
             raise ProcessError(
                 "no capture round is open: `capture-start <version> [expected ...]` first. "
@@ -2731,6 +2755,8 @@ class Process:
         return state, round_
 
     def _close_capture(self, state, round_, reason=None):
+        """Mark `round_` closed in `state` and return its `capture_round_closed` event's fields. The caller writes the
+        state, then appends the event (#141, J2b): the close is in the journal only once it is in the state."""
         # Worked out BEFORE the round is marked closed: `capture_outstanding` answers about the
         # open round, and it is the closing event that most needs the answer.
         outstanding = _outstanding(round_)
@@ -2742,8 +2768,7 @@ class Process:
         round_["closed_against"] = ({"rew": True, "missing": rec.get("missing") or [],
                                      "extra": rec.get("extra") or [], "renames": rec.get("renames") or {}}
                                     if rec.get("rew") else {"rew": False})
-        self._append(
-            EV_CAPTURE_CLOSED,
+        return dict(
             capture=round_["id"],
             version=round_["version"],
             taken=sorted(t for t in round_.get("taken", {}) if _is_taken(round_, t)),   # never a superseded row (N17)
@@ -3013,11 +3038,11 @@ class Process:
             raise ProcessError(f"no such step {step_id!r}")
         return entry
 
-    def _write(self, state, landed=None):
-        """Write the state, once its guards pass. `landed`, when given, names what the transition already put in the
-        journal before this write (`start_capture`'s close of the round it supersedes, an order W-9's J2b settles): a
-        move refused by a holder then says so beside "the state is as it was", and never "it is as it was" of the
-        journal too (part A's re-review, N-1)."""
+    def _write(self, state):
+        """Write the state, once its guards pass. A move refused by a holder says "it is as it was" -- of the journal
+        too: every transition writes its state before its events (#141, J2b). A round's close went to the journal
+        first, and this write was told what had landed there (`landed`, part A's re-review, N-1); nothing lands before
+        it now, so nothing is told."""
         state["updated"] = _now()
         validate(state)
         # Strictly first (#136, audit K-2): a file that is there and cannot be read is never replaced. Each transition
@@ -3041,10 +3066,32 @@ class Process:
             # A refusal, exit 1, not a bug (H minor 2): on Windows a holder past the retries -- a sync client, a scanner
             # -- as the same hold is on the read. The move either lands or leaves the file whole, and no temp behind.
             raise ProcessError(f"{self.state_path} could not be written ({exc}) -- "
-                               f"{io_.repair_for(exc, writing=True)}; "
-                               + (f"the state is as it was, but {landed}" if landed else "it is as it was")) from exc
+                               f"{io_.repair_for(exc, writing=True)}; it is as it was") from exc
         # Owed from here: the event that goes with this change (`_append` says it, if it cannot be appended).
         self._unjournaled = True
+
+    def _require_home(self, verb):
+        """Refuse a write into a process folder that is no project's, before anything is made (#141, W-8's R46): the
+        writer lock's hold makes the project's `.autosound/`, and the first write the folder itself, so a mistyped path
+        -- `<project>/process-typo` -- got a process of its own. `verb` names the writer asking: a method's name, or
+        `enter-phase <N>`, `session-close` and `capture-close` for the command line's own. Only `enter-phase -1`, the
+        intake, starts a project where there is none yet.
+
+        * the folder is there: nothing to check;
+        * it is not, and is not called `process`: refused -- the method's process folder is called process;
+        * it is not, is called `process`, and `project.json` stands beside it: the project's first process write;
+        * it is not, is called `process`, and no `project.json` is beside it: `enter-phase -1` alone -- any other
+          writer is refused, not a project yet. TCC's new-project dialog writes `project.json` before any verb."""
+        folder = os.path.abspath(self.dir)
+        if os.path.isdir(folder):
+            return
+        if os.path.basename(folder) != "process":
+            raise ProcessError(f"{folder} does not exist, and the method's process folder is called process -- a "
+                               "mistyped path? nothing was written")
+        if verb == "enter-phase -1" or os.path.isfile(os.path.join(self.project_dir, "project.json")):
+            return
+        raise ProcessError(f"{self.project_dir} holds no project.json: not a project yet -- the intake starts one with "
+                           "enter-phase -1; nothing was written")
 
     def _ready_to_hold(self):
         """What a writer does with the project's lock still free, before it takes it (#141): reads the wait -- an
@@ -3132,12 +3179,24 @@ class Process:
             return None
         why = str(exc if unreadable else io_.cannot_append(self.journal_path, exc))     # one wording (m4)
         if getattr(self, "_unjournaled", False):
-            event = {"at": _now(), "type": event_type}
-            event.update({k: v for k, v in payload.items() if v is not None})
+            # This line, and any the same write owes after it (`_owed_after`: a superseded round's close, then the new
+            # round's own, #141): each is said, in order -- nothing replays one left out.
+            owed = [(event_type, payload)] + list(getattr(self, "_owed_after", None) or [])
+            lines = []
+            for kind, fields in owed:
+                event = {"at": _now(), "type": kind}
+                event.update({k: v for k, v in fields.items() if v is not None})
+                lines.append(json.dumps(event, ensure_ascii=False))
+            if len(lines) == 1:
+                return _StateWithoutItsEvent(
+                    f"{self.state_path} is written, but its journal line is not: {why}. The state holds this change "
+                    f"and the journal has no `{event_type}` event for it, and nothing replays it: once the journal can "
+                    f"be written, append this line to {self.journal_path}: {lines[0]}")
             return _StateWithoutItsEvent(
-                f"{self.state_path} is written, but its journal line is not: {why}. The state holds this change and "
-                f"the journal has no `{event_type}` event for it, and nothing replays it: once the journal can be "
-                f"written, append this line to {self.journal_path}: {json.dumps(event, ensure_ascii=False)}")
+                f"{self.state_path} is written, but its journal lines are not: {why}. The state holds this change and "
+                f"the journal has no {' or '.join(f'`{kind}`' for kind, _ in owed)} event for it, and nothing replays "
+                f"them: once the journal can be written, append these lines to {self.journal_path}, in order:\n"
+                + "\n".join(lines))
         if unreadable:
             return None
         return ProcessError(f"{why}; the `{event_type}` event was not recorded")
@@ -3199,7 +3258,9 @@ _USAGE = """usage: process.py <process-dir> <command> [args]
                                         --plan: the list from the method's plan for the phase (skill #77),
                                         titles beside it added in their place; --start: the setup the car is
                                         in (else the last capture's, skill #78); --optional: on the list,
-                                        no gap when left (skill #80). Prints the list, column by column
+                                        no gap when left (skill #80). Prints the list, column by column,
+                                        then `plan: <path>`, its file in docs/plans/ (one not written:
+                                        a `note:` on stderr, why -- the round is open either way)
                                         --under: the ledger version the series is taken under (#57 P0;
                                         recorded only when given); --level: the level as a quantity (S-026)
                                         open a capture round; titles = what was
@@ -4283,8 +4344,9 @@ def _check_event_refused_after_the_state():
             finally:
                 os.chmod(p.journal_path, 0o644)
             assert _project_bytes(d) == before, "something was written beside a read-only journal"
-        # A close appends its event before its state write: that write owes no line, and a refusal after it -- in the
-        # same process, as a caller in code keeps one -- is not said as a state change missing its event.
+        # A close writes its state, then appends its event (#141, J2b): once that event is in, the write owes no line,
+        # and a refusal after it -- in the same process, as a caller in code keeps one -- is not said as a state change
+        # missing its event.
         q = Process(d)
         with contextlib.redirect_stdout(_io.StringIO()):
             q.start_capture("1", expected=["w-L_1 (sw)"])
@@ -4308,7 +4370,11 @@ def _check_state_replace_refused():
     """A replace refused past the retries -- Windows, a sync client or a scanner holding `process-state.json` -- is a
     refusal naming what holds it, exit 1, the file as it was (#134, H minor 2): it was a `PermissionError`, exit 70, "a
     bug", while the same hold on the read was exit 1. Faked here as Windows: the move is retried as there, then
-    refused; nothing is written and no temp is left."""
+    refused; nothing is written and no temp is left.
+
+    A round's close refused so is as it was in the journal too (#141, J2b): its event follows the state write now.
+    The close's event went first -- W-8's order -- and this "it is as it was" stood over a journal that said closed;
+    the byte walk below would have found that line."""
     import contextlib
     import io as _io
     import shutil
@@ -4337,6 +4403,18 @@ def _check_state_replace_refused():
         assert p.state_path in err and "close what holds it" in err and "it is as it was" in err, err
         assert len(tries) == len(real_waits) + 1, f"tried {len(tries)} times, not as on Windows"
         assert _project_bytes(d) == before, "a refused replace left something behind"
+        with contextlib.redirect_stdout(_io.StringIO()):
+            p.start_capture("1", expected=["w-L_1 (sw)"])
+        before = _project_bytes(d)
+        del tries[:]
+        try:
+            os.name, os.replace, pio._REPLACE_RETRIES_S = "nt", held, (0.001,) * len(real_waits)
+            rc, out, err = _run_main(["process.py", d, "capture-close", "--no-rew"])
+        finally:
+            os.name, os.replace, pio._REPLACE_RETRIES_S = real_name, real_replace, real_waits
+        assert rc == EXIT_NO and "Traceback" not in err and not out.strip(), (rc, out, err[-400:])
+        assert err.rstrip().endswith("it is as it was") and len(tries) == len(real_waits) + 1, (len(tries), err)
+        assert _project_bytes(d) == before, "a refused close left something behind: its event in the journal"
     finally:
         os.name, os.replace, pio._REPLACE_RETRIES_S = real_name, real_replace, real_waits
         shutil.rmtree(top, ignore_errors=True)
@@ -6571,15 +6649,18 @@ def _check_capture_start_said_as_it_landed():
     """`capture-start` refused at a state write says what landed (the final review's M3): it wrote the state twice --
     the round, then its plan path -- and a second write refused (a Windows holder past the retries) said "it is as it
     was" over a state holding the open round, with no `capture_issued` in the journal; the next round then closed it
-    as superseded, a close for a round never issued. Now the state is written once. Refused, the state is as it was,
-    byte for byte -- and so is the journal here, with no round open before; a round it supersedes is already closed in
-    the journal -- that order is W-9's (J2b), and the refusal names that close
-    (`_check_capture_start_held_names_the_close_that_landed`). Through, the round is open, its plan path recorded and
-    its `capture_issued` in the journal."""
+    as superseded, a close for a round never issued. Now the state is written once, and nothing goes to the journal
+    before it -- the close of a round it supersedes neither. That close was appended first, W-8's order, and the
+    refusal had to name it (`_check_capture_start_held_names_the_close_that_landed`); W-9 (J2b, #141) turned it round,
+    and this check now runs with a round open before as well as without. Refused, the state and the journal are as
+    they were, byte for byte. Through, the round is open, its plan path recorded, and its `capture_issued` in the
+    journal after the close of the round it supersedes. And the journal refusing a line once the state landed says
+    every line still owed, in order (F M-7): with the close's refused, the round's own is owed too."""
     import shutil
     import tempfile
     io_ = _project_io()
     real = io_.atomic_write_json
+    real_event = Process._append_event
     top = tempfile.mkdtemp(prefix="autosound_process_capture_start_landed_")
     failures = []
 
@@ -6603,27 +6684,74 @@ def _check_capture_start_said_as_it_landed():
                 out[path] = fh.read()
         return out
     try:
-        for refused_at in (1, 2):
-            d = os.path.join(top, f"held-at-{refused_at}", "process")
+        for over in (None, "cap_001"):
+            for refused_at in (1, 2):
+                d = os.path.join(top, f"held-at-{refused_at}-over-{over}", "process")
+                p = Process(d)
+                p.enter_phase("-1")
+                if over:
+                    p.start_capture("1", expected=["w-L_1 (sw)"])
+                before = state_and_journal(p)
+                io_.atomic_write_json = held_at(refused_at)
+                try:
+                    rc, out, err = _run_main(["process.py", d, "capture-start", "1", "w-R_1 (sw)"])
+                finally:
+                    io_.atomic_write_json = real
+                want = "cap_002" if over else "cap_001"
+                round_ = Process(d).load().get("capture") or {}
+                rounds = [(e.get("type"), e.get("capture")) for e in Process(d).events()
+                          if e.get("type") in (EV_CAPTURE_ISSUED, EV_CAPTURE_CLOSED)]
+                label = f"the state's write {refused_at} held, over {over or 'no round'}"
+                if refused_at == 1:                     # the one state write: refused, nothing has landed anywhere
+                    if rc != EXIT_NO or not err.rstrip().endswith("it is as it was") \
+                            or state_and_journal(p) != before:
+                        failures.append(f"{label}: rc {rc}, the state and the journal "
+                                        f"{'as they were' if state_and_journal(p) == before else 'changed'}, "
+                                        f"{rounds} -- {err.strip()[-200:]!r}")
+                    continue
+                landed = ([(EV_CAPTURE_ISSUED, "cap_001"), (EV_CAPTURE_CLOSED, "cap_001"), (EV_CAPTURE_ISSUED, want)]
+                          if over else [(EV_CAPTURE_ISSUED, want)])
+                if rc != EXIT_OK or round_.get("id") != want or round_.get("closed") or rounds != landed \
+                        or round_.get("plan_path") != "docs/plans/_1-capture.md":
+                    failures.append(f"{label}: rc {rc}, round {round_.get('id')!r} closed {round_.get('closed')!r}, "
+                                    f"plan {round_.get('plan_path')!r}, the journal {rounds}, err "
+                                    f"{err.strip()[-200:]!r}")
+        # The journal refusing a line once the state landed (F M-7) says each line still owed, in order: the close of
+        # the round superseded refused, the new round's `capture_issued` is owed after it, and nothing replays either.
+        decoder = json.JSONDecoder()
+        for refused in (EV_CAPTURE_CLOSED, EV_CAPTURE_ISSUED):
+            d = os.path.join(top, f"journal-refuses-{refused}", "process")
             p = Process(d)
             p.enter_phase("-1")
-            before = state_and_journal(p)
-            io_.atomic_write_json = held_at(refused_at)
+            p.start_capture("1", expected=["w-L_1 (sw)"])
+            with open(p.journal_path, "rb") as fh:
+                journal = fh.read()
+
+            def refusing(self, event_type, payload, refused=refused):
+                if event_type == refused:
+                    raise PermissionError(13, "Permission denied", self.journal_path)
+                return real_event(self, event_type, payload)
+            Process._append_event = refusing
             try:
-                rc, out, err = _run_main(["process.py", d, "capture-start", "1", "w-L_1 (sw)"])
+                rc, out, err = _run_main(["process.py", d, "capture-start", "1", "w-R_1 (sw)"])
             finally:
-                io_.atomic_write_json = real
+                Process._append_event = real_event
+            said, at = [], err.find('{"at"')
+            while at != -1:
+                event, end = decoder.raw_decode(err, at)
+                said.append((event.get("type"), event.get("capture")))
+                at = err.find('{"at"', end)
+            owed = ([(EV_CAPTURE_CLOSED, "cap_001"), (EV_CAPTURE_ISSUED, "cap_002")] if refused == EV_CAPTURE_CLOSED
+                    else [(EV_CAPTURE_ISSUED, "cap_002")])
+            with open(p.journal_path, "rb") as fh:
+                appended = [json.loads(line).get("type") for line in fh.read()[len(journal):].splitlines()
+                            if line.strip()]
             round_ = Process(d).load().get("capture") or {}
-            issued = [e for e in Process(d).events() if e.get("type") == EV_CAPTURE_ISSUED]
-            label = f"the state's write {refused_at} held"
-            if rc == EXIT_NO:
-                if "it is as it was" in err and state_and_journal(p) != before:
-                    failures.append(f"{label}: said it is as it was, and the state holds {round_.get('id')!r} open "
-                                    f"with {len(issued)} capture_issued -- {err.strip()[-200:]!r}")
-            elif rc != EXIT_OK or round_.get("id") != "cap_001" or round_.get("closed") or len(issued) != 1 \
-                    or round_.get("plan_path") != "docs/plans/_1-capture.md":
-                failures.append(f"{label}: rc {rc}, round {round_.get('id')!r} closed {round_.get('closed')!r}, "
-                                f"plan {round_.get('plan_path')!r}, {len(issued)} issued, err {err.strip()[-200:]!r}")
+            if rc != EXIT_NO or "Traceback" in err or "process-state.json is written, but its journal line" not in err \
+                    or said != owed or round_.get("id") != "cap_002" \
+                    or appended != ([] if refused == EV_CAPTURE_CLOSED else [EV_CAPTURE_CLOSED]):
+                failures.append(f"the journal refusing {refused} after the state: rc {rc}, said {said}, appended "
+                                f"{appended}, open {round_.get('id')!r} -- {err.strip()[-300:]!r}")
         # The plan file goes down only once the state's guards pass: a state damaged after the round's own read is
         # refused by `_write`'s guard, and nothing -- the plan's list included -- is left beside it.
         p = Process(_state_dir_with(_UNREADABLE["truncated"], top))
@@ -6640,6 +6768,7 @@ def _check_capture_start_said_as_it_landed():
             failures.append(f"damaged after its read: left {sorted(set(_project_bytes(p.dir)) - set(before))}")
     finally:
         io_.atomic_write_json = real
+        Process._append_event = real_event
         shutil.rmtree(top, ignore_errors=True)
     assert not failures, "\n  ".join(["capture-start refused at a state write:"] + failures)
 
@@ -6674,10 +6803,12 @@ def _second_capture_start_held(top):
 
 
 def _check_capture_start_held_names_the_close_that_landed():
-    """`capture-start` over an open round closes that round first, and the close is a journal event appended before the
-    one state write (part A's re-review, N-1). A holder refusing that write left the state as it was -- and the
-    refusal said "it is as it was" -- with the close in the journal, so a retry closed the round there a second time.
-    The order is W-9's (J2b) and stays; the refusal says what landed: the round's close, in the journal already."""
+    """`capture-start` over an open round closes that round, and a holder refuses its one state write (part A's
+    re-review, N-1). The close was a journal event appended before that write, so the refusal said "it is as it was"
+    over a journal that said closed, and a retry closed the round there a second time; W-8 had the refusal name that
+    close, the order left to W-9. W-9 (J2b, #141) turned the order round: the close is in the state write and its
+    event follows it. Refused now, no close has landed to name -- "it is as it was" is true of the journal too -- and
+    the retry closes the round once."""
     import shutil
     import tempfile
     top = tempfile.mkdtemp(prefix="autosound_process_supersede_held_")
@@ -6685,12 +6816,17 @@ def _check_capture_start_held_names_the_close_that_landed():
         rc, err, p, _before, _after = _second_capture_start_held(top)
         said = " ".join(err.split())
         round_ = p.load().get("capture") or {}
-        closes = [(e.get("capture"), e.get("reason")) for e in p.events() if e.get("type") == EV_CAPTURE_CLOSED]
+
+        def closes():
+            return [(e.get("capture"), e.get("reason")) for e in p.events() if e.get("type") == EV_CAPTURE_CLOSED]
         assert rc == EXIT_NO, (rc, said)
         assert round_.get("id") == "cap_001" and not round_.get("closed"), round_
-        assert closes == [("cap_001", "superseded")], closes          # the order as it stands, J2b's to change
-        assert "cap_001's close (superseded) is in the journal already" in said and "J2b" in said, said
-        assert not said.endswith("it is as it was"), said
+        assert closes() == [], closes()                       # nothing in the journal before the state (J2b)
+        assert said.endswith("it is as it was") and "in the journal already" not in said, said
+        rc, _out, err = _run_main(["process.py", p.dir, "capture-start", "1", "w-R_1 (sw)", "tw-R_1 (sw)"])
+        round_ = p.load().get("capture") or {}
+        assert rc == EXIT_OK and round_.get("id") == "cap_002" and not round_.get("closed"), (rc, round_, err)
+        assert closes() == [("cap_001", "superseded")], f"the retry closed cap_001 {closes()}"
     finally:
         shutil.rmtree(top, ignore_errors=True)
 
@@ -7250,6 +7386,300 @@ def _check_the_sha_is_asked_before_the_hold():
     assert not failures, "\n  ".join(["the sha and the lock:"] + failures)
 
 
+def _check_a_close_lands_state_first():
+    """A round's close goes to the journal only once it is in the state (#141, J2b; W-8's review): its event went
+    first, and a state write a holder refused -- Windows, past the retries -- said "it is as it was" over a journal
+    that said closed; the retry closed the round there a second time. Now the refused write leaves both files as
+    they were, and the retry closes the round once."""
+    import shutil
+    import tempfile
+    io_ = _project_io()
+    real = io_.atomic_write_json
+    top = tempfile.mkdtemp(prefix="autosound_process_close_first_")
+
+    def held(path, data, *args, **kwargs):
+        if os.path.basename(path) == "process-state.json":
+            raise PermissionError(13, "The process cannot access the file because it is being used by another "
+                                      "process", path)
+        return real(path, data, *args, **kwargs)
+
+    def closes(d):
+        return [(e.get("capture"), e.get("reason")) for e in Process(d).events() if e.get("type") == EV_CAPTURE_CLOSED]
+    try:
+        d = os.path.join(top, "process")
+        Process(d).enter_phase("-1")
+        Process(d).start_capture("1", expected=["w-L_1 (sw)"])
+        before = _project_bytes(d)
+        io_.atomic_write_json = held
+        try:
+            caught = _raised(lambda: Process(d).close_capture("done"))
+        finally:
+            io_.atomic_write_json = real
+        said = str(caught)
+        assert isinstance(caught, ProcessError) and said.endswith("it is as it was"), f"{type(caught).__name__}: {said}"
+        assert closes(d) == [], f"the journal says closed, the state as it was: {closes(d)}"
+        assert _project_bytes(d) == before, "a refused close wrote something"
+        Process(d).close_capture("done")
+        assert closes(d) == [("cap_001", "done")], f"the retry: {closes(d)}"
+        assert Process(d).load(strict=True)["capture"].get("closed"), "the retry did not close the round"
+    finally:
+        io_.atomic_write_json = real
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_capture_close_closes_the_round_it_read():
+    """`capture-close` reads the open round, then takes the project's lock three times -- the reconcile, the checks,
+    the close -- and another writer can close or replace the round between them (#141, R7): the close closed the round
+    open by then, one this verb never read against REW nor checked. Now the close is of the round it read, or refused
+    naming both, nothing written. `close_capture` with no round given closes the open one, as ever."""
+    import shutil
+    import tempfile
+    rew_api = _siblings().load("rew_api.py")
+    real_list, real_verifier, real_check = rew_api.get_measurements, Process._load_verifier, Process.check_captures
+    top = tempfile.mkdtemp(prefix="autosound_process_close_read_")
+    failures = []
+
+    class Verifier:
+        def verify(self, titles):
+            return [{"name": t, "exists": True, "reachable": True, "valid": True, "issues": [], "stats": {}}
+                    for t in titles]
+
+    def fresh():
+        d = os.path.join(tempfile.mkdtemp(dir=top), "process")
+        Process(d).enter_phase("-1")
+        Process(d).start_capture("1", expected=["m-L_1 (sw)"])
+        return d
+
+    def closes(d):
+        return [(e.get("capture"), e.get("reason")) for e in Process(d).events() if e.get("type") == EV_CAPTURE_CLOSED]
+
+    def checks_then_a_new_round(self, *args, **kwargs):
+        got = real_check(self, *args, **kwargs)
+        raised = _from_another_thread(lambda: Process(self.dir).start_capture("1", expected=["m-R_1 (sw)"]))
+        if raised is not None:
+            failures.append(f"the other writer: {raised!r}")
+        return got
+    try:
+        for what, meanwhile, now in (
+                ("replaced", lambda q: q.start_capture("1", expected=["m-R_1 (sw)"]), "(cap_002 is the open round now)"),
+                ("closed", lambda q: q.close_capture("closed meanwhile"), "(no round is open now)")):
+            d = fresh()
+            meanwhile(Process(d))
+            before = _project_bytes(d)
+            caught = _raised(lambda: Process(d).close_capture("done", round_id="cap_001"))
+            said = str(caught)
+            if not isinstance(caught, ProcessError) or not said.startswith("round cap_001 ") or now not in said \
+                    or "nothing was written" not in said:
+                failures.append(f"{what}, in code: {type(caught).__name__}: {said}")
+            if _project_bytes(d) != before:
+                failures.append(f"{what}, in code: wrote")
+        d = fresh()
+        closed = _raised(lambda: Process(d).close_capture("done", round_id="cap_001"))
+        if closed is not None or closes(d) != [("cap_001", "done")]:
+            failures.append(f"the round given, open: {closed!r}, closes {closes(d)}")
+        # The command line: another writer opens the next round between the checks and the close.
+        rew_api.get_measurements = lambda: {"1": {"title": "m-L_1 (sw)"}}
+        Process._load_verifier = lambda self: Verifier()
+        d = fresh()
+        Process.check_captures = checks_then_a_new_round
+        try:
+            rc, out, err = _run_main(["process.py", d, "capture-close"])
+        finally:
+            Process.check_captures = real_check
+        last = (err.strip().splitlines() or [""])[-1]
+        live = Process(d).load()["capture"]
+        if rc != EXIT_NO or "cap_001" not in last or "cap_002" not in last or live.get("id") != "cap_002" \
+                or live.get("closed") or closes(d) != [("cap_001", "superseded")]:
+            failures.append(f"replaced after the checks: rc {rc}, open {live.get('id')!r} closed "
+                            f"{live.get('closed')!r}, closes {closes(d)}, said {last!r}")
+    finally:
+        rew_api.get_measurements, Process._load_verifier, Process.check_captures = real_list, real_verifier, real_check
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["capture-close and the round it read:"] + failures)
+
+
+#: A run of each verb that writes -- the state, the journal or a plan beside them -- as the checks of a folder that
+#: does not exist drive them (#141, R46), and of each verb that only reads. Together they are `VERB_FLAGS`: a verb
+#: added there and classed in neither turns `_check_a_mistyped_process_folder_starts_nothing` red.
+_WRITING_RUNS = (
+    ["enter-phase", "-1"], ["enter-phase", "0"], ["add-step", "1.1", "x"], ["start", "1.1"],
+    ["done", "1.1", "project.json"], ["skip", "1.1", "not needed"], ["block", "1.1", "waiting"],
+    ["reviewer", "gemini", "m"], ["target", "FULL", "EPY"], ["decision", "keep 45 degrees?", "yes"],
+    ["session-start", "tcc", "opus"], ["session-close"], ["session-reopen", "it was a check"],
+    ["capture-start", "1", "a_1 (sw)"], ["capture-check"], ["capture-taken", "a_1 (sw)"],
+    ["capture-import", "1", "a_1 (sw)", "--bind", "=v_001", "--knob", "K=1"], ["amp-gain", "sw=+3"],
+    ["capture-knobs", "SubRC=4/4"], ["capture-knobs", "--amend", "cap_001", "--reason", "late", "SubRC=4/4"],
+    ["capture-protective", "w-L", "OFF"], ["capture-protective", "--amend", "cap_001", "--reason", "late", "w-L", "OFF"],
+    ["listening-verdict", "--text", "heard"], ["capture-supersede", "a_1 (sw)", "a_1 (rta)"],
+    ["capture-skip", "a_1 (sw)", "later"], ["capture-close"], ["capture-close", "--no-rew"])
+_READING_RUNS = (["show"], ["plan"], ["check"], ["handoff"], ["handoff", "--json"], ["amp-changes"],
+                 ["listening-verdicts"], ["session-close", "--check"])
+
+
+def _made(d):
+    """The process folder `d`, made, for a fixture whose first write is not `enter-phase -1`: a writer starts a process
+    only in a folder that is there, or in one called `process` beside `project.json` (#141, R46)."""
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def _check_a_mistyped_process_folder_starts_nothing():
+    """W-8's ruling R46 (#141): a write verb on a process folder that does not exist creates nothing there. A mistyped
+    path, `<project>/process-typo`, got a state and a journal of its own from `enter-phase -1`, `reviewer`, `target`
+    and `capture-start`, a journal from `decision`, `session-start`, `session-close`, `amp-gain` and
+    `listening-verdict`; beside a whole project `enter-phase 0` and `capture-import` would have written too. Now each
+    verb that writes refuses there, exit 1, naming the folder, and nothing is made -- no folder, no plan, and no
+    `.autosound/`: the lock's hold makes that one, so the refusal comes before the hold (the byte walks leave a top
+    `.autosound/` out, so it is looked for here by name). The verbs that only read make nothing either."""
+    import shutil
+    import tempfile
+    runs = _WRITING_RUNS + _READING_RUNS
+    assert {argv[0] for argv in runs} == set(VERB_FLAGS), \
+        f"verbs classed nowhere here: {sorted(set(VERB_FLAGS) - {argv[0] for argv in runs})}"
+    top = tempfile.mkdtemp(prefix="autosound_process_typo_")
+    failures = []
+
+    def made(proj, kept):
+        extra = sorted(set(os.listdir(proj)) - set(kept))
+        for name in extra:                      # cleared, so that the next verb is judged on its own
+            path = os.path.join(proj, name)
+            if os.path.isdir(path):
+                shutil.rmtree(path)
+            else:
+                os.remove(path)
+        return extra
+    try:
+        for kept in ((), ("project.json",)):
+            proj = os.path.join(top, "beside-a-project" if kept else "bare")
+            os.makedirs(proj)
+            for name in kept:
+                with open(os.path.join(proj, name), "w", encoding="utf-8") as f:
+                    f.write("{}\n")
+            d = os.path.join(proj, "process-typo")
+            want = (f"error: {d} does not exist, and the method's process folder is called process -- a mistyped "
+                    "path? nothing was written")
+            for argv in runs:
+                rc, out, err = _run_main(["process.py", d, *argv])
+                label = " ".join(argv) + (" beside a project" if kept else "")
+                last = (err.strip().splitlines() or [""])[-1]
+                if argv in _WRITING_RUNS and (rc != EXIT_NO or last != want or out.strip()):
+                    failures.append(f"{label}: rc {rc}, said {(err or out).strip()[-200:]!r}")
+                extra = made(proj, kept)
+                if extra:
+                    failures.append(f"{label}: made {extra}")
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, f"{len(failures)} run(s) on a folder that does not exist:\n  " + "\n  ".join(failures)
+
+
+def _check_a_new_project_still_starts():
+    """The rule against a mistyped folder stops no project starting (#141, R46). A folder called `process` that is not
+    there yet is a project's first process write where `project.json` stands beside it -- TCC's new-project dialog
+    writes that file first -- and, with none, the intake's own `enter-phase -1`, which starts the project. Any other
+    verb there first is refused, exit 1, "not a project yet", and nothing is made."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_process_new_project_")
+    failures = []
+    try:
+        d = os.path.join(top, "intake", "process")
+        os.makedirs(os.path.dirname(d))
+        rc, out, err = _run_main(["process.py", d, "enter-phase", "-1"])
+        if rc != EXIT_OK or Process(d).load(strict=True).get("active_phase") != "-1":
+            failures.append(f"enter-phase -1, the intake: rc {rc}, said {err.strip()[-200:]!r}")
+        for n, argv in enumerate(a for a in _WRITING_RUNS if a != ["enter-phase", "-1"]):
+            proj = os.path.join(top, f"first-{n}")
+            os.makedirs(proj)
+            rc, out, err = _run_main(["process.py", os.path.join(proj, "process"), *argv])
+            want = (f"error: {proj} holds no project.json: not a project yet -- the intake starts one with "
+                    "enter-phase -1; nothing was written")
+            if rc != EXIT_NO or (err.strip().splitlines() or [""])[-1] != want or out.strip():
+                failures.append(f"{' '.join(argv)} first: rc {rc}, said {(err or out).strip()[-200:]!r}")
+            if os.listdir(proj):
+                failures.append(f"{' '.join(argv)} first: made {sorted(os.listdir(proj))}")
+        for argv in (["session-start", "tcc", "opus"], ["reviewer", "gemini", "m"], ["decision", "keep 45?", "yes"]):
+            proj = os.path.join(top, f"seeded-{argv[0]}")
+            os.makedirs(proj)
+            with open(os.path.join(proj, "project.json"), "w", encoding="utf-8") as f:
+                f.write("{}\n")
+            d = os.path.join(proj, "process")
+            rc, out, err = _run_main(["process.py", d, *argv])
+            if rc != EXIT_OK or not os.path.isfile(Process(d).journal_path):
+                failures.append(f"{argv[0]} beside project.json: rc {rc}, said {err.strip()[-200:]!r}")
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["a new project:"] + failures)
+
+
+def _check_the_plan_file_is_said():
+    """A round's plan file is said (#141; W-8's review, S-101). The round is the record, the file is where the person
+    reads it, written once the round landed -- and one that could not be written was said nowhere: `_write_capture_plan`
+    returned None and `start_capture` dropped it. Now `capture-start` names the file on stdout once it is written, and
+    one it could not write in one line on stderr, with why and where the list is; exit 0 either way, the round open."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_process_plan_said_")
+    try:
+        d = os.path.join(top, "blocked", "process")
+        Process(d).enter_phase("-1")
+        os.makedirs(os.path.join(top, "blocked", "docs"))
+        with open(os.path.join(top, "blocked", "docs", "plans"), "w", encoding="utf-8") as f:
+            f.write("a file where the plans folder belongs\n")
+        plan = os.path.join(top, "blocked", "docs", "plans", "_1-capture.md")
+        rc, out, err = _run_main(["process.py", d, "capture-start", "1", "w-L_1 (sw)"])
+        round_ = Process(d).load(strict=True).get("capture") or {}
+        lines = err.strip().splitlines()
+        head, tail = f"note: the round is open, but its plan {plan} could not be written (", \
+            f") -- process.py {d} show holds its list"
+        assert rc == EXIT_OK and round_.get("id") == "cap_001" and not round_.get("closed"), (rc, round_, err)
+        assert len(lines) == 1 and lines[0].startswith(head) and lines[0].endswith(tail) \
+            and lines[0][len(head):-len(tail)].strip(), f"stderr: {lines}"
+        assert "plan:" not in out, out
+        d = os.path.join(top, "open", "process")
+        Process(d).enter_phase("-1")
+        plan = os.path.join(top, "open", "docs", "plans", "_1-capture.md")
+        rc, out, err = _run_main(["process.py", d, "capture-start", "1", "w-L_1 (sw)"])
+        assert rc == EXIT_OK and f"plan: {plan}" in out.splitlines() and not err.strip(), (rc, out[-300:], err)
+        assert os.path.isfile(plan), f"no plan at {plan}"
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_a_project_folder_that_cannot_be_written():
+    """A project folder this user may not write cannot hold the writer lock's `.autosound/` (#141, R6): `hold` let the
+    `OSError` out -- exit 70 and a bug's traceback, over a folder that is only as it is. Now it is a refusal: exit 1,
+    one line naming the folder and its repair, nothing written and nothing made. Met for real, so POSIX and not root
+    (`_mode_refuses`)."""
+    import shutil
+    import tempfile
+    if not _mode_refuses("a project folder this user may not write, met for real"):
+        return
+    top = tempfile.mkdtemp(prefix="autosound_process_read_only_")
+    failures, proj = [], None
+    try:
+        d = _at_phase(top, "-1")
+        proj = os.path.dirname(d)
+        want = (f"error: {os.path.join(proj, '.autosound')} cannot be made for the project's writer lock (Permission "
+                "denied), so nothing was written -- this user may not write there: give it access (its owner and "
+                "mode, `ls -l`) and run again")
+        before = _project_bytes(d)
+        os.chmod(proj, 0o555)
+        for argv in (["add-step", "-1.1", "x"], ["decision", "keep 45 degrees?", "yes"], ["session-close"],
+                     ["enter-phase", "-1"], ["capture-start", "1", "w-L_1 (sw)"]):
+            rc, out, err = _run_main(["process.py", d, *argv])
+            if rc != EXIT_NO or err.strip().splitlines() != [want] or out.strip():
+                failures.append(f"{' '.join(argv)}: rc {rc}, said {(err or out).strip()[-300:]!r}")
+        if _project_bytes(d) != before:
+            failures.append("wrote")
+        if os.path.exists(os.path.join(proj, ".autosound")):
+            failures.append("made the lock's folder")
+    finally:
+        if proj is not None:
+            os.chmod(proj, 0o755)
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["a project folder this user may not write:"] + failures)
+
+
 def _selftest():
     """The refusals, exercised. This module is the one with the most of them — evidence must exist
     and must resolve (SCR-035), a round's captures must be usable (SCR-040), phase 0 must record a
@@ -7283,7 +7713,10 @@ def _selftest():
                   _check_project_bytes_leave_the_lock_out, _check_every_writer_holds_the_lock,
                   _check_a_held_lock_answers_75_with_nothing_written, _check_a_bad_timeout_is_a_usage_error,
                   _check_capture_check_reads_rew_unlocked, _check_enter_phase_gates_run_unlocked,
-                  _check_the_sha_is_asked_before_the_hold):
+                  _check_the_sha_is_asked_before_the_hold, _check_a_close_lands_state_first,
+                  _check_capture_close_closes_the_round_it_read, _check_a_mistyped_process_folder_starts_nothing,
+                  _check_a_new_project_still_starts, _check_the_plan_file_is_said,
+                  _check_a_project_folder_that_cannot_be_written):
         try:
             check()
         except AssertionError as exc:
@@ -7488,7 +7921,7 @@ def _selftest():
     # The amendment path a CLOSED round needs (skill #48), on a project of its own so the fixture
     # above keeps its open round: no state write, a required reason, and `protective_record_for`
     # reads the correction as the last word on that channel.
-    am = Process(os.path.join(tempfile.mkdtemp(prefix="autosound_amend_"), "process"))
+    am = Process(_made(os.path.join(tempfile.mkdtemp(prefix="autosound_amend_"), "process")))
     am.start_capture("49", expected=["m-L_49 (sw)"], phase="0")
     am.set_protective("m-L", "OFF", source="front_end")
     cap_id = am.protective_record()["id"]
@@ -7527,7 +7960,7 @@ def _selftest():
     assert proc.knobs_for("999") is None, "a version with no round has no knobs, not empty ones"
     assert _cli("capture-knobs").returncode != 0 and _cli("capture-knobs", "SubRC").returncode != 0
     # #56 item 9: a CLOSED round's knobs can be written, as a correction with a reason, and are then read.
-    amend_p = Process(os.path.join(root, "process-amend"))
+    amend_p = Process(_made(os.path.join(root, "process-amend")))
     amend_p.enter_phase("0")
     closed_id = amend_p.start_capture("5", expected=["m-L_5 (sw)"], phase="0")["id"]
     amend_p.close_capture(reason="done")
@@ -7540,7 +7973,7 @@ def _selftest():
                       "SubRC=7/12").returncode == 0
     assert amend_p.knobs_for("5")["knobs"]["SubRC"] == "7/12", amend_p.knobs_for("5")
     # #58 P3: REW titles registered after the fact -- one round per DSP state, knobs required, lateness said.
-    imp = Process(os.path.join(root, "process-import"))
+    imp = Process(_made(os.path.join(root, "process-import")))
     imp.enter_phase("0")
     for bad_binds, bad_knobs in (({"": "v_404"}, {"SubRC": "4/4"}), ({}, {"SubRC": "4/4"}),
                                  ({"": None, "C": None}, {})):
@@ -7562,7 +7995,7 @@ def _selftest():
     assert imp.knobs_for("9")["knobs"] == {"SubRC": "4/4"}
     # The Arbiter, 2026-09-23: an amp gain he turned is on record per channel, between the rounds either side
     # of it, and a measured value replaces a said one. A series with no round cannot be placed (None, not {}).
-    amp = Process(os.path.join(root, "process-amp"))
+    amp = Process(_made(os.path.join(root, "process-amp")))
     amp.enter_phase("0")
     amp.start_capture("50", expected=["sw_50 (sw)"], phase="0")
     amp.close_capture(reason="done")
@@ -7584,7 +8017,7 @@ def _selftest():
             pass
     # The Arbiter, 2026-09-23: protective history is gathered PER CHANNEL, from the newest round where the channel
     # had one -- the front raw in one round and the centre raw in another are both kept, and an OFF hides nothing.
-    ph = Process(os.path.join(root, "process-prot-hist"))
+    ph = Process(_made(os.path.join(root, "process-prot-hist")))
     ph.enter_phase("0")
     ph.start_capture("40", expected=["m-L_40 (sw)", "tw-L_40 (sw)"], phase="0")
     ph.set_protective("m-L", {"hp": {"f": 100.0, "type": "LR", "slope": 24}})
@@ -7599,7 +8032,7 @@ def _selftest():
     assert got["m-L"]["version"] == "40" and got["c"]["version"] == "41" and got["tw-L"]["legs"]["hp"]["f"] == 1000.0, got
     # #57 P0 / S-026: a round records the ledger version it was taken under and the level as a quantity; a
     # level with no dB in it, or an under that is not banked, is refused.
-    lvl = Process(os.path.join(root, "process-level"))
+    lvl = Process(_made(os.path.join(root, "process-level")))
     lvl.enter_phase("0")
     r_ = lvl.start_capture("3", expected=["m-L_3 (sw)"], phase="0", level="-25 dB rel. max",
                            level_read_as="7 lamps on the Conductor")
@@ -7613,7 +8046,7 @@ def _selftest():
     # A round that closes with no knobs recorded says so, at the one moment the answer is still in
     # the room -- and closes anyway, because refusing would strand a session mid-car. REW is a dead
     # port here (T-30): the close runs with REW down whatever listens on 4735 on this machine.
-    bare = Process(os.path.join(root, "process-bare"))
+    bare = Process(_made(os.path.join(root, "process-bare")))
     bare.enter_phase("0")
     bare.start_capture("7", expected=["m-L_7 (sw)"], phase="0")
     bare_out = subprocess.run([sys.executable, _mod, bare.dir, "capture-close"],
@@ -7702,7 +8135,7 @@ def _selftest():
     real_sha = _writer_sha
     try:
         globals()["_writer_sha"] = lambda: "a" * 40
-        stamped = os.path.join(tempfile.mkdtemp(prefix="autosound_stamp_"), "process")
+        stamped = _made(os.path.join(tempfile.mkdtemp(prefix="autosound_stamp_"), "process"))
         run = Process(stamped)
         run.record_session("selftest", "-")
         run.record_session("selftest", "-")
@@ -7727,7 +8160,7 @@ def _selftest():
         # "Asked and could not be told" is recorded, not skipped: a journal with no header at all
         # means nobody ever asked, and the two must not look the same.
         globals()["_writer_sha"] = lambda: ""
-        blind = os.path.join(tempfile.mkdtemp(prefix="autosound_blind_"), "process")
+        blind = _made(os.path.join(tempfile.mkdtemp(prefix="autosound_blind_"), "process"))
         Process(blind).record_session("selftest", "-")
         first = Process(blind).events()[0]
         assert first["type"] == EV_WRITTEN_BY and first["skill_sha"] == "", first
@@ -7740,7 +8173,7 @@ def _selftest():
     # `session_start` had no pair, so "we stopped" could be said over an open round whose status
     # lives only in REW's measurement list. `open_work` REPORTS; closing each thing stays a
     # decision (which evidence, which reason), which is why nothing here writes.
-    stop_root = os.path.join(tempfile.mkdtemp(prefix="autosound_stop_"), "process")
+    stop_root = _made(os.path.join(tempfile.mkdtemp(prefix="autosound_stop_"), "process"))
     sp = Process(stop_root)
     assert sp.open_work() == {"capture_round": None, "steps_in_progress": [], "phase": None}, \
         "a project that has done nothing owes nothing"
@@ -7905,7 +8338,7 @@ def _selftest():
     # Fails on the old code at the refusal: `start_capture` took any number, and a session that
     # had ALREADY SAID the set was «серія _49 зі старого проєкту» opened the round as series 49,
     # writing another build's numbering into this project's record as its own.
-    fs = Process(os.path.join(tempfile.mkdtemp(prefix="autosound_series_"), "process"))
+    fs = Process(_made(os.path.join(tempfile.mkdtemp(prefix="autosound_series_"), "process")))
     fs.start_capture("1", ["m-L_1 (sw)"])          # a first round has no sequence to be outside of
     fs.close_capture("done")
     fs.start_capture("2", ["m-L_2 (sw)"])          # the next number is this project's own
@@ -7924,7 +8357,7 @@ def _selftest():
     # Half an origin is no origin: "from somewhere else" with no name answers nothing.
     for half in ("passat-b8-2026", {"project": "x"}, {"series": "49"}, ":49"):
         try:
-            Process(os.path.join(tempfile.mkdtemp(prefix="autosound_half_"), "process")).start_capture(
+            Process(_made(os.path.join(tempfile.mkdtemp(prefix="autosound_half_"), "process"))).start_capture(
                 "1", ["m-L_1 (sw)"], origin=half)
             raise AssertionError(f"accepted half an origin: {half!r}")
         except ProcessError:
@@ -7939,7 +8372,7 @@ def _selftest():
     assert (version_kind("v_001"), version_kind("1"), version_kind("_17")) == \
         ("ledger", "series", "series"), "the two counters"
     assert version_kind("ir-v7_49") is None and version_kind(None) is None
-    cap = Process(os.path.join(tempfile.mkdtemp(prefix="autosound_cap_"), "process"))
+    cap = Process(_made(os.path.join(tempfile.mkdtemp(prefix="autosound_cap_"), "process")))
     try:
         cap.start_capture("v_001", ["w-L_1 (sw)"])
         raise AssertionError("a round was opened at a ledger version nobody had banked")
@@ -7978,7 +8411,7 @@ def _selftest():
     # The old behaviour: `add_step("0.4", "Закрити відкриті поля: project.json (8)")` and the
     # eight fields live nowhere a reader can reach. Fails on the old code at the first line --
     # `covers` was not a parameter.
-    cv = Process(os.path.join(tempfile.mkdtemp(prefix="autosound_covers_"), "process"))
+    cv = Process(_made(os.path.join(tempfile.mkdtemp(prefix="autosound_covers_"), "process")))
     facts = ["project.json:sources.sweep_input", "project.json:amps.front.gain_db",
              "project.json:channels.r-L.driver", "project.json:channels.r-R.driver",
              "dsp_profile.json:eq.bands_total"]
@@ -8015,7 +8448,7 @@ def _selftest():
     # -- skill #29: phase 0 asks for (sw) AND (rta). The verdict marks an RTA `applicable: False`
     #    ("nothing here was checked"); the round must KEEP that and the step must not read it as
     #    bad. Round-trip, the way a producer's field is owed: verdict -> disk -> gate.
-    na = Process(os.path.join(tempfile.mkdtemp(prefix="autosound_na_"), "process"))
+    na = Process(_made(os.path.join(tempfile.mkdtemp(prefix="autosound_na_"), "process")))
     na.start_capture("1", ["w-L_1 (sw)", "w-L_1 (rta)", "w-R_1 (sw)"], phase="0")
 
     class _Verdicts:
@@ -8065,7 +8498,7 @@ def _selftest():
     assert issued["groups"] == rnd["groups"] and issued["optional"] == ["Ws_55 (sw)"], issued
     # --start overrides what the last round says; with nothing known, the plan's order (sweeps first).
     assert rr.start_capture("56", phase="2", plan=True, start_method="sw")["groups"][0]["label"] == "Solo (sw)"
-    fresh = Process(os.path.join(tempfile.mkdtemp(prefix="autosound_fresh_"), "process"))
+    fresh = Process(_made(os.path.join(tempfile.mkdtemp(prefix="autosound_fresh_"), "process")))
     refuses("a plan with no glossary", lambda: fresh.start_capture("1", plan=True, phase="2"))
     # A round opened without the plan still carries its columns (#83): by kind and method of its titles.
     plain_r = rr.start_capture("57", ["m-L_57 (sw)", "Ms_57 (rta)", "w-L_57 (sw)"], phase="2")
@@ -8275,7 +8708,9 @@ def _main(argv):
             check_only = "--check" in args
             # The stop reads what is open and records the close under the project's lock (#141): read apart, a round
             # or a step another writer opened in between was stopped over. `--check` writes nothing, waits for nobody.
+            # A folder that is no project's is refused before the hold makes anything (R46).
             if not check_only:
+                p._require_home("session-close")
                 p._ready_to_hold()
             with contextlib.nullcontext() if check_only else _hold(p.project_dir):
                 # Strict, before anything is written (#136): read as an empty process, an unreadable file had nothing
@@ -8373,6 +8808,13 @@ def _main(argv):
             )
             for line in render_round_list(round_):
                 print(line)
+            # The plan file, said either way (S-101): written, where it is; not, why -- the round is open all the same.
+            plan_path, unwritten = p._plan_written
+            if unwritten is None:
+                print(f"plan: {plan_path}")
+            else:
+                print(f"note: the round is open, but its plan {plan_path} could not be written ({unwritten}) -- "
+                      f"process.py {p.dir} show holds its list", file=sys.stderr)
         elif cmd == "capture-check":
             session = "--session" in args
             args = [a for a in args if a != "--session"]
@@ -8681,10 +9123,17 @@ def _main(argv):
             no_rew = "--no-rew" in args
             args = [a for a in args if a != "--no-rew"]
             checked = None
+            # A folder that is no project's is said as such (#141, R46), before the look for an open round below.
+            p._require_home("capture-close")
             # The journal the close appends to is read and opened for appending first (batch 2's re-review, Out of
             # Scope 5): one that cannot be refuses before a line is printed. With REW down the verb said "closing on
             # the record alone" and then refused at the close's own append.
             p._require_journal()
+            # The round this verb closes, read once, before REW (#141, R7): the reconcile, the checks and the close each
+            # take the project's lock for themselves, and another writer can close or replace the round between them.
+            # The close is of this round or refused, naming both -- it closed the round open by then, one this verb
+            # never read against REW nor checked. No round open is refused here, before a line is printed.
+            pinned = p._require_capture()[1]["id"]
             if not no_rew:
                 rew_api = _load_sibling("rew_api.py")
                 if rew_api is None:
@@ -8742,7 +9191,7 @@ def _main(argv):
                         print(f"  checks not run on the taken captures ({type(exc).__name__}: {str(exc)[:160]}): "
                               "the round closes on the record, unchecked")
             outstanding = p.capture_outstanding(p.load(strict=True))   # what the close is about to say (#136)
-            round_ = p.close_capture(" ".join(args) or None)
+            round_ = p.close_capture(" ".join(args) or None, round_id=pinned)
             print(
                 f"{round_['id']} closed: {sum(1 for t in round_['taken'] if _is_taken(round_, t))} taken, "
                 f"{len(round_['skipped'])} skipped, {len(outstanding)} outstanding"

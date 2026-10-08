@@ -12,7 +12,9 @@ polled, so one deadline covers this process's threads and the other processes. R
 that calls another writer (capture-import -> start/record/close) takes it once.
 
 A folder that cannot be locked at all (some shared or cloud folders refuse every lock) is written WITHOUT the lock,
-and the writer says so on stderr once: two writers there can still lose a change, as before this module.
+and the writer says so on stderr once: two writers there can still lose a change, as before this module. A folder
+where the lock cannot even be MADE -- one this user may not write -- is refused, `Unwritable` (exit 1), before
+anything is taken.
 
 TCC reads this file as TEXT, never imports it, for the line below: a copy that declares it locks itself, and TCC takes
 no lock of its own around it (`core/project_lock.py` `locks_itself`).
@@ -86,6 +88,45 @@ class BadTimeout(Exception):
     def __str__(self):
         return (f"{ENV_TIMEOUT}={self.value} is not a number of seconds (0 or more) -- unset it for the default "
                 f"{DEFAULT_TIMEOUT_S:g}")
+
+
+class Unwritable(Exception):
+    """The lock cannot be made in the project -- its folder `.autosound/`, the `.gitignore` there, or `write.lock`: a
+    project folder this user may not write, a read-only disk, a file where the folder belongs (#141, R6). A refusal,
+    not a bug: raised before anything is taken, and nothing written. It carries what
+    `project_io.Unreadable` carries -- `.path`, `.reason`, `.repair` -- and says itself the same way, so every command
+    line that refuses that one in one line (exit 1) refuses this one too. Matched by `is_unreadable`, never by its
+    class: a copy of this module loaded under another name has its own."""
+    is_unreadable = True
+
+    def __init__(self, path, reason, repair=None):
+        super().__init__(path, reason, repair)
+        self.path, self.reason, self.repair = path, reason, repair
+
+    def __str__(self):
+        return f"{self.path} {self.reason}" + (f" -- {self.repair}" if self.repair else "")
+
+
+def _repair_for(exc):
+    """The repair for `exc`, an `OSError` met making the lock's folder or file: the one its cause allows. Said here,
+    not loaded from `project_io`: this module loads no sibling (TCC reads it as text; the writers load it by path)."""
+    if exc.errno in (errno.EEXIST, errno.ENOTDIR):
+        return "a file stands where a folder of its path belongs: move that file aside and run again"
+    if exc.errno == errno.EISDIR:
+        return "a folder stands where the lock file belongs: move that folder aside and run again"
+    if exc.errno == errno.EROFS:
+        return "the disk is read-only: work on a copy of the project on a disk this user can write"
+    if exc.errno in (errno.EACCES, errno.EPERM):
+        return "this user may not write there: give it access (its owner and mode, `ls -l`) and run again"
+    return "check the disk and the folder it is on (a network share, a sync client's folder) and run again"
+
+
+def _unwritable(project_dir, exc):
+    """The `Unwritable` for `exc`, an `OSError` met making the lock's folder or file in `project_dir`: what could not
+    be made (the `OSError`'s own file, else `.autosound/`), why, and its repair."""
+    path = exc.filename or os.path.join(os.path.abspath(project_dir), LOCK_DIR)
+    return Unwritable(path, f"cannot be made for the project's writer lock ({exc.strerror or exc}), so nothing was "
+                            "written", _repair_for(exc))
 
 
 def lock_path(project_dir):
@@ -213,7 +254,8 @@ def hold(project_dir, timeout_s=None):
     `timeout_s` seconds to wait (None: `timeout_s()`, the environment's), one deadline over both; past it `Busy`,
     with nothing taken. A free lock is taken at once, even with no wait. A thread already holding it passes
     straight in, and its outer hold lets go. The wait is read before anything is touched: a `BadTimeout` makes
-    nothing."""
+    nothing. The lock's folder and file are made next, before anything is taken: ones that cannot be made -- a
+    project folder this user may not write -- are `Unwritable`, a refusal (#141, R6)."""
     start = time.monotonic()
     deadline = start + _wait_s(timeout_s)
     path = lock_path(project_dir)
@@ -222,13 +264,16 @@ def hold(project_dir, timeout_s=None):
     if entry.owner == me:
         yield
         return
-    if not entry.rlock.acquire(timeout=_left(deadline)):
-        raise Busy(path, time.monotonic() - start)
     with ExitStack() as undo:            # each step's undo, run last-first however the block ends
-        undo.callback(entry.rlock.release)
-        _prepare(project_dir)
-        fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o644)
+        try:
+            _prepare(project_dir)
+            fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o644)
+        except OSError as exc:
+            raise _unwritable(project_dir, exc) from exc
         undo.callback(os.close, fd)
+        if not entry.rlock.acquire(timeout=_left(deadline)):
+            raise Busy(path, time.monotonic() - start)
+        undo.callback(entry.rlock.release)
         if _take(fd, project_dir, path, start, deadline):
             undo.callback(_let_go, fd)
         entry.owner = me
@@ -517,6 +562,43 @@ def _check_a_folder_that_cannot_lock():
         _drop(p)
 
 
+def _check_a_project_that_cannot_be_written():
+    """A project folder this user may not write cannot hold the lock's folder (#141, R6): `hold` refuses with
+    `Unwritable` -- `is_unreadable` on its class, `.path` (what could not be made), `.reason` and `.repair`, said in one
+    line as `project_io.Unreadable` says itself, so every command line refuses with it, exit 1 -- before anything is
+    taken, and making nothing. It let the `OSError` out, a bug's 70 with a traceback. Met for real, so POSIX and not
+    root; elsewhere it is not checked, and the OK line says so (False)."""
+    if os.name != "posix" or os.geteuid() == 0:
+        return False
+    p = _scratch()
+    try:
+        os.chmod(p, 0o555)
+        caught = _raised(lambda: _enter(p))
+        assert caught is not None, "a hold in a folder this user may not write went through"
+        assert getattr(type(caught), "is_unreadable", False) is True, f"no refusal: {type(caught).__name__}: {caught}"
+        folder = os.path.join(p, LOCK_DIR)
+        assert caught.path == folder, f"path {caught.path!r}"
+        assert caught.reason == "cannot be made for the project's writer lock (Permission denied), so nothing was " \
+                                "written", f"reason {caught.reason!r}"
+        assert caught.repair == "this user may not write there: give it access (its owner and mode, `ls -l`) and " \
+                                "run again", f"repair {caught.repair!r}"
+        assert str(caught) == f"{folder} {caught.reason} -- {caught.repair}", f"said {str(caught)!r}"
+        assert not os.path.exists(folder), "the lock's folder was made"
+        assert not held_here(p), "held here after the refusal"
+        os.chmod(p, 0o755)
+        # Let in once the folder can be written -- from another thread: this one's thread lock is re-entrant, so only
+        # another thread would meet one the refusal left taken.
+        after = []
+        t = threading.Thread(target=lambda: after.append(_raised(lambda: _enter(p, timeout_s=5))), daemon=True)
+        t.start()
+        t.join(60)
+        assert after == [None], f"not let in once the folder could be written: {after}"
+    finally:
+        os.chmod(p, 0o755)
+        _drop(p)
+    return True
+
+
 def _check_busy_exit_says_one_line():
     """`busy_exit` prints the refusal as one line, on stderr unless told otherwise, and returns its exit code."""
     import contextlib
@@ -536,7 +618,8 @@ def _selftest():
     for check in (_check_protocol_line, _check_folder_ignores_itself, _check_reentrant_and_held_here,
                   _check_another_thread_waits, _check_another_process_is_busy, _check_timeout_from_the_environment,
                   _check_a_wait_given_in_code_is_checked_too, _check_a_free_lock_with_zero_wait,
-                  _check_a_folder_that_cannot_lock, _check_busy_exit_says_one_line):
+                  _check_a_folder_that_cannot_lock, _check_a_project_that_cannot_be_written,
+                  _check_busy_exit_says_one_line):
         try:
             seen[check.__name__] = check()
         except Exception as exc:  # noqa: BLE001 -- each check is reported by name; one failing must not hide the rest
@@ -548,6 +631,10 @@ def _selftest():
     git = seen["_check_folder_ignores_itself"]
     if not git:                                    # the OK line below claims only what ran
         print("write_lock: git add -A in a project was not checked here -- no git on PATH")
+    unwritable = seen["_check_a_project_that_cannot_be_written"]
+    if not unwritable:
+        print("write_lock: a project folder this user may not write was not checked here -- "
+              + ("run as root, whom no file mode refuses" if os.name == "posix" else "Windows keeps no POSIX mode"))
     print(f"write_lock selftest OK -- PROTOCOL = 1 on a line of its own, as TCC's probe reads it; a hold makes "
           f".autosound/write.lock and a .gitignore of '*'{' (git add -A stages nothing from it)' if git else ''}; "
           f"re-entrant in a thread, the OS lock kept until the outer hold ends; another thread and another "
@@ -555,7 +642,9 @@ def _selftest():
           f"named, nothing taken -- and get in once it is let go; {ENV_TIMEOUT} read at every call (unset 10 s), "
           f"a value that is no number of seconds exit 2 naming it, before anything is made, and a wait given in "
           f"code held to the same; a free lock taken at once with no wait; a folder that cannot be locked written "
-          f"without the lock, said in one note line; busy_exit says one line and returns 75")
+          f"without the lock, said in one note line; "
+          f"{'a project folder this user may not write refused as Unwritable, nothing taken or made; ' if unwritable else ''}"
+          f"busy_exit says one line and returns 75")
     return 0
 
 
