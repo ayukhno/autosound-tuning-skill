@@ -121,7 +121,8 @@ tripod block; every channel both `(sw)` and `(rta)`.
   off the DSP's screens, not a reason to guess which switches counted. Then the seat.
 - **0.2** **session levels, handheld**: one REW output level for all sweeps, one head-unit/Conductor
   level for all RTA; then the knobs are not touched. Set by the **loudest-driver test** (usually the
-  sub): peak −5…−10 dBFS in; the quietest driver above the cabin noise (example: sub −5, centre −15…−20,
+  sub): the INPUT peak −5…−10 dBFS (REW's input meter); the output level is a separate number; the quietest
+  driver above the cabin noise (example: sub −5, centre −15…−20,
   garage noise −40 works, because a 12 s sweep × 4 reps accumulates; garage noise is low-frequency, so
   the sub and midbass suffer, not the tweeters). The judge is `capture-check` per measurement, not a
   number. **The same numbers in Phase 3.**

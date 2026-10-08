@@ -52,7 +52,8 @@ BLOCK 0 · OPEN THE ROUND (laptop, ~1 min)                      [0.0]
     -protective, -knobs and -check all refuse while no round is open
 
 BLOCK A · SESSION LEVELS (handheld, ~5 min, nothing saved)     [0.2]
-  loudest driver (usually the sub): sweep → peak −5…−10 dBFS, knobs fixed
+  loudest driver (usually the sub): sweep → the INPUT peak −5…−10 dBFS (REW's input meter);
+    the output level is a separate number · knobs fixed
   quietest driver: sweep → above the cabin noise (capture-check sees it)
   one REW output level for ALL sweeps · one HU/Conductor level for ALL RTA
   → both numbers to the passport; the SAME numbers in Phase 3
