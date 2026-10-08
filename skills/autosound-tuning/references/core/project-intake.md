@@ -14,9 +14,10 @@ numbers did not change, so a `project-intake.md §3` or `§4` pointer still land
 > connected, call `get_tcc_state` and read it as **answered**, not as a suggestion. It reports the
 > project folder, the current phase, the **language** the Arbiter is working in (`language`, e.g.
 > `"uk"`), and the reviewer they chose in the GUI's own controls (`reviewer.model`,
-> `reviewer.reachable`, `reviewer.how`). Everything it reports was set by the user in the app
-> before this conversation started — **do not ask them to confirm it.** Ask only about what the
-> state leaves blank or what contradicts the disk.
+> `reviewer.reachable`, `reviewer.ready`, `reviewer.how`). `reviewer.reachable` is null when no
+> reviewer is configured; then `model` and `ready` are absent. Everything it reports was set by the
+> user in the app before this conversation started — **do not ask them to confirm it.** Ask only
+> about what the state leaves blank or what contradicts the disk.
 >
 > **And it may have asked more than those two.** The intake's fields, their enumerations and
 > the couples that must be asked as ONE control are data since SCR-059 (`rew_tool/intake.py`),
@@ -26,8 +27,9 @@ numbers did not change, so a `project-intake.md §3` or `§4` pointer still land
 >
 > This changes which of the questions below you actually put: with a front-end, the language is the
 > one the app is already speaking and the reviewer channel is already picked, so steps 1 and 2 of
-> the sequence collapse into "note what the state says and move on". With no front-end, ask them
-> exactly as written — this is an "if you are told, do not ask" rule, not a removal.
+> the sequence collapse into "note what the state says and move on". With no front-end, hand the
+> person the form's URL (`intake_form.py serve`); ask in chat only what the form marks *not
+> machine-readable*. Either way this is an "if you are told, do not ask" rule, not a removal.
 >
 > **An answered step is a closed step.** Not asking is only half of it: leave the plan's language /
 > reviewer step open and the panel shows an unfinished intake for the rest of the project, and the
