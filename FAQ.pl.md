@@ -89,7 +89,7 @@ Będziesz potrzebować laptopa, mikrofonu pomiarowego, procesora DSP w aucie ora
 - Otwórz **Terminal** (naciśnij `Cmd + Space` → wpisz `Terminal` → naciśnij `Enter`).
 - Wklej poniższe polecenie i naciśnij `Enter`:
    ```bash
-   curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.1.1/install.sh | bash
+   curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.1.2/install.sh | bash
    ```
 - W zależności od systemu inne instalatory mogą poprosić o uprawnienia; to normalne. Poczekaj 10–20 minut.
 
@@ -101,7 +101,7 @@ Będziesz potrzebować laptopa, mikrofonu pomiarowego, procesora DSP w aucie ora
 - Otwórz **Windows PowerShell** (naciśnij Start → wpisz `powershell` → naciśnij `Enter`).
 - Wklej poniższe polecenie i naciśnij `Enter`:
    ```powershell
-   irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.1.1/install.ps1 | iex
+   irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.1.2/install.ps1 | iex
    ```
 - W zależności od systemu inne instalatory mogą poprosić o uprawnienia; to normalne. Skrypt utworzy skrót **REW (API on)** na twoim Pulpicie.
 
