@@ -122,10 +122,12 @@ writer lock cannot be taken in its folder -- the OS refuses the lock itself, and
 (item 8) -- else null; the text report says it as `**Writer lock:** <line>.` It is never part of `ok`. It is
 `write_lock.probe`'s answer: the lock file tried as a hold tries it and let go at once, nothing made. So `check` says
 nothing until a writer has made the lock file there -- a new project on such a folder is named from the first `check`
-after the first write in a folder that is there. Something that is not a file where the lock file belongs (a folder),
-or not a folder where its folder `.autosound` belongs (a file), is said too, as what every writer refuses there (item
-8): `<project> cannot be locked (<that path> is not a file): the method's writers refuse to write here until it is
-moved aside` (`is not a folder` for the second). A probe that fails -- the file there and not to be opened, any other
+after the first write in a folder that is there. Something that is not a file where the lock file belongs (a folder, a
+link into a folder that is not there), or not a folder where its folder `.autosound` belongs (a file, a link to
+nothing), is said too, as what every writer refuses there (item 8): `<project> cannot be locked (<that path> is not a
+file): the method's writers refuse to write here until it is moved aside` (`is not a folder` for the second). A link
+to nothing at the lock file, into a folder that is there, is no lock file yet: a writer's hold makes the file it names
+and takes the lock. A probe that fails -- the file there and not to be opened, any other
 error -- is said in that line, `<project>: whether the project's writer lock can be taken here could not be told
 (<type>: <why>)`, never a crash of `check`.
 

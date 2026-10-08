@@ -382,8 +382,8 @@ def hold(project_dir, timeout_s=None):
             fd = _opened(project_dir, path, undo)
         if fd is not None and _take(fd, project_dir, path, start, deadline):
             undo.callback(_let_go, fd)
+        undo.callback(setattr, entry, "owner", None)     # its undo first: an exception between the two never keeps it
         entry.owner = me
-        undo.callback(setattr, entry, "owner", None)
         yield
 
 
@@ -401,10 +401,12 @@ def probe(project_dir):
     * `("cannot_lock", <the OS's reason>)` -- the OS refuses the lock itself: the writers write here WITHOUT it, each
       saying so in a `note:` line;
     * `("cannot_lock", "<path> is not a file")`, or `"<path> is not a folder"` -- something that is not a file stands
-      at the lock file's path (a folder), or something that is not a folder at its folder's, `.autosound` (a file):
-      the lock cannot be made there, and every writer refuses to write, `Unwritable`, until it is moved aside;
+      at the lock file's path (a folder, a link into a folder that is not there), or something that is not a folder at
+      its folder's, `.autosound` (a file, a link to nothing): the lock cannot be made there, and every writer refuses to
+      write, `Unwritable`, until it is moved aside;
     * `("no_lock_file", None)` -- `<project>/.autosound/write.lock` is not there: no writer has made it yet, or the
-      project folder is not there. It is not tried, for it would have to be made.
+      project folder is not there -- or it is a link to nothing in a folder that is there, which a writer's open goes
+      through, making the file it names. It is not tried, for it would have to be made.
 
     The existing file is opened read-write, never created: nothing is made, nothing in it changes. The OS lock is tried
     without waiting, as a hold tries it, and a refusal read as a hold reads it -- on Windows only ERROR_LOCK_VIOLATION
@@ -415,7 +417,12 @@ def probe(project_dir):
         try:
             mode = os.stat(where).st_mode
         except FileNotFoundError:
-            return "no_lock_file", None
+            try:
+                mode = os.lstat(where).st_mode         # a link to nothing stands there, or nothing at all
+            except FileNotFoundError:
+                return "no_lock_file", None
+            if where == path and os.path.isdir(os.path.dirname(os.path.realpath(path))):
+                return "no_lock_file", None            # a writer's open makes the file the link names, and locks it
         if not kind(mode):
             return "cannot_lock", f"{where} is not {what}"
     fd = os.open(path, os.O_RDWR)
@@ -972,39 +979,62 @@ def _check_an_error_inside_lets_go():
 
 
 def _check_one_deadline():
-    """One deadline covers both waits (#141): a hold that queued 0.6 s behind another thread has what is left of its
-    1 s for the OS lock, not a fresh second -- Busy at 1 s, never at 1.6. The OS lock is faked as held, so only the
-    deadline ends the wait."""
-    global _os_lock
-    real = _os_lock
+    """One deadline covers both waits (#141): a hold that queued behind another thread has what is left of its wait
+    for the OS lock, not a fresh one. The other thread lets go 1 s into the waiter's 2 s, and records when just before
+    it does; the waiter's Busy must come at its own 2 s, sooner than 2 s after that record. Held to the record, not to
+    an assumed time, a loaded machine that slows either thread does not fail it, while a fresh deadline always does:
+    its Busy comes 2 s after the thread lock was let go, at the earliest. The OS lock is faked as held, so only the
+    deadline ends the wait -- which the waiter must have reached, or the case was not met. Timed against a fixed 0.6 s
+    holder, it failed whenever a loaded machine (a VM beside the suite) held the waiter back 0.4 s."""
+    global _os_lock, _opened
+    real_lock, real_opened = _os_lock, _opened
+    wait = 2.0
     p = _scratch()
-    held, go, errors = threading.Event(), threading.Event(), []
+    held, began, errors = threading.Event(), threading.Event(), []
+    began_at, let_go_at, met = [], [], []
 
     def holder():
         try:
             with hold(p, timeout_s=0):
                 held.set()
-                go.wait(60)
-                time.sleep(0.6)
+                began.wait(60)
+                time.sleep(wait / 2)
+                let_go_at.append(time.monotonic())     # as it lets go: never later than the waiter gets the thread lock
         except Exception as exc:  # noqa: BLE001 -- carried to the main thread, which names it
             errors.append(exc)
             held.set()
 
+    def opened(project_dir, path, undo):               # the waiter's: its deadline is set, the thread lock is next
+        began_at.append(time.monotonic())
+        began.set()
+        return real_opened(project_dir, path, undo)
+
     def still_held(fd):
+        met.append(time.monotonic())
         raise _a_held_refusal()
 
     t = threading.Thread(target=holder, daemon=True)
     t.start()
     try:
         assert held.wait(60) and not errors, f"the other thread never held the lock: {errors}"
-        _os_lock = still_held
-        go.set()
-        caught = _raised(lambda: _enter(p, timeout_s=1.0))
+        _os_lock, _opened = still_held, opened             # after the holder's own look: the waiter's alone is seen
+        try:
+            caught = _raised(lambda: _enter(p, timeout_s=wait))
+        finally:
+            _os_lock, _opened = real_lock, real_opened
+        t.join(60)
         assert getattr(type(caught), "is_busy", False) is True, f"not busy: {caught!r}"
-        assert 0.9 <= caught.waited_s < 1.4, f"Busy after {caught.waited_s:.2f}s of a 1 s wait"
+        assert began_at and let_go_at and not errors, f"the waiter never began, or the other thread did not let go: " \
+                                                      f"{errors}"
+        holder_s = let_go_at[0] - began_at[0]
+        assert met, f"the other thread let go {holder_s:.2f}s into a {wait:g} s wait, and the waiter never reached " \
+                    f"the OS lock: the case was not met"
+        assert wait - 0.1 <= caught.waited_s < wait + holder_s, \
+            f"Busy after {caught.waited_s:.2f}s of a {wait:g} s wait, the other thread having let go {holder_s:.2f}s " \
+            f"in: the OS lock's wait began a fresh {wait:g} s"
     finally:
-        _os_lock = real
-        go.set()
+        _os_lock, _opened = real_lock, real_opened
+        began.set()
         t.join(60)
         _drop(p)
 
@@ -1187,14 +1217,15 @@ def _check_the_probe_answers():
     `("free", None)`, the lock taken and let go at once; `("held", None)` while another (spawned) process holds it;
     `("cannot_lock", <the OS's reason>)` where the OS refuses the lock itself, faked at the call with the refusal this
     system gives such a folder; and `("cannot_lock", "<path> is not a file")` -- or `is not a folder` -- where a folder
-    stands at the lock file's path, or a file at its folder's, which a writer's hold there refuses (`Unwritable`). It
+    stands at the lock file's path, or a file at its folder's, which a writer's hold there refuses (`Unwritable`). On
+    POSIX, a link to nothing as well (`_probe_rows_on_links`); returns whether those rows ran, for the OK line. It
     keeps nothing: after it the lock is free and the folder holds what it held."""
     import multiprocessing
     global _os_lock
     real = _os_lock
     top, signals = _scratch(), _scratch()
     p, gone = os.path.join(top, "car"), os.path.join(top, "gone")
-    child = None
+    child, links = None, False
     failures = []
 
     def refuse(fd):
@@ -1259,6 +1290,9 @@ def _check_the_probe_answers():
             refused = _raised(lambda: _enter(folder, timeout_s=0))
             if not getattr(type(refused), "is_unreadable", False):
                 failures.append(f"a hold where the probe says cannot_lock, {os.path.basename(folder)}: {refused!r}")
+        links = os.name == "posix"                         # a link, as POSIX makes one; elsewhere a skip line
+        if links:
+            _probe_rows_on_links(top, failures)
     finally:
         _os_lock = real
         with open(os.path.join(signals, "go"), "w", encoding="utf-8"):
@@ -1271,6 +1305,47 @@ def _check_the_probe_answers():
         _drop(top)
         _drop(signals)
     assert not failures, "\n  ".join(["the probe:"] + failures)
+    return links
+
+
+def _probe_rows_on_links(top, failures):
+    """`_check_the_probe_answers`' rows for a link to nothing, POSIX's: made in `top`, each failure added to `failures`.
+    The probe answers as a writer's hold there does. At `.autosound` such a link is no folder, and a writer's `mkdir`
+    meets it: cannot lock, `is not a folder`, the hold refused. At the lock file a writer's open goes through it and
+    makes the file it names: where that file's folder is there, no lock file yet, and the hold takes the lock; where it
+    is not, cannot lock, `is not a file`, the hold refused. The probe makes nothing at either end of a link. A link to
+    nothing read as no lock file at `.autosound`, and `check` said nothing while every writer refused there."""
+    linked, away, here = (os.path.join(top, name) for name in ("linked-folder", "linked-away", "linked-here"))
+    target = os.path.join(top, "elsewhere.lock")
+    os.makedirs(linked)
+    os.symlink(os.path.join(top, "no-folder"), os.path.join(linked, LOCK_DIR))
+    os.makedirs(os.path.join(away, LOCK_DIR))
+    os.symlink(os.path.join(top, "no-such-folder", LOCK_FILE), lock_path(away))
+    os.makedirs(os.path.join(here, LOCK_DIR))
+    os.symlink(target, lock_path(here))
+    for label, folder, want in (
+            ("a link to nothing at .autosound", linked,
+             ("cannot_lock", f"{os.path.dirname(lock_path(linked))} is not a folder")),
+            ("a link at the lock file into a folder that is not there", away,
+             ("cannot_lock", f"{lock_path(away)} is not a file"))):
+        got = probe(folder)
+        if got != want:
+            failures.append(f"{label}: {got!r}, not {want!r}")
+        refused = _raised(lambda: _enter(folder, timeout_s=0))
+        if not getattr(type(refused), "is_unreadable", False):
+            failures.append(f"{label}: a writer's hold where the probe says {got[0]}: {refused!r}")
+    got = probe(here)
+    if got != ("no_lock_file", None) or os.path.lexists(target):
+        failures.append(f"a link to nothing at the lock file, its folder there: {got!r}, the file it names made "
+                        f"{os.path.lexists(target)}")
+    refused = _raised(lambda: _enter(here, timeout_s=0))     # a writer's hold makes the file the link names, and locks
+    if refused is not None or not os.path.isfile(target):
+        failures.append(f"a link to nothing at the lock file, its folder there: the hold {refused!r}, the file it "
+                        f"names made {os.path.isfile(target)}")
+    elif probe(here) != ("free", None):
+        failures.append(f"a link at the lock file once a hold made its file: {probe(here)!r}")
+    if os.path.lexists(os.path.join(top, "no-folder")) or os.path.lexists(os.path.join(top, "no-such-folder")):
+        failures.append("the probe or a refused hold made where a link to nothing leads")
 
 
 def _run_checks(checks):
@@ -1324,6 +1399,13 @@ def _selftest():
     if not share:
         print("write_lock: LockFileEx refused by a share (ERROR_ACCESS_DENIED, faked at the call) was not checked "
               "here -- Windows only; the table of which refusals are held ran")
+    links = seen["_check_the_probe_answers"]
+    if not links:
+        print("write_lock: the probe on a link to nothing at .autosound or at the lock file was not checked here -- "
+              "a link as POSIX makes one, asked on POSIX alone")
+    on_links = (" (a link to nothing at .autosound, or at the lock file into a folder that is not there, too; one at "
+                "the lock file into a folder that is there is no lock file yet, a hold through it taking the lock)"
+                if links else "")
     print(f"write_lock selftest OK -- PROTOCOL = 1 on a line of its own, as TCC's probe reads it; a hold makes "
           f".autosound/write.lock and a .gitignore of '*'{' (git add -A stages nothing from it)' if git else ''}; "
           f"re-entrant in a thread, the OS lock kept until the outer hold ends; another thread and another "
@@ -1346,7 +1428,7 @@ def _selftest():
           f"the access repair fits the system; the refusals are no OSError or ValueError; busy_exit says one line and "
           f"returns 75; a check that breaks shows its traceback; probe answers no_lock_file (making nothing), free, "
           f"held by a spawned process, cannot_lock with the OS's reason, and cannot_lock naming a folder at the lock "
-          f"file's path or a file at its folder's, keeping nothing")
+          f"file's path or a file at its folder's{on_links}, keeping nothing")
     return 0
 
 
