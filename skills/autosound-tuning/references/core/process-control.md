@@ -104,13 +104,11 @@ Three independent occurrences on one build, each caught only by someone reading 
 - the ledger recorded a centre gain of **+4.0** that existed in **no preset** — the real baseline was +3.0 in both, so every delta computed from +4.0 was wrong;
 - a debrief listed five harvested lessons as "filed in the skill inbox"; the inbox never received them (they sat in the plan document that generated them).
 
-**Rules.** Read the current value off the DSP screen before computing any delta from it. A level "attested in the ledger" is a claim about the past, not a reading of the present. And when a document says work was filed somewhere, check the destination — a harvest queue that is written to but never read from silently becomes a second ledger.
+**Rules.** The ledger HEAD says what was banked; the DSP screen says what is set now — read the screen before computing a delta, and record a difference rather than average it. And when a document says work was filed somewhere, check the destination — a harvest queue that is written to but never read from silently becomes a second ledger.
 
-## The system state belongs in the measurement, not in memory
+## The system state belongs on the capture round, not in memory
 
-Anything global and level-dependent (master volume, loudness/tilt compensation, a sub level knob, whether the fill channel and effects were on, a non-standard mic position, an attenuated sweep level) must be written into **the measurement's own notes** at capture time. Titles stay protocol-clean — they are the tool-facing identity that name-matching resolves exactly (`naming-and-structure.md`); notes carry the state.
-
-Minimum per block of captures: **master · sub · effects · fill channel**. Add the sweep attenuation for sweeps and the mic position when it is not the usual seat.
+The state outside the DSP (master · sub · effects · fill channel) is recorded with `process.py capture-knobs` for the round — the record the tools read. A copy in the measurement's notes helps a person reading REW; it is not the record. Titles stay protocol-clean — they are the tool-facing identity that name-matching resolves exactly (`naming-and-structure.md`).
 
 ⚠️ Writing notes over an API usually **replaces** the field, destroying the capture information the measurement software put there itself. Read → append → write back; never a bare overwrite. (Confirmed by destroying it once.)
 
