@@ -1684,12 +1684,35 @@ def _check_step_aside_names_the_answers_name():
     assert not failures, "\n  ".join(["the answer's name, over a step-aside refused:"] + failures)
 
 
+def _check_engine_line_optional():
+    """#138 I-16: with no desk engine the doctor says the engine is optional -- Phase 1.3 runs the per-driver way
+    without it (`virtual-first.md`) -- and never that Phase 1.3 will not run without it, the claim the method's own
+    text contradicted (a session relayed a false "Phase 1 cannot run")."""
+    import types
+    fake = types.ModuleType("resonalyze_engine")
+    fake.engine_status = lambda: {"present": False, "how": "no prebuilt one", "pin": "v0", "rid": "osx-arm64",
+                                  "fetch": "install.sh"}
+    saved = sys.modules.get("resonalyze_engine")
+    sys.modules["resonalyze_engine"] = fake
+    try:
+        lines = _engine_lines()
+    finally:
+        if saved is None:
+            sys.modules.pop("resonalyze_engine", None)
+        else:
+            sys.modules["resonalyze_engine"] = saved
+    said = "\n".join(lines)
+    assert "НЕМАЄ" in lines[0], lines
+    assert "Він не обовʼязковий: Фаза 1.3 обходиться без нього (virtual-first.md)" in said, said
+    assert "не піде" not in said, said
+
+
 def _selftest():
     """Offline: a retired model becomes a CHOICE carrying the key's list (never a fall-through),
     the list is parsed from the API's shape, and a run with a key and no model stops on the list."""
     failures = []
     for check in (_check_review_names_unique, _check_step_aside_refused_remove,
-                  _check_step_aside_names_the_answers_name):
+                  _check_step_aside_names_the_answers_name, _check_engine_line_optional):
         try:
             check()
         except AssertionError as exc:
@@ -3145,7 +3168,7 @@ def _engine_lines():
         return [f"✓ Рушій столу (Resonalyze): є — {st['how']} · пін {st['pin']} · {st['rid']}", receipt]
     return [
         f"· Рушій столу (Resonalyze): НЕМАЄ — {st['how']}",
-        f"  Фаза 1.3 (пошук кросоверів) без нього не піде. Пін {st['pin']}, платформа "
+        f"  Він не обовʼязковий: Фаза 1.3 обходиться без нього (virtual-first.md). Пін {st['pin']}, платформа "
         f"{st['rid']}; забрати: {st['fetch']}",
         receipt,
     ]

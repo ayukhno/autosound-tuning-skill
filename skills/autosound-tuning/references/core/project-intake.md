@@ -39,19 +39,25 @@ numbers did not change, so a `project-intake.md §3` or `§4` pointer still land
 > # against the artefact that carries it (`autosound_context.md`, written in `phase_-1_intake.md` §5).
 > python3 rew_tool/state/process.py <project>/process decision "dialogue language" "uk" -1.1
 >
-> # The reviewer channel is closed by an ANSWER, not by a setting. One live check, recorded:
-> python3 scripts/autosound_ai.py doctor | tee <project>/rew_analitic/reviewer-check.md
+> # The reviewer channel is closed by an ANSWER, not by a setting. One live check, recorded,
+> # and the step closes on the doctor's exit code:
+> python3 scripts/autosound_ai.py doctor > <project>/rew_analitic/reviewer-check.md; rc=$?
+> # rc 0 -- the channel answered:
 > python3 rew_tool/state/process.py <project>/process reviewer <vendor> <the model you named> -1.2 \
 >   --review rew_analitic/reviewer-check.md
 > python3 rew_tool/state/process.py <project>/process done -1.2 "rew_analitic/reviewer-check.md"
+> # any other rc -- it did not; the step is blocked with what the doctor said:
+> python3 rew_tool/state/process.py <project>/process block -1.2 "<the first ✗ line of reviewer-check.md>"
 > ```
 >
 > ⚠️ **Why a live check and not "configured".** Evidence must RESOLVE — a file, a ledger version, a
 > measurement name — and `"reviewer.model=…"`, `"reachable=true"` resolve to nothing, so the step
 > this file used to demonstrate was refused by the gate when run exactly as printed. A channel that
 > was configured and never answered is the one that fails in Phase 1, when a round is waiting on it.
-> The doctor runs a live one-line smoke through the channel; `tee` leaves what it said in the
-> project, and that file is what closes the step (user's ruling 2026-09-09).
+> The doctor runs a live one-line smoke through the channel; the redirect leaves what it said in the
+> project, and its exit code decides: on 0 that file is what closes the step (user's ruling
+> 2026-09-09); on anything else the step is blocked with the file's first ✗ line. A pipe into `tee`
+> returned `tee`'s status, so a doctor that failed still closed the step.
 >
 > The evidence names where the answer came from AND where it now lives on disk — a state read is
 > not by itself a fact a later session can check. A reviewer the state reports as **unreachable**
