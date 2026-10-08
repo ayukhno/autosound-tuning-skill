@@ -41,8 +41,9 @@ hören, fahren, zurückkommen, wieder hören. Unterwegs erholen sich die Ohren.
 `label` ist die Kurzform fürs Menü, `name` die volle. „Klingt richtig“ und „klingt falsch“ sind zwei
 eigenständige Wendungen, so geschrieben, dass sie in einen Satz passen. `route` ist der Schritt der
 Methode, zu dem ein ✗ geht, nach seiner Nummer und seinem Namen in `virtual-first.md` (Schreibtisch
-1.3 Weichen, 1.4 grober EQ, 1.5 Übergänge, 1.6 Pegel; Auto 3.3 feiner EQ über MMM; Intake
-−1.3 Schutzfilter). Ein Merkmal mit „höhere Liga“ ist nichts für den ersten Durchgang.
+1.3 Weichen, 1.4 grober EQ, 1.5 Übergänge, 1.6 Pegel, 2.1 zweiter Teil des EQ; Auto 3.3 feiner EQ
+über MMM; Intake −1.3 Schutzfilter). Ein Merkmal mit „höhere Liga“ ist nichts für den ersten
+Durchgang.
 
 | id | label | name | sounds right | sounds wrong | where a ✗ goes |
 |---|---|---|---|---|---|
@@ -55,7 +56,7 @@ Methode, zu dem ein ✗ geht, nach seiner Nummer und seinem Namen in `virtual-fi
 | c07 | Höhen / Zischlaute | Höhen und Zischlaute | „s“ und „sch“ natürlich, lösen sich weder ab noch verschwinden sie; Becken ein anhaltendes Schimmern | Zischlaute lösen sich ab oder verschwinden; Becken wie zerkaute Folie oder ein dumpfes „pssch“ | chirurgische Schnitte in der virtuellen Ebene (3.3 feiner EQ); der Übergang Mitteltöner↔Hochtöner (1.5 Übergänge) |
 | c08 | Nervbänder in der Stimme | Stimme — Nervbänder in den Mitten | eine natürliche Stimme mit Brustton und ohne Druck | bohrt in den Ohren, drückt, oder klingt magersüchtig ohne Körper | das Band, das nervt (3.3 feiner EQ) — nicht das Fundament |
 | c09 | Tiefe | Tiefe und Raum | die Bühne hinter der Motorhaube, Schichten erkennbar, ein Flüstern unter einem Solo noch hörbar | ein flaches Bild, alles vorne | der Übergang Mitteltöner↔Hochtöner (1.5 Übergänge), oder Höhen heißer als der Bass (3.3 feiner EQ) |
-| c10 | Trennung | Trennung unter Last | Mikroereignisse bleiben getrennt, wenn der Mix dicht wird | Brei, langweilig, oder erdrückend | meist zu viel EQ — etwas wegnehmen (1.4 grober EQ / 3.3 feiner EQ); selten ein Übergang (1.5 Übergänge) |
+| c10 | Trennung | Trennung unter Last | Mikroereignisse bleiben getrennt, wenn der Mix dicht wird | Brei, langweilig, oder erdrückend | meist zu viel EQ — etwas wegnehmen (1.4 grober EQ / 2.1 zweiter Teil / 3.3 feiner EQ); selten ein Übergang (1.5 Übergänge) |
 | c11 | Attack | Attack und Transienten | der Beginn eines Schlags ist knackig, die Trommeln straff | Anfänge verschmiert, Trommeln weich | Verstärker- und Treiberkontrolle, kein EQ; der Übergang Midbass↔Mitteltöner (1.5 Übergänge) |
 | c12 | Universalität | Universalität über Aufnahmen | verschiedene Aufnahmen klingen verschieden | „die nächste im Radio“ — alles gleich | eine Neigung, oder übertriebener EQ (3.3 feiner EQ) |
 | c13 | langes Hören | Das lange Hören — ein Album, 15–20 min, entspannt | bleibt leicht und einladend | ermüdet: dick, hell oder dunkel (eine Neigung), oder tot, trocken, klinisch (Überkorrektur) | Neigung → eine breite Neigung gegenüber MMM, nie schmale Kerben; tot → EQ wegnehmen, nicht hinzufügen (3.3 feiner EQ) |

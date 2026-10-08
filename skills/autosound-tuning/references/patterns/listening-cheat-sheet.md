@@ -45,8 +45,8 @@ sittings** — listen, drive, come back, listen again. Ears reset on the road.
 `label` is the short form for a menu; `name` the full one. `sounds right` and `sounds wrong` are two
 free-standing phrases, written to be dropped into a sentence. `route` is the step of the method a ✗
 goes to, by its number and its name in `virtual-first.md` (desk 1.3 crossovers, 1.4 coarse EQ,
-1.5 joints, 1.6 levels; car 3.3 fine EQ over MMM; intake −1.3 protective filters). A
-characteristic marked `next league` is not for the first pass.
+1.5 joints, 1.6 levels, 2.1 second part of EQ; car 3.3 fine EQ over MMM; intake −1.3 protective
+filters). A characteristic marked `next league` is not for the first pass.
 
 | id | label | name | sounds right | sounds wrong | where a ✗ goes |
 |---|---|---|---|---|---|
@@ -59,7 +59,7 @@ characteristic marked `next league` is not for the first pass.
 | c07 | top / sibilants | Top and sibilants | "s" and "sh" natural, neither detaching nor vanishing; cymbals a sustained shimmer | sibilants detach or disappear; cymbals like chewed foil or a dull "pssh" | surgical cuts in the virtual layer (3.3 fine EQ); the mid↔tweeter joint (1.5 joints) |
 | c08 | voice cutters | Voice — cutters in the mids | a natural voice with chest and no pressure | drills the ears, presses, or sounds anorexic with no body | the cutter's own band (3.3 fine EQ) — not the foundation |
 | c09 | depth | Depth and space | the stage behind the hood, layers read, a whisper under a solo still reads | a flat picture with everything forward | the mid↔tweeter joint (1.5 joints), or a top hotter than the bass (3.3 fine EQ) |
-| c10 | separation | Separation under load | micro-events stay separate when the mix is dense | mush, boring, or oppressive | usually too much EQ — remove some (1.4 coarse EQ / 3.3 fine EQ); rarely a joint (1.5 joints) |
+| c10 | separation | Separation under load | micro-events stay separate when the mix is dense | mush, boring, or oppressive | usually too much EQ — remove some (1.4 coarse EQ / 2.1 second part / 3.3 fine EQ); rarely a joint (1.5 joints) |
 | c11 | attack | Attack and transients | the start of a hit is crisp, drums taut | starts smeared, drums soft | amplifier and driver control, not EQ; the midbass↔mid joint (1.5 joints) |
 | c12 | universality | Universality across recordings | different recordings sound different | "the next one on the radio" — everything alike | a tilt, or EQ overreach (3.3 fine EQ) |
 | c13 | long listen | The long listen — an album, 15–20 min, relaxed | stays easy and inviting | tires you: thick, bright or dark (a tilt), or dead, dry, clinical (over-correction) | a tilt → a broad tilt against MMM, never narrow notches; dead → remove EQ, do not add (3.3 fine EQ) |

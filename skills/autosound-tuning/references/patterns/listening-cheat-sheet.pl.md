@@ -39,9 +39,9 @@ posłuchaj, pojedź, wróć, posłuchaj znowu. W drodze uszy się resetują.
 
 `label` to krótka forma do menu; `name` — pełna. „Brzmi dobrze” i „brzmi źle” to dwa samodzielne
 zwroty, pisane tak, by wstawić je w zdanie. `route` to krok metody, do którego idzie ✗, według numeru
-i nazwy w `virtual-first.md` (stół 1.3 zwrotnice, 1.4 zgrubna EQ, 1.5 złącza, 1.6 poziomy; auto
-3.3 dokładna EQ po MMM; przyjęcie −1.3 filtry ochronne). Cecha oznaczona „wyższa liga” nie jest na
-pierwsze przejście.
+i nazwy w `virtual-first.md` (stół 1.3 zwrotnice, 1.4 zgrubna EQ, 1.5 złącza, 1.6 poziomy, 2.1 druga
+część EQ; auto 3.3 dokładna EQ po MMM; przyjęcie −1.3 filtry ochronne). Cecha oznaczona „wyższa liga”
+nie jest na pierwsze przejście.
 
 | id | label | name | sounds right | sounds wrong | where a ✗ goes |
 |---|---|---|---|---|---|
@@ -54,7 +54,7 @@ pierwsze przejście.
 | c07 | góra / sybilanty | Góra i sybilanty | „s” i „sz” naturalne, ani się nie odrywają, ani nie znikają; talerze — trwałe migotanie | sybilanty odrywają się lub znikają; talerze jak żuta folia albo głuche „pssz” | punktowe cięcia w warstwie wirtualnej (3.3 dokładna EQ); styk średniotonowy↔wysokotonowy (1.5 złącza) |
 | c08 | kłucie w głosie | Głos — kłujące pasma w średnicy | naturalny głos, osadzony w piersi, bez nacisku | wierci w uszach, naciska albo brzmi anorektycznie, bez ciała | własne pasmo kłucia (3.3 dokładna EQ) — nie fundament |
 | c09 | głębia | Głębia i przestrzeń | scena za maską, warstwy czytelne, szept pod solówką wciąż słyszalny | płaski obraz, wszystko z przodu | styk średniotonowy↔wysokotonowy (1.5 złącza) albo góra gorętsza od basu (3.3 dokładna EQ) |
-| c10 | separacja | Separacja pod obciążeniem | mikrozdarzenia zostają osobno, gdy miks jest gęsty | papka, nuda albo przytłoczenie | zwykle za dużo EQ — zdejmij część (1.4 zgrubna EQ / 3.3 dokładna EQ); rzadko styk (1.5 złącza) |
+| c10 | separacja | Separacja pod obciążeniem | mikrozdarzenia zostają osobno, gdy miks jest gęsty | papka, nuda albo przytłoczenie | zwykle za dużo EQ — zdejmij część (1.4 zgrubna EQ / 2.1 druga część / 3.3 dokładna EQ); rzadko styk (1.5 złącza) |
 | c11 | atak | Atak i transjenty | początek uderzenia ostry, bębny napięte | początki rozmyte, bębny miękkie | kontrola wzmacniacza i głośników, nie EQ; styk midbas↔średniotonowy (1.5 złącza) |
 | c12 | uniwersalność | Uniwersalność między nagraniami | różne nagrania brzmią różnie | „następna w radiu” — wszystko podobne | nachylenie albo przesada w EQ (3.3 dokładna EQ) |
 | c13 | długi odsłuch | Długi odsłuch — album, 15–20 min, na luzie | pozostaje lekki i zapraszający | męczy: grubo, jasno lub ciemno (nachylenie), albo martwo, sucho, klinicznie (przekorygowanie) | nachylenie → szerokie nachylenie po MMM, nigdy wąskie wycięcia; martwo → zdejmij EQ, nie dodawaj (3.3 dokładna EQ) |
