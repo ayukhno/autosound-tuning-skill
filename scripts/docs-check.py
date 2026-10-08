@@ -76,8 +76,8 @@ Rules:
     it: none of `references/phases/*.md` opens a round at series 1 (`capture-start 1`). The series is the project's
     own; a runbook that said 1, followed on a project at `_49` or on a second capture day, opened series 1 again.
 
-Rules 9-12 read a phrase as a reader does (`_phrase`): across a wrapped line and inline markup, in the
-case it is given, as whole words. Their cases, and rules 13's and 14's, are `_check_*` functions, run through one
+Rules 9-12 read a phrase as a reader does (`_phrase`): across a wrapped line and inline markup, its first letter in
+either case (a sentence's head, a clause's middle) and the rest in the case it is given, as whole words. Their cases, and rules 13's and 14's, are `_check_*` functions, run through one
 loop that collects every failure.
 
 Run: `scripts/docs-check.py` (from anywhere), `--selftest` for the checker's own mechanics.
@@ -145,12 +145,17 @@ _PHRASE_GAP = r"(?:[ \t*`]+|[ \t*`]*\n[ \t>*`]*)"
 
 def _phrase(phrase: str) -> re.Pattern:
     """`phrase` as a reader reads it, and no more: across a wrapped line and the markup inside a sentence, with either
-    apostrophe and either minus sign -- but in the case it is given, and as whole words (anchored like `\\b` at both
-    ends, as look-arounds, so a phrase that ends in punctuation still holds). A search for the bytes misses the same
-    sentence wrapped, or with one word in bold: `installation.md` said "pinned at" on one line and "**2.8.3**" on
-    the next. And a search that ignores case or word edges finds sentences nobody wrote: a lessons file's "you must
-    inspect the summation" is not the rule "MUST inspect", and "pinned at 2.8.30" is not "pinned at 2.8.3"."""
-    words = (re.escape(w).replace("'", "['’]").replace("−", "[−-]") for w in phrase.split())
+    apostrophe and either minus sign, its first letter in either case -- but the rest in the case it is given, and as
+    whole words (anchored like `\\b` at both ends, as look-arounds, so a phrase that ends in punctuation still holds).
+    A search for the bytes misses the same sentence wrapped, or with one word in bold: `installation.md` said "pinned
+    at" on one line and "**2.8.3**" on the next. It misses it at the head of a sentence too, and in the middle of
+    one: "Pinned at 2.8.3, ..." and "... apply only if Phase −1 chose ..." are the very regressions (Task 13's
+    re-review, N1). And a search that ignores case or word edges finds sentences nobody wrote: a lessons file's "you
+    must inspect the summation" is not the rule "MUST inspect", and "pinned at 2.8.30" is not "pinned at 2.8.3"."""
+    words = [re.escape(w).replace("'", "['’]").replace("−", "[−-]") for w in phrase.split()]
+    first = words[0][:1]
+    if first.lower() != first.upper():               # a letter: the head of a sentence capitalises it, a clause not
+        words[0] = f"[{first.upper()}{first.lower()}]" + words[0][1:]
     return re.compile(r"(?<!\w)" + _PHRASE_GAP.join(words) + r"(?!\w)")
 
 
@@ -1046,6 +1051,33 @@ def _check_one_path_banner():
         assert len(missing) == 1 and f"{ONE_PATH_FILES[2]}: missing" in missing[0], missing
 
 
+def _check_phrase_first_letter_in_either_case():
+    """Rules 9-12 (Task 13's re-review, N1): a phrase is read with its first letter in either case -- the sentence
+    that starts with it ("Pinned at 2.8.3 ...") and the clause that carries it mid-sentence ("... apply only if
+    Phase −1 chose ...") are the regressions a rule exists for -- and the rest of it in the case it is given, as
+    whole words: "must inspect the summation" and "MUST INSPECT" are still not "MUST inspect"."""
+    with _scratch() as tmp:
+        release = json.dumps({"plugins": [{"name": "autosound-tuning", "version": "3.1.1", "source": {
+            "source": "url", "url": "https://github.com/ayukhno/autosound-tuning-skill.git", "ref": "v3.1.1",
+            "sha": "e8dabf7145dea459a9f3c591c0828c9dbeb51669"}}]})
+        pinned = _fixture(tmp, {os.path.join(SKILL, "references", "tooling", "installation.md"):
+                                "# I\n\nPinned at 2.8.3, the plugin waits for the installer.\n",
+                                PLUGIN_CATALOGUE: release})
+        said = rule_plugin_route(pinned)
+        assert len(said) == 1 and "installation.md:3:" in said[0], said
+        banner = "> 🗺️ " + ONE_PATH_BANNER
+        files = {rel: f"# Phase\n\nWhat this phase is for.\n\n{banner}\n" for rel in ONE_PATH_FILES}
+        files[ONE_PATH_FILES[1]] += "\nThe sections below apply only if Phase −1 chose the iterative path.\n"
+        said = rule_one_path_banner(_fixture(tmp, files))
+        assert len(said) == 1 and "phase_1_foundation.md:7:" in said[0] and TWO_PATHS in said[0], said
+        by_tool = ("* The tools read arrivals (`predict --align`); the REW GUI is the cross-check when a tool says "
+                   "ILL-POSED or UNVERIFIED.\n")
+        rest = _fixture(tmp, dict(zip(ARRIVAL_FILES, (
+            "# P\n\n" + by_tool, "# Q\n\n" + by_tool,
+            "# D\n\n- You must inspect the summation at the joint. MUST INSPECT is a heading's shout.\n"))))
+        assert rule_arrivals(rest) == [], rule_arrivals(rest)
+
+
 #: Rule 13's fixture, `virtual-first.md` as the real file opens its steps: each step's name on its first line, the
 #: neighbours some of those lines cite (1.3 "without the wishes", 1.4 "BEFORE the delays", 1.5 "with the coarse EQ",
 #: 2.3 "the second"), a phase-0 step, and the words a number that is no pointer meets there ("order", "project", "dB").
@@ -1460,7 +1492,7 @@ def _selftest() -> int:
         # -- rules 9-14 (#138): each a `_check_*` of its own, and one loop that collects every failure
         failures = []
         for check in (_check_plugin_route, _check_owner_sentence, _check_arrivals, _check_one_path_banner,
-                      _check_step_ids, _check_step_ids_off_by_one, _check_step_ids_wishes_on_crossovers,
+                      _check_phrase_first_letter_in_either_case, _check_step_ids, _check_step_ids_off_by_one, _check_step_ids_wishes_on_crossovers,
                       _check_step_ids_delays_on_coarse_eq, _check_step_ids_second_on_review,
                       _check_step_ids_after_a_slash, _check_step_ids_read_as_written, _check_step_names_held,
                       _check_step_ids_reviewer_before_new_dsp, _check_step_ids_translation_keeps_every_row,
@@ -1485,8 +1517,10 @@ def _selftest() -> int:
           "named; a mapped file, its translation and an honest off-map declaration are not; a "
           "protective floor that drifted from the gate's constants, in a document or in the gate, "
           "is named; a document or a front page saying the plugin is pinned at 2.8.3 while the catalogue "
-          "installs 3.x is named, wrapped, quoted and in bold too, while the real 2.8.3 pin, another number, "
-          "another word and a paragraph break are not, and a catalogue that cannot be read is said; a document or "
+          "installs 3.x is named, wrapped, quoted and in bold too, and so is a sentence that opens 'Pinned at "
+          "2.8.3' or a clause 'if Phase −1 chose' (a phrase's first letter in either case), while the real 2.8.3 "
+          "pin, another number, another word and a paragraph break are not, and a catalogue that cannot be read is "
+          "said; a document or "
           "project.py's text saying the phase-0 gate still waits for the owner's own sentence is named, "
           "wrapped across a column of spaces too; an arrival to be inspected by hand in the GUI is named (a "
           "lower-case 'must inspect the summation' is not), and so is a phase file or the quirks file left "
