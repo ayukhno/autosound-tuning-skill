@@ -2502,20 +2502,30 @@ class Process:
         # capturing at the processing rate is impossible, we work with what there is. What must
         # never happen silently is the two being confused -- delays in samples derive from the
         # PROCESSING rate regardless of what the microphone recorded at.
-        rate_note = None
+        #
+        # The rate is read by the one rule the settings sheet and the model read it by (`load_profile`, then
+        # `stated_rate_hz`; the final review's I2). A profile that cannot be read, or a rate stated that is no rate,
+        # is said in the note with its file and repair, never a failure: it was a plain `json.load` read leniently,
+        # so a text rate exited 70 at the note's `:g`, `true` was noted as 1 Hz, and a cut or BOM'd profile said
+        # nothing. No profile at all, or no rate stated in it, is no note, as before.
+        rate_note, proc_rate = None, None
         capture_rates = sorted({v["stats"]["capture_rate_hz"] for v in verdicts
                                 if v.get("stats", {}).get("capture_rate_hz")})
         if capture_rates:
+            captured = "/".join(str(r) for r in capture_rates)
             module = _load_dsp_profile_module()
-            proc_rate = None
             if module is not None:
+                path = os.path.join(self.project_dir, "dsp_profile.json")
                 try:
-                    with open(os.path.join(self.project_dir, "dsp_profile.json"), encoding="utf-8") as f:
-                        proc_rate = module.processing_rate_hz(json.load(f))
-                except (OSError, ValueError, AttributeError):
+                    proc_rate = module.stated_rate_hz(module.load_profile(path), path, self.project_dir)
+                except FileNotFoundError:
                     proc_rate = None
+                except Exception as exc:  # noqa: BLE001 -- matched by its attribute below; anything else still raises
+                    if not getattr(type(exc), "is_unreadable", False):
+                        raise
+                    rate_note = f"captured at {captured} Hz; the DSP's processing rate NOT READ -- {exc}"
             if proc_rate and any(r != proc_rate for r in capture_rates):
-                rate_note = (f"captured at {'/'.join(str(r) for r in capture_rates)} Hz; the DSP "
+                rate_note = (f"captured at {captured} Hz; the DSP "
                              f"processes at {proc_rate:g} Hz -- fine, working with it. Delays in "
                              f"samples derive from the PROCESSING rate; the capture rate stays with "
                              f"the measurement")
@@ -6377,6 +6387,90 @@ def _check_close_checks_stage_refusals():
     assert not failures, "\n  ".join(["capture-close's checks stage:"] + failures)
 
 
+def _check_rate_note_reads_the_rule():
+    """`capture-check`'s rate note reads the profile by the one rule the settings sheet and the model read it by (the
+    final review's I2): `dsp_profile.load_profile`, then `stated_rate_hz`. A rate stated that is no rate -- text,
+    `true`, 0, a negative number -- and a profile cut off are said in the note, `captured at <rate> Hz; the DSP's
+    processing rate NOT READ -- <file> <reason> -- <repair>`, on stdout and in the journal's
+    `capture_verified.rate_note`; the check is recorded and exits by its verdicts, and the session probe is handed no
+    rate. A text rate exited 70 (the note's `:g` stood outside the `try`) with nothing recorded, `true` was noted as "the
+    DSP processes at 1 Hz", a negative rate as a rate, and a profile cut off, or saved with a UTF-8 BOM, said nothing.
+    A BOM'd profile is read, as every other reader reads it; no profile at all says nothing, as before."""
+    import shutil
+    import tempfile
+
+    class Verifier:                              # one capture at 48 kHz; REW is not asked
+        given = []
+
+        def verify(self, titles):
+            return [{"name": t, "exists": True, "reachable": True, "valid": True, "issues": [],
+                     "stats": {"uuid": "u-" + t, "capture_rate_hz": 48000}} for t in titles]
+
+        def session_report(self, verdicts, processing_rate_hz=None):
+            Verifier.given.append(processing_rate_hz)
+            return {"spread": None, "drift": None, "capture_rates_hz": [48000], "rows": []}
+
+        def summary(self, rows):
+            return {}
+
+        def render_session(self, probe):
+            return "(the session probe)"
+
+    top = tempfile.mkdtemp(prefix="autosound_process_rate_note_")
+    real = Process._load_verifier
+    failures = []
+    unread = "captured at 48000 Hz; the DSP's processing rate NOT READ -- "
+    noted = ("captured at 48000 Hz; the DSP processes at 96000 Hz -- fine, working with it. Delays in samples derive "
+             "from the PROCESSING rate; the capture rate stays with the measurement")
+    try:
+        Process._load_verifier = lambda self: Verifier()
+        for n, (label, raw, said) in enumerate((
+                ("96000", json.dumps({"dsp_processing_rate_hz": 96000}).encode(), noted),
+                ("96000 after a UTF-8 BOM", b"\xef\xbb\xbf" + json.dumps({"dsp_processing_rate_hz": 96000}).encode(),
+                 noted),
+                ('"48000", text', json.dumps({"dsp_processing_rate_hz": "48000"}).encode(),
+                 'states dsp_processing_rate_hz "48000", which is no processing rate'),
+                ('"96 kHz"', json.dumps({"dsp_processing_rate_hz": "96 kHz"}).encode(),
+                 'states dsp_processing_rate_hz "96 kHz", which is no processing rate'),
+                ("true", json.dumps({"dsp_processing_rate_hz": True}).encode(),
+                 "states dsp_processing_rate_hz true, which is no processing rate"),
+                ("0", json.dumps({"dsp_processing_rate_hz": 0}).encode(),
+                 "states dsp_processing_rate_hz 0, which is no processing rate"),
+                ("-96000", json.dumps({"dsp_processing_rate_hz": -96000}).encode(),
+                 "states dsp_processing_rate_hz -96000, which is no processing rate"),
+                ("cut off", b'{"dsp_processing_rate_hz": 96000, "na', "is not valid JSON"),
+                ("no profile", None, None))):
+            d = os.path.join(top, f"p{n}", "process")
+            p = Process(d)
+            p.enter_phase("-1")
+            p.start_capture("1", expected=["w-L_1 (sw)"])
+            profile = os.path.join(p.project_dir, "dsp_profile.json")
+            if raw is not None:
+                with open(profile, "wb") as fh:
+                    fh.write(raw)
+            del Verifier.given[:]
+            rc, out, err = _run_main(["process.py", d, "capture-check", "--session"])
+            events = [e for e in Process(d).events() if e.get("type") == EV_CAPTURE_VERIFIED]
+            note = events[-1].get("rate_note") if events else "(no capture_verified)"
+            if said is None:
+                ok = note is None and rc == EXIT_OK and "⚠" not in out
+            elif said == noted:
+                ok = note == noted and f"  ⚠ {noted}" in out.splitlines() and Verifier.given == [96000]
+            else:
+                ok = (isinstance(note, str) and note.startswith(unread + profile + " ") and said in note
+                      and note.endswith(f"set-field {os.path.abspath(p.project_dir)} dsp_processing_rate_hz <Hz>, "
+                                        "then finalize" if "no processing rate" in said else
+                                        f"git -C {os.path.abspath(p.project_dir)} checkout HEAD -- dsp_profile.json")
+                      and f"  ⚠ {note}" in out.splitlines() and Verifier.given == [None])
+            if not ok or rc != EXIT_OK or "Traceback" in err:
+                failures.append(f"{label}: rc {rc}, note {note!r}, rate handed on {Verifier.given}, "
+                                f"out {out.strip()[-200:]!r}, err {err.strip()[-200:]!r}")
+    finally:
+        Process._load_verifier = real
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["capture-check's rate note:"] + failures)
+
+
 def _selftest():
     """The refusals, exercised. This module is the one with the most of them — evidence must exist
     and must resolve (SCR-035), a round's captures must be usable (SCR-040), phase 0 must record a
@@ -6403,7 +6497,8 @@ def _selftest():
                   _check_intake_gate_names_an_unreadable_project_json, _check_close_checks_stage_refusals,
                   _check_naming_load_error_named, _check_round_lookups_read_the_state_strictly,
                   _check_intake_gate_names_an_unreadable_glossary, _check_plan_names_the_naming_load_error,
-                  _check_phase1_gate_names_an_unreadable_glossary, _check_capture_verbs_read_the_glossary_strictly):
+                  _check_phase1_gate_names_an_unreadable_glossary, _check_capture_verbs_read_the_glossary_strictly,
+                  _check_rate_note_reads_the_rule):
         try:
             check()
         except AssertionError as exc:
