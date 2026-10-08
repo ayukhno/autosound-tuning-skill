@@ -4,11 +4,12 @@ This document describes how to install, update, and set up the `autosound-tuning
 
 ## Installation Methods
 
-**One supported way to install 3.x: the installer** (the user's decision, 2026-09-16 —
-docs/SIMPLIFICATION-2026-09-16.md §7.4). The plugin catalogue is pinned at 2.8.3 and moves only with
-3.1.0; until then two install stories were one too many.
+**Two supported routes: the installer (§1) and the Claude Code plugin (§2).** Until 3.1.0 the installer
+was the only one (the user's decision, 2026-09-16 — docs/SIMPLIFICATION-2026-09-16.md §7.4), because the
+plugin catalogue had not moved to 3.x; since 3.1.0 it installs the release, and `/autosound-tuning:setup`
+brings what the plugin does not.
 
-### 1. The installer (recommended — the only supported path for 3.x)
+### 1. The installer (recommended)
 The one-liner is in `README.md` §Install (it names the current release, and `scripts/docs-check.py`
 keeps every README and FAQ on the same tag): `install.sh` on macOS/Linux, `install.ps1` on Windows. It
 clones the method at the newest `v3.*` release into `~/.claude/skills/.autosound-tuning-src` and links
@@ -29,7 +30,16 @@ clones the method at the newest `v3.*` release into `~/.claude/skills/.autosound
 
 ---
 
-### 2. Developer / Author Setup
+### 2. The Claude Code plugin
+`/plugin install autosound-tuning` (from the catalogue: `/plugin marketplace add ayukhno/autosound-tuning-skill`
+first), then `/autosound-tuning:setup` once in the first session: it installs the libraries and the tools and checks
+the copy against the signed tag. A plugin brings the method's files only, so until the setup has run the session
+says this plugin version is not set up; a new version is checked and set up the same way. The TCC desktop app comes
+with `/autosound-tuning:setup app` (or `/autosound-tuning:install-tcc`).
+
+---
+
+### 3. Developer / Author Setup
 A clone + a symlink of the inner `skills/autosound-tuning` into `~/.claude/skills/` (edits go live;
 update = `git pull`). This is what the installer does, pointed at your own checkout.
 
@@ -38,12 +48,9 @@ update = `git pull`). This is what the installer does, pointed at your own check
 
 ---
 
-### 3. Found installed some other way
-* **As a Claude Code plugin** (`/plugin install autosound-tuning`): that catalogue entry is pinned at
-  **2.8.3**, not 3.x. Offer to switch to the installer (§1) and remove the plugin
-  (`/plugin uninstall autosound-tuning`), or two copies of the method answer to one name —
-  `deployment.py` below names both.
-* **As a plain file copy:** offer to switch to the installer as well; a copy updated by hand drifts.
+### 4. Found installed some other way
+* **As a Claude Code plugin:** supported — run `/autosound-tuning:setup` once if the session says it is not set up.
+* **As a plain file copy:** offer to switch to the installer; a copy updated by hand drifts.
 
 ---
 

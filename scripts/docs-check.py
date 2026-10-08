@@ -43,12 +43,18 @@ Rules:
    margin (or 1.5, the top of the recommended range), and every "≥ N dB/oct" said of a protective or
    safety filter must be that slope. A copy that drifts is the one a session reads first.
 
+9. **`plugin-route`** (#138, I-1). Since 3.1.0 the plugin is a supported route: the catalogue
+   (`.claude-plugin/marketplace.json`) installs the release, and `/autosound-tuning:setup` brings what
+   the method runs on. No document may still say the plugin is "pinned at 2.8.3" while the catalogue
+   installs another release — a session that believed it told a plugin user to uninstall.
+
 Run: `scripts/docs-check.py` (from anywhere), `--selftest` for the checker's own mechanics.
 stdlib only.
 """
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
 import sys
@@ -97,6 +103,21 @@ def _section(text: str, heading: str) -> str:
     rest = text[start + len(heading):]
     end = re.search(r"^#{1,%d} " % level, rest, re.M)
     return rest[: end.start()] if end else rest
+
+
+def _phrase(phrase: str) -> re.Pattern:
+    """`phrase` as a reader reads it: across a line break and the markup inside a sentence (`**`, a backtick), in
+    either letter case, with either apostrophe and either minus sign. A search for the bytes misses the same
+    sentence wrapped, or with one word in bold: `installation.md` said "pinned at" on one line and "**2.8.3**" on
+    the next."""
+    words = (re.escape(w).replace("'", "['’]").replace("−", "[−-]") for w in phrase.split())
+    return re.compile(r"[\s*`]+".join(words), re.I)
+
+
+def _hits(path: str, phrase: str) -> list[int]:
+    """The line numbers where `phrase` starts in the file at `path`, read as `_phrase` reads it."""
+    text = open(path, encoding="utf-8").read()
+    return [text.count("\n", 0, m.start()) + 1 for m in _phrase(phrase).finditer(text)]
 
 
 def rule_data_not_instructions(root: str) -> list[str]:
@@ -383,6 +404,42 @@ def rule_protective_floor(root: str) -> list[str]:
     return bad
 
 
+#: The plugin catalogue, and the sentence the documents carried while it stayed on 2.8.3 (until 3.1.0).
+PLUGIN_CATALOGUE = os.path.join(".claude-plugin", "marketplace.json")
+PLUGIN_PINNED_OLD = "pinned at 2.8.3"
+
+
+def rule_plugin_route(root: str) -> list[str]:
+    """No document says the plugin is pinned at 2.8.3 while the catalogue installs another release (#138, I-1).
+
+    From 2026-09-16 to 3.1.0 the catalogue's entry stayed on 2.8.3, and `installation.md` sent a plugin user to the
+    installer and offered to uninstall the plugin. 3.1.0 moved the catalogue to the release (`ref` v3.x) and gave the
+    plugin `/autosound-tuning:setup`, and the documents kept the old sentence: a session that read them told a
+    plugin user to remove a working install. So the sentence is held to the file it describes, read the way
+    `rule_install_ref` reads the front page: no catalogue in the tree, nothing to compare.
+    """
+    raw = _read(root, PLUGIN_CATALOGUE)
+    if raw is None:
+        return []
+    try:
+        plugins = json.loads(raw).get("plugins") or []
+        refs = sorted({str(p["source"]["ref"]) for p in plugins
+                       if isinstance(p, dict) and isinstance(p.get("source"), dict) and p["source"].get("ref")})
+    except (ValueError, AttributeError, TypeError) as exc:
+        return [f"{PLUGIN_CATALOGUE}: cannot be read ({exc}) — which release the plugin installs is unknown, so "
+                f"'{PLUGIN_PINNED_OLD}' cannot be checked against it"]
+    if "v2.8.3" in refs:
+        return []                      # the catalogue IS on 2.8.3: the sentence is true
+    bad = []
+    for path in _md_files(root):
+        rel = os.path.relpath(path, root)
+        for n in _hits(path, PLUGIN_PINNED_OLD):
+            bad.append(f"{rel}:{n}: says the plugin is '{PLUGIN_PINNED_OLD}', but {PLUGIN_CATALOGUE} installs "
+                       f"{', '.join(refs) or 'no pinned release'} — the plugin is a supported route "
+                       f"(`/autosound-tuning:setup`), and a session reading this tells its user to remove it")
+    return bad
+
+
 RULES = [("data-not-instructions", rule_data_not_instructions),
          ("phase-source", rule_phase_source),
          ("references-orphans", rule_references_orphans),
@@ -390,7 +447,8 @@ RULES = [("data-not-instructions", rule_data_not_instructions),
          ("state-source", rule_state_source),
          ("ledger-root", rule_ledger_root),
          ("install-ref", rule_install_ref),
-         ("protective-floor", rule_protective_floor)]
+         ("protective-floor", rule_protective_floor),
+         ("plugin-route", rule_plugin_route)]
 
 
 def run(root: str) -> int:
@@ -572,6 +630,32 @@ def _selftest() -> int:
         moved_code = rule_protective_floor(floor_tree("HPF ≥ 1.1×Fs @ ≥24 dB/oct\n", margin="1.2"))
         assert any("1.1×Fs" in c for c in moved_code), "the gate is the home: a doc left behind is named"
 
+        # -- rule 9: the plugin is a route once the catalogue left 2.8.3 (#138, I-1)
+        def plugin_tree(doc: str, catalogue: str | None):
+            root = tempfile.mkdtemp(dir=tmp)
+            tooling = os.path.join(root, SKILL, "references", "tooling")
+            os.makedirs(tooling)
+            open(os.path.join(tooling, "installation.md"), "w", encoding="utf-8").write(doc)
+            if catalogue is not None:
+                os.makedirs(os.path.join(root, ".claude-plugin"))
+                open(os.path.join(root, PLUGIN_CATALOGUE), "w", encoding="utf-8").write(catalogue)
+            return root
+
+        def catalogue(ref: str) -> str:
+            return json.dumps({"plugins": [{"name": "autosound-tuning", "source": {"source": "url", "ref": ref}}]})
+
+        # the regression as `installation.md` carried it: wrapped, the number in bold
+        pinned = "# I\n\n* **As a Claude Code plugin**: that catalogue entry is pinned at\n  **2.8.3**, not 3.x.\n"
+        stale_route = rule_plugin_route(plugin_tree(pinned, catalogue("v3.1.1")))
+        assert any("installation.md:3:" in c and "v3.1.1" in c for c in stale_route), stale_route
+        supported = "# I\n\n* **As a Claude Code plugin:** supported — run `/autosound-tuning:setup` once.\n"
+        assert rule_plugin_route(plugin_tree(supported, catalogue("v3.1.1"))) == []
+        # while the catalogue IS on 2.8.3 the sentence is true; with no catalogue there is nothing to hold it to
+        assert rule_plugin_route(plugin_tree(pinned, catalogue("v2.8.3"))) == []
+        assert rule_plugin_route(plugin_tree(pinned, None)) == []
+        # a catalogue that cannot be read is said, never taken for one that pins nothing
+        assert any("cannot be read" in c for c in rule_plugin_route(plugin_tree(supported, "{"))), "unread catalogue"
+
         # and the tree itself, which is the point of the whole file
         assert run(ROOT) == 0, "the tree must be clean, or the selftest measures a fake"
     finally:
@@ -585,7 +669,8 @@ def _selftest() -> int:
           "is lost too, a declaration buried below the head and a file that claims both are each "
           "named; a mapped file, its translation and an honest off-map declaration are not; a "
           "protective floor that drifted from the gate's constants, in a document or in the gate, "
-          "is named")
+          "is named; a document saying the plugin is pinned at 2.8.3 while the catalogue installs 3.x is "
+          "named, wrapped and in bold too, and a catalogue that cannot be read is said")
     return 0
 
 
