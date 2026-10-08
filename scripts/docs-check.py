@@ -691,17 +691,19 @@ def _says(head: str, name: str) -> bool:
 
 def _step_named(steps: dict, sid: str, word: str) -> str | None:
     """None when step `sid` exists and `word` starts its name in `STEP_NAMES`; else why not -- naming the step whose
-    name the word does start, when there is one."""
-    if sid not in steps:
-        return f"there is no step {sid} in {STEP_HOME}"
-    name = STEP_NAMES.get(sid)
-    if name is None:
-        return (f"step {sid} has no name in docs-check.py's STEP_NAMES; give it the one its opening line in "
-                f"{STEP_HOME} says, and its pointers are held to it")
-    if word == name.split()[0].lower():
+    name the word does start, when there is one, whatever else is wrong: a pointer to a step with no name in the
+    table, or to no step at all, is told where its word belongs too (Task 14's re-review, Minor 2)."""
+    name = STEP_NAMES.get(sid) if sid in steps else None
+    if name is not None and word == name.split()[0].lower():
         return None
     other = next((s for s, n in STEP_NAMES.items() if n.split()[0].lower() == word), None)
-    return f"step {sid} is '{name}'" + (f"; '{STEP_NAMES[other]}' is step {other}" if other else "")
+    belongs = f"; '{STEP_NAMES[other]}' is step {other}" if other else ""
+    if sid not in steps:
+        return f"there is no step {sid} in {STEP_HOME}" + belongs
+    if name is None:
+        return (f"step {sid} has no name in docs-check.py's STEP_NAMES; give it the one its opening line in "
+                f"{STEP_HOME} says, and its pointers are held to it" + belongs)
+    return f"step {sid} is '{name}'" + belongs
 
 
 def _route_cells(path: str):
@@ -999,6 +1001,12 @@ def _check_arrivals():
         assert sum("does not say" in c for c in said_nothing) == 2, said_nothing
         by_tools = arrival_tree("# P\n\n" + by_tool, "# Q\n\n" + by_tool, "# D\n\n" + by_tool)
         assert rule_arrivals(by_tools) == [], rule_arrivals(by_tools)
+        # a file that carries the sentence, gone, is named -- a check whose input is missing fails, and is never read
+        # as a file that says nothing wrong (the final review's tests m-1)
+        for gone in ARRIVALS_SAID_IN:
+            without = _fixture(tmp, {rel: "# X\n\n" + by_tool for rel in ARRIVAL_FILES if rel != gone})
+            said = rule_arrivals(without)
+            assert len(said) == 1 and f"{gone}: missing" in said[0], (gone, said)
         # the phrase in the case it is given: a lessons file's lower-case "must inspect the summation" is advice
         summation = arrival_tree("# P\n\n" + by_tool, "# Q\n\n" + by_tool,
                                  "# D\n\n- At a joint you must inspect the summation at the joint, not the onsets.\n")
@@ -1030,6 +1038,12 @@ def _check_one_path_banner():
         # the old opening anywhere in a phase file, with an ASCII minus as well
         stray = rule_one_path_banner(banner_tree(extra="\nIf Phase -1 chose the iterative path, read on.\n"))
         assert len(stray) == 1 and "phase_0_baseline.md:9:" in stray[0], stray
+        # a phase file gone is named -- a check whose input is missing fails -- and the other three are still held
+        # (the final review's tests m-1)
+        without = banner_tree()
+        os.remove(os.path.join(without, ONE_PATH_FILES[2]))
+        missing = rule_one_path_banner(without)
+        assert len(missing) == 1 and f"{ONE_PATH_FILES[2]}: missing" in missing[0], missing
 
 
 #: Rule 13's fixture, `virtual-first.md` as the real file opens its steps: each step's name on its first line, the
@@ -1063,14 +1077,18 @@ _IDS_SHEET = ("# L\n\n`route` is the step a ✗ goes to (desk 1.5 joints, 1.6 le
               "| c01 | centre | L/R level, arrival, polarity (desk 1.5 joints / 1.6 levels) |\n"
               "| c04 | balance | a broad tilt against the MMM target (3.3 fine EQ) |\n"
               "| c16 | dynamics | not EQ; the protection filters (−1.3 protective filters) |\n"
-              "| c17 | +6 dB | the LOUDER verdict (EMMA Judge Book 2024 §4.5) |\n")
+              "| c17 | +6 dB | the LOUDER verdict (EMMA Judge Book 2024 §4.5, rule 2.8.3) |\n")
 _IDS_UK = ("# Л\n\n" + _IDS_HEADER + "| c01 | центр | рівні L/R, час, полярність (стіл 1.5 стики / 1.6 рівні) |\n"
            "| c04 | баланс | широкий нахил проти цілі MMM (3.3 тонкий EQ) |\n"
            "| c16 | динаміка | не EQ; захисні фільтри (-1.3 захисні фільтри) |\n"
-           "| c17 | +6 дБ | ГУЧНІШИЙ вердикт (EMMA Judge Book 2024 §4.5) |\n")
-#: Numbers in running text that are no pointers -- each held by one exclusion, which the fixture above makes matter:
-#: a unit, a word that names no step, a word the stop list takes out, the inside of a range.
-_IDS_NOT_POINTERS = ("Not pointers: a +1.2 PK, Q 0.7 all-pass, 1.5 dB, v3.1 levels, §0.5 step 3, 2.8.3 levels, the "
+           "| c17 | +6 дБ | ГУЧНІШИЙ вердикт (EMMA Judge Book 2024 §4.5, правило 2.8.3) |\n")
+#: Numbers in running text that are no pointers. Each is kept out by one exclusion, and a word after it that is a
+#: step's name makes that exclusion matter -- taken out, a check fails: the sign of `+1.2 levels`, the Q of
+#: `Q 0.7 levels`, the letter of `v3.1 levels`, the inside of a range, the stop list's `dB` and `project`, and the
+#: word no step is named by in `0.4 shows`. A version and a section are held in c17's route cell above (`rule 2.8.3`,
+#: `§4.5`), where a bare number counts: in running text a version's first number has no word after it, so nothing
+#: there could tell its exclusion was gone (Task 14's re-review, Minor 3).
+_IDS_NOT_POINTERS = ("Not pointers: a +1.2 levels, Q 0.7 levels, 1.5 dB, v3.1 levels, §0.5 step 3, the "
                      "drift pair in 0.4 shows it, in the 0.2 → 0.5 order below, a new 3.0 project, 3.3/2.1 ms, "
                      "−2.3..−3.8 levels and −0.5..−1.8 levels.\n")
 _IDS_FILES = {
@@ -1121,6 +1139,10 @@ def _check_step_ids():
         assert any("'1.5 levels'" in c and "step 1.5 is 'joints'" in c for c in moved), moved
         assert any("'1.5 joint'" in c and "step 1.5 is 'joints'" in c for c in moved), moved
         assert len(moved) == 4 and not any("rew-tool-docs.md" in c for c in moved), moved
+        # ... and in the core files: the capabilities board, estimator-scope.md and the analysis playbook carry
+        # pointers too (the final review's tests m-2)
+        stale_core = rule_step_ids(_ids_tree(tmp, core="| settled after it (1.3 joints) |\n"))
+        assert len(stale_core) == 1 and "estimator-scope.md:1: '1.3 joints'" in stale_core[0], stale_core
         # (c) the routes as they stood before the rule: bare numbers, and a word that names no step
         old = _IDS_HEADER + ("| c01 | centre | L/R level, arrival, polarity (desk 1.3 / 1.4) |\n"
                              "| c16 | dynamics | the protection filters (1.2 shows) |\n| c17 | loud | (4.2 levels) |\n")
@@ -1200,6 +1222,16 @@ def _check_step_names_held():
         assert len(gone) == 1 and "has no step 2.4" in gone[0] and "'sheet'" in gone[0], gone
     said = _step_ids_said("0.7 mark")
     assert len(said) == 1 and "step 0.7 has no name" in said[0], said
+
+
+def _check_step_ids_unnamed_step_says_whose_word():
+    """Rule 13 (Task 14's re-review, Minor 2): a pointer to a step the table has no name for still hears whose name
+    its word starts -- "3.2 joints" heard only "name the step", and 3.2's opening line says "the joints", so naming
+    3.2 "joints" passed both the table and the stale pointer. So does a pointer to a step that does not exist."""
+    said = _step_ids_said("0.7 joints")
+    assert len(said) == 1 and "step 0.7 has no name" in said[0] and "'joints' is step 1.5" in said[0], said
+    said = _step_ids_said("1.9 levels")
+    assert len(said) == 1 and "there is no step 1.9" in said[0] and "'levels' is step 1.6" in said[0], said
 
 
 def _check_step_ids_reviewer_before_new_dsp():
@@ -1432,7 +1464,7 @@ def _selftest() -> int:
                       _check_step_ids_delays_on_coarse_eq, _check_step_ids_second_on_review,
                       _check_step_ids_after_a_slash, _check_step_ids_read_as_written, _check_step_names_held,
                       _check_step_ids_reviewer_before_new_dsp, _check_step_ids_translation_keeps_every_row,
-                      _check_no_capture_start_literal):
+                      _check_step_ids_unnamed_step_says_whose_word, _check_no_capture_start_literal):
             try:
                 check()
             except AssertionError as exc:
@@ -1458,13 +1490,14 @@ def _selftest() -> int:
           "project.py's text saying the phase-0 gate still waits for the owner's own sentence is named, "
           "wrapped across a column of spaces too; an arrival to be inspected by hand in the GUI is named (a "
           "lower-case 'must inspect the summation' is not), and so is a phase file or the quirks file left "
-          "without the sentence that the tools read arrivals; a phase file that opens 'If Phase −1 chose', a "
-          "banner copy edited alone and all four banners deleted at once are each named; a step id held by two "
-          "steps, a pointer whose word does not start its step's name (one step off, a neighbour its step's opening "
-          "line cites, after a slash, behind a capital article, left on the id a renumber gave another step) or whose "
-          "step does not exist (1.10 too), a name table "
-          "parted from the steps, a route by a bare number (one ending its sentence too) and a translation routing "
-          "a row elsewhere, or dropping, adding or reordering one, are each named, while a value, a unit, a version, a section, a range, a word no step is "
+          "without the sentence that the tools read arrivals, or gone; a phase file that opens 'If Phase −1 chose', "
+          "a banner copy edited alone, all four banners deleted at once and a phase file gone are each named; a "
+          "step id held by two steps, a pointer in a phase or a core file whose word does not start its step's name "
+          "(one step off, a neighbour its step's opening line cites, after a slash, behind a capital article, left "
+          "on the id a renumber gave another step) or whose step does not exist (1.10 too) or has no name -- each "
+          "told whose name its word starts --, a name table parted from the steps, a route by a bare number (one "
+          "ending its sentence too or a version) and a translation routing a row elsewhere, or dropping, adding or "
+          "reordering one, are each named, while a value, a unit, a version, a section, a range, a word no step is "
           "named by and a heading's number are not pointers; a phase file opening a capture round at series 1 "
           "is named, on a code line, in a bullet, in a pointer and wrapped, while the series the project gives, "
           "another number and a file outside the phases folder are not; the rules' checks report every failure in "

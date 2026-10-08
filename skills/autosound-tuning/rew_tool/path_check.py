@@ -21,7 +21,7 @@ What is walked, and what would fail if the seam broke:
       driver wired backwards comes back INV, nothing arrives early
   2   the proposal banks through `apply.propose` (v_002, sheet in samples), an EQ band through a
       second proposal (v_003), `eq_export` renders it; the prediction of v_003 sums clean;
-      2.1: a resonance planted on one driver comes back as ONE cut in its group's package
+      1.4: a resonance planted on one driver comes back as ONE cut in its group's package
       (`eq_propose`), banks as one version, and the prediction shows it gone
   3   `verify_prediction --entry` on `_2` solos taken WITH the tune: an entry error (a delay typed
       10 ms off, a corner typed an octave off) is CHECK by name; the clean set is ENTRY OK; the
