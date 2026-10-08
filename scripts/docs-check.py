@@ -53,6 +53,11 @@ Rules:
     `rew_tool/project.py`'s text (`catch-up`'s usage and docstring), may say the gate still wants the
     owner's own sentence.
 
+11. **`arrivals`** (#138, I-20). The tools read arrivals; the REW GUI is the cross-check when a tool
+    says ILL-POSED or UNVERIFIED. `phase_1_foundation.md`, `rew-api-quirks.md` and
+    `diagnostic-techniques.md` may not tell the reader to inspect onsets by hand, and the first two
+    must say "The tools read arrivals".
+
 Run: `scripts/docs-check.py` (from anywhere), `--selftest` for the checker's own mechanics.
 stdlib only.
 """
@@ -474,6 +479,42 @@ def rule_owner_sentence(root: str) -> list[str]:
     return bad
 
 
+#: The three files that say how an arrival is read; the first two carry the sentence that says who reads it.
+ARRIVAL_FILES = (os.path.join(SKILL, "references", "phases", "phase_1_foundation.md"),
+                 os.path.join(SKILL, "references", "tooling", "rew-api-quirks.md"),
+                 os.path.join(SKILL, "references", "core", "diagnostic-techniques.md"))
+ARRIVALS_SAID_IN = ARRIVAL_FILES[:2]
+ARRIVALS_BY_HAND = ("MUST inspect", "MANUALLY INSPECT IMPULSE GRAPHS", "manually-inspected IR onsets")
+ARRIVALS_BY_TOOL = "The tools read arrivals"
+
+
+def rule_arrivals(root: str) -> list[str]:
+    """The tools read arrivals; the REW GUI is the cross-check, not the method (#138, I-20).
+
+    `phase_1_foundation.md` said a session MUST inspect the impulse responses by hand in the REW GUI and gated Phase 1
+    on "manually-inspected IR onsets", and `diagnostic-techniques.md` repeated it; `rew-api-quirks.md` headed its
+    Timing section "NOT a blanket 'go manual'" and two lines later said "MANUALLY INSPECT IMPULSE GRAPHS". A session
+    that follows them sends the person to eyeball onsets in the GUI -- the most error-prone step for a
+    non-engineer -- or states an arrival in prose, while `predict --align`, `windows.py` and `analyze-joints` read
+    them and say ILL-POSED or UNVERIFIED where a reading does not hold. The phrases go from all three files; the
+    sentence that says who reads an arrival is held in the first two, so a tidy-up cannot leave them saying nothing.
+    """
+    bad = []
+    for rel in ARRIVAL_FILES:
+        path = os.path.join(root, rel)
+        if not os.path.isfile(path):
+            if rel in ARRIVALS_SAID_IN:
+                bad.append(f"{rel}: missing — it carries the sentence that says who reads an arrival")
+            continue
+        for n, phrase in sorted((n, phrase) for phrase in ARRIVALS_BY_HAND for n in _hits(path, phrase)):
+            bad.append(f"{rel}:{n}: says '{phrase}' — the tools read arrivals; the REW GUI is the "
+                       f"cross-check when a tool says ILL-POSED or UNVERIFIED")
+        if rel in ARRIVALS_SAID_IN and not _hits(path, ARRIVALS_BY_TOOL):
+            bad.append(f"{rel}: does not say '{ARRIVALS_BY_TOOL} …' — the sentence that says who reads an "
+                       f"arrival, and that the GUI is the cross-check, is gone")
+    return bad
+
+
 RULES = [("data-not-instructions", rule_data_not_instructions),
          ("phase-source", rule_phase_source),
          ("references-orphans", rule_references_orphans),
@@ -483,7 +524,8 @@ RULES = [("data-not-instructions", rule_data_not_instructions),
          ("install-ref", rule_install_ref),
          ("protective-floor", rule_protective_floor),
          ("plugin-route", rule_plugin_route),
-         ("owner-sentence", rule_owner_sentence)]
+         ("owner-sentence", rule_owner_sentence),
+         ("arrivals", rule_arrivals)]
 
 
 def run(root: str) -> int:
@@ -713,6 +755,29 @@ def _selftest() -> int:
                     "finished tune; nothing about it gates phase 0 (the Arbiter's ruling, 2026-09-08).\n")
         assert rule_owner_sentence(owner_tree(optional, 'USAGE = """catch-up  invents no fact"""\n')) == []
 
+        # -- rule 11: the tools read arrivals, the GUI is the cross-check (#138, I-20)
+        def arrival_tree(phase1: str, quirks: str, diagnostic: str):
+            root = tempfile.mkdtemp(dir=tmp)
+            for rel, body in zip(ARRIVAL_FILES, (phase1, quirks, diagnostic)):
+                os.makedirs(os.path.dirname(os.path.join(root, rel)), exist_ok=True)
+                open(os.path.join(root, rel), "w", encoding="utf-8").write(body)
+            return root
+
+        by_tool = ("* The tools read arrivals (`predict --align`, `windows.py`, `analyze-joints`); the REW GUI is "
+                   "the cross-check when a tool says ILL-POSED or UNVERIFIED.\n")
+        by_hand = rule_arrivals(arrival_tree(
+            "# P\n\n**Gate:** arrival TA set from **manually-inspected IR onsets**.\n" + by_tool,
+            "# Q\n\n* **⚠️ MANUALLY INSPECT IMPULSE GRAPHS — REW NATIVE DELAY ESTIMATES ARE FIXED:**\n" + by_tool,
+            "# D\n\n  * **we MUST inspect the impulse response graphs manually in the REW GUI**\n"))
+        assert any("phase_1_foundation.md:3:" in c and "manually-inspected" in c for c in by_hand), by_hand
+        assert any("rew-api-quirks.md:3:" in c and "MANUALLY INSPECT" in c for c in by_hand), by_hand
+        assert any("diagnostic-techniques.md:3:" in c and "MUST inspect" in c for c in by_hand), by_hand
+        # the sentence deleted from the two files that carry it is named: a tidy-up leaves nothing saying who reads
+        said_nothing = rule_arrivals(arrival_tree("# P\n", "# Q\n", "# D\n"))
+        assert sum("does not say" in c for c in said_nothing) == 2, said_nothing
+        by_tools = arrival_tree("# P\n\n" + by_tool, "# Q\n\n" + by_tool, "# D\n\n" + by_tool)
+        assert rule_arrivals(by_tools) == [], rule_arrivals(by_tools)
+
         # and the tree itself, which is the point of the whole file
         assert run(ROOT) == 0, "the tree must be clean, or the selftest measures a fake"
     finally:
@@ -729,7 +794,8 @@ def _selftest() -> int:
           "is named; a document saying the plugin is pinned at 2.8.3 while the catalogue installs 3.x is "
           "named, wrapped and in bold too, and a catalogue that cannot be read is said; a document or "
           "project.py's text saying the phase-0 gate still waits for the owner's own sentence is named, "
-          "wrapped across a column of spaces too")
+          "wrapped across a column of spaces too; an arrival to be inspected by hand in the GUI is named, and "
+          "so is a phase file or the quirks file left without the sentence that the tools read arrivals")
     return 0
 
 
