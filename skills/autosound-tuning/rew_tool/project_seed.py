@@ -669,6 +669,9 @@ def _check_a_held_lock_said_in_the_result():
     with tempfile.TemporaryDirectory() as tmp:
         src = _source_project(os.path.join(tmp, "old-car"))
         dst = os.path.join(tmp, "new-car")
+        # The folder first: the lock never makes a project folder (#141, R23), so another process holding a missing one
+        # holds its own thread lock alone, and no other process would meet it.
+        os.makedirs(dst)
         lock_file = project._write_lock().lock_path(dst)
         with project._held_elsewhere(dst), project._env(AUTOSOUND_LOCK_TIMEOUT_S="0.2"):
             out = seed(src, dst, today=date(2026, 10, 8))

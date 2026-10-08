@@ -863,6 +863,9 @@ def _check_into_waits_for_the_lock():
     try:
         _two_x(old)
         new = os.path.join(top, "new")
+        # The folder first: the lock never makes a project folder (#141, R23), so another process holding a missing one
+        # holds its own thread lock alone, and no other process would meet it.
+        os.makedirs(new)
         with _project._held_elsewhere(new):
             rc, out, err = _project._run_cli(_main, [old, "--into", new], AUTOSOUND_LOCK_TIMEOUT_S="0.2")
             why = _project._said_busy(rc, err, new)

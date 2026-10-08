@@ -11,6 +11,10 @@ POSIX: `fcntl.flock` on the file. Windows: `msvcrt.locking` on its first byte. B
 polled, so one deadline covers this process's threads and the other processes. Re-entrant within a thread: a writer
 that calls another writer (capture-import -> start/record/close) takes it once.
 
+The lock never makes the project folder (R23). A hold on a folder that is not there -- a mistyped path, one gone --
+is this process's thread lock alone, and makes nothing. The writer's own first write makes the folder, and the next
+hold makes the lock and takes it; two processes creating one new project at the same moment are not ordered by it.
+
 A folder that cannot be locked at all (some shared or cloud folders refuse every lock) is written WITHOUT the lock,
 and the writer says so on stderr once: two writers there can still lose a change, as before this module. A folder
 where the lock cannot even be MADE -- one this user may not write -- is refused, `Unwritable` (exit 1), before
@@ -161,9 +165,14 @@ def _wait_s(given):
 
 
 def _prepare(project_dir):
-    """`<project>/.autosound/`, and its `.gitignore` of `*`, written once: the folder stays out of the project's git."""
+    """`<project>/.autosound/`, and its `.gitignore` of `*`, written once: the folder stays out of the project's git.
+    The folder alone, never its parents (R23): a project folder gone since the hold looked is refused, not made."""
     folder = os.path.join(os.path.abspath(project_dir), LOCK_DIR)
-    os.makedirs(folder, exist_ok=True)
+    try:
+        os.mkdir(folder)
+    except FileExistsError:
+        if not os.path.isdir(folder):
+            raise                        # a file where the folder belongs: `Unwritable`, its repair EEXIST's
     try:
         with open(os.path.join(folder, ".gitignore"), "x", encoding="utf-8", newline="\n") as f:
             f.write("*\n")
@@ -247,6 +256,20 @@ def _take(fd, project_dir, path, start, deadline):
         time.sleep(min(_POLL_S, deadline - now))
 
 
+def _opened(project_dir, path, undo):
+    """The lock file, open, its folder made first -- its close put on `undo` -- or None where the project folder itself
+    is not there: the lock never makes it (R23). An `OSError` making either is `Unwritable`, a refusal (R6)."""
+    if not os.path.lexists(os.path.abspath(project_dir)):
+        return None
+    try:
+        _prepare(project_dir)
+        fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o644)
+    except OSError as exc:
+        raise _unwritable(project_dir, exc) from exc
+    undo.callback(os.close, fd)
+    return fd
+
+
 @contextmanager
 def hold(project_dir, timeout_s=None):
     """Hold the project's writer lock for the block: this process's other threads and every other process wait.
@@ -255,7 +278,9 @@ def hold(project_dir, timeout_s=None):
     with nothing taken. A free lock is taken at once, even with no wait. A thread already holding it passes
     straight in, and its outer hold lets go. The wait is read before anything is touched: a `BadTimeout` makes
     nothing. The lock's folder and file are made next, before anything is taken: ones that cannot be made -- a
-    project folder this user may not write -- are `Unwritable`, a refusal (#141, R6)."""
+    project folder this user may not write -- are `Unwritable`, a refusal (#141, R6). A project folder that is not
+    there is never made (R23): the hold is this process's thread lock alone, under the same deadline, and makes
+    nothing -- but a folder made while this thread waited for that lock is locked as any other."""
     start = time.monotonic()
     deadline = start + _wait_s(timeout_s)
     path = lock_path(project_dir)
@@ -265,16 +290,13 @@ def hold(project_dir, timeout_s=None):
         yield
         return
     with ExitStack() as undo:            # each step's undo, run last-first however the block ends
-        try:
-            _prepare(project_dir)
-            fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o644)
-        except OSError as exc:
-            raise _unwritable(project_dir, exc) from exc
-        undo.callback(os.close, fd)
+        fd = _opened(project_dir, path, undo)
         if not entry.rlock.acquire(timeout=_left(deadline)):
             raise Busy(path, time.monotonic() - start)
         undo.callback(entry.rlock.release)
-        if _take(fd, project_dir, path, start, deadline):
+        if fd is None:                   # no project folder when this thread came: one may have been made since
+            fd = _opened(project_dir, path, undo)
+        if fd is not None and _take(fd, project_dir, path, start, deadline):
             undo.callback(_let_go, fd)
         entry.owner = me
         undo.callback(setattr, entry, "owner", None)
@@ -317,6 +339,19 @@ def _raised(call):
 def _enter(project_dir, **kw):
     with hold(project_dir, **kw):
         pass
+
+
+def _probe(project_dir):
+    """The OS lock tried through a descriptor of its own: None when it was free (taken, and let go again), else what
+    refused it."""
+    fd = os.open(lock_path(project_dir), os.O_RDWR)
+    try:
+        caught = _raised(lambda: _os_lock(fd))
+        if caught is None:
+            _os_unlock(fd)
+        return caught
+    finally:
+        os.close(fd)
 
 
 def _check_protocol_line():
@@ -613,13 +648,78 @@ def _check_busy_exit_says_one_line():
     assert err.getvalue() == str(exc) + "\n", f"said on stderr {err.getvalue()!r}"
 
 
+def _check_a_missing_project_is_not_made():
+    """The lock never makes the project folder (#141, R23). A hold on a path where nothing stands -- a mistyped folder,
+    one gone -- takes this process's thread lock alone, under the same deadline, and makes nothing: no folder, no
+    `.autosound/`, no OS lock. Another thread waits its deadline and answers Busy; an inner hold re-enters; after the
+    block nothing is there. The writer's own first write makes the folder, and the next hold the lock -- as does a
+    hold that queued while the folder came. A file standing at the project path is no missing folder: `Unwritable`, as
+    before. A hold made `<typo>/.autosound/`, under verbs that went on to say "nothing was written"."""
+    top = _scratch()
+    gone, later = os.path.join(top, "gone"), os.path.join(top, "later")
+    try:
+        with hold(gone, timeout_s=0):
+            assert held_here(gone), "not held here on a missing project"
+            assert not os.path.lexists(gone), f"the hold made the project folder: {sorted(os.listdir(top))}"
+            other = []
+            t = threading.Thread(target=lambda: other.append(_raised(lambda: _enter(gone, timeout_s=0.3))),
+                                 daemon=True)
+            t.start()
+            t.join(60)
+            busy = other[0] if other else None
+            assert getattr(type(busy), "is_busy", False) is True, f"another thread got in, or: {busy!r}"
+            assert 0.25 <= busy.waited_s < 5, f"waited {busy.waited_s:.3f}s for a deadline of 0.3s"
+            with hold(gone, timeout_s=0):
+                assert held_here(gone), "not held inside the inner hold"
+            assert held_here(gone), "the inner hold's end let the outer one go"
+        assert not held_here(gone), "still held after the hold"
+        assert os.listdir(top) == [], f"a hold on a missing project made {sorted(os.listdir(top))}"
+        os.makedirs(gone)                                  # the writer's own first write makes the folder...
+        with hold(gone, timeout_s=0):                      # ...and the next hold makes the lock and takes it
+            refused = _probe(gone)
+            assert refused is not None and _held(refused), f"the next hold took no OS lock: {refused!r}"
+        # A hold that queued on the thread lock while the folder was missing, let in once a writer made it, takes the
+        # OS lock as every hold on a folder that is there does.
+        got, queued = [], threading.Event()
+
+        def waiter():
+            queued.set()
+            try:
+                with hold(later, timeout_s=30):
+                    got.append(_probe(later))
+            except Exception as exc:  # noqa: BLE001 -- carried to the main thread, which names it
+                got.append(exc)
+        with hold(later, timeout_s=0):
+            t = threading.Thread(target=waiter, daemon=True)
+            t.start()
+            queued.wait(60)
+            time.sleep(0.2)                                # it found no folder, and waits on the thread lock
+            os.makedirs(later)
+        t.join(60)
+        assert len(got) == 1 and got[0] is not None and _held(got[0]), \
+            f"a hold let in once the folder came took no OS lock: {got}"
+        a_file = os.path.join(top, "a-file")
+        with open(a_file, "w", encoding="utf-8") as f:
+            f.write("not a folder\n")
+        caught = _raised(lambda: _enter(a_file, timeout_s=0))
+        assert getattr(type(caught), "is_unreadable", False) is True, f"a file at the project path: {caught!r}"
+        assert not held_here(a_file), "held here after the refusal"
+        # Nor does making the lock's own folder make a parent: a project folder gone since the hold looked is refused.
+        vanished = os.path.join(top, "vanished")
+        caught = _raised(lambda: _prepare(vanished))
+        assert getattr(caught, "errno", None) == errno.ENOENT, f"the lock's folder made in a gone project: {caught!r}"
+        assert not os.path.lexists(vanished), "making the lock's folder made the project folder"
+    finally:
+        _drop(top)
+
+
 def _selftest():
     failures, seen = [], {}
     for check in (_check_protocol_line, _check_folder_ignores_itself, _check_reentrant_and_held_here,
                   _check_another_thread_waits, _check_another_process_is_busy, _check_timeout_from_the_environment,
                   _check_a_wait_given_in_code_is_checked_too, _check_a_free_lock_with_zero_wait,
                   _check_a_folder_that_cannot_lock, _check_a_project_that_cannot_be_written,
-                  _check_busy_exit_says_one_line):
+                  _check_busy_exit_says_one_line, _check_a_missing_project_is_not_made):
         try:
             seen[check.__name__] = check()
         except Exception as exc:  # noqa: BLE001 -- each check is reported by name; one failing must not hide the rest
@@ -641,7 +741,9 @@ def _selftest():
           f"(spawned) process holding it make a hold wait its deadline and answer Busy -- exit 75, the lock file "
           f"named, nothing taken -- and get in once it is let go; {ENV_TIMEOUT} read at every call (unset 10 s), "
           f"a value that is no number of seconds exit 2 naming it, before anything is made, and a wait given in "
-          f"code held to the same; a free lock taken at once with no wait; a folder that cannot be locked written "
+          f"code held to the same; a free lock taken at once with no wait; a hold on a missing project makes "
+          f"nothing -- the thread lock alone, Busy to another thread, re-entrant -- and the next hold on the made "
+          f"folder takes the lock; a folder that cannot be locked written "
           f"without the lock, said in one note line; "
           f"{'a project folder this user may not write refused as Unwritable, nothing taken or made; ' if unwritable else ''}"
           f"busy_exit says one line and returns 75")
