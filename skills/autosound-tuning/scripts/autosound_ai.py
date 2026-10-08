@@ -1764,15 +1764,54 @@ def _check_receipt_says_how_the_install_ended():
             (dict(old, installer_version="3.1.3", status="stopped", missing=[], python="no python3"),
              ("стан: stopped", "no python3"), ("бракує",)),
             (old, ("install.sh", "v3.0.60", "not fetched: --no-engine"), ("стан", "бракує", "python3:")),
+            # Task 8's review: a `missing` that is not a list is one part -- a string one name, anything else as it
+            # prints -- and the line is said, never an exception that takes the doctor down with it.
+            (dict(old, installer_version="3.1.3", status="not ready", missing=5, python="no python3"),
+             ("стан: not ready", "бракує: 5"), ()),
+            (dict(old, installer_version="3.1.3", status="not ready", missing="numpy", python="no python3"),
+             ("бракує: numpy",), ("n, u, m",)),
         )
         failures = []
         for receipt, words, never in ends:
             with open(path, "w", encoding="utf-8") as fh:
                 json.dump(receipt, fh)
-            said = receipt_line(path)
+            try:
+                said = receipt_line(path)
+            except Exception as exc:  # noqa: BLE001 -- a reader that raises is this check's finding
+                failures.append(f"missing={receipt.get('missing')!r}: raised {exc!r}")
+                continue
             lost = [w for w in words if w not in said] + [f"not {w!r}" for w in never if w in said]
             if lost:
                 failures.append(f"{receipt.get('status', 'an older receipt')}: {lost} -- said {said!r}")
+        # ...and the doctor's own path, which says it never raises, over a receipt no installer writes: numbers for the
+        # sha and the parts. The engine is stood in for: this is about the receipt's line.
+        import types
+        home = os.path.join(d, "data")
+        os.makedirs(os.path.join(home, "autosound"))
+        with open(os.path.join(home, "autosound", "install-receipt.json"), "w", encoding="utf-8") as fh:
+            json.dump(dict(old, installer_sha256=5, status="not ready", missing=5), fh)
+        fake = types.ModuleType("resonalyze_engine")
+        fake.engine_status = lambda: {"present": True, "how": "a stand-in", "pin": "v0", "rid": "osx-arm64"}
+        saved = {name: os.environ.get(name) for name in ("XDG_DATA_HOME", "LOCALAPPDATA")}
+        saved_module = sys.modules.get("resonalyze_engine")
+        os.environ.update(XDG_DATA_HOME=home, LOCALAPPDATA=home)
+        sys.modules["resonalyze_engine"] = fake
+        try:
+            lines = _engine_lines()
+            if "бракує: 5" not in lines[-1]:
+                failures.append(f"the doctor's engine lines over a receipt with missing=5: {lines!r}")
+        except Exception as exc:  # noqa: BLE001 -- the doctor dying is this check's finding
+            failures.append(f"the doctor's engine lines over a receipt with missing=5 raised {exc!r}")
+        finally:
+            for name, value in saved.items():
+                if value is None:
+                    os.environ.pop(name, None)
+                else:
+                    os.environ[name] = value
+            if saved_module is None:
+                sys.modules.pop("resonalyze_engine", None)
+            else:
+                sys.modules["resonalyze_engine"] = saved_module
     finally:
         shutil.rmtree(d, ignore_errors=True)
     assert not failures, "\n  ".join(["the receipt's line, over how the install ended:"] + failures)
@@ -3225,7 +3264,7 @@ def receipt_line(path=None):
         return f"· Квитанція інсталятора не читається ({path}): {exc}"
     if not isinstance(r, dict):
         return f"· Квитанція інсталятора не читається ({path}): not a JSON object"
-    sha = (r.get("installer_sha256") or "")[:12]
+    sha = str(r.get("installer_sha256") or "")[:12]
     version = r.get("installer_version")
     line = (f"· Інсталятор: {r.get('installer')}{f' {version}' if version else ''}"
             f"{f' (sha256 {sha}…)' if sha else ''} для {r.get('method_ref')}, {r.get('at')}, {r.get('platform')}; "
@@ -3233,8 +3272,9 @@ def receipt_line(path=None):
     if r.get("python"):
         line += f"; python3: {r['python']}"
     if r.get("status"):
+        # A list is the parts; anything else is one part (a string, one name), said as it prints -- never a crash.
         missing = r.get("missing") or []
-        missing = [missing] if isinstance(missing, str) else [str(m) for m in missing]
+        missing = [str(m) for m in missing] if isinstance(missing, list) else [str(missing)]
         line += f"; стан: {r['status']}" + (f" — бракує: {', '.join(missing)}" if missing else "")
     return line
 
@@ -3242,7 +3282,10 @@ def receipt_line(path=None):
 def _engine_lines():
     """The desk engine's one line, or the two that say how to get it. Never raises: a doctor that
     dies on an optional component reports nothing about the components that matter."""
-    receipt = receipt_line()
+    try:
+        receipt = receipt_line()
+    except Exception as exc:  # noqa: BLE001 -- whatever the receipt holds, the doctor goes on
+        receipt = f"· Квитанція інсталятора не читається: {exc}"
     try:
         sys.path.insert(0, os.path.join(SKILL_DIR, "rew_tool"))
         import resonalyze_engine as _engine
