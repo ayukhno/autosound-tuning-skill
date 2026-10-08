@@ -134,17 +134,19 @@ missing:
   history;
 - **a line in another code page** (not UTF-8 before its end: a project begun before v3.0.45 on Windows): refused,
   naming the line(s) and `contract.py repair-encoding` -- skipped, a round, a series, a protective record or a ruling
-  was gone without a word. A line no code page makes JSON of -- a write cut inside a character with the next event
-  glued on, before T-14 -- cannot be rewritten: the refusal names `contract.py repair-encoding <project> --set-aside`,
-  which moves such lines, bytes kept and numbered, into `<journal>.set-aside`, every other line byte-identical (R56).
+  was gone without a word. A line no code page makes JSON of -- a write cut off in it: one cut inside a character
+  with the next event glued on, before T-14, or a lone line cut in a legacy page -- cannot be rewritten: the refusal
+  says `(a write cut off in it, perhaps with the next glued on)` and names `contract.py repair-encoding <project>
+  --set-aside`, which moves such lines, bytes kept and numbered, into `<journal>.set-aside`, every other line
+  byte-identical (R56).
 
 A journal that reads and refuses the append (read-only, held for writing) is `cannot be appended to (...)` from every
 verb (m4). The command lines that read the journal through `Process` (`predict.py` -- its read of the knobs a series
 was taken at too --, `flaw_map.py`, `rew_tool.py analyze-joints`, `resonalyze_ir.py`, `eq_propose.py`,
 `ear_suspects.py`, `naming.py next-series`) refuse either in one line, `error: <file> <reason> -- <repair>`, exit 1,
-never a traceback (R53). `Process.events()`, the reader for a screen (TCC), stays
-lenient, as `Process.load()` does (R53): a journal it cannot open is `[]` there, and a line in another code page is
-skipped and counted in `journal_skipped` (`{"torn": [...], "not_utf8": [...]}`, line numbers from 1).
+never a traceback (R53). `Process.events()`, the reader for a screen (TCC), stays lenient, as `Process.load()` does
+(R53): a journal it cannot open is `[]` there, and a line in another code page is skipped and counted in
+`journal_skipped` (`{"torn": [...], "not_utf8": [...]}`, line numbers from 1).
 
 `contract.py check` reads the journal strictly too, and reports as not valid one that cannot be opened, that holds a
 line in another code page, or that has lines and no event or as many lines that are no event as events or more (R55:
@@ -281,72 +283,86 @@ usage on stdout, exit 0.
 | 0 | done, or yes |
 | 1 | refused, or no: the reason on stderr (`error: …`); REW answering with an error (`error: REW answered with an error: <REW's words> -- nothing was written`), or with any other state but "unavailable" -- something the method cannot read (`protocol`), `write_mismatch`, `not_found`, `ambiguous`, `config` -- (`error: <its words> -- nothing was written`; a `write_mismatch` ends `-- REW may hold part of the write: check REW's EQ before going on`, and a filter write REW acknowledged and nobody could read back, `rew_unchecked` on its class, is said in its own words); `capture-check` with REW's list not read for any reason but REW not answering (`error: REW's measurement list was not read (<why>) -- nothing was recorded`); a typed mistake in a value the verb parses itself (a leg, a series) |
 | 2 | usage: an unknown verb, a flag the verb does not take, a flag's value missing (one of the verb's flags, `-h` or `--help` in its place, or nothing after it: a value flag left last), a value on a flag that takes none, one of the verb's flags with its hyphens autocorrected to a dash, `--help` or `-h` after other arguments, too few arguments |
-| 69 | REW did not answer, and nothing was written (sysexits' `EX_UNAVAILABLE`) |
+| 69 | REW did not answer, and nothing was written (sysexits' `EX_UNAVAILABLE`) -- but a filter write REW acknowledged before it stopped answering (`rew_unchecked` on its class), said in its own words: sent, acknowledged, not checked |
 | 70 | an unexpected error, a bug: Python's traceback on stderr, then `error: unexpected <type>: <message>` (`EX_SOFTWARE`) |
 | 75 | the project busy: reserved for the lock (J2b, W-9), not raised yet (`EX_TEMPFAIL`) |
 
 - **Each verb takes its own flags, and only those.** `VERB_FLAGS` in `process.py` is the table, one string literal
   per flag, and `_FLAG_TAKES_VALUE` says of each whether it takes a value (the selftest holds the two to each other).
   A flag is `--`, an ASCII letter and no whitespace -- after an `=`, whitespace is the value's only when the name
-  before it is one of the verb's flags (`--invalidates=w-L_1 (sw)`). Any other `--<word>` is a usage error,
-  exit 2, with the flags the verb takes named on stderr and nothing written; it used to become a title, a reason or a
-  piece of evidence (TCC's N19). Text that only begins with two dashes is a word, not a flag: `--бас гуде`, `--bass
-  hums`, `--bass=45 Hz hums?`, `-- note`, as well as a bare `--` and a negative number. Where a flag stands, one of the
+  before it is one of the verb's flags (`--invalidates=w-L_1 (sw)`). Any other `--<word>` is a usage error, exit 2,
+  with the flags the verb takes named on stderr and nothing written; it used to become a title, a reason or a piece
+  of evidence (TCC's N19). Text that only begins with two dashes is a word, not a flag: `--бас гуде`, `--bass hums`,
+  `--bass=45 Hz hums?`, `-- note`, as well as a bare `--` and a negative number. Where a flag stands, one of the
   verb's flags whose two hyphens an editor autocorrected to a dash -- a word that starts with an em or an en dash and
   names the flag past its dashes (`—origin`, `–origin=other:49`) -- is a usage error, exit 2: `<verb>: —origin looks
   like --origin with its dashes autocorrected; type two hyphens`; as a word it opened a round expecting `—origin`.
   After a flag that takes a value, such a word is the value. `--flag value` and `--flag=value` are the same: the
   value is taken as it stands, whatever it looks like (`--text --loud`, `--note=--loud`), with one exception in both
   forms -- a value that is one of the verb's own flags, `-h` and `--help` among them (`capture-start 1 --optional
-  --plan`, `amp-gain sw=+3 --note=--measured`, `--text=-h`; the name before any `=` counts), is no value: the value is
-  missing, exit 2. A branch that scans for its flags read `--note=--measured` as the flag `--measured` and recorded no
-  note. A flag that takes a value and stands last, with nothing after it, is refused the same way before the verb
-  runs (`_check_value_flag_last` sweeps every one): taken as unset, `decision <q> <a> --invalidates` recorded the
-  decision without its link and `capture-import <N> --bind` asked REW. capture-protective's legs `--hp` and `--lp`
-  (`_LEG_FLAGS`) are the exception: the verb parses their three values and says what is wrong, exit 1 -- `--hp needs
-  three values: f type slope, e.g. --hp 100 LR 24` (fewer, or a flag among them), `--hp: 'abc' is not a number`
-  (`100Hz`, `nan` too), `--hp: '24.5' is not a whole number`. They exited 70, a bug's code. Each value is checked as
-  well (R47b, R48), and each of these was recorded: a frequency not above 0, a slope not above 0, a type that is none
-  of `_LEG_TYPES` -- `dsp_math.MODELLABLE_FAMILIES` (LR, BW, BE) and CH, the Chebyshev a Helix and TCC's dialog
-  offer, recorded as typed -- an empty type included (`--hp: 'XX' is not a filter type: LR, BW, BE or CH`). A leg's
-  values are the leg's, not the verb's arguments: legs with no channel are too few, exit 2.
-  `capture-import`'s series is read the same way before REW is asked: `capture-import: '1a' is not a number`, exit 1.
-  With no titles (R47a), `capture-import <N>` imports what REW holds of series N and the project has not on record
-  (taken in a round, superseded there, or held by REW under its own spelling of one): none held is exit 1, `REW holds
-  no measurement of series _N; nothing was imported`; all on record is exit 0, `nothing new`. A flag that takes no
-  value (`--plan`,
-  `--session`, `--json`, `--check`, `--no-rew`, ...) takes no `=`. The refusal's words never contain `usage:
-  process.py`, which a front-end reads as "this method is too old".
+  --plan`, `amp-gain sw=+3 --note=--measured`, `--text=-h`; the name before any `=` counts), is no value: the value
+  is missing, exit 2. A branch that scans for its flags read `--note=--measured` as the flag `--measured` and
+  recorded no note. A flag that takes a value and stands last, with nothing after it, is refused the same way before
+  the verb runs (`_check_value_flag_last` sweeps every one): taken as unset, `decision <q> <a> --invalidates`
+  recorded the decision without its link and `capture-import <N> --bind` asked REW. capture-protective's legs `--hp`
+  and `--lp` (`_LEG_FLAGS`) are the exception: the verb parses their three values and says what is wrong, exit 1 --
+  `--hp needs three values: f type slope, e.g. --hp 100 LR 24` (fewer, or a flag among them), `--hp: 'abc' is not a
+  number` (`100Hz`, `nan` too), `--hp: '24.5' is not a whole number`. They exited 70, a bug's code. Each value is
+  checked as well (R47b, R48), and each of these was recorded: a frequency not above 0, a slope not above 0, a type
+  that is none of `_LEG_TYPES` -- `dsp_math.MODELLABLE_FAMILIES` (LR, BW, BE) and CH, the Chebyshev a Helix and TCC's
+  dialog offer, recorded as typed -- an empty type included (`--hp: 'XX' is not a filter type: LR, BW, BE or CH`). A
+  leg's values are the leg's, not the verb's arguments: legs with no channel are too few, exit 2. A CH leg is
+  recorded, and the method cannot take it back out (#134, R49, R52): the method has no Chebyshev verified on a DSP --
+  its ripple is not identified, so the filter is not determined -- and it never puts another family in its place, so
+  `protective.de_embed` refuses it (`Unmodelled`) and every phase decision read through it is refused. The verb's
+  line says so, and the person's way on: set LR, BW or BE as the protective filter on the DSP and sweep again, or
+  sweep with the protective filter OFF where the driver is safe without it. A user who researches the Chebyshev
+  mathematics and verifies it against their own DSP in their project teaches it to the method through an issue in the
+  skill's repo. `capture-import`'s series is read the same way before REW is asked: `capture-import: '1a' is not a
+  number`, exit 1. With no titles (R47a), `capture-import <N>` imports what REW holds of series N and the project has
+  not on record (taken in a round, superseded there, or held by REW under its own spelling of one): none held is exit
+  1, `REW holds no measurement of series _N; nothing was imported`; all on record is exit 0, `nothing new`. A flag
+  that takes no value (`--plan`, `--session`, `--json`, `--check`, `--no-rew`, ...) takes no `=`. The refusal's words
+  never contain `usage: process.py`, which a front-end reads as "this method is too old".
 - **Too few arguments are a usage error.** A verb needs the arguments its line in the usage names in `<...>`
-  (`_VERB_ARGS`): `target <preset> <curve>`, `capture-skip <title> <reason>`, `done <id> <evidence>`; `skip` needs its
-  `<id>`, then a reason or `--superseded-by`, which `skip_step` checks. Fewer is exit 2, naming them, and the verb
-  does not run. It raised IndexError -- "list index out of range", exit 1 like a refusal with no reason; an
-  IndexError raised inside a verb is a bug now, exit 70 with its traceback.
+  (`_VERB_ARGS`): `target <preset> <curve>`, `capture-skip <title> <reason>`, `done <id> <evidence>`. Fewer is exit
+  2, naming them, and the verb does not run -- but `skip <id>` with neither a reason nor `--superseded-by`, which
+  `skip_step` refuses itself, exit 1: either one completes its line. It raised IndexError -- "list index out of
+  range", exit 1 like a refusal with no reason; an IndexError raised inside a verb is a bug now, exit 70 with its
+  traceback.
 - **`<verb> --help`** (or `-h`), right after the verb, prints that verb's lines of the usage and the exit table on
   stdout, exit 0, and reads and writes nothing. It ran the verb: `session-close --help` recorded a close,
   `capture-start --help` opened a round at `--help`. After other arguments, `--help` and `-h` are a usage error,
   exit 2: `-h` was data there (`capture-start 1 -h` opened a round expecting a capture titled `-h`).
 - **The command line is answered first**: `--help`, an unknown verb, an unknown flag and too few arguments come
   before the strict read below, so on a state that cannot be read they still answer 0 or 2, not 1.
-- **REW down is 69, nothing written.** `capture-check` with REW not answering (any title `reachable: false` in
-  `verify`'s verdicts) records no verdict, no round change and no event; REW not answering a verb that asks it
-  itself (`capture-import`, for a series' titles) exits 69 too. REW answering such a verb with something the method
-  cannot read (`rew_state` "protocol") is exit 1, REW's words and `-- nothing was written`: REW's answer, not a bug;
-  so is REW answering it with an error -- an `HTTPError`, its 4xx/5xx, or a class whose `rew_state` is "error" --
-  said `error: REW answered with an error: <REW's words> -- nothing was written`, where it was a bug's 70. Every
-  other state but "unavailable" is exit 1 the same way, read off the exception's class (R47c): `config` (a
-  `REW_API_URL` that is no address, which `capture-import <N>` meets asking REW itself: `REW_API_URL '<value>' is
-  not an address: <why> — set it right, or unset it for REW's default`, where it was 69), and `write_mismatch`,
-  `not_found` and `ambiguous`, which no verb meets there today. A write REW took is never "nothing was written":
-  a `write_mismatch` ends `-- REW may hold part of the write: check REW's EQ before going on`, and a filter write
-  REW acknowledged and nobody could read back is said in its own words (m3). `capture-close` still closes on the
-  record alone over REW's own states, exit 0, and says which it met, with what was raised: `REW not reached`, `REW
-  answered something that is not a measurement list`, or `REW answered with an error`. Anything else stops it
-  before a line is printed, the round left open and nothing written (T I4, F M-11, H minor 5): a `REW_API_URL`
-  that is no address (1), the reconcile's own refusal -- its read of the state refused, `naming.py` that cannot be
-  loaded (1) -- and a bug (70). Before, any of them printed `not read against REW (...)` and the round closed
-  unchecked when the next read went through. REW gone between its list and the checks `capture-close` runs is
-  said as what happens: the checks were not run, and the round closes on the record, unchecked.
+- **REW down is 69, nothing written** -- but a filter write REW acknowledged before it stopped answering, which says
+  so (below). `capture-check` with REW not answering (any title `reachable: false` in `verify`'s verdicts) records no
+  verdict, no round change and no event; REW not answering a verb that asks it itself (`capture-import`, for a
+  series' titles) exits 69 too. REW answering such a verb with something the method cannot read (`rew_state`
+  "protocol") is exit 1, REW's words and `-- nothing was written`: REW's answer, not a bug; so is REW answering it
+  with an error -- an `HTTPError`, its 4xx/5xx, or a class whose `rew_state` is "error" -- said `error: REW answered
+  with an error: <REW's words> -- nothing was written`, where it was a bug's 70. Every other state but "unavailable"
+  is exit 1 the same way, read off the exception's class (R47c): `config` (a `REW_API_URL` that is no address, which
+  `capture-import <N>` meets asking REW itself: `REW_API_URL '<value>' is not an address: <why> — set it right, or
+  unset it for REW's default`, where it was 69), and `write_mismatch`, `not_found` and `ambiguous`, which no verb
+  meets there today. A write REW took is never "nothing was written": a `write_mismatch` ends `-- REW may hold part
+  of the write: check REW's EQ before going on`, and a filter write REW acknowledged and nobody could read back is
+  said in its own words (m3). `capture-close` still closes on the record alone over REW's own states, exit 0, and
+  says which it met, with what was raised: `REW not reached`, `REW answered something that is not a measurement
+  list`, or `REW answered with an error`. Anything else stops it before a line is printed, the round left open (T I4,
+  F M-11, H minor 5): a `REW_API_URL` that is no address (1), a `rew_api.py` that cannot be loaded (`rew_api.py could
+  not be loaded (<type>: <message>) -- the round cannot be read against REW, and nothing was written; capture-close
+  --no-rew closes it on the record alone`, 1), the reconcile's own refusal -- its read of the state refused,
+  `naming.py` that cannot be loaded, named with why (1) -- and a bug (70); nothing is written, but when the refusal
+  is the reconcile's journal line after its state write landed, which says so (`... is written, but its journal line
+  is not`). A journal the close cannot append to is refused before anything, REW asked or not (it said `closing on
+  the record alone` with REW down, then refused). Before, any of them printed `not read against REW (...)` and the
+  round closed unchecked when the next read went through. REW gone between its list and the checks `capture-close`
+  runs, and a bug in the checks (named with its type), are said as what happens: the checks were not run, and the
+  round closes on the record, unchecked. The state that cannot be read at the checks, and the checks' journal line
+  refused after their state write, are refusals, exit 1, the round open (batch 3's re-review O3): both read as
+  "checks not run" and the round closed.
 - **A bug is 70, not 1.** An exception no refusal names exits 70 with its traceback, where it exited 1 like a
   refusal or escaped as a bare traceback; an IndexError too. An unreadable file (`is_unreadable`) stays a refusal,
   exit 1.
@@ -413,10 +429,12 @@ usage on stdout, exit 0.
 that raises must not become a wall"), on the damaged projects most of all.
 
 - **The intake gate** (leaving −1): a `contract.py` that cannot be loaded refuses with `phase N is not entered: the
-  intake check could not be loaded (<type>: <message>) -- the install is broken, not the project`; a check that raises
-  refuses with `phase N is not entered: the intake check raised <type>: <message>`; a file the check found unreadable
-  raises as itself, with its own repair. It still gates on `missing`; gating on `complete`, with a parity test against
-  `contract.py check --gate`, is J3b (W-11).
+  intake check could not be loaded (<type>: <message>) -- the install is broken, not the project`; a check that
+  raises refuses with `phase N is not entered: the intake check raised <type>: <message>`; a file the check found
+  unreadable raises as itself, with its own repair, and a `project.json` that is there and cannot be read refuses as
+  itself too, `phase N is not entered: <file> exists and cannot be read: ...` (#134, F M-5: it said the glossary
+  inside it was not produced). Otherwise it still gates on `missing`; gating on `complete`, with a parity test
+  against `contract.py check --gate`, is J3b (W-11).
 - **The flaw-map gate** (leaving 0): a `project.json` that is there and cannot be read raises `Unreadable` with its
   repair (`git -C <project-dir> checkout HEAD -- project.json`, or `contract.py repair-encoding` for another code
   page). One holding an array stopped the gate with a traceback; a damaged one let the phase in with no map.

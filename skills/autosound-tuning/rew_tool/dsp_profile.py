@@ -50,6 +50,7 @@ import hashlib
 import json
 import os
 import sys
+import time
 
 
 def _siblings():
@@ -125,6 +126,27 @@ def processing_rate_hz(data):
     profile = _unwrap(data)
     v = profile.get(PROCESSING_RATE_KEY)
     return v if v is not None else profile.get(LEGACY_RATE_KEY)
+
+
+def gain_range_db(data):
+    """`channel_gain.range_db` as `(low, high)` in dB, or None when the profile states no range (#134, H 17).
+
+    Anything else there -- one number, a word in it, true or false, a map, an empty list -- raises `ValueError` naming
+    the field and what it holds: read as no range, a malformed one was "the DSP's plus was not read" in silence, and
+    the level plan dropped the sentence that the plus is short."""
+    profile = _unwrap(data)
+    gain = profile.get("channel_gain") if isinstance(profile, dict) else None
+    if gain is None:
+        return None
+    if not isinstance(gain, dict):
+        raise ValueError(f"channel_gain is {json.dumps(gain)}, not an object holding range_db")
+    rng = gain.get("range_db")
+    if rng is None:
+        return None
+    if not (isinstance(rng, list) and len(rng) == 2
+            and all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in rng)):
+        raise ValueError(f"channel_gain.range_db is {json.dumps(rng)}, not [low, high] in dB")
+    return float(rng[0]), float(rng[1])
 
 
 #: The general term for everything a capture session must have OFF: anything that is not gain,
@@ -341,16 +363,22 @@ def bind_model_rate(project_dir_or_profile):
 
     `dsp_math` is imported lazily: this module is pure stdlib on purpose and is read by tools that
     have no numpy.
+
+    A path is read through `load_profile` (#134, H I-4, T m15): a profile that is there and cannot be read, or that a
+    newer method wrote, raises its exception (`is_unreadable`), naming the file, before anything is bound. It was read
+    as one stating no rate -- "State dsp_processing_rate_hz in the profile" over a profile cut off after stating it --
+    and the model stayed at the assumed rate. No profile at all is "no rate stated", as before.
     """
-    dsp_math = _siblings().load("dsp_math.py")
     profile = project_dir_or_profile
     if isinstance(profile, str):
         path = os.path.join(profile, "dsp_profile.json") if os.path.isdir(profile) else profile
         try:
-            with open(path, encoding="utf-8") as fh:
-                profile = json.load(fh)
-        except (OSError, ValueError):
-            return None, dsp_math.rate_note(None)
+            profile = load_profile(path)
+        except FileNotFoundError:
+            profile = None
+    dsp_math = _siblings().load("dsp_math.py")
+    if profile is None:
+        return None, dsp_math.rate_note(None)
     rate = processing_rate_hz(profile)
     if rate:
         try:
@@ -895,20 +923,54 @@ def reset_field(project_dir, path):
     return True
 
 
+class DraftLeft(Exception):
+    """`finalize` wrote the profile and could not remove the draft (#134, F M-9). The draft is read before the profile
+    by `load_draft`, so the interview would resume from it: the person removes it. `.profile`, `.draft`, `.cause`; its
+    words say what landed. Matched by `draft_left` on its class."""
+    draft_left = True
+
+    def __init__(self, profile, draft, cause):
+        self.profile, self.draft, self.cause = profile, draft, cause
+        super().__init__(f"{profile} is written, but the draft {draft} could not be removed ({cause}): it is still "
+                         f"there, and the interview reads it before the profile -- remove it (close what holds it, "
+                         f"then delete the file) before the next step")
+
+
+def _remove_draft(path):
+    """Remove the draft `finalize` promoted; no draft is no error. On Windows a remove refused because a process holds
+    the file (an editor, a scanner, TCC's watcher) is retried as `project_io`'s move is, for under a second; elsewhere,
+    and past the retries, the refusal raises."""
+    for delay in _project_io()._REPLACE_RETRIES_S + (None,):
+        try:
+            os.remove(path)
+            return
+        except FileNotFoundError:
+            return
+        except PermissionError:
+            if delay is None or os.name != "nt":
+                raise
+            time.sleep(delay)
+
+
 def finalize(project_dir):
     """Validate the draft and promote it to `dsp_profile.json`, removing the draft.
 
     Refuses on an invalid draft (same discipline as `state.snapshot()`): a profile is consumed by
     code, and a half-answered one that validated would produce a UI rendering fields the DSP does
     not have. The draft survives the refusal, so the interview can fix and retry.
+
+    A draft that cannot be removed once the profile is written raises `DraftLeft` (#134, F M-9): it was passed over,
+    and `load_draft`, which reads the draft first, resumed the interview from it. On Windows the remove is retried
+    first (`_remove_draft`). No draft at all -- finalizing an edited profile directly -- is no error.
     """
     data = load_draft(project_dir)
     validate_profile(data)
     path = save_profile(profile_path(project_dir), data)
+    draft = draft_path(project_dir)
     try:
-        os.remove(draft_path(project_dir))
-    except OSError:
-        pass  # no draft (finalizing an edited profile directly) -- not an error
+        _remove_draft(draft)
+    except OSError as exc:
+        raise DraftLeft(path, draft, exc) from exc
     return path
 
 
@@ -1306,6 +1368,12 @@ def _run(args):
         except ValueError as exc:
             print(f"draft is not a valid profile yet, kept as-is: {exc}", file=sys.stderr)
             return 1
+        except Exception as exc:  # noqa: BLE001 -- matched by its attribute; anything else still raises
+            # The profile is written and the draft is still there (F M-9): what landed, and what the person does.
+            if not getattr(type(exc), "draft_left", False):
+                raise
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
         print(f"wrote {path}")
         return 0
 
@@ -1481,10 +1549,190 @@ def _check_newer_profile_refused():
         shutil.rmtree(d, ignore_errors=True)
 
 
+def _damaged_profiles():
+    """`(label, bytes, words)`: a profile cut off after stating its rate, and one a newer method wrote -- the two kinds
+    of a file that is there and cannot be read, with what the refusal of each must say."""
+    newer = SCHEMA_VERSION + 1
+    return (("cut off", b'{"dsp_profile": {"name": "M6V4", "vendor": "Musway", "dsp_processing_rate_hz": 48000, '
+                        b'"channel_gain": {"step_options_db": [1.0, 0.1]}, "gro', "checkout HEAD -- dsp_profile.json"),
+            ("a newer method's", json.dumps({"schema_version": newer, "dsp_profile": {
+                "name": "M6V4", "vendor": "Musway", "groups": [{"id": "physical_outputs", "label": "Out",
+                                                                "fields": ["gain_db"]}],
+                "channel_gain": {"step_options_db": [1.0, 0.1]}}}).encode("utf-8"),
+             f"is schema v{newer}; this method reads v{SCHEMA_VERSION}"))
+
+
+def _check_bind_model_rate_refuses_unreadable():
+    """`bind_model_rate` reads the profile through `load_profile` (#134, H I-4, T m15): a profile cut off mid-write
+    that states `dsp_processing_rate_hz` was read as one stating no rate -- "State dsp_processing_rate_hz in the
+    profile", advice that cannot be followed -- and the model stayed at the assumed rate; a newer method's profile was
+    read as this copy's. Each raises `load_profile`'s exception now, `is_unreadable`, naming the file, before anything
+    is bound, whether the caller passes the folder or the file. No profile at all is still "no rate stated"."""
+    import shutil
+    import tempfile
+    d = tempfile.mkdtemp(prefix="autosound_bind_unreadable_")
+    try:
+        path = profile_path(d)
+        for label, raw, said in _damaged_profiles():
+            with open(path, "wb") as fh:
+                fh.write(raw)
+            for arg in (d, path):
+                try:
+                    got = bind_model_rate(arg)
+                except Exception as exc:  # noqa: BLE001 -- the kind is what is under test
+                    assert getattr(type(exc), "is_unreadable", False), (label, repr(exc))
+                    assert str(exc).startswith(path + " ") and said in str(exc), (label, str(exc))
+                else:
+                    raise AssertionError(f"{label}, given {arg}: read as {got!r}")
+        os.remove(path)
+        rate, note = bind_model_rate(d)
+        assert rate is None and note and note.startswith("no processing rate in the profile"), (rate, note)
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+
+
+def _check_writers_refuse_unreadable_profile():
+    """With no draft, a `dsp_profile.json` that cannot be read, or that a newer method wrote, refuses every verb that
+    reads it (#134, T I7b, T I7c): `set-setting`, and `set-field`, `reset-field`, `start` and `draft`, which read the
+    profile when there is no draft -- the profile keeps its bytes, and no draft is written. Read as absent, a blank
+    draft was written, and `finalize` would save the blank interview over the profile; a newer profile was written
+    back down by `set-setting`. The command line says it in one line, `error: <file> ...`, exit 1."""
+    import contextlib
+    import io
+    import shutil
+    import tempfile
+    d = tempfile.mkdtemp(prefix="autosound_t13_profile_")
+    try:
+        path, draft = profile_path(d), draft_path(d)
+        for label, raw, said in _damaged_profiles():
+            with open(path, "wb") as fh:
+                fh.write(raw)
+            for name, call in (("set_setting", lambda: set_setting(d, "channel_gain.step_db", "0.1")),
+                               ("set_field", lambda: set_field(d, "delay.max_ms", "20")),
+                               ("reset_field", lambda: reset_field(d, "channel_gain")),
+                               ("start_draft", lambda: start_draft(d, "Musway", "M6V4")),
+                               ("load_draft", lambda: load_draft(d)),
+                               ("refresh_project", lambda: refresh_project(d, write=True))):
+                try:
+                    call()
+                except Exception as exc:  # noqa: BLE001 -- the kind is what is under test
+                    assert getattr(type(exc), "is_unreadable", False), (label, name, repr(exc))
+                    assert str(exc).startswith(path + " ") and said in str(exc), (label, name, str(exc))
+                else:
+                    raise AssertionError(f"{label}: {name} read a profile it cannot read")
+                with open(path, "rb") as fh:
+                    assert fh.read() == raw, f"{label}: {name} rewrote the profile"
+                assert not os.path.exists(draft), f"{label}: {name} wrote a draft"
+            for argv in (["set-setting", d, "channel_gain.step_db", "0.1"], ["set-field", d, "delay.max_ms", "20"],
+                         ["reset-field", d, "channel_gain"], ["start", d, "Musway", "M6V4"], ["draft", d]):
+                out, err = io.StringIO(), io.StringIO()
+                with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                    rc = _main(argv)
+                assert rc == 1 and err.getvalue().startswith(f"error: {path} ") and not out.getvalue(), \
+                    (label, argv[0], rc, err.getvalue()[-300:])
+                with open(path, "rb") as fh:
+                    assert fh.read() == raw and not os.path.exists(draft), (label, argv[0], "written")
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+
+
+def _check_library_skips_unreadable():
+    """A library file `load_profile` refuses -- cut off, or a newer method's -- is skipped by `find_bundled` and
+    `list_bundled`, as a broken one always was (#134, T m2); `find-bundled` and `list-bundled` exit 0. An `except
+    (OSError, ValueError)` alone let `Unreadable` out of the scan, and one bad file on the shelf stopped both."""
+    import contextlib
+    import io
+    import shutil
+    import tempfile
+    lib = tempfile.mkdtemp(prefix="autosound_library_")
+    try:
+        good = {"dsp_profile": {"name": "Ultra S", "vendor": "Helix", "groups": [
+            {"id": "physical_outputs", "label": "Out", "fields": ["gain_db"]}]}}
+        with open(os.path.join(lib, "b-good.json"), "w", encoding="utf-8") as fh:
+            json.dump(good, fh)
+        for n, (label, raw, _said) in enumerate(_damaged_profiles()):
+            with open(os.path.join(lib, f"a-{n}.json"), "wb") as fh:
+                fh.write(raw)
+        rows = list_bundled(lib)
+        assert [(v, m) for v, m, _p in rows] == [("Helix", "Ultra S")], rows
+        assert find_bundled("Helix", "Ultra S", lib) == good, "the good file was not found past the bad ones"
+        assert find_bundled("Musway", "M6V4", lib) is None, "a profile that cannot be read was offered"
+        for argv in (["find-bundled", "Musway", "M6V4", lib], ["list-bundled", lib]):
+            out, err = io.StringIO(), io.StringIO()
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                rc = _main(argv)
+            assert rc == 0 and not err.getvalue(), (argv[0], rc, err.getvalue()[-300:])
+    finally:
+        shutil.rmtree(lib, ignore_errors=True)
+
+
+def _check_finalize_says_a_draft_left():
+    """`finalize` never swallows a draft it could not remove (#134, F M-9). The profile is written; a draft left
+    beside it is read before it by `load_draft`, and the interview would resume from the stale draft. The remove is
+    retried on Windows as `project_io`'s move is (a holder that lets go in time is waited out), then said: exit 1,
+    one line naming the profile written, the draft still there, the cause and that it must be removed. Elsewhere a
+    refused remove is not retried. No draft at all -- finalizing the profile itself -- is no error, as before."""
+    import contextlib
+    import io
+    import shutil
+    import tempfile
+    io_ = _project_io()
+    real_remove, real_name, real_sleep = os.remove, os.name, time.sleep
+    d = tempfile.mkdtemp(prefix="autosound_finalize_")
+    draft = draft_path(d)
+    tries = []
+
+    def held_for(n):
+        def remove(p, *a, **kw):
+            if os.path.abspath(p) == os.path.abspath(draft):
+                tries.append(p)
+                if len(tries) <= n:
+                    raise PermissionError(13, "The process cannot access the file because it is being used", p)
+            return real_remove(p, *a, **kw)
+        return remove
+    try:
+        interview = {"dsp_profile": {"name": "M6V4", "vendor": "Musway", "groups": [
+            {"id": "physical_outputs", "label": "Outputs", "fields": ["gain_db"]}]}}
+        for system, held, rc_want, left in (("posix", 1, 1, True), ("nt", 2, 0, False),
+                                            ("nt", len(io_._REPLACE_RETRIES_S) + 1, 1, True)):
+            save_draft(d, interview)
+            tries.clear()
+            out, err = io.StringIO(), io.StringIO()
+            os.remove, time.sleep = held_for(held), (lambda s: None)
+            os.name = system
+            try:
+                with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                    rc = _main(["finalize", d])
+            finally:
+                os.remove, os.name, time.sleep = real_remove, real_name, real_sleep
+            label = f"{system}, held for {held} tries"
+            assert rc == rc_want and os.path.exists(draft) is left, (label, rc, err.getvalue()[-300:])
+            assert load_profile(profile_path(d))["dsp_profile"]["name"] == "M6V4", (label, "no profile written")
+            want_tries = 1 if system == "posix" else min(held + 1, len(io_._REPLACE_RETRIES_S) + 1)
+            assert len(tries) == want_tries, (label, len(tries), want_tries)
+            if left:
+                said = err.getvalue().strip()
+                assert said.startswith(f"error: {profile_path(d)} is written, but the draft {draft} could not be "
+                                       f"removed") and "it is still there" in said and "remove it" in said, \
+                    (label, said)
+                assert "\n" not in said and not out.getvalue(), (label, out.getvalue(), said)
+                real_remove(draft)
+            else:
+                assert out.getvalue().startswith("wrote ") and not err.getvalue(), (label, out.getvalue(), err.getvalue())
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            assert _main(["finalize", d]) == 0 and out.getvalue().startswith("wrote "), "no draft: the profile itself"
+    finally:
+        os.remove, os.name, time.sleep = real_remove, real_name, real_sleep
+        shutil.rmtree(d, ignore_errors=True)
+
+
 def _selftest():
     failures = []
     for check in (_check_loads_by_path, _check_bind_model_rate_binds_the_callers_dsp_math,
-                  _check_draft_refuses_unreadable, _check_newer_profile_refused):
+                  _check_draft_refuses_unreadable, _check_newer_profile_refused,
+                  _check_bind_model_rate_refuses_unreadable, _check_writers_refuse_unreadable_profile,
+                  _check_library_skips_unreadable, _check_finalize_says_a_draft_left):
         try:
             check()
         except AssertionError as exc:

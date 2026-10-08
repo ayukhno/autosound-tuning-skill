@@ -104,6 +104,31 @@ class ProtectiveError(ValueError):
     """The protective record cannot answer what was asked of it."""
 
 
+#: A recorded leg the method has no model for (#134, R49, R52): `dsp_math.Unmodelled`, one class with dsp_math's.
+#: Matched by `is_unmodelled` on its class, as every copy of the module raises its own.
+Unmodelled = dsp_math.Unmodelled
+
+
+def _unmodelled(kind, leg, family):
+    """The refusal for a live leg whose type the method does not model: the leg, why, and the person's way on.
+
+    A Chebyshev is recorded as typed (R48), and the method has no Chebyshev verified on a DSP: its ripple is not
+    identified, so the filter is not determined (`dsp_math.MODELLABLE_FAMILIES`' note). Taking another family out in
+    its place -- a Butterworth, which `_design` built for it -- leaves tens of degrees of the real filter's phase in
+    the sweep, read as the driver's (R52, the Arbiter: no substitute, no override). So the way on is the person's,
+    on the DSP. The words say the leg alone: `de_embed` is not told the channel, and its callers prefix it."""
+    shown = f"{kind.upper()} {float(leg['f']):g} Hz {family}{leg.get('slope', '?')}"
+    if family in ("CH", "CHEBYSHEV"):
+        why = ("the method has no Chebyshev model verified on a DSP -- its ripple is not identified, so the filter "
+               "is not determined -- and it never takes another family out in its place")
+    else:
+        why = (f"the method models {', '.join(dsp_math.MODELLABLE_FAMILIES[:-1])} and "
+               f"{dsp_math.MODELLABLE_FAMILIES[-1]} only, and never takes another family out in its place")
+    return Unmodelled(f"protective {shown} cannot be taken out of the sweep for a phase decision: {why}. Set a "
+                      f"filter the method models (LR, BW or BE) as the protective on the DSP and sweep again, or "
+                      f"sweep with the protective filter OFF where the driver is safe without it")
+
+
 def legs_of(record, channel):
     """The `{hp, lp}` in force for one channel, or `None` when NOBODY SAID.
 
@@ -222,14 +247,25 @@ def _live(leg):
 
 
 def response(freqs_hz, legs):
-    """The complex response of the protective chain — the thing that is IN the recording."""
-    h = np.ones(len(freqs_hz), dtype=complex)
+    """The complex response of the protective chain — the thing that is IN the recording.
+
+    A live leg whose type the method does not model -- a Chebyshev (`CH`, recorded as typed), anything outside
+    `dsp_math.MODELLABLE_FAMILIES` -- raises `Unmodelled` before anything is computed (#134, R49, R52): it was built
+    as a Butterworth and nobody was told. So do `de_embed` and `matters_at`, which read the chain through here. A type
+    is read in any letter case, as the record reads it (R47b): `lr` is LR."""
+    live = []
     for kind in ("hp", "lp"):
         leg = _live((legs or {}).get(kind))
         if leg is None:
             continue
+        family = str(leg.get("type", "LR")).upper()
+        if family not in dsp_math.MODELLABLE_FAMILIES:
+            raise _unmodelled(kind, leg, family)
+        live.append((kind, leg, family))
+    h = np.ones(len(freqs_hz), dtype=complex)
+    for kind, leg, family in live:
         h = h * dsp_math.xo_response(np.asarray(freqs_hz, float), float(leg["f"]),
-                                     int(leg["slope"]), kind, leg.get("type", "LR"))
+                                     int(leg["slope"]), kind, family)
     return h
 
 
@@ -258,6 +294,10 @@ def de_embed(freqs_hz, measured, legs, *, max_boost_db=MAX_BOOST_DB):
     Raises rather than guessing when `legs` is `None`: that means nobody recorded what was in the
     chain, and a correction applied to an unknown chain is worse than none, because the result
     looks corrected.
+
+    Raises `Unmodelled` (`is_unmodelled` on its class) for a live leg the method does not model --
+    a Chebyshev, recorded as typed (#134, R49, R52): it was taken out as a Butterworth, and the
+    result looked corrected. The words name the leg; a caller names the channel.
     """
     if legs is None:
         raise ProtectiveError(
@@ -304,7 +344,49 @@ def de_embed(freqs_hz, measured, legs, *, max_boost_db=MAX_BOOST_DB):
 
 
 # ── selftest ───────────────────────────────────────────────────────────────────
+def _check_unmodelled_leg_refused():
+    """A recorded leg the method cannot model is refused, never taken out as another family (#134, R49, R52).
+
+    `dsp_math._design` built a Butterworth for any type but BE, so a Chebyshev leg (`CH`, which the record keeps as
+    typed, R48) was de-embedded as a BW of its order: `de_embed` returned a "corrected" curve and `applied: ["hp"]`,
+    and `matters_at` answered a BW's degrees. Now `response`, `de_embed` and `matters_at` raise `Unmodelled`
+    (`is_unmodelled` on its class) naming the leg, why the method has no model for it, and the person's way on: a
+    filter it models (LR, BW or BE) set on the DSP and a new sweep, or a sweep with the protective filter OFF. LR, BW
+    and BE are untouched -- the same bytes as `dsp_math.xo_response` gives for each leg -- and a type in another letter
+    case is the type."""
+    freqs = np.geomspace(20, 20000, 400)
+    measured = np.exp(-2j * np.pi * freqs * 1e-3)
+    for legs, said in (({"hp": {"f": 100, "type": "CH", "slope": 24}, "lp": "OFF"},
+                        ("HP 100 Hz CH24", "no Chebyshev model verified on a DSP")),
+                       ({"hp": "OFF", "lp": {"f": 4000, "type": "ch", "slope": 36}},
+                        ("LP 4000 Hz CH36", "no Chebyshev model verified on a DSP")),
+                       ({"hp": {"f": 100, "type": "XX", "slope": 24}},
+                        ("HP 100 Hz XX24", "models LR, BW and BE only"))):
+        for name, call in (("response", lambda: response(freqs, legs)),
+                           ("de_embed", lambda: de_embed(freqs, measured, legs)),
+                           ("matters_at", lambda: matters_at(legs, 800.0))):
+            try:
+                call()
+            except Exception as exc:  # noqa: BLE001 -- the kind is what is under test
+                text = str(exc)
+                assert getattr(type(exc), "is_unmodelled", False), (name, repr(exc))
+                assert all(s in text for s in said), (name, text)
+                assert "LR, BW or BE" in text and "sweep again" in text and "protective filter OFF" in text, \
+                    (name, text)
+            else:
+                raise AssertionError(f"{name}: {legs} was modelled as another family")
+    for family in ("LR", "BW", "BE"):
+        for slope in (12, 24, 36):
+            legs = {"hp": {"f": 80, "type": family, "slope": slope}, "lp": {"f": 3000, "type": family, "slope": slope}}
+            want = (dsp_math.xo_response(freqs, 80.0, slope, "hp", family)
+                    * dsp_math.xo_response(freqs, 3000.0, slope, "lp", family))
+            assert np.array_equal(response(freqs, legs), np.ones(len(freqs), dtype=complex) * want), (family, slope)
+            lower = {k: dict(v, type=family.lower()) for k, v in legs.items()}
+            assert np.array_equal(response(freqs, lower), response(freqs, legs)), (family, slope, "letter case")
+
+
 def _selftest():
+    _check_unmodelled_leg_refused()
     freqs = np.geomspace(20, 20000, 800)
 
     # The numbers that forced this work, from this module's own maths rather than a report.

@@ -24,7 +24,8 @@ For each candidate:
         --hp 200:400:5 --lp 2500:4000:10 [--fs 90] [--top 3] [--json]
     python3 rew_tool/xover_candidates.py --selftest
 
-It refuses without a solo for the channel, and it never picks: the last line says so.
+It refuses without a solo for the channel, and over a `dsp_profile.json` it cannot read -- each refusal one line,
+`refusing: <why>`, exit 3 -- and it never picks: the last line says so.
 """
 from __future__ import annotations
 
@@ -218,9 +219,11 @@ def render(descs, channel):
 
 def _check_cli_refuses_unreadable_profile():
     """A `dsp_profile.json` that is there and cannot be read, or that a newer method wrote, is refused before anything
-    else is read: `error: <file> <reason> -- <repair>`, exit 1, nothing on stdout (#136). It was read as "no range",
-    and each candidate's trim was borrowed; once `load_profile` raised its own exception for it, the command ended in
-    a traceback. No profile at all is still no range."""
+    else is read or modelled, in this tool's one form (#134, H 24, T m15): `refusing: <file> <reason> -- <repair>`,
+    exit 3, the one line on stderr, nothing on stdout. It was read as "no range" (#136); then said as `error:` exit 1,
+    beside every other refusal's `refusing:` exit 3, and after a rate note `bind_model_rate` made of the same file read
+    as one stating no rate -- or, for a newer method's, bound to its rate. A `channel_gain.range_db` that is no
+    `[low, high]` in dB is refused the same way, naming the field: it read as "no range" in silence (H 17's twin)."""
     import contextlib
     import io
     import shutil
@@ -230,10 +233,17 @@ def _check_cli_refuses_unreadable_profile():
     try:
         path = os.path.join(d, "dsp_profile.json")
         newer = dsp_profile.SCHEMA_VERSION + 1
-        for raw, said in (
-                (b'{"dsp_profile": {"name": "X", "channel_gain": {"ran', "checkout HEAD -- dsp_profile.json"),
-                (json.dumps({"schema_version": newer, "dsp_profile": {"name": "X"}}).encode("utf-8"),
-                 f"is schema v{newer}; this method reads v{dsp_profile.SCHEMA_VERSION} -- update the method")):
+        cases = [(b'{"dsp_profile": {"name": "X", "dsp_processing_rate_hz": 48000, "channel_gain": {"ran',
+                  f"refusing: {path} ", "checkout HEAD -- dsp_profile.json"),
+                 (json.dumps({"schema_version": newer, "dsp_profile": {"name": "X", "dsp_processing_rate_hz": 44100}})
+                  .encode("utf-8"), f"refusing: {path} ",
+                  f"is schema v{newer}; this method reads v{dsp_profile.SCHEMA_VERSION} -- update the method")]
+        for bad in ([-12], [-12, "x"], {"low": -12}):
+            cases.append((json.dumps({"dsp_profile": {"name": "X", "channel_gain": {"range_db": bad}}}).encode(),
+                          f"refusing: {path}: channel_gain.range_db is {json.dumps(bad)}, not [low, high] in dB",
+                          "correct it in the profile"))
+        failures = []
+        for raw, starts, said in cases:
             with open(path, "wb") as fh:
                 fh.write(raw)
             out, err = io.StringIO(), io.StringIO()
@@ -242,17 +252,60 @@ def _check_cli_refuses_unreadable_profile():
                     rc = _main(["--solos", d, "--project", d, "--house", os.path.join(d, "house.txt"),
                                 "--channel", "m-L", "--hp", "100:200:10"])
             except Exception as exc:  # noqa: BLE001 -- the failure under test is the traceback itself
-                raise AssertionError(f"raised {type(exc).__name__}: {exc}") from None
-            last = (err.getvalue().strip().splitlines() or [""])[-1]
-            assert rc == 1 and last.startswith(f"error: {path} ") and said in last, (rc, err.getvalue()[-300:])
-            assert not out.getvalue(), out.getvalue()[-300:]
+                rc = f"raised {type(exc).__name__}: {exc}"
+            lines = err.getvalue().strip().splitlines()
+            if rc != 3 or out.getvalue() or len(lines) != 1 or not lines[0].startswith(starts) or said not in lines[0]:
+                failures.append(f"{raw[:60]!r}: rc {rc!r}, said {lines!r}"[:600])
+        assert not failures, "\n  ".join(["a profile xover_candidates could not read:"] + failures)
+        assert dsp_math.processing_rate()[1] != "profile", ("a refused profile's rate was bound",
+                                                            dsp_math.processing_rate())
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+
+
+def _check_unmodelled_protective_said():
+    """A solo whose recorded protective leg the method cannot model -- a Chebyshev (#134, R49, R52) -- is refused at
+    the de-embedding, and the refusal says why, in the one line it gives: the leg, and the person's way on. It said
+    only `(refused at de-embed: m-L)`, a code with no reason; before R52 the Chebyshev was taken out as a
+    Butterworth and the candidates read off what was left."""
+    import contextlib
+    import io
+    import shutil
+    import tempfile
+    import resonalyze_ir as ri
+    state_dir = os.path.join(_HERE, "state")
+    if state_dir not in sys.path:
+        sys.path.insert(0, state_dir)
+    import state as st
+    d = tempfile.mkdtemp(prefix="autosound_xover_unmodelled_")
+    try:
+        st.PresetHistory(os.path.join(d, "state"), "SQ", project_dir=d).snapshot(
+            {"schema_version": 3, "preset": "SQ", "sample_rate": 96000, "channels": {
+                "m-L": {"hp": {"f": 300, "type": "LR", "slope": 24}, "lp": {"f": 3000, "type": "LR", "slope": 24},
+                        "gain_db": 0.0, "ta_ms": 0.0, "polarity": "NORM", "eq": []}}}, note="a ledger")
+        st.Registry(os.path.join(d, "state")).set_active("SQ")
+        solos = os.path.join(d, "solos")
+        os.makedirs(solos)
+        x = np.zeros(1 << 15)
+        x[96] = 0.5
+        doc = ri.build_v7(x, 96000, 0.0, low_hz=20.0, high_hz=20000.0, rew_source={
+            "protectiveHighPass": {"hz": 100, "family": "CH", "slopeDbPerOct": 24}, "protectiveState": "raw"})
+        ri.write_v7(doc[0] if isinstance(doc, tuple) else doc, os.path.join(solos, "m_L.json"))
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            rc = _main(["--solos", solos, "--project", d, "--house", os.path.join(d, "house.txt"),
+                        "--channel", "m-L", "--hp", "200:400:10"])
+        last = (err.getvalue().strip().splitlines() or [""])[-1]
+        assert rc == 3 and last.startswith(f"refusing: no usable solo for m-L in {solos} -- refused at de-embed: "
+                                           "protective HP 100 Hz CH24 cannot be taken out") \
+            and "LR, BW or BE" in last and not out.getvalue(), (rc, err.getvalue()[-400:])
     finally:
         shutil.rmtree(d, ignore_errors=True)
 
 
 def _selftest():
     failures = []
-    for check in (_check_cli_refuses_unreadable_profile,):
+    for check in (_check_cli_refuses_unreadable_profile, _check_unmodelled_protective_said):
         try:
             check()
         except AssertionError as exc:
@@ -333,33 +386,35 @@ def _main(argv=None):
     ap.add_argument("--preset")
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args(argv)
+    if not args.hp and not args.lp:
+        ap.error("at least one of --hp / --lp")
+    # The profile is read once, first, before anything is modelled: a profile that is there and cannot be read, or that
+    # a newer method wrote, is refused here (#136) -- it was read as "no range", and the trim was borrowed -- and so is
+    # a `channel_gain.range_db` that is no `[low, high]` (#134, H 17). In this tool's one form, the one every other
+    # refusal of it takes: `refusing:`, exit 3 (H 24). Read once: `bind_model_rate` read the same file again, as one
+    # stating no rate, and said so before the refusal (T m15). No profile, or no range in it, is still no range.
+    import dsp_profile
+    path = dsp_profile.profile_path(args.project)
+    try:
+        prof = dsp_profile.load_profile(path)
+    except FileNotFoundError:
+        prof = None
+    except Exception as exc:  # noqa: BLE001 -- matched by its attribute; anything else still raises
+        if not getattr(type(exc), "is_unreadable", False):
+            raise
+        print(f"refusing: {exc}", file=sys.stderr)
+        return 3
+    try:
+        trim_range = dsp_profile.gain_range_db(prof) if prof is not None else None
+    except ValueError as exc:
+        print(f"refusing: {path}: {exc} -- correct it in the profile", file=sys.stderr)
+        return 3
     # The response model is bound to THIS device's processing rate before anything is modelled.
     # Not inside a branch: the crossover model runs on every path, and a binding that happens only
     # where the delay grid is computed leaves the common case on a module constant (hub #28).
-    if getattr(args, "project", None):
-        import dsp_profile as _dp_bind
-        _rate_hz, _rate_note = _dp_bind.bind_model_rate(args.project)
-        if _rate_note:
-            print(f"  \u26a0 {_rate_note}", file=sys.stderr)
-    if not args.hp and not args.lp:
-        ap.error("at least one of --hp / --lp")
-    # The profile's channel-gain range bounds each candidate's trim, read before anything else is: a profile that is there
-    # and cannot be read, or that a newer method wrote, is refused here (#136) -- it was read as "no range", and the trim
-    # was borrowed. No profile, or no range in it, is still no range.
-    trim_range = None
-    try:
-        import dsp_profile
-        prof = dsp_profile.load_profile(dsp_profile.profile_path(args.project))
-        rng = (dsp_profile._unwrap(prof).get("channel_gain") or {}).get("range_db")
-        if rng and len(rng) == 2:
-            trim_range = (float(rng[0]), float(rng[1]))
-    except (OSError, ValueError):
-        pass
-    except Exception as exc:  # noqa: BLE001 -- matched by its attribute; anything else still raises
-        if not getattr(exc, "is_unreadable", False):
-            raise
-        print(f"error: {exc}", file=sys.stderr)
-        return 1
+    _rate_hz, _rate_note = dsp_profile.bind_model_rate(prof if prof is not None else args.project)
+    if _rate_note:
+        print(f"  \u26a0 {_rate_note}", file=sys.stderr)
 
     f = P.grid(20, 20000, 96)
     preset, snap = P.load_project_state(args.project, args.preset)
@@ -371,8 +426,12 @@ def _main(argv=None):
     loaded = P.load_solos_dir(args.solos, f)
     solos, notes, refused = P.de_embed_solos(loaded, f, baseline=True)
     if code not in solos:
+        # Why this channel was refused, when it was: its note (a baseline nobody marked, a leg the method has no model
+        # for -- #134, R52), never a bare code.
+        why = next((n[len(f"{code}: REFUSED -- "):] for n in notes if n.startswith(f"{code}: REFUSED -- ")), None)
         print(f"refusing: no usable solo for {code} in {args.solos}"
-              + (f" (refused at de-embed: {', '.join(sorted(refused))})" if refused else ""), file=sys.stderr)
+              + (f" -- refused at de-embed: {why}" if why else
+                 (f" (refused at de-embed: {', '.join(sorted(refused))})" if refused else "")), file=sys.stderr)
         return 3
     pdata = _project.Project(args.project).load()
     roles = {c["code"]: c.get("role") for c in (pdata.get("channels") or []) if isinstance(c, dict)}

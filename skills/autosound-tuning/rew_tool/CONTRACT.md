@@ -32,7 +32,7 @@ too when the path is wrong, with `can't open file` on stderr: the usage line is 
 | 0 | done, or yes |
 | 1 | refused, or no: the reason on stderr, `error: <reason>`; REW answering with an error, `error: REW answered with an error: <REW's words> -- nothing was written`; any other state REW's exceptions name but "unavailable" (`protocol`, `write_mismatch`, `not_found`, `ambiguous`, `config`), read off the class, `error: <its words> -- nothing was written`, except that a `write_mismatch` ends `-- REW may hold part of the write: check REW's EQ before going on` and a filter write REW acknowledged and nobody could read back (`rew_unchecked` on its class) is said in its own words alone; `capture-check` when REW's measurement list was not read and REW did not stay silent -- it answered with an error or with something the method cannot read, or it was not asked, its address being none -- `error: REW's measurement list was not read (<why>) -- nothing was recorded` |
 | 2 | usage: an unknown verb (the usage on stderr), a flag the verb does not take, a flag's value missing (one of the verb's flags, `-h` or `--help` in its place, or nothing after it: a value flag left last), `=` on a flag that takes no value, one of the verb's flags with its hyphens autocorrected to a dash, `--help` or `-h` after other arguments, too few arguments |
-| 69 | REW did not answer, and nothing was written |
+| 69 | REW did not answer, and nothing was written -- but a filter write REW acknowledged before it stopped answering (`rew_unchecked` on its class), said in its own words: sent, acknowledged, not checked |
 | 70 | an unexpected error, a bug: Python's traceback on stderr, then `error: unexpected <type>: <message>` |
 | 75 | the project busy: reserved for the lock (W-9, J2b), not raised yet |
 
@@ -62,38 +62,46 @@ resolves) and `handoff` (1 while the next session would miss something), as `sta
 
 `show`, `plan`, `enter-phase`, `start`, `done`, `block`, `target`, `session-start`, `session-reopen`,
 `capture-taken`, `amp-changes`, `capture-supersede`, `capture-skip` and `check` take none. A flag is `--`, an ASCII
-letter and no whitespace -- after an `=`, whitespace is the value's only when the name before it is one of the
-verb's flags (`--invalidates=w-L_1 (sw)`); any other token is a word -- a bare `--`, a negative number, and text that
-only begins with two dashes (`--бас гуде`, `--bass hums`, `--bass=45 Hz hums?`). A flag the verb does not take is a
-usage error, exit 2, and the verb does not run; its words never contain `usage: process.py`. So is, where a flag
-stands, one of the verb's flags with its two hyphens autocorrected to a dash: a word that starts with an em or an en
-dash and names that flag past its dashes (`—origin`, `–origin=other:49`), said as `<verb>: —origin looks like
---origin with its dashes autocorrected; type two hyphens`. `--flag value` and `--flag=value` are one:
-the value is taken as it stands, whatever it looks like (`--text --loud`, `--text=--loud`), with one exception in
-both forms -- a value that is one of the verb's own flags, `-h` and `--help` among them (`--note --measured`,
-`--note=--measured`, `--text=-h`; the name before any `=` counts), is no value: the value is missing, exit 2. So is
-a flag that takes a value and stands last, with nothing after it -- refused before the verb runs -- except
-capture-protective's legs `--hp` and `--lp`, which the verb parses: `--hp needs three values` (a flag among them
-too), `--hp: 'abc' is not a number`, `--hp: '24.5' is not a whole number`, a frequency or a slope not above 0, a
-type other than LR, BW, BE or CH (any letter case), exit 1; their values are not the verb's arguments, so legs with no
-channel are too few. A series `capture-import` cannot read as a number is exit 1 too, before REW is asked; with no
-titles, REW holding nothing of the series is exit 1, and every title of it on record already is exit 0, `nothing
-new`. `--project`,
-`--check`, `--plan`, `--session`, `--measured`, `--bank`, `--json` and `--no-rew` take no value and no `=`. A verb needs the arguments its line in the usage names in `<...>` (`_VERB_ARGS` in `process.py`; `skip` needs
-its `<id>`, then a reason or `--superseded-by`); fewer is a usage error, exit 2, naming them. `<verb> --help` (or
-`-h`), right after the verb, prints that verb's lines and exits 0, reading and writing nothing; after other
-arguments either is a usage error, exit 2. `process.py --help` prints the whole usage on stdout. A verb or a flag
-added later is an addition (item 12); removing or renaming one is a contract change.
+letter and no whitespace -- after an `=`, whitespace is the value's only when the name before it is one of the verb's
+flags (`--invalidates=w-L_1 (sw)`); any other token is a word -- a bare `--`, a negative number, and text that only
+begins with two dashes (`--бас гуде`, `--bass hums`, `--bass=45 Hz hums?`). A flag the verb does not take is a usage
+error, exit 2, and the verb does not run; its words never contain `usage: process.py`. So is, where a flag stands,
+one of the verb's flags with its two hyphens autocorrected to a dash: a word that starts with an em or an en dash and
+names that flag past its dashes (`—origin`, `–origin=other:49`), said as `<verb>: —origin looks like --origin with
+its dashes autocorrected; type two hyphens`. `--flag value` and `--flag=value` are one: the value is taken as it
+stands, whatever it looks like (`--text --loud`, `--text=--loud`), with one exception in both forms -- a value that
+is one of the verb's own flags, `-h` and `--help` among them (`--note --measured`, `--note=--measured`, `--text=-h`;
+the name before any `=` counts), is no value: the value is missing, exit 2. So is a flag that takes a value and
+stands last, with nothing after it -- refused before the verb runs -- except capture-protective's legs `--hp` and
+`--lp`, which the verb parses: `--hp needs three values` (a flag among them too), `--hp: 'abc' is not a number`,
+`--hp: '24.5' is not a whole number`, a frequency or a slope not above 0, a type other than LR, BW, BE or CH (any
+letter case), exit 1; their values are not the verb's arguments, so legs with no channel are too few. A series
+`capture-import` cannot read as a number is exit 1 too, before REW is asked; with no titles, REW holding nothing of
+the series is exit 1, and every title of it on record already is exit 0, `nothing new`. `--project`, `--check`,
+`--plan`, `--session`, `--measured`, `--bank`, `--json` and `--no-rew` take no value and no `=`. A verb needs the
+arguments its line in the usage names in `<...>` (`_VERB_ARGS` in `process.py`); fewer is a usage error, exit 2,
+naming them -- but `skip <id>` with neither a reason nor `--superseded-by`, which `skip` refuses itself, exit 1
+(either one completes its line). `<verb> --help` (or `-h`), right after the verb, prints that verb's lines and exits
+0, reading and writing nothing; after other arguments either is a usage error, exit 2. `process.py --help` prints the
+whole usage on stdout. A verb or a flag added later is an addition (item 12); removing or renaming one is a contract
+change.
 
 **The JSON:** `show` prints `process-state.json` as `state/process-schema.md` describes it (a round's `checks` among
 its keys); `plan [phase]` a list of the plan's steps; `handoff --json` `{ok, missing, phase, resume, warnings,
 next_message}`, with the same keys when the state cannot be read (`ok` false, the file and its repair in `missing`).
+A state a newer method wrote is answered on stderr alone, `error: <file> is schema v4; ...`, exit 1, nothing on
+stdout: an empty stdout, which a front end reads as "update the method", which is the answer.
 
 ## 3. `contract.py check <dir> [--json] [--no-rew] [--gate | --phase0-gate]` — planned (W-10)
 
 Exit 0/1/2, every top-level key of `--json`, and a REW block that tells *skipped* from *unreachable* (audit T-2).
 The keys TCC reads today: `ok`, `project_dir`, `files[]`, `cross_checks{rew, continue_head, glossary_vs_ledgers,
-tiers_vs_profile}`, `inherited`, `sources_gone`, `complete`.
+tiers_vs_profile}`, `inherited`, `sources_gone`, `complete`. As built today (#134), the REW block reads the state off
+the exception's class into `state`: REW down is `reachable: false`; REW answering its list with an error or with
+something that is no measurement list is `reachable: true`, the list not read; an address that is none (`config`),
+or a failure that is none of REW's, is `reachable: null`, its note starting `skipped:` as `--no-rew`'s does.
+`unreadable` names a `project.json` that is there and cannot be read, which both gates' last lines name first;
+`encoding_unread` the files the encoding survey could not open.
 
 ## 4. `deployment.py [<project>] [--json]` — not promised
 
@@ -190,13 +198,14 @@ both. No file at all is the one quiet case: a fresh project. It holds for:
   profile gate. The intake's processor change, which replaces the profile, sets such a file aside unread and byte for
   byte, with one line on stderr saying where; the intake form's page shows it with its repair.
 
-Each phase gate refuses what it cannot check. Leaving phase −1: an intake check that raises or cannot be loaded.
+Each phase gate refuses what it cannot check. Leaving phase −1: an intake check that raises or cannot be loaded, and
+a `project.json` that cannot be read, named with its repair (#134) -- the glossary inside it read as not produced.
 Leaving phase 0: a `project.json` that cannot be read, where the flaw-map gate reads the map. Into phases 1 and 2: a
 `dsp_profile.json` that cannot be read or that a newer method wrote, and a profile check that cannot be loaded.
-Leaving −1 still gates on missing files only, so `enter-phase 0` passes over a `dsp_profile.json` that is there and
-cannot be read, or a newer one, where `contract.py check --gate` says NOT READY; gating it on the profile's
-readability, with that parity, waits for J3b (W-11). `contract.py check` reports such a file (`exists: true`,
-`valid: false`, the refusal in `issues`) instead of failing.
+Leaving −1 still gates on missing files and that `project.json` only, so `enter-phase 0` passes over a
+`dsp_profile.json` that is there and cannot be read, or a newer one, where `contract.py check --gate` says NOT READY;
+gating it on the profile's readability, with that parity, waits for J3b (W-11). `contract.py check` reports such a
+file (`exists: true`, `valid: false`, the refusal in `issues`) instead of failing.
 
 ## 8. How to write them — atomic writes guaranteed (W-8, #135); the lock planned (W-9, J2b)
 
@@ -251,15 +260,16 @@ Two more writes go through `project_io.py`; neither replaces a file:
   is not JSON; a line that is not UTF-8 before its end is another code page, which the method's readers refuse (item
   7). The survey of `repair-encoding` reads a `.jsonl` line by line, does not count a line that stops inside its last
   character as a wrong code page, and repairs it line by line: only the lines that are not UTF-8 are rewritten. A
-  line no code page makes JSON of (a write cut inside a character with the next event glued on, before T-14) is
-  left by every page's rewrite; on the person's `--set-aside` it moves, bytes kept, into `<journal>.set-aside` as
-  `line N: <bytes>`, every other line byte-identical (R56). Nothing is rewritten or set aside while a file could not
-  be read. The append itself is a plain one: text mode, the platform's line ending, no lock; it is fsynced, and so is
-  the folder when the append made the file (#134). A journal that cannot be opened is refused by the append too
-  (`Unreadable`), and one that reads and refuses the append is `cannot be appended to (...)`.
-  `process.py` reads the journal, and opens it for appending, before it writes the state that an event goes with;
-  an append refused after that write is said as what landed -- the state holds the change, the journal has no line
-  for it -- with the line to append, exit 1.
+  line no code page makes JSON of (a write cut off in it: a write cut inside a character with the next event glued
+  on, before T-14, or a lone line cut in a legacy page) is left by every page's rewrite; on the person's
+  `--set-aside` it moves, bytes kept, into `<journal>.set-aside` as `line N: <bytes>`, every other line
+  byte-identical (R56). Nothing is rewritten or set aside while a file could not be read, and a write the disk
+  refuses there is one line, exit 1, with what landed. The append itself is a plain one: text mode, the platform's
+  line ending, no lock; it is fsynced, and so is the folder when the append made the file (#134). A journal that
+  cannot be opened is refused by the append too (`Unreadable`), and one that reads and refuses the append is `cannot
+  be appended to (...)`. `process.py` reads the journal, and opens it for appending, before it writes the state that
+  an event goes with; an append refused after that write is said as what landed -- the state holds the change, the
+  journal has no line for it -- with the line to append, exit 1.
 
 Every other write is still a plain one, in place. Among them: `state/apply.py`'s proposal deltas and sheets; the
 capture plans in `docs/plans/`; the review files in `process/reviews/` (each created under a name of its own since
@@ -320,6 +330,19 @@ TCC also compares values that no name pins: naming's method tags `"sw"` and `"rt
 `"sweep"`, `"rta"` and `"impedance"`, and the journal's event names and fields. The shapes of returned values (the
 keys of `verify.verdict`, the result of `resonalyze_vc.convert` or `eq_export.export_eq`) are written down in J1b
 (W-10).
+
+**A protective leg the method cannot model is refused, never taken out as another family** (#134, R49, R52; the
+Arbiter's word). `protective.de_embed` and `protective.matters_at` (and `protective.response`, which both read the
+chain through) raise `Unmodelled` for a live leg whose type is outside `dsp_math.MODELLABLE_FAMILIES` -- a Chebyshev,
+`CH`, which the record keeps as typed (item 2) -- naming the leg and the way on; match `is_unmodelled` on the
+exception's class (`protective.Unmodelled` is `dsp_math.Unmodelled`; neither an `OSError` nor a `ValueError`). The
+signatures are as the table holds them. Why: the method has no Chebyshev verified on a DSP -- its ripple is not
+identified, so the filter is not determined -- and it never puts another family in its place; there is no override.
+The person's way on is on the DSP: set a filter the method models (LR, BW or BE) as the protective and sweep again,
+or sweep with the protective filter OFF where the driver is safe without it. A Chebyshev model comes only from
+research that teaches the method: a user who researches the Chebyshev mathematics and verifies it against their own
+DSP in their project sends it as an issue in the skill's repo. LR, BW and BE are taken out as before, bit for bit; a
+type is read in any letter case.
 
 ## 10. Environment variables — planned (W-10)
 

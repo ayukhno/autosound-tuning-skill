@@ -131,10 +131,12 @@ class RewAddressError(ValueError):
 # A filter write REW acknowledged and whose read-back failed (#134, H 10): the write was sent and REW said it was done,
 # and nothing checked it. Each keeps the state the read-back met -- REW stopped answering, answered the read with an
 # error, or answered something that is no list of slots -- and carries `rew_unchecked` on its class, so a caller that
-# says "nothing was written" for that state can tell. Raised by `set_filters` and `set_filter` (`_read_back_after`).
+# says "nothing was written" for that state can tell. Raised by `set_filters` and `set_filter` (`_read_back_after`),
+# and by the version commands (`_create_version`, batch 3's re-review O6) when the list read after REW accepted the
+# command fails: REW may have made the measurement, and nothing checked it.
 
 class RewReadBackUnavailable(RewUnavailable):
-    """REW stopped answering between acknowledging a filter write and its read-back. `rew_state` "unavailable"."""
+    """REW stopped answering between acknowledging a write or a command and its check. `rew_state` "unavailable"."""
     rew_unchecked = True
 
     def __str__(self):
@@ -142,13 +144,25 @@ class RewReadBackUnavailable(RewUnavailable):
 
 
 class RewReadBackUnreadable(RewProtocolError):
-    """REW answered a filter write's read-back with something that is no list of slots. `rew_state` "protocol"."""
+    """REW answered the check after a write or a command with something it cannot be read as. `rew_state` "protocol"."""
     rew_unchecked = True
 
 
 class RewReadBackRefused(urllib.error.HTTPError):
-    """REW answered a filter write's read-back with an error, 4xx/5xx. An `HTTPError`, with no `rew_state`."""
+    """REW answered the check after a write or a command with an error, 4xx/5xx. An `HTTPError`, with no `rew_state`."""
     rew_unchecked = True
+
+
+def _unchecked(exc, note, url):
+    """The exception for a request REW acknowledged and whose check failed with `exc` (#134, H 10, O6): `note` its
+    words, the state the check met kept, `rew_unchecked` on its class. `url` is the check's own address."""
+    if isinstance(exc, urllib.error.HTTPError):
+        raised = RewReadBackRefused(url, exc.code, note, exc.hdrs, None)
+        raised.rew_body = exc.__dict__.get("rew_body", "")   # off the instance's own dict: Python 3.9's trap
+        return raised
+    if rew_state(exc) == "unavailable":
+        return RewReadBackUnavailable(note, getattr(exc, "url", None))
+    return RewReadBackUnreadable(note)
 
 
 def rew_state(exc):
@@ -205,8 +219,9 @@ _NOT_IN_AN_ADDRESS = re.compile(r"[\x00-\x20\x7f]")
 @functools.lru_cache(maxsize=16)
 def _address_problem(base):
     """Why `base` is no address a request can go to, or None when it is one (#134, H I-5): it starts with http:// or
-    https://, names a host, and its port, when it has one, is a whole number from 0 to 65535; no space or control
-    character anywhere. Read once for each value: `BASE_URL` is set by callers too (a tool's `--rew`, a test)."""
+    https://, names a host, and its port, when it has one, is a whole number from 0 to 65535 -- quoted as typed when
+    it is not, and a `:` with nothing after it is no port (batch 3's re-review M4); no space or control character
+    anywhere. Read once for each value: `BASE_URL` is set by callers too (a tool's `--rew`, a test)."""
     bad = _NOT_IN_AN_ADDRESS.search(base)
     if bad:
         return f"it holds {bad.group()!r}, a space or a control character"
@@ -220,11 +235,25 @@ def _address_problem(base):
         return f"its scheme is {parts.scheme!r}, not http or https"
     if not parts.hostname:
         return "it names no host"
+    written = _port_as_written(parts.netloc)
     try:
         parts.port
     except ValueError:                           # not a number, or out of 0-65535
-        return f"its port {parts.netloc.rpartition(':')[2]!r} is not a whole number from 0 to 65535"
+        return f"its port {written!r} is not a whole number from 0 to 65535"
+    if written == "":                            # `http://host:` -- read as port 80, a REW down where none was meant
+        return "its port is empty (nothing after the ':')"
     return None
+
+
+def _port_as_written(netloc):
+    """The port of `netloc` as it was typed -- all that follows the host's `:` (after the `]` of an IPv6 host) -- or
+    None when no `:` follows the host (batch 3's re-review M4: `4735:80` was quoted as '80')."""
+    hostport = netloc.rpartition("@")[2]
+    if hostport.startswith("["):
+        rest = hostport.partition("]")[2]
+        return rest[1:] if rest.startswith(":") else None
+    _host, colon, port = hostport.partition(":")
+    return port if colon else None
 
 
 def _check_address():
@@ -889,14 +918,7 @@ def _read_back_after(mid, written, said):
         answer = said.get("message") if isinstance(said, dict) and said.get("message") else said
         note = (f"REW acknowledged the filter write to measurement {mid} ({answer!r}), and reading the filters back "
                 f"failed ({exc}): the write was sent and acknowledged but not checked -- check REW's EQ before going on")
-        if isinstance(exc, urllib.error.HTTPError):
-            raised = RewReadBackRefused(f"{BASE_URL}/measurements/{mid}/filters", exc.code, note, exc.hdrs, None)
-            raised.rew_body = exc.__dict__.get("rew_body", "")   # off the instance's own dict: Python 3.9's trap
-        elif state == "unavailable":
-            raised = RewReadBackUnavailable(note, getattr(exc, "url", None))
-        else:
-            raised = RewReadBackUnreadable(note)
-        raise raised from exc
+        raise _unchecked(exc, note, f"{BASE_URL}/measurements/{mid}/filters") from exc
 
 
 def set_filters(mid, filters):
@@ -1055,6 +1077,12 @@ def _create_version(mid, command, parameters, wait_s):
     which of them is ours is not knowable from the list.
 
     Returns REW's answer (a dict) with `created_id` and `created_title` added.
+
+    A list read that fails once REW has accepted the command -- REW stopped answering, answered with an error, or with
+    something that is no measurement list -- leaves the command sent, acknowledged and unchecked (#134, batch 3's
+    re-review O6): REW may have made the measurement. It read as REW not answering at `/measurements`, as if nothing
+    was sent; it is said as that now, the read's state kept and `rew_unchecked` on the class (`_unchecked`, as a filter
+    write's read-back). The read before the command failing is REW's state as it is: nothing was sent.
     """
     before = get_measurements()
     seen = {_identity(k, m) for k, m in before.items()}
@@ -1062,7 +1090,18 @@ def _create_version(mid, command, parameters, wait_s):
     said = measurement_command(mid, command, parameters)
     deadline = time.monotonic() + wait_s
     while True:
-        new = {k: m for k, m in get_measurements().items() if _identity(k, m) not in seen}
+        try:
+            current = get_measurements()
+        except Exception as exc:  # noqa: BLE001 -- REW's answers are said below, anything else is raised as it is
+            if not (rew_state(exc) in ("unavailable", "protocol") or isinstance(exc, urllib.error.HTTPError)):
+                raise
+            answer = said.get("message") if isinstance(said, dict) and said.get("message") else said
+            note = (f"REW accepted {command!r} on measurement {mid} ({source!r}; it said {answer!r}), and reading its "
+                    f"measurement list afterwards failed ({exc}): the command was sent and acknowledged but not "
+                    f"checked -- REW may have made the new measurement: look at REW's measurement list before going "
+                    f"on")
+            raise _unchecked(exc, note, f"{BASE_URL}/measurements") from exc
+        new = {k: m for k, m in current.items() if _identity(k, m) not in seen}
         if new or time.monotonic() >= deadline:
             break
         time.sleep(_COMMAND_POLL_S)
@@ -1560,6 +1599,79 @@ def _check_read_back_unchecked():
         raise AssertionError("a filter REW does not take was sent")
 
 
+def _check_version_unchecked():
+    """A version command REW accepted, whose list read afterwards fails, says the command was sent and acknowledged
+    but not checked (#134, batch 3's re-review O6, H 10's class): it read as REW not answering at `/measurements`, as
+    if nothing was sent -- while REW, having taken the command, may have made the new measurement. The state is the
+    read's (REW stopped answering: "unavailable"; it answered with an error: an `HTTPError`; with something that is no
+    measurement list: "protocol"), and the class carries `rew_unchecked`, as a filter write's read-back does. The list
+    read BEFORE the command failing is REW's state as it is, nothing sent; a bug after the command is raised as it
+    is."""
+    global get_measurements, measurement_command
+    real_list, real_command = get_measurements, measurement_command
+    listing = {"7": {"title": "m-L_50 (sw)", "uuid": "u7"}}
+    sent = []
+
+    def stopped():
+        raise RewUnavailable(ConnectionRefusedError(61, "Connection refused"), f"{BASE_URL}/measurements")
+
+    def refused():
+        raise urllib.error.HTTPError(f"{BASE_URL}/measurements", 500, "Internal Server Error -- REW said: busy",
+                                     {}, None)
+
+    def unreadable():
+        raise RewProtocolError("REW's measurement list is not a map of measurements: list")
+
+    def bug():
+        raise TypeError("a bug in the poll")
+    failures = []
+    try:
+        measurement_command = lambda mid, command, parameters: (sent.append(command),
+                                                                {"message": f"{command} in progress"})[1]
+        for label, after, state, unchecked in (("stopped", stopped, "unavailable", True),
+                                               ("refused", refused, None, True),
+                                               ("unreadable", unreadable, "protocol", True),
+                                               ("a bug", bug, None, False)):
+            calls = []
+
+            def listing_then(after=after, calls=calls):
+                calls.append(1)
+                if len(calls) == 1:
+                    return {k: dict(m) for k, m in listing.items()}
+                after()
+            get_measurements = listing_then
+            try:
+                excess_phase_version(7, wait_s=0.0)
+            except Exception as e:  # noqa: BLE001 -- what is under test is which state, and what it says
+                said, marked = str(e), getattr(type(e), "rew_unchecked", False)
+                if rew_state(e) != state or marked is not unchecked:
+                    failures.append(f"{label}: state {rew_state(e)!r}, rew_unchecked {marked}, {type(e).__name__}")
+                elif unchecked and not ("REW accepted 'Excess phase version' on measurement 7 ('m-L_50 (sw)'" in said
+                                        and "sent and acknowledged but not checked" in said
+                                        and "look at REW's measurement list before going on" in said):
+                    failures.append(f"{label}: said {said!r}")
+                elif label == "refused" and not (isinstance(e, urllib.error.HTTPError) and e.code == 500
+                                                 and "busy" in said):
+                    failures.append(f"{label}: REW's error and words not kept: {e!r} {said!r}")
+                elif label == "a bug" and not isinstance(e, TypeError):
+                    failures.append(f"a bug: raised as {type(e).__name__}")
+            else:
+                failures.append(f"{label}: returned")
+        # The list read before the command: nothing was sent -- raised as it is, no mark.
+        sent.clear()
+        get_measurements = stopped
+        try:
+            excess_phase_version(7, wait_s=0.0)
+        except OSError as e:
+            if getattr(type(e), "rew_unchecked", False) or sent or rew_state(e) != "unavailable":
+                failures.append(f"before the command: {type(e).__name__}, sent {sent}")
+        else:
+            failures.append("before the command: returned")
+    finally:
+        get_measurements, measurement_command = real_list, real_command
+    assert not failures, "\n  ".join(["a version command's check:"] + failures)
+
+
 def _check_silence_and_hangup():
     """No answer is REW unavailable, however it fails to come (#134, T-2): a port that takes the connection and
     never answers (the read times out: `socket.timeout` on Python 3.9, `TimeoutError` from 3.10), and one that hangs
@@ -1622,6 +1734,11 @@ def _check_malformed_address():
                           ("http://127.0.0.1:99999", "its port '99999' is not a whole number from 0 to 65535"),
                           ("http://127.0.0.1:65536", "its port '65536'"),
                           ("http://127.0.0.1:abc", "its port 'abc'"),
+                          # The port as written, not the last field of the address (batch 3's re-review M4): '80' was
+                          # quoted for `4735:80`; and a port left empty is none, never port 80 by default.
+                          ("http://127.0.0.1:4735:80", "its port '4735:80' is not a whole number from 0 to 65535"),
+                          ("http://127.0.0.1:", "its port is empty (nothing after the ':')"),
+                          ("http://[::1]:", "its port is empty (nothing after the ':')"),
                           ("http://rew host:4735", "a space")):
             for from_env in (True, False):
                 os.environ["REW_API_URL"] = base if from_env else "http://127.0.0.1:1"
@@ -1819,7 +1936,8 @@ def _selftest():
                   _check_filter_keys_refused, _check_read_back, _check_foreign_keys_every_writer,
                   _check_read_back_cases, _check_read_back_unchecked, _check_silence_and_hangup, _check_title_states,
                   _check_listing_entries_and_empty_bodies, _check_rew_state_reads_any_http_error,
-                  _check_http_level_broken_answers, _check_malformed_address, _check_recorded_answers):
+                  _check_http_level_broken_answers, _check_malformed_address, _check_recorded_answers,
+                  _check_version_unchecked):
         try:
             check()
         except AssertionError as exc:

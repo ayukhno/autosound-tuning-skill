@@ -264,16 +264,11 @@ def gain_grid_advisories(project_dir, current, proposed):
     at 0.1 dB handed to a machine set to 1.00 is rounded by whoever types it, and what they typed is never recorded.
     With the project's `channel_gain.step_db` known, a trim off it is named; with it unknown, a trim with decimals
     is named with the question to ask. Advice, not a refusal: the number is right, the machine may simply be set
-    coarser, and that is the tuner's switch."""
-    path = os.path.join(project_dir or "", "dsp_profile.json")
-    try:
-        with open(path, encoding="utf-8") as fh:
-            prof = json.load(fh)
-    except (OSError, ValueError):
-        return []
-    prof = prof.get("dsp_profile", prof) if isinstance(prof, dict) else {}
-    gain = prof.get("channel_gain") or {}
-    step = gain.get("step_db")
+    coarser, and that is the tuner's switch.
+
+    The profile is read through `load_profile` (#134, H 16): one that is there and cannot be read, or that a newer
+    method wrote, is said -- the file, its repair, and that the step is not checked against the trims that moved. It
+    was read as absent, and said nothing over a profile that may record a 1.00 dB step. No profile is no advisory."""
     moved = []
     for tier in _state.tier_names(proposed):
         for ch, row in (proposed.get(tier) or {}).items():
@@ -283,6 +278,19 @@ def gain_grid_advisories(project_dir, current, proposed):
                 moved.append((ch, float(g)))
     if not moved:
         return []
+    dsp_profile = _state._siblings().load("dsp_profile.py")
+    path = os.path.join(project_dir or "", "dsp_profile.json")
+    try:
+        prof = dsp_profile._unwrap(dsp_profile.load_profile(path))
+    except FileNotFoundError:
+        return []
+    except Exception as exc:  # noqa: BLE001 -- matched by its attribute; anything else still raises
+        if not getattr(type(exc), "is_unreadable", False):
+            raise
+        return [f"{exc}; so the machine's gain step is not checked against "
+                + ", ".join(f"{ch} {g:+g}" for ch, g in moved) + " (#52)"]
+    gain = (prof.get("channel_gain") if isinstance(prof, dict) else None) or {}
+    step = gain.get("step_db")
     if step:
         off = [(ch, g) for ch, g in moved if abs(g / step - round(g / step)) > 1e-6]
         if off:
@@ -579,10 +587,38 @@ def _check_cli_refuses_unreadable():
         shutil.rmtree(top, ignore_errors=True)
 
 
+def _check_gain_grid_says_an_unreadable_profile():
+    """`gain_grid_advisories` reads the profile through `load_profile` (#134, H 16): one that is there and cannot be
+    read, or that a newer method wrote, is said -- one advisory naming the file, its repair, and that the machine's
+    gain step is not checked against the trims that moved. It was read as absent and gave no advisory at all, over
+    a profile that may record a 1.00 dB step. No profile, and no trim moved, are still no advisory."""
+    import shutil
+    import tempfile
+    d = tempfile.mkdtemp(prefix="autosound_gaingrid_unreadable_")
+    try:
+        path = os.path.join(d, "dsp_profile.json")
+        base, moved = {"channels": {"w-L": {"gain_db": -7.0}}}, {"channels": {"w-L": {"gain_db": -1.2}}}
+        newer = _state._siblings().load("dsp_profile.py").SCHEMA_VERSION + 1
+        for label, raw, said in (
+                ("cut off", b'{"dsp_profile": {"channel_gain": {"step_db": 1.0, "ste', "checkout HEAD -- dsp_profile.json"),
+                ("a newer method's", json.dumps({"schema_version": newer, "dsp_profile": {
+                    "channel_gain": {"step_db": 1.0}}}).encode("utf-8"), f"is schema v{newer}")):
+            with open(path, "wb") as fh:
+                fh.write(raw)
+            got = gain_grid_advisories(d, base, moved)
+            assert len(got) == 1 and got[0].startswith(f"{path} ") and said in got[0] \
+                and "gain step is not checked" in got[0] and "w-L -1.2" in got[0], (label, got)
+            assert gain_grid_advisories(d, base, base) == [], (label, "no trim moved: nothing to check")
+        os.remove(path)
+        assert gain_grid_advisories(d, base, moved) == [], "no profile is still no advisory"
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+
+
 def _selftest():
     import tempfile
     failures = []
-    for check in (_check_cli_refuses_unreadable,):
+    for check in (_check_cli_refuses_unreadable, _check_gain_grid_says_an_unreadable_profile):
         try:
             check()
         except AssertionError as exc:

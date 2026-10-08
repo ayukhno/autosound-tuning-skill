@@ -117,6 +117,19 @@ def _fs(fs):
     return float(fs) if fs is not None else _RATE["hz"]
 
 
+class Unmodelled(Exception):
+    """A filter family this module has no realisation for (#134, R49, R52): `CH` (Chebyshev), or any type outside
+    `MODELLABLE_FAMILIES`, in any spelling but theirs.
+
+    `_design` built a Butterworth for every type that was not BE, so a Chebyshev came back as a BW of its order and
+    nobody was told -- a de-embedding then took a BW out of a sweep that had a CH in it. The method has no Chebyshev
+    verified on a DSP (its ripple is unidentified, `MODELLABLE_FAMILIES`' note), and it never puts another family in
+    its place. Neither a `ValueError` nor an `OSError`, so no `except` written for those reads it as something else;
+    match it by `is_unmodelled` on its class -- a copy of this module loaded under another name has a class of its own.
+    """
+    is_unmodelled = True
+
+
 def _scipy_signal():
     try:
         from scipy import signal
@@ -138,7 +151,13 @@ def _design(order_db_per_oct, wn, btype, ftype):
     63 Hz by -28.0, BE36 at 40 Hz by +13.2. That band is where a sub/midbass joint lives and steep
     slopes are exactly what gets chosen there, so the worst errors sat on the most-used settings.
     Cascaded second-order sections are conditioned per section and give 0.000 dB across the whole
-    grid. Found 2026-08-22 (see the selftest's corner anchor, which is what would have caught it)."""
+    grid. Found 2026-08-22 (see the selftest's corner anchor, which is what would have caught it).
+
+    A type it has no realisation for raises `Unmodelled` (#134, R49): it built a Butterworth for anything that was not
+    BE, a Chebyshev included."""
+    if ftype not in ("BW", "BE"):
+        raise Unmodelled(f"dsp_math has no model for a {ftype!r} filter: it models {', '.join(MODELLABLE_FAMILIES)} "
+                         f"-- never another family in its place")
     sig = _scipy_signal()
     n = max(1, round(order_db_per_oct / 6))
     if ftype == "BE":
@@ -155,7 +174,8 @@ def _design(order_db_per_oct, wn, btype, ftype):
 
 
 def xo_response(freqs_hz, corner_hz, order_db_per_oct, kind, ftype, fs=None):
-    """Complex response of one HPF/LPF slot. kind: 'hp'|'lp'. ftype: 'BW'|'BE'|'LR'.
+    """Complex response of one HPF/LPF slot. kind: 'hp'|'lp'. ftype: 'BW'|'BE'|'LR', as spelled; any other type
+    raises `Unmodelled` (#134, R49) -- a Chebyshev was built as a Butterworth.
 
     `fs` is the DSP's PROCESSING rate; omitted, the session's bound rate is used
     (`processing_rate()`). scipy designs digitally — `warped = 2*fs*tan(pi*Wn/fs)` then the
@@ -1024,6 +1044,39 @@ def bench_residual(f, measured, model, band, mask_db):
 
 # ---------- selftest ----------
 
+def _check_unmodelled_family_refused():
+    """A crossover family this module has no realisation for is refused, never built as another (#134, R49, R52).
+
+    `_design` built a Butterworth for any type that was not BE, so a recorded Chebyshev (`CH`) leg came back as a BW
+    of the same order without a word, and a de-embedding took a BW out of a sweep that had a CH in it. Now `CH`,
+    `CHEBYSHEV`, an empty type and a family in another letter case raise `Unmodelled` (`is_unmodelled` on its class),
+    naming the type and the families modelled. LR, BW and BE are untouched: the same bytes as the realisation built
+    directly."""
+    freqs = np.geomspace(20.0, 20000.0, 64)
+    for ftype in ("CH", "CHEBYSHEV", "", "bw", "Linkwitz"):
+        try:
+            xo_response(freqs, 100.0, 24, "hp", ftype)
+        except Exception as exc:  # noqa: BLE001 -- the kind is what is under test
+            assert getattr(type(exc), "is_unmodelled", False), (ftype, repr(exc))
+            assert repr(ftype) in str(exc) and "LR, BW, BE" in str(exc), (ftype, str(exc))
+        else:
+            raise AssertionError(f"{ftype!r} was modelled as another family")
+    sig = _scipy_signal()
+    w = 2 * np.pi * freqs / _fs(None)
+    for kind, btype in (("hp", "highpass"), ("lp", "lowpass")):
+        wn = min(max(100.0 / (_fs(None) / 2.0), 1e-4), 0.999)
+        for order in XO_BW_ORDERS:
+            n = max(1, round(order / 6))
+            bw = sig.sosfreqz(sig.butter(n, wn, btype=btype, output="sos"), worN=w)[1]
+            be = sig.sosfreqz(sig.bessel(n, wn, btype=btype, norm="mag", output="sos"), worN=w)[1]
+            assert np.array_equal(xo_response(freqs, 100.0, order, kind, "BW"), bw), (kind, order, "BW")
+            assert np.array_equal(xo_response(freqs, 100.0, order, kind, "BE"), be), (kind, order, "BE")
+            if order % 12 == 0:
+                half = max(1, round(max(6, order // 2) / 6))
+                lr = sig.sosfreqz(sig.butter(half, wn, btype=btype, output="sos"), worN=w)[1]
+                assert np.array_equal(xo_response(freqs, 100.0, order, kind, "LR"), lr * lr), (kind, order, "LR")
+
+
 def _selftest():
     """The all-pass functions against the physics, and `eq_complex` against its own kinds.
 
@@ -1031,6 +1084,7 @@ def _selftest():
     run: a selftest that agrees with the implementation instead of checking it would have passed
     on the day `eq_complex` rendered an APF as a high shelf.
     """
+    _check_unmodelled_family_refused()
     # ---- sum loss: anchored to the DEFINITION, never to a stored number ---------------------
     fs_ = np.geomspace(20.0, 20000.0, 3000)
     band = (100.0, 1000.0)

@@ -780,6 +780,8 @@ def _joints_verdict(rows, unread):
     blocked = [r for r in rows if r.get("verdict") == "blocked"]
     nopair = [r for r in rows if r.get("verdict") is None]
     check = [r for r in rows if r.get("verdict") == "check protective"]
+    # A protective leg the method has no model for -- a Chebyshev (#134, R52): the joint is held back, never read.
+    unmodelled = [r for r in rows if r.get("verdict") == "protective not modelled"]
     unver = [r for r in rows if r.get("delay_ms") is not None and not r.get("bankable")]
     total = len(rows) + len(unread)
 
@@ -792,6 +794,7 @@ def _joints_verdict(rows, unread):
 
     held_back = ", ".join(f"{len(g)} {label}" for g, label in (
         (blocked, "BLOCK"), (nopair, "no pair"), (check, "CHECK protective"),
+        (unmodelled, "protective not modelled"),
         (unver, "read without a pair (--no-pair)"), (unread, "solo not read")) if g)
     if not total:
         head = "NOTHING TO ENTER -- no joint given"
@@ -836,6 +839,10 @@ def _joints_verdict(rows, unread):
     if check:
         numbers.append(f"CHECK at {names(check)}: {chans} unmarked on a baseline round -- its "
                        f"protective filter is unknown, so no number")
+    unmodelled_chans = ", ".join(sorted({r["channel"] for r in unmodelled}))
+    if unmodelled:
+        numbers.append(f"NOT MODELLED at {names(unmodelled)}: {unmodelled_chans} swept through a protective filter "
+                       f"the method has no model for (a Chebyshev) -- it cannot be taken out, so no number")
     if unver:
         numbers.append(f"read without a pair at {names(unver)}: the delay on its row is NOT BANKABLE")
     if unread:
@@ -858,6 +865,9 @@ def _joints_verdict(rows, unread):
         steps.append(f"flip polarity at {names(blocked)} and re-measure the pair")
     if check:
         steps.append(f"mark {chans} on the capture round (`capture-protective`) and re-run")
+    if unmodelled:
+        steps.append(f"set LR, BW or BE as the protective on {unmodelled_chans} on the DSP and sweep again, or sweep "
+                     f"with the protective filter OFF where the driver is safe without it")
     if unread:
         steps.append(f"fix the solo at {names(unread)} ({say(unread)} why)")
     return head, numbers, "; ".join(steps) or None
@@ -1091,16 +1101,25 @@ def _joint_table(joint_specs, ver, band_oct, candidates, protective_record, base
                          f"`{found['code']}`), attached")
         elif found:
             notes.append(f"read WITHOUT a pair (--no-pair): {found['why']}")
+        unmodelled = None
         for ch, side in ((lo, "lo"), (hi, "hi")):
             action, detail = _protective_verdict(protective_record, ch, baseline)
             if action == "check":
                 refused = (ch, detail)
                 break
             if action == "yes":
-                if side == "lo":
-                    mA, pA, info = _de_embed_trace(fA, mA, pA, detail)
-                else:
-                    mB, pB, info = _de_embed_trace(fA, mB, pB, detail)
+                try:
+                    if side == "lo":
+                        mA, pA, info = _de_embed_trace(fA, mA, pA, detail)
+                    else:
+                        mB, pB, info = _de_embed_trace(fA, mB, pB, detail)
+                except Exception as exc:  # noqa: BLE001 -- matched by its attribute; anything else still raises
+                    # A leg the method has no model for -- a Chebyshev, recorded as typed (#134, R49, R52): the joint
+                    # is held back with the leg and the way on. It was taken out as a Butterworth.
+                    if not getattr(type(exc), "is_unmodelled", False):
+                        raise
+                    unmodelled = (ch, str(exc))
+                    break
                 cap = ""
                 if info.get("capped_below_hz"):
                     cap = f"; phase NOT recovered below {info['capped_below_hz']:.0f} Hz"
@@ -1114,6 +1133,14 @@ def _joint_table(joint_specs, ver, band_oct, candidates, protective_record, base
             rows.append({"joint": jl, "fc": fc, "trust": None, "polarity": None,
                          "delay_ms": None, "verdict": "check protective",
                          "channel": ch, "ask": why, "window": read["window"]})
+            continue
+        if unmodelled:
+            ch, why = unmodelled
+            print(f"  {jl:<15}{fc:>6.0f}{band_s:>12}{'PROTECTIVE ✗':>12}"
+                  f"{'?':>5}{'—':>9}{'—':>7}{'—':>10}  NOT MODELLED: {ch} — {why}")
+            rows.append({"joint": jl, "fc": fc, "trust": None, "polarity": None,
+                         "delay_ms": None, "verdict": "protective not modelled",
+                         "channel": ch, "reason": why, "window": read["window"]})
             continue
         for note in notes:
             print(f"  {'':<15}  ↳ {note}")
@@ -1685,6 +1712,23 @@ def _selftest():
                                 no_pair=True)
         assert rows_c[0]["verdict"] == "check protective" and rows_c[0]["delay_ms"] is None, rows_c
         assert rows_c[0]["channel"] == "w-L", "the first unmarked channel is the one asked about"
+        # A leg the method has no model for -- a Chebyshev, recorded as typed (#134, R49, R52) -- holds the joint
+        # back, never "de-embedded": it was taken out as a Butterworth and the joint got a delay read through the rest.
+        rec_ch = dict(rec_raw, channels={"m-L": {"hp": {"f": 100, "type": "CH", "slope": 24}, "lp": "OFF"},
+                                         "w-L": "OFF"})
+        said_ch = io.StringIO()
+        with contextlib.redirect_stdout(said_ch):
+            rows_ch = analyze_joints([("w-L", "m-L", 400.0, None)], ver="1", protective_record=rec_ch,
+                                     no_pair=True)
+        r_ch = rows_ch[0]
+        assert r_ch["verdict"] == "protective not modelled" and r_ch["delay_ms"] is None and r_ch["polarity"] is None \
+            and r_ch["channel"] == "m-L" and "HP 100 Hz CH24" in r_ch["reason"] \
+            and "LR, BW or BE" in r_ch["reason"], rows_ch
+        assert "de-embedded" not in said_ch.getvalue() and "NOT MODELLED: m-L" in said_ch.getvalue(), \
+            said_ch.getvalue()[-600:]
+        head_ch, numbers_ch, step_ch = _joints_verdict(rows_ch, [])
+        assert "1 protective not modelled" in head_ch and any("NOT MODELLED at" in n for n in numbers_ch) \
+            and "LR, BW or BE" in (step_ch or ""), (head_ch, numbers_ch, step_ch)
         # ...and an unmarked NON-baseline solo is a working capture: left alone, computed.
         jmeas["10"], jmeas["11"] = {"title": "w-L_2 (sw)"}, {"title": "m-L_2 (sw)"}
         rows_w = analyze_joints([("w-L", "m-L", 400.0, None)], ver="2", protective_record=None,

@@ -213,6 +213,14 @@ class RewUnavailableError(ProcessError):
     rew_state = "unavailable"
 
 
+class _StateWithoutItsEvent(ProcessError):
+    """The state is written in this run, and its journal line is not (#134, F M-7): the refusal says what landed and
+    the line to append. `state_written` on the class, so a caller that goes on past a failure -- `capture-close`'s
+    checks -- tells it from one that wrote nothing, and refuses with it (batch 3's re-review O3): swallowed, it was
+    cut to 160 characters, the line to append lost, and the round closed."""
+    state_written = True
+
+
 # Phase 0 selects the target curve and every later phase is measured against it, so leaving 0
 # without one means the whole EQ stage has no reference. Watched happening: the Arbiter named a
 # curve out loud, the model repeated it back and wrote it into a free-text profile field, and
@@ -437,9 +445,11 @@ def _require_intake(phase, previous, project_dir):
     Computed by the same code `contract.py check --gate` runs (`check_project`) — two
     implementations of "is intake finished" would eventually disagree, and the one nobody runs
     would be the one that says yes. Not yet the same ANSWER: this gate refuses on `missing` alone,
-    while `--gate` also wants nothing there invalid (`complete`), so a `dsp_profile.json` that is
-    there and cannot be read, or that a newer method wrote, passes here and is NOT READY there.
-    Gating on `complete`, with a parity test, is J3b (W-11).
+    and on a `project.json` that is there and cannot be read (the report's `unreadable`, #134, F M-5:
+    named first, with its repair -- the glossary inside it read as "not produced"), while `--gate`
+    also wants nothing there invalid (`complete`), so a `dsp_profile.json` that is there and cannot
+    be read, or that a newer method wrote, passes here and is NOT READY there. Gating on
+    `complete`, with a parity test, is J3b (W-11).
 
     A check that cannot run refuses the phase (#136, audit T-10). It used to pass it -- "cannot check is not the same
     as failed", "a checker that raises must not become a wall" -- and so a gate that could not check let the phase
@@ -466,6 +476,10 @@ def _require_intake(phase, previous, project_dir):
             raise
         raise ProcessError(f"phase {phase} is not entered: the intake check raised {type(exc).__name__}: {exc}") \
             from exc
+    # A `project.json` that is there and cannot be read refuses as itself, with its repair (#134, F M-5): the glossary
+    # it carries read as "not produced", and the person was sent to redo an intake that is done.
+    for entry in report.get("unreadable") or []:
+        raise ProcessError(f"phase {phase} is not entered: {entry['issue']}")
     missing = report.get("missing") or []
     if not missing:
         return
@@ -1233,7 +1247,8 @@ class Process:
             repair += "; then rewrite the rest as UTF-8: " + io_.reencode_line(self.project_dir).split(": ", 1)[1]
         return io_.Unreadable(
             self.journal_path, f"has {len(numbers)} line(s) not in UTF-8: line {shown(numbers)} -- no code page makes "
-                               f"JSON of line {shown(nowhere)} (a write cut off, another glued on)", repair)
+                               f"JSON of line {shown(nowhere)} (a write cut off in it, perhaps with the next "
+                               f"glued on)", repair)
 
     def _require_journal(self):
         """Before a state write, what would keep its event from following it (F M-7): a journal that cannot be read
@@ -1669,7 +1684,8 @@ class Process:
         state, round_ = self._require_capture()
         naming = _load_naming()
         if naming is None:
-            raise ProcessError("naming.py could not be loaded -- the round cannot be read against REW")
+            raise ProcessError(f"naming.py could not be loaded{_load_failure('naming.py')} -- the round cannot be read "
+                               "against REW")
         glossary = naming.Glossary.for_project(self.project_dir)
         expected = [str(x) for x in round_.get("expected") or []]
         verdict = naming.validate_series([str(t) for t in rew_titles], expected, glossary)
@@ -1794,7 +1810,8 @@ class Process:
         number = _series_number(series)
         _naming = _load_naming()
         if _naming is None:
-            raise ProcessError("the title grammar (naming.py) cannot be loaded -- nothing was imported")
+            raise ProcessError(f"the title grammar (naming.py) cannot be loaded{_load_failure('naming.py')} -- nothing "
+                               "was imported")
         if not isinstance(knobs, dict) or not knobs:
             raise ProcessError("capture-import needs the knobs as they stood (NAME=POS): two series cannot be "
                                "compared on the assumption that nobody touched anything")
@@ -2056,7 +2073,9 @@ class Process:
         for r in self.capture_rounds():
             if key(r["version"]) == version or any(key(v) == version for v in r.get("title_versions") or []):
                 found = r.get("under") or found
-        live = self.load().get("capture") or {}
+        # The live round is read strictly (#134, batch 2's re-review, Out of Scope 3): a state that cannot be read was
+        # an empty one, and predict then read a series taken under a version "as it is" -- the chain applied twice.
+        live = (self._read_state() or {}).get("capture") or {}
         if key(live.get("version")) == version and live.get("under"):
             found = live["under"]
         return found
@@ -2086,7 +2105,7 @@ class Process:
         for cid in reversed(order):
             if rounds[cid]["knobs"]:
                 return rounds[cid]
-        live = (self.load().get("capture") or {})
+        live = (self._read_state() or {}).get("capture") or {}      # strictly, as `under_for` (Out of Scope 3)
         if live.get("knobs") and key(live.get("version")) == version:
             return {"series": live["id"], "phase": live.get("phase"),
                     "version": str(live.get("version")), "knobs": dict(live["knobs"])}
@@ -2208,7 +2227,10 @@ class Process:
                 if event.get("amends"):
                     rounds[cid]["amended"][channel] = event.get("reason") or ""
         if not order:
-            live = self.protective_record()
+            # The open round, read strictly (Out of Scope 3): read as empty, a state that cannot be read was "no round",
+            # and a solo was read as configured. `protective_record()` itself stays a screen's lenient read.
+            state = self._read_state()
+            live = self.protective_record(state) if state else None
             return live if live and key(live.get("version")) == version else None
         return rounds[order[-1]]
 
@@ -2943,7 +2965,7 @@ class Process:
         if getattr(self, "_unjournaled", False):
             event = {"at": _now(), "type": event_type}
             event.update({k: v for k, v in payload.items() if v is not None})
-            return ProcessError(
+            return _StateWithoutItsEvent(
                 f"{self.state_path} is written, but its journal line is not: {why}. The state holds this change and "
                 f"the journal has no `{event_type}` event for it, and nothing replays it: once the journal can be "
                 f"written, append this line to {self.journal_path}: {json.dumps(event, ensure_ascii=False)}")
@@ -2961,7 +2983,8 @@ _USAGE = """usage: process.py <process-dir> <command> [args]
        A command takes the flags written beside it, as `--flag value` or `--flag=value`, the value as it
        stands (never another of its flags, -h or --help); any other flag, a flag with no value after it, one
        of its flags with the two hyphens autocorrected to a dash (`—origin`) and fewer arguments than its
-       line names are a usage error (exit 2), never a title or a reason. Text that only begins with `--` and
+       line names are a usage error (exit 2), never a title or a reason -- but `skip <id>` with neither a
+       reason nor --superseded-by, which `skip` refuses itself (exit 1). Text that only begins with `--` and
        holds a space (`--bass hums`, `--bass=45 Hz`) is a word, unless the name before its `=` is a flag of
        the command (`--invalidates=w-L_1 (sw)`).
 
@@ -3300,6 +3323,9 @@ def _args_counted(cmd, args):
 #: Chebyshev. The selftest holds this to the modellable families and CH, so a family `dsp_math` comes to model is a
 #: type a leg can carry.
 _LEG_TYPES = ("LR", "BW", "BE", "CH")
+#: Those the de-embedding can take back out: every leg type but the Chebyshev, which `protective.de_embed` refuses
+#: (#134, R49, R52) -- the method never takes another family out in its place.
+_MODELLED_LEG_TYPES = tuple(t for t in _LEG_TYPES if t != "CH")
 
 
 def _leg(kind, values):
@@ -3380,6 +3406,38 @@ def _seed_intake(root):
         "channels": {"w-L": {"hp": None, "lp": None, "gain_db": 0.0, "ta_ms": 0.0,
                              "polarity": "NORM"}},
     }, note="fixture intake")
+
+
+def _check_intake_gate_names_an_unreadable_project_json():
+    """Leaving phase −1 over a `project.json` that is there and cannot be read is refused naming that file and its
+    repair (#134, F M-5): the gate said "intake has not produced glossary.json (or project.json.glossary)" -- the
+    glossary inside the file it could not read -- and sent the person to finish an intake already done. Refused before
+    anything is written; a `project.json` that reads still passes."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_intake_cut_project_")
+    try:
+        root = os.path.join(top, "p")
+        os.makedirs(root)
+        _seed_intake(root)
+        p = Process(os.path.join(root, "process"))
+        p.enter_phase("-1")
+        path = os.path.join(root, "project.json")
+        with open(path, "rb") as f:
+            whole = f.read()
+        with open(path, "wb") as f:
+            f.write(whole[: len(whole) // 2])
+        rc, said, kept = _gate_run(p.dir, ["enter-phase", "0"])
+        last = (said.strip().splitlines() or [""])[-1]
+        assert rc == 1 and kept and p.load()["active_phase"] == "-1", (rc, kept, last)
+        assert last.startswith(f"error: phase 0 is not entered: {path} exists and cannot be read") \
+            and "glossary" not in last, last
+        with open(path, "wb") as f:
+            f.write(whole)
+        rc, said, _kept = _gate_run(p.dir, ["enter-phase", "0"])
+        assert rc == 0 and p.load()["active_phase"] == "0", (rc, said[-300:])
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
 
 
 def _check_one_naming():
@@ -4740,6 +4798,23 @@ def _check_typed_values_refused():
                                "lp": {"f": 4000.0, "type": "CH", "slope": 36}}:
             failures.append(f"capture-protective m-L --hp 80 be 12 --lp 4000 ch 36: rc {rc}, recorded {legs}, "
                             f"said {err.strip()!r}")
+        # Recorded, and said for what it is (#134, R49, R52): a Chebyshev cannot be taken back out -- the method has no
+        # model for it -- so its sweeps are not "de-embedded before any phase decision", as the line said. The way on
+        # is the person's, on the DSP. A leg the method models keeps the old line.
+        if "de-embedded before any phase decision" in out or "LP 4000 CH36" not in out \
+                or "cannot be de-embedded" not in out or "LR, BW or BE" not in out:
+            failures.append(f"capture-protective m-L ... --lp 4000 ch 36 said {out.strip()!r}")
+        rc, out, err = _run_main(["process.py", d, "capture-protective", "m-L", "--hp", "80", "lr", "24"])
+        if rc != 0 or "de-embedded before any phase decision" not in out or "cannot be de-embedded" in out:
+            failures.append(f"capture-protective m-L --hp 80 lr 24: rc {rc}, said {out.strip()!r} {err.strip()!r}")
+        # An amendment to a Chebyshev says the same (a closed round's record, corrected).
+        round_id = p.protective_record()["id"]
+        _run_main(["process.py", d, "capture-close", "--no-rew"])
+        rc, out, err = _run_main(["process.py", d, "capture-protective", "--amend", round_id, "--reason",
+                                  "it was a Chebyshev", "m-L", "--hp", "80", "CH", "24"])
+        if rc != 0 or "corrected to HP 80 CH24" not in out or "cannot be de-embedded" not in out:
+            failures.append(f"capture-protective --amend ... m-L --hp 80 CH 24: rc {rc}, said {out.strip()!r} "
+                            f"{err.strip()!r}")
         # The leg types are dsp_math's modellable families and the Chebyshev, nothing else: a family `dsp_math` comes
         # to model is a type a leg can carry. Read off `dsp_math.py`'s text, not imported: it needs numpy, and this
         # module's checks do not.
@@ -5137,7 +5212,8 @@ def _check_unknown_flags():
 def _check_flag_values_as_they_stand():
     """R35, R37 (#134): the word after a flag that takes a value is that value, whatever it looks like -- as after
     `=` -- unless, in either form, it is one of the verb's own flags: then the value is missing, exit 2. A flag is
-    `--`, an ASCII letter and no whitespace before any `=`, so text that only begins with two dashes is a word. TCC
+    `--`, an ASCII letter and no whitespace -- after an `=`, whitespace is the value's only when the name before it is
+    one of the verb's own flags (M-b) -- so text that only begins with two dashes, or holds a space, is a word. TCC
     sends the Arbiter's own words both ways: after `--text` and `--note` (listening_dialog), after `--reason`
     (protective_dialog, an amendment), and as arguments -- `decision`'s question and answer, the reasons of
     `capture-skip`, `block`, `capture-close`. Each was refused as a flag the verb does not take; `--text "--бас гуде"`
@@ -5922,6 +5998,206 @@ def _check_close_swallows_only_rew():
         shutil.rmtree(top, ignore_errors=True)
 
 
+def _check_round_lookups_read_the_state_strictly():
+    """The round lookups the method's readers call read the live round strictly (#134, batch 2's re-review, Out of
+    Scope 3): `under_for` (predict's default `--from-state`), `knobs_for` (the knobs when no journal round carries
+    them) and `protective_record_for` (the open round, when the journal holds none) read `process-state.json`
+    leniently behind their strict journal reads -- a state that cannot be read was an empty one, so predict read the
+    solos "as they are" over a round taken under a ledger version (the chain applied twice, #57 P0). Each raises the
+    read's `Unreadable` now. `protective_record()` -- TCC's, for a screen, and contract 1's -- stays lenient."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_process_lookups_")
+    failures = []
+    try:
+        _seed_intake(top)                                  # a banked v_001 for the round to be taken under
+        d = os.path.join(top, "process")
+        p = Process(d)
+        p.enter_phase("-1")
+        p.start_capture("1", expected=["w-L_1 (sw)"], under="v_001")
+        p.set_knobs({"SubRC": "4/4"})
+        assert p.under_for("1") == "v_001" and (p.knobs_for("1") or {}).get("knobs") == {"SubRC": "4/4"}, "fixture"
+        with open(p.journal_path, "wb"):                   # no round in the journal: the live round is the answer
+            pass
+        assert p.protective_record_for("1") is not None and (p.knobs_for("1") or {}).get("knobs"), "fixture"
+        with open(p.state_path, "rb") as f:
+            whole = f.read()
+        with open(p.state_path, "wb") as f:
+            f.write(whole[: len(whole) // 2])
+        for name, call in (("under_for", lambda: p.under_for("1")), ("knobs_for", lambda: p.knobs_for("1")),
+                           ("protective_record_for", lambda: p.protective_record_for("1"))):
+            try:
+                got = call()
+            except Exception as exc:  # noqa: BLE001 -- the kind is what is under test
+                if not (getattr(type(exc), "is_unreadable", False) and str(exc).startswith(p.state_path + " ")):
+                    failures.append(f"{name} raised {type(exc).__name__}: {exc}")
+            else:
+                failures.append(f"{name} read a state it could not read as {got!r}")
+        assert p.protective_record() is None, "protective_record() is a screen's read: lenient, as contract 1 says"
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["a round lookup read the state leniently:"] + failures)
+
+
+def _check_naming_load_error_named():
+    """Every refusal over a `naming.py` that cannot be loaded names why (#134, batch 1's re-review m4): its type and
+    message -- a syntax error in it, numpy missing. `capture-import <N>` with no titles said it; the same import with
+    titles, and capture-close's read against REW, said only "cannot be loaded"."""
+    import shutil
+    import tempfile
+    global _load_naming
+    real_naming = _load_naming
+    top = tempfile.mkdtemp(prefix="autosound_process_naming_error_")
+    failure = SyntaxError("invalid syntax (naming.py, line 3)")
+    failures = []
+    try:
+        d = os.path.join(top, "process")
+        p = Process(d)
+        p.enter_phase("-1")
+        p.start_capture("1", expected=["m-L_1 (sw)"])
+
+        def broken():
+            _LOAD_FAILURES["naming.py"] = failure
+            return None
+        _load_naming = broken
+        named = "(SyntaxError: invalid syntax (naming.py, line 3))"
+        for label, call in (("capture-import with titles", lambda: p.capture_import("1", ["m-L_1 (sw)"], {"": None},
+                                                                                     {"SubRC": "4/4"})),
+                            ("the read against REW", lambda: p.reconcile_captures(["m-L_1 (sw)"]))):
+            try:
+                call()
+            except ProcessError as exc:
+                if named not in str(exc):
+                    failures.append(f"{label}: {exc}")
+            else:
+                failures.append(f"{label}: went through")
+    finally:
+        _load_naming = real_naming
+        _LOAD_FAILURES.pop("naming.py", None)
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["a naming.py that cannot be loaded, said without why:"] + failures)
+
+
+def _check_close_checks_stage_refusals():
+    """capture-close's checks run after its read against REW, in an `except` that lets the close go on: REW stopping
+    before them, or a bug in them, is said with its type and the round closes unchecked, exit 0 (as built). Two
+    things there are not bugs, and are the verb's refusal now (#134, batch 3's re-review O3): exit 1, said whole, the
+    round open. The state held at that stage -- the line said "the round closes on the record, unchecked" and the
+    close went on over a read it could not make (or refused at the next one); and the checks' journal line refused
+    after their state write landed -- "is written, but its journal line is not", cut to 160 characters with its line
+    to append lost, and the round closed. And a `rew_api.py` that cannot be loaded refuses the close before anything
+    is read or written, naming why and `--no-rew` (M1): it closed the round unchecked under "not read against REW"."""
+    import shutil
+    import tempfile
+    global _load_sibling
+    rew_api = _siblings().load("rew_api.py")
+    real_list, real_verifier, real_check = rew_api.get_measurements, Process._load_verifier, Process.check_captures
+    real_event, real_load = Process._append_event, _load_sibling
+    top = tempfile.mkdtemp(prefix="autosound_process_close_checks_")
+
+    class Verifier:
+        def verify(self, titles):
+            return [{"name": t, "exists": True, "reachable": True, "valid": True, "issues": [], "stats": {}}
+                    for t in titles]
+
+    class Buggy:
+        def verify(self, titles):
+            raise TypeError("a bug in the verifier")
+
+    def fresh():
+        d = os.path.join(tempfile.mkdtemp(dir=top), "process")
+        Process(d).enter_phase("-1")
+        Process(d).start_capture("1", expected=["m-L_1 (sw)"])
+        return d
+
+    def held_during_checks(self, *args, **kwargs):
+        def refused():
+            raise _project_io().Unreadable(self.state_path, "cannot be opened (held by another writer)",
+                                           "close what holds it and run again")
+        self._read_state = refused
+        try:
+            return real_check(self, *args, **kwargs)
+        finally:
+            del self._read_state
+
+    def journal_refuses_the_check(self, event_type, payload):
+        if event_type == EV_CAPTURE_VERIFIED:
+            raise PermissionError(13, "Permission denied", self.journal_path)
+        return real_event(self, event_type, payload)
+    failures = []
+    try:
+        rew_api.get_measurements = lambda: {"1": {"title": "m-L_1 (sw)"}}
+        Process._load_verifier = lambda self: Verifier()
+        for what, patch, said in (
+                ("the state held at the checks", ("check_captures", held_during_checks),
+                 "cannot be opened (held by another writer)"),
+                ("the checks' journal line refused after their state write", ("_append_event", journal_refuses_the_check),
+                 "is written, but its journal line is not")):
+            d = fresh()
+            setattr(Process, *patch)
+            try:
+                rc, out, err = _run_main(["process.py", d, "capture-close"])
+            finally:
+                Process.check_captures, Process._append_event = real_check, real_event
+            closed = Process(d).load()["capture"].get("closed")
+            if rc != EXIT_NO or said not in err or "the round closes on the record, unchecked" in out or closed:
+                failures.append(f"{what}: rc {rc}, closed {closed!r}, out {out.strip()[-160:]!r}, err {err.strip()[-200:]!r}")
+            if patch[0] == "_append_event" and f"append this line to {Process(d).journal_path}" not in err:
+                failures.append(f"{what}: the line to append is not said: {err.strip()[-300:]!r}")
+        # A journal the close cannot append to is refused before a line is printed (batch 2's re-review, Out of Scope
+        # 5): with REW down, "REW not reached ...: closing on the record alone" was printed, and then the close refused.
+        if os.name == "posix" and os.geteuid() != 0:            # root opens a mode-0 file all the same
+            d = fresh()
+
+            def down():
+                raise rew_api.RewUnavailable(ConnectionRefusedError(61, "Connection refused"),
+                                             "http://127.0.0.1:1/measurements")
+            rew_api.get_measurements = down
+            journal = Process(d).journal_path
+            os.chmod(journal, 0)
+            try:
+                rc, out, err = _run_main(["process.py", d, "capture-close"])
+            finally:
+                os.chmod(journal, 0o644)
+                rew_api.get_measurements = lambda: {"1": {"title": "m-L_1 (sw)"}}
+            if rc != EXIT_NO or out.strip() or f"error: {journal} cannot be opened" not in err \
+                    or Process(d).load()["capture"].get("closed"):
+                failures.append(f"a journal that cannot be opened, REW down: rc {rc}, out {out.strip()[-200:]!r}, "
+                                f"err {err.strip()[-200:]!r}")
+        # A bug in the checks is still said with its type, and the round closes unchecked (as built).
+        d = fresh()
+        Process._load_verifier = lambda self: Buggy()
+        rc, out, err = _run_main(["process.py", d, "capture-close"])
+        if rc != EXIT_OK or "checks not run on the taken captures (TypeError: a bug in the verifier)" not in out \
+                or not Process(d).load()["capture"].get("closed"):
+            failures.append(f"a bug in the checks: rc {rc}, out {out.strip()[-200:]!r}")
+        # rew_api.py that cannot be loaded (M1): refused before anything is read or written.
+        d = fresh()
+        before = _project_bytes(d)
+
+        def no_rew_api(name):
+            if name == "rew_api.py":
+                _LOAD_FAILURES[name] = ImportError("No module named 'numpy'")
+                return None
+            return real_load(name)
+        _load_sibling = no_rew_api
+        try:
+            rc, out, err = _run_main(["process.py", d, "capture-close"])
+        finally:
+            _load_sibling = real_load
+            _LOAD_FAILURES.pop("rew_api.py", None)
+        if rc != EXIT_NO or out.strip() or _project_bytes(d) != before or Process(d).load()["capture"].get("closed") \
+                or not err.strip().startswith("error: rew_api.py could not be loaded (ImportError: No module named "
+                                              "'numpy') -- the round cannot be read against REW, and nothing was "
+                                              "written; `capture-close --no-rew` closes it on the record alone"):
+            failures.append(f"rew_api.py not loaded: rc {rc}, out {out.strip()[-160:]!r}, err {err.strip()[-300:]!r}")
+    finally:
+        rew_api.get_measurements, Process._load_verifier = real_list, real_verifier
+        Process.check_captures, Process._append_event, _load_sibling = real_check, real_event, real_load
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["capture-close's checks stage:"] + failures)
+
+
 def _selftest():
     """The refusals, exercised. This module is the one with the most of them — evidence must exist
     and must resolve (SCR-035), a round's captures must be usable (SCR-040), phase 0 must record a
@@ -5944,7 +6220,9 @@ def _selftest():
                   _check_value_flag_last, _check_help_writes_nothing, _check_usage_before_the_read,
                   _check_handoff_says_an_unreadable_changelog, _check_superseded_not_taken,
                   _check_check_never_invents_taken, _check_close_says_what_rew_did,
-                  _check_listing_never_read_as_rew, _check_ambiguous_capture, _check_close_swallows_only_rew):
+                  _check_listing_never_read_as_rew, _check_ambiguous_capture, _check_close_swallows_only_rew,
+                  _check_intake_gate_names_an_unreadable_project_json, _check_close_checks_stage_refusals,
+                  _check_naming_load_error_named, _check_round_lookups_read_the_state_strictly):
         try:
             check()
         except AssertionError as exc:
@@ -7225,17 +7503,28 @@ def _main(argv):
                         "give --hp/--lp, or the bare word OFF to say this channel was swept with "
                         "nothing in the chain. Saying nothing at all is a different thing and is "
                         "recorded by NOT running this command")
+            # A leg the method has no model for -- a Chebyshev, recorded as typed (R48) -- is said as what it means for
+            # the sweeps (#134, R49, R52): they cannot be de-embedded, so no phase decision is read through them. The
+            # line said they were "de-embedded before any phase decision", and they were, as a Butterworth.
+            unmodelled = [] if legs == "OFF" else [
+                f"{k.upper()} {v['f']:g} {v['type']}{v['slope']}" for k, v in sorted(legs.items())
+                if v["type"] not in _MODELLED_LEG_TYPES]
+            cannot = ("" if not unmodelled else
+                      f"; {', '.join(unmodelled)} is recorded as typed, and the method has no Chebyshev model verified "
+                      f"on a DSP: the sweeps cannot be de-embedded, and every phase decision on them is refused -- "
+                      f"set LR, BW or BE as the protective on the DSP and sweep again, or sweep with the protective "
+                      f"filter OFF where the driver is safe without it")
             if amend:
                 done = p.amend_protective(amend, channel, legs, reason or "", source=source)
                 shown_legs = "OFF" if legs == "OFF" else ", ".join(
                     f"{k.upper()} {v['f']:g} {v['type']}{v['slope']}" for k, v in sorted(legs.items()))
-                print(f"{amend} {channel}: corrected to {shown_legs} ({source}) — {done['reason']}")
+                print(f"{amend} {channel}: corrected to {shown_legs} ({source}) — {done['reason']}{cannot}")
                 return 0
             round_ = p.set_protective(channel, legs, source=source)
             shown = "OFF" if legs == "OFF" else ", ".join(
                 f"{k.upper()} {v['f']:g} {v['type']}{v['slope']}" for k, v in sorted(legs.items()))
-            print(f"{round_['id']} {channel}: protective {shown} — this round is RAW for that "
-                  f"channel, so its sweeps are de-embedded before any phase decision")
+            print(f"{round_['id']} {channel}: protective {shown} — this round is RAW for that channel"
+                  + (cannot or ", so its sweeps are de-embedded before any phase decision"))
         elif cmd == "listening-verdict":
             pairs, text, route, lv, note = [], None, None, None, None
             i = 0
@@ -7319,6 +7608,10 @@ def _main(argv):
             no_rew = "--no-rew" in args
             args = [a for a in args if a != "--no-rew"]
             checked = None
+            # The journal the close appends to is read and opened for appending first (batch 2's re-review, Out of
+            # Scope 5): one that cannot be refuses before a line is printed. With REW down the verb said "closing on
+            # the record alone" and then refused at the close's own append.
+            p._require_journal()
             if not no_rew:
                 rew_api = _load_sibling("rew_api.py")
                 if rew_api is None:
@@ -7363,6 +7656,12 @@ def _main(argv):
                         p.check_captures(taken_now)
                         print(f"  checks run on {len(taken_now)} taken capture(s) (capture-check for the verdicts)")
                     except Exception as exc:  # noqa: BLE001 -- the close goes on (exit 0): the checks are not the close
+                        # ...but never over a refusal (#134, batch 3's re-review O3): the state that cannot be read at
+                        # this stage, and the checks' journal line refused after their state write landed, are this
+                        # verb's refusal, whole, the round left open. They read as "checks not run", and the close went
+                        # on over a read it could not make, or over a state write whose event is missing.
+                        if getattr(type(exc), "is_unreadable", False) or getattr(type(exc), "state_written", False):
+                            raise
                         # Said as what happens (#134): the round is closing, so a check cannot be run on it again.
                         print(f"  checks not run on the taken captures ({type(exc).__name__}: {str(exc)[:160]}): "
                               "the round closes on the record, unchecked")

@@ -1291,7 +1291,8 @@ class PresetHistory:
             raise SnapshotError(
                 f"no free version number after 100 tries, {first} to {version}: each was taken when this writer came "
                 f"to it. If the numbers moved, another writer is claiming them as fast as this one; if they did not, "
-                f"a file the ledger does not list holds that name ({self._path(version)}, in another case)")
+                f"a file the ledger does not list holds that name ({self._path(version)}, spelled in another letter case, "
+                f"e.g. V_002.JSON)")
         seals = _read_seals(self.root)
         seals[_seal_key(self.root, version, self.preset)] = content_digest(state)
         _write_seals(self.root, seals)
@@ -1659,6 +1660,20 @@ def render_registry(root, reg, presets):
 LEGACY_PAGES = ("cp1251", "cp1252", "cp1250")
 
 
+class RepairRefused(Exception):
+    """A write of `repair_encoding` or `set_aside` the disk refused, or a set-aside file that cannot be read (#134,
+    batch 2's second re-review n1): its words name the file, the cause, the repair its cause allows, and what landed.
+    It was the bare `OSError`, a traceback. Matched by `repair_refused` on the class: `contract.py repair-encoding` and
+    this module's own say it in one line, exit 1."""
+    repair_refused = True
+
+
+def _landed(done, verb):
+    """`; <verb> before it: a, b` for the files a run changed before the one it stopped on, else ``."""
+    paths = [d["path"] for d in done if d.get("backup") or d.get("set_aside")]
+    return f"; {verb} before it: {', '.join(paths)}" if paths else ""
+
+
 def ledger_files(root):
     """Every file the ledger writes, oldest preset first: snapshots and their HEAD (on the
     per-project line, the versions and `slots.json`; `legacy/` is history and is not rewritten)."""
@@ -1685,13 +1700,17 @@ def _utf8_damage(raw, appended):
     It is torn, not mis-encoded, and the method's readers skip it; read as a wrong code page, a repair from a legacy
     page would have decoded every good line of the journal wrongly. A line written in a legacy page has its wrong
     bytes before its end (a JSON line ends in `}`), so it still counts.
+
+    Any other file whose one fault is an unfinished last character is cut off, not in another code page (#134, batch
+    2's re-review, Out of Scope 1): it is no damage of this survey's, and `read_json` says it as cut off, with its
+    restore. Listed here, it was offered `repair-encoding`, which no page answers.
     """
     if not appended:
         try:
             raw.decode("utf-8")
             return None
         except UnicodeDecodeError as exc:
-            return exc
+            return None if _project_io().cut_inside_a_character(raw) else exc
     start = 0
     for line in raw.splitlines(keepends=True):
         body = line.rstrip(b"\r\n")
@@ -1844,7 +1863,8 @@ def render_survey(found, where, repair_command, set_aside_command=None, unread=(
         if unread:
             return (f"the files the survey could read under {where} are UTF-8, but {len(unread)} could not be read "
                     f"(each named on its own error line) -- run this again once they can be")
-        return f"every file under {where} is UTF-8 — nothing to repair"
+        return (f"every file under {where} is UTF-8, or cut off in its last character (a cut write, which no code page "
+                f"mends) — nothing to repair")
     lines = [f"{len(found)} file(s) under {where} are NOT UTF-8.", ""]
     for e in found:
         lines.append(f"{e['path']}")
@@ -1852,8 +1872,8 @@ def render_survey(found, where, repair_command, set_aside_command=None, unread=(
         if e.get("set_aside"):
             # No page makes JSON of these (R56): no rewrite mends them, and the readers refuse the journal over them.
             for number, text in e["set_aside"][:6]:
-                lines.append(f"    line {number}: no code page makes JSON of it (a write cut off, another glued on): "
-                             f"{text[:100]}")
+                lines.append(f"    line {number}: no code page makes JSON of it (a write cut off in it, "
+                             f"perhaps with the next glued on): {text[:100]}")
             if len(e["set_aside"]) > 6:
                 lines.append(f"    ... and {len(e['set_aside']) - 6} more line(s) no code page makes JSON of")
         if not e["candidates"]:
@@ -1934,8 +1954,14 @@ def repair_encoding(paths, codec, unread=None):
 
     Nothing is rewritten while a file could not be read (`unread` not empty, m3), nor when one damaged
     file has no answer in `codec`: every file is judged before the first write, so a refusal writes
-    nothing (it rewrote the files before the one that failed).
+    nothing (it rewrote the files before the one that failed). One that NO page answers names the way
+    out (n3): it is damaged, not in another code page -- its own history, or a backup -- where
+    "Offered: none" named none.
+
+    A write the disk refuses raises `RepairRefused` naming the file, the cause, the repair its cause
+    allows and what is as it was (n1): it was the bare `OSError`, a traceback.
     """
+    io_ = _project_io()
     found = encoding_survey(paths, unread)
     if unread:
         return []
@@ -1947,11 +1973,18 @@ def repair_encoding(paths, codec, unread=None):
             plan.append((e, None, left))            # only lines no page reads: `set_aside`'s, not a page's
             continue
         if not match:
+            if e["candidates"]:
+                way = f"Offered: {', '.join(c['codec'] for c in e['candidates'])}"
+            elif e["path"].endswith(".jsonl"):
+                way = "no code page makes JSON of it"
+            else:
+                way = (f"no code page does: it is damaged, not in another code page -- restore it from its history "
+                       f"({io_.restore_line(e['path']).split(': ', 1)[1]}) or a backup, then run this again")
             raise SnapshotError(
-                f"{e['path']}: {codec} does not decode this file into readable JSON. "
-                f"Offered: {', '.join(c['codec'] for c in e['candidates']) or 'none'}"
+                f"{e['path']}: {codec} does not decode this file into readable JSON. {way}"
                 + (f"; lines no code page makes JSON of: {', '.join(map(str, left))} -- set them aside first "
                    f"(repair-encoding --set-aside)" if left else "")
+                + "; nothing was rewritten"
             )
         plan.append((e, match[0], left))
     done = []
@@ -1961,15 +1994,24 @@ def repair_encoding(paths, codec, unread=None):
             continue
         backup = e["path"] + f".{codec}.orig"
         if not os.path.exists(backup):          # on a second run the first backup is the original, and stays
-            with open(e["path"], "rb") as f:
-                original = f.read()
-            _project_io().atomic_write_bytes(backup, original)
+            try:
+                with open(e["path"], "rb") as f:
+                    original = f.read()
+                io_.atomic_write_bytes(backup, original)
+            except OSError as exc:
+                raise RepairRefused(f"{backup} could not be written ({exc}) -- {io_.repair_for(exc, writing=True)}; "
+                                    f"{e['path']} is as it was" + _landed(done, "rewritten")) from exc
         # The candidate's bytes, written as they are, because the repair changes the ENCODING and
         # nothing else. The text came from `bytes.decode`, so its line endings are the ones the file
         # already had; writing it back in the default text mode would translate every `\n` to `\r\n`
         # on the very platform this repair is for, and a repair that silently rewrites bytes it was
         # not asked about is one nobody can check afterwards.
-        _project_io().atomic_write_bytes(e["path"], candidate["data"])
+        try:
+            io_.atomic_write_bytes(e["path"], candidate["data"])
+        except OSError as exc:
+            raise RepairRefused(f"{e['path']} could not be written ({exc}) -- {io_.repair_for(exc, writing=True)}; "
+                                f"it is as it was, its original bytes kept at {backup} too"
+                                + _landed(done, "rewritten")) from exc
         done.append({"path": e["path"], "backup": backup, "codec": codec, "left": left})
     return done
 
@@ -1982,7 +2024,8 @@ def set_aside(paths, unread=None):
     no JSON in any page: the strict readers refuse the journal over it, and no rewrite can mend it. Each goes, bytes
     kept, into `<journal>.set-aside` as `line N: <its bytes>` and a "\\n", after what that file holds already; every
     other line keeps its bytes and its line ending. Both are written atomically, the set-aside first, so the bytes are
-    safe before they leave the journal. Nothing is moved while a file could not be read (`unread`, m3)."""
+    safe before they leave the journal. Nothing is moved while a file could not be read (`unread`, m3). A set-aside
+    file that cannot be read, and a write the disk refuses, raise `RepairRefused` with what landed (n1)."""
     io_ = _project_io()
     plan = []
     for path in paths:
@@ -2009,10 +2052,24 @@ def set_aside(paths, unread=None):
                 kept = fh.read()
         except FileNotFoundError:
             kept = b""
+        except OSError as exc:              # a folder in its place, a permission (n1): said, nothing moved
+            raise RepairRefused(f"{io_.cannot_open(target, exc)}; nothing was set aside from {path}"
+                                + _landed(done, "set aside")) from exc
         records = b"".join(b"line %d: " % number + piece + b"\n" for number, piece in moved)
-        io_.atomic_write_bytes(target, kept + records)
-        io_.atomic_write_bytes(path, b"".join(piece + ending for number, piece, ending, _body in _pieces(raw)
-                                              if number not in numbers))
+        try:
+            io_.atomic_write_bytes(target, kept + records)
+        except OSError as exc:
+            raise RepairRefused(f"{target} could not be written ({exc}) -- {io_.repair_for(exc, writing=True)}; "
+                                f"nothing was set aside from {path}" + _landed(done, "set aside")) from exc
+        try:
+            io_.atomic_write_bytes(path, b"".join(piece + ending for number, piece, ending, _body in _pieces(raw)
+                                                  if number not in numbers))
+        except OSError as exc:
+            shown = ", ".join(str(n) for n in sorted(numbers))
+            raise RepairRefused(f"{path} could not be written ({exc}) -- {io_.repair_for(exc, writing=True)}; it is "
+                                f"as it was, and its line {shown} is copied into {target} already: run --set-aside "
+                                f"again once it can be written (the set-aside file then holds that line twice)"
+                                + _landed(done, "set aside")) from exc
         done.append({"path": path, "set_aside": target, "lines": sorted(numbers)})
     return done
 
@@ -2127,8 +2184,9 @@ def _main(argv=None):
         # version it cannot take (`SnapshotError`: one a newer method wrote, audit T-21, or one in another code page)
         # is a refusal naming it and its repair: exit 1, as the traceback it was, with the sentence instead. Both are
         # matched by their attribute: a `SnapshotError` from another copy of this module (`variant --delta` loads
-        # `apply.py`, which loads `state.py` again) is another class.
-        if not (getattr(exc, "is_unreadable", False) or getattr(exc, "is_snapshot_error", False)):
+        # `apply.py`, which loads `state.py` again) is another class. So is a repair's write the disk refused (n1).
+        if not (getattr(exc, "is_unreadable", False) or getattr(exc, "is_snapshot_error", False)
+                or getattr(type(exc), "repair_refused", False)):
             raise
         print(f"error: {exc}", file=sys.stderr)
         return 1
@@ -2220,7 +2278,7 @@ def _run(p, args):
                   file=sys.stderr)
             return said_unread(unread)
         if not done:
-            print(f"every ledger file under {args.root} is UTF-8 — nothing was rewritten")
+            print(f"no ledger file under {args.root} is in another code page — nothing was rewritten")
         for d in done:
             print(f"{d['path']} — rewritten as UTF-8 (was {d['codec']}); "
                   f"original bytes kept at {os.path.basename(d['backup'])}")
@@ -2331,11 +2389,43 @@ def _variant_cli(h, args):
     for key in ("version", "created", "parent", "migrated_from"):
         state.pop(key, None)
     if args.delta:
+        # A delta it cannot read or apply is a refusal naming what is wrong, nothing banked (#134, H 22, T m10): a file
+        # not there, not JSON, not an object, or a change `apply_delta` refuses ended in a traceback.
         import apply as _apply                      # same folder; apply imports this module
-        with open(args.delta, encoding="utf-8") as fh:
-            state = _apply.apply_delta(state, json.load(fh), project_channels(h.project_dir))
+        refused = f"error: variant new: --delta {args.delta}"
+        try:
+            with open(args.delta, "rb") as fh:
+                raw = fh.read()
+        except OSError as exc:
+            print(f"{refused} cannot be read ({exc}) -- nothing was banked", file=sys.stderr)
+            return 1
+        try:
+            delta = json.loads(raw.decode("utf-8-sig"))
+        except ValueError as exc:                   # not UTF-8 either: a UnicodeDecodeError is a ValueError
+            print(f"{refused} is not JSON ({exc}) -- nothing was banked", file=sys.stderr)
+            return 1
+        if not isinstance(delta, dict):
+            kind = "an array" if isinstance(delta, list) else f"{type(delta).__name__!r}"
+            print(f"{refused} holds {kind} where an object belongs ({{channel: {{field: value}}}}, apply.py's delta "
+                  f"shape) -- nothing was banked", file=sys.stderr)
+            return 1
+        try:
+            state = _apply.apply_delta(state, delta, project_channels(h.project_dir))
+        except ValueError as exc:
+            if getattr(type(exc), "is_snapshot_error", False):
+                raise                               # the ledger's own refusal: `_main` says it
+            print(f"{refused}: {exc} -- nothing was banked", file=sys.stderr)
+            return 1
     state["variant"] = args.arg
-    v = h.snapshot(state, note=args.note or f"variant {args.arg} from {base}", place=False, parent=base)
+    try:
+        v = h.snapshot(state, note=args.note or f"variant {args.arg} from {base}", place=False, parent=base)
+    except ValueError as exc:
+        # The bank validates what the delta made (a gain that is no number, a corner below 0 Hz): the delta's fault,
+        # said as such. The ledger's own refusals (`SnapshotError`) are `_main`'s to say.
+        if not args.delta or getattr(type(exc), "is_snapshot_error", False):
+            raise
+        print(f"error: variant new: --delta {args.delta}: {exc} -- nothing was banked", file=sys.stderr)
+        return 1
     print(f"{v}: variant {args.arg} from {base}, not in the slot -- `variant switch {h.preset} {v}` "
           f"puts it there")
     return 0
@@ -2476,8 +2566,13 @@ def _check_repair_encoding_keeps_the_file():
             try:
                 repair_encoding([path], "cp1251")
                 raise AssertionError(f"{label}: a repair that failed reported success")
-            except OSError:
-                pass
+            except Exception as exc:  # noqa: BLE001 -- the kind is what is under test
+                # Said, naming the file it could not write and what is as it was (n1): it was the bare `OSError`.
+                said = str(exc)
+                assert getattr(type(exc), "repair_refused", False) and \
+                    said.startswith(f"{target} could not be written (disk pulled) -- "), (label, repr(exc))
+                assert (f"{path} is as it was" in said) if target == backup else \
+                    (f"it is as it was, its original bytes kept at {backup} too" in said), (label, said)
             finally:
                 os.replace = real_replace
             assert os.path.isfile(path), f"{label}: the failed repair left no file under the name"
@@ -2881,9 +2976,56 @@ def _check_snapshot_error_from_another_copy():
         shutil.rmtree(top, ignore_errors=True)
 
 
+def _check_variant_delta_refused():
+    """`variant new --delta` with a delta it cannot read or apply is a refusal (#134, H 22, T m10): exit 1, one line
+    `error: variant new: --delta <file> ...` naming what is wrong, nothing on stdout, nothing banked. A file that is
+    not there, not JSON, not an object, or a change `apply.apply_delta` refuses (a field it does not know, a channel the
+    version does not have) ended in a traceback: the wrapper matched only `is_unreadable` and `is_snapshot_error`."""
+    import contextlib
+    import io
+    import shutil
+    import tempfile
+    root = tempfile.mkdtemp(prefix="autosound_variant_delta_")
+    try:
+        h = PresetHistory(root, "SQ")
+        h.snapshot(_sample_state(), note="baseline")
+        banked = h.versions()
+        failures = []
+        for label, name, raw, said in (
+                ("no such file", "nowhere.json", None, "cannot be read"),
+                ("not JSON", "garbage.json", b"{not json", "is not JSON"),
+                ("not an object", "array.json", b"[]", "holds an array where an object belongs"),
+                ("a field the ledger does not know", "field.json", json.dumps({"w-L": {"gain": -3.0}}).encode(),
+                 "unknown field(s) ['gain']"),
+                ("a channel the version does not have", "phantom.json", json.dumps({"x-L": {"gain_db": -3.0}}).encode(),
+                 "x-L is not in the current state"),
+                ("a gain the bank refuses", "gain.json", json.dumps({"w-L": {"gain_db": "loud"}}).encode(),
+                 "gain_db must be a number"),
+                ("a corner the bank refuses", "corner.json",
+                 json.dumps({"w-L": {"hp": {"f": -5, "type": "LR", "slope": 24}}}).encode(), "must be a positive Hz")):
+            path = os.path.join(root, name)
+            if raw is not None:
+                with open(path, "wb") as fh:
+                    fh.write(raw)
+            out, err = io.StringIO(), io.StringIO()
+            try:
+                with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                    rc = _main(["--root", root, "variant", "new", "SQ", "B", "--delta", path])
+            except Exception as exc:  # noqa: BLE001 -- a traceback is the failure under test
+                rc = f"raised {type(exc).__name__}: {exc}"
+            lines = err.getvalue().strip().splitlines()
+            if rc != 1 or out.getvalue() or len(lines) != 1 \
+                    or not lines[0].startswith(f"error: variant new: --delta {path}") or said not in lines[0] \
+                    or h.versions() != banked:
+                failures.append(f"{label}: rc {rc!r}, said {lines[-2:]!r}, versions {h.versions()}")
+        assert not failures, "\n  ".join(["a delta variant new cannot apply:"] + failures)
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def _selftest():
     failures = []
-    for check in (_check_eq_refusals, _check_canonical_code_uses_the_loaded_naming,
+    for check in (_check_variant_delta_refused, _check_eq_refusals, _check_canonical_code_uses_the_loaded_naming,
                   _check_repair_encoding_keeps_the_file, _check_version_never_overwritten,
                   _check_survey_reads_a_torn_journal_as_torn, _check_repair_encoding_line_by_line,
                   _check_set_aside_what_no_page_reads, _check_banked_never_sealed,

@@ -176,9 +176,12 @@ def dsp_level_plan(offsets: dict, plus_db=None, threshold: float = CUT_SPREAD_DB
 
 def _check_cli_refuses_unreadable_profile() -> None:
     """`--project` with a `dsp_profile.json` that is there and cannot be read, or that a newer method wrote, is refused
-    before anything else is read: `error: <file> <reason> -- <repair>`, exit 1, nothing on stdout (#136). It was read
-    as "no plus", and the level plan went on without the DSP's range; once `load_profile` raised its own exception for
-    it, the command printed its table and ended in a traceback. No profile at all is still no plus."""
+    before anything else is read, in this tool's one form, the one its docs name (#134, H 24): `refusing: <file>
+    <reason> -- <repair>`, exit 3, one line, nothing on stdout. It was read as "no plus" (#136); then said in a
+    second form, `error:` exit 1, beside every other refusal's `refusing:` exit 3. A `channel_gain.range_db` that is
+    no `[low, high]` in dB -- one number, a word in it, true or false, a map -- is refused the same way, naming the
+    field (H 17): it read as "no plus" in silence, and the plan dropped the sentence that the plus is short. No
+    profile, and a profile with no range, are still no plus."""
     import contextlib
     import io
     import json
@@ -190,10 +193,19 @@ def _check_cli_refuses_unreadable_profile() -> None:
     try:
         path = os.path.join(d, "dsp_profile.json")
         newer = dsp_profile.SCHEMA_VERSION + 1
-        for raw, said in (
-                (b'{"dsp_profile": {"name": "X", "channel_gain": {"ran', "checkout HEAD -- dsp_profile.json"),
-                (json.dumps({"schema_version": newer, "dsp_profile": {"name": "X"}}).encode("utf-8"),
-                 f"is schema v{newer}; this method reads v{dsp_profile.SCHEMA_VERSION} -- update the method")):
+
+        def ranged(value):
+            return json.dumps({"dsp_profile": {"name": "X", "channel_gain": {"range_db": value}}}).encode("utf-8")
+        cases = [(b'{"dsp_profile": {"name": "X", "channel_gain": {"ran', f"refusing: {path} ",
+                  "checkout HEAD -- dsp_profile.json"),
+                 (json.dumps({"schema_version": newer, "dsp_profile": {"name": "X"}}).encode("utf-8"),
+                  f"refusing: {path} ", f"is schema v{newer}; this method reads v{dsp_profile.SCHEMA_VERSION} -- "
+                                       "update the method")]
+        for bad in ([-12], [-12, "x"], "x", {"low": -12}, [-12, True], []):
+            cases.append((ranged(bad), f"refusing: {path}: channel_gain.range_db is {json.dumps(bad)}, "
+                                       "not [low, high] in dB", "correct it in the profile"))
+        failures = []
+        for raw, starts, said in cases:
             with open(path, "wb") as fh:
                 fh.write(raw)
             out, err = io.StringIO(), io.StringIO()
@@ -201,10 +213,31 @@ def _check_cli_refuses_unreadable_profile() -> None:
                 with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
                     rc = _main(["--solos", d, "--ver", "1", "--levels-fixed", "--project", d])
             except Exception as exc:  # noqa: BLE001 -- the failure under test is the traceback itself
-                raise AssertionError(f"raised {type(exc).__name__}: {exc}") from None
-            assert rc == 1 and err.getvalue().startswith(f"error: {path} ") and said in err.getvalue(), \
-                (rc, err.getvalue()[-300:])
-            assert not out.getvalue(), out.getvalue()[-300:]
+                rc = f"raised {type(exc).__name__}: {exc}"
+            lines = err.getvalue().strip().splitlines()
+            if rc != 3 or out.getvalue() or len(lines) != 1 or not lines[0].startswith(starts) or said not in lines[0]:
+                failures.append(f"{raw[:60]!r}: rc {rc!r}, said {lines[-2:]!r}")
+        # No range is no plus: the run goes on, to the ledger and the solos (none here, refused as such).
+        state_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "state")
+        if state_dir not in sys.path:
+            sys.path.insert(0, state_dir)
+        import state as st
+        st.PresetHistory(os.path.join(d, "state"), "SQ", project_dir=d).snapshot(
+            {"schema_version": 3, "preset": "SQ", "sample_rate": 96000, "channels": {
+                "w-L": {"hp": None, "lp": {"f": 400, "type": "LR", "slope": 24}, "gain_db": 0.0, "ta_ms": 0.0,
+                        "polarity": "NORM", "eq": []}}}, note="a ledger")
+        st.Registry(os.path.join(d, "state")).set_active("SQ")
+        empty = os.path.join(d, "solos")
+        os.makedirs(empty)
+        for raw in (ranged(None), json.dumps({"dsp_profile": {"name": "X"}}).encode("utf-8")):
+            with open(path, "wb") as fh:
+                fh.write(raw)
+            err = io.StringIO()
+            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(err):
+                rc = _main(["--solos", empty, "--ver", "1", "--levels-fixed", "--project", d])
+            if rc != 3 or "no solo v7 files" not in err.getvalue():
+                failures.append(f"{raw[:60]!r} (no range): rc {rc!r}, said {err.getvalue()[-200:]!r}")
+        assert not failures, "\n  ".join(["a profile level_offsets could not read:"] + failures)
     finally:
         shutil.rmtree(d, ignore_errors=True)
 
@@ -286,6 +319,9 @@ def _main(argv=None):
     Bands come from the ledger's own crossovers, so the level is read where the driver actually
     works. The output is a PROPOSAL to compare with the geometry estimate and with the gains
     already in the ledger — it is not applied by anything here.
+
+    Every refusal is one line, `refusing: <why>`, exit 3: no `--levels-fixed`, no solos, a
+    `dsp_profile.json` it cannot read or whose `channel_gain.range_db` is no `[low, high]` (#134).
     """
     import argparse
     ap = argparse.ArgumentParser(description="levels read off the measurement (second estimate)")
@@ -309,20 +345,27 @@ def _main(argv=None):
         sys.path.insert(0, _here)
     # The DSP's plus, for the level plan at the end, read before anything else is: a profile that is there and cannot be
     # read, or that a newer method wrote, is refused here (#136) -- it was read as "no plus", and the plan went on
-    # without the device's range. No profile, or no range in it, is still no plus.
+    # without the device's range -- and so is a `channel_gain.range_db` that is no `[low, high]` (#134, H 17). In this
+    # tool's one form, the one its docs name: `refusing:`, exit 3 (H 24). No profile, or no range in it, is no plus.
     plus = None
     if args.project:
+        import dsp_profile as _dp
+        path = _dp.profile_path(args.project)
         try:
-            import dsp_profile as _dp
-            rng = (_dp._unwrap(_dp.load_profile(_dp.profile_path(args.project))).get("channel_gain") or {}).get("range_db")
-            plus = float(rng[1]) if rng else None
-        except (OSError, ValueError, TypeError, IndexError):
-            plus = None
+            prof = _dp.load_profile(path)
+        except FileNotFoundError:
+            prof = None
         except Exception as exc:  # noqa: BLE001 -- matched by its attribute; anything else still raises
-            if not getattr(exc, "is_unreadable", False):
+            if not getattr(type(exc), "is_unreadable", False):
                 raise
-            print(f"error: {exc}", file=sys.stderr)
-            return 1
+            print(f"refusing: {exc}", file=sys.stderr)
+            return 3
+        try:
+            rng = _dp.gain_range_db(prof) if prof is not None else None
+        except ValueError as exc:
+            print(f"refusing: {path}: {exc} -- correct it in the profile", file=sys.stderr)
+            return 3
+        plus = rng[1] if rng else None
     import naming as _naming                         # the title grammar, for stem -> channel code
     import predict as _predict                       # numpy lives there, not here
     import verify_prediction as _vp                  # the SAME v7 reader the predictions use

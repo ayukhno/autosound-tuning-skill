@@ -66,6 +66,8 @@ _MIN_SPAN_FRACTION = 0.5
 # What `verify.py` exits with when REW did not answer: sysexits' EX_UNAVAILABLE, the code `process.py` gives the
 # same state (#134). 0 and 1 keep their meaning, so a gate that only knew those still stops on it.
 EXIT_REW_UNAVAILABLE = 69
+# And on a bug: EX_SOFTWARE, with Python's traceback, as `process.py`'s exit table has it (batch 3's re-review O1).
+EXIT_BUG = 70
 
 
 def _state(exc):
@@ -384,9 +386,11 @@ def session_report(verdicts, processing_rate_hz=None, ir_of=_rew_ir_of):
     them it falls back to the peak times in the verdicts and the record says which -- and, when REW
     gave no impulse, why (`ir_not_read`, H 11).
 
-    A control is "missing" only when it was asked for and REW holds no such title. Not asked for, or
-    asked while REW's list could not be read, it is `not_read`, never missing (T I5); held twice in
-    REW, the record names it (`ambiguous`, H I-8).
+    A control is "missing" only when it was asked for and REW holds no such title -- ctl1 too, which
+    the line called "present" whatever REW held (O2). Not asked for, or asked while REW's list could
+    not be read, it is `not_read`, never missing (T I5); listed, and REW stopped before its curve was
+    read, `not_read` with `stopped` (O2: "an impulse on both missing"); held twice in REW, the record
+    names it (`ambiguous`, H I-8).
     """
     rows = []
     for v in verdicts:
@@ -437,9 +441,16 @@ def session_report(verdicts, processing_rate_hz=None, ir_of=_rew_ir_of):
             drift = {"ctl1": r["name"], "ctl3": partner, "not_read": True, "not_asked": True}
         elif p["exists"] is False:
             drift = {"ctl1": r["name"], "ctl3": partner, "missing": partner}
+        elif r["exists"] is False:
+            # REW holds no ctl1 (batch 3's re-review O2): it is the one missing -- the line said "<ctl1> present".
+            drift = {"ctl1": r["name"], "ctl3": partner, "missing": r["name"]}
         elif r.get("ambiguous") or p.get("ambiguous"):
             # REW holds a control more than once (H I-8): which one the drift is read on is not knowable.
             drift = {"ctl1": r["name"], "ctl3": partner, "ambiguous": r["name"] if r.get("ambiguous") else partner}
+        elif not r["reachable"] or not p["reachable"]:
+            # REW stopped answering after its list (O2): the controls are there and their curves were not read -- not
+            # read, never "an impulse on both missing".
+            drift = {"ctl1": r["name"], "ctl3": partner, "not_read": True, "stopped": True}
         elif r["peak_time_ms"] is None or p["peak_time_ms"] is None:
             drift = {"ctl1": r["name"], "ctl3": partner, "missing": "an impulse on both"}
         else:
@@ -485,7 +496,8 @@ def render_session(report):
              + (f", {counts['ambiguous']} ambiguous" if counts.get("ambiguous") else "")
              + (f", {counts['not_applicable']} not checked (not a sweep)"
                 if counts.get("not_applicable") else "")
-             + (f", {counts['unreachable']} unreachable" if counts.get("unreachable") else ""), ""]
+             + (f", {counts['unreachable']} unreachable" if counts.get("unreachable") else "")
+             + (f", {counts['not_asked']} not asked (REW's address is none)" if counts.get("not_asked") else ""), ""]
     lines.append(f"  {'title':24}{'live dB':>9}{'IR peak':>9}{'pre-ring':>10}{'arrival ms':>12}{'rate':>7}  ")
     lines.append("  " + "-" * 74)
     for r in report["rows"]:
@@ -512,13 +524,16 @@ def render_session(report):
         lines.append("  drift: no `-ctl1 (sw)` title in this set -- the drift record needs ctl1 and ctl3")
     elif d.get("not_read"):
         why = (f"{d['ctl3']} was not among the titles checked: check it beside {d['ctl1']} for the drift record"
-               if d.get("not_asked") else "REW's measurement list was not read")
+               if d.get("not_asked") else
+               "REW stopped answering before their curves were read" if d.get("stopped") else
+               "REW's measurement list was not read")
         lines.append(f"  drift: {d['ctl1']} -> {d['ctl3']} not read -- {why}")
     elif d.get("ambiguous"):
         lines.append(f"  drift: {d['ctl1']} -> {d['ctl3']} not read -- REW holds {d['ambiguous']} more than once: "
                      "rename so titles are unique")
     elif d.get("missing"):
-        lines.append(f"  drift: {d['ctl1']} present, {d['missing']} missing -- no drift record")
+        # Only what is missing is said (O2): "<ctl1> present" was said of a ctl1 REW does not hold.
+        lines.append(f"  drift: {d['ctl1']} -> {d['ctl3']}: {d['missing']} missing -- no drift record")
     else:
         smp = d["delta_samples"]
         held = ("the time base HELD" if d["held"] else
@@ -539,6 +554,8 @@ def _counted_as(v):
     """The one count of `summary` a verdict goes in. Each goes in exactly one, so the counts add up to the total."""
     if v.get("reachable", True) is False:
         return "unreachable"               # REW did not answer: nothing is known of the title (#134)
+    if v.get("reachable", True) is None and v.get("exists") is None:
+        return "not_asked"                 # REW's address is none: not asked, so no verdict on the capture (M5)
     if v["valid"]:
         return "ok"
     if v.get("ambiguous"):
@@ -558,10 +575,12 @@ def summary(verdicts):
     the header of the very output whose rows said "nothing here was checked" (skill #29). And a
     title REW did not answer for (`reachable: False`) is `unreachable`, never `missing`: `missing`
     is REW answering that it holds no such title, `exists` False and nothing else (#134). A title
-    REW holds more than once is `ambiguous` (H I-8): neither missing nor merely unusable.
+    REW holds more than once is `ambiguous` (H I-8): neither missing nor merely unusable. A title
+    REW was never asked about -- its address being none (`reachable` null, `config`) -- is
+    `not_asked`, never `invalid` (batch 3's re-review M5): it is no verdict on the capture.
     """
     counts = {"total": len(verdicts), "missing": 0, "invalid": 0, "not_applicable": 0, "ok": 0, "unreachable": 0,
-              "ambiguous": 0}
+              "ambiguous": 0, "not_asked": 0}
     for v in verdicts:
         counts[_counted_as(v)] += 1
     return counts
@@ -572,14 +591,29 @@ _USAGE = """usage: verify.py <title> [title ...] [--json] [--band LOW HIGH] [--s
   Verdict per REW measurement title: does it exist, is what REW holds usable.
   Exit 0 when every title is valid, 1 otherwise, 69 when REW did not answer — so a shell gate
   can branch on it. A capture this check does not apply to (an RTA) does not make it 1. A
-  REW_API_URL that is no address is 1, never 69: REW was not asked.
+  REW_API_URL that is no address is 1, never 69: REW was not asked -- one line on stderr,
+  `error: REW_API_URL ... is not an address: ...`, and no verdict. 70 is a bug: Python's
+  traceback on stderr, then `error: unexpected <type>: <message>`.
   --session adds the whole-session table (Phase 0.6): level and impulse of every title side by
   side, loudest/quietest, and the ctl1->ctl3 drift record.
 """
 
 # The mark a verdict line starts with, by its count; `ERROR  ` is an `invalid` whose title REW could not list.
 _MARKS = {"ok": "OK  ", "missing": "MISSING", "not_applicable": "N/A ", "invalid": "INVALID",
-          "unreachable": "NO REW ", "ambiguous": "AMBIGUOUS"}
+          "unreachable": "NO REW ", "ambiguous": "AMBIGUOUS", "not_asked": "NOT ASKED"}
+
+
+def main(argv):
+    """The command line (`_main`), and the exit table's 70 for a bug (#134, batch 3's re-review O1): Python's traceback
+    on stderr above `error: unexpected <type>: <message>`, as `process.py`'s catch-all says it. A bug raised from REW's
+    listing read -- never a verdict (H I-6) -- left `_main` and exited 1, the code an unusable title gives."""
+    import traceback
+    try:
+        return _main(argv)
+    except Exception as exc:  # noqa: BLE001 -- the catch-all: REW's own states are verdicts inside `_main`
+        traceback.print_exc()
+        print(f"error: unexpected {type(exc).__name__}: {exc}", file=sys.stderr)
+        return EXIT_BUG
 
 
 def _main(argv):
@@ -604,6 +638,13 @@ def _main(argv):
         return 2
 
     verdicts = verify(args, f_low=f_low, f_high=f_high)
+    # REW's address is none (`config`, H I-5): REW was not asked, and nothing here is a verdict on a capture -- a
+    # configuration refusal, one line, exit 1, before any verdict line (batch 3's re-review M5). It printed
+    # `ERROR   <title>` for each title and counted them unusable.
+    unasked = next((v for v in verdicts if _counted_as(v) == "not_asked"), None)
+    if unasked is not None:
+        print(f"error: {(unasked.get('issues') or ['REW was not asked: its address is none'])[0]}", file=sys.stderr)
+        return 1
     if as_json:
         out = {"summary": summary(verdicts), "measurements": verdicts}
         if session:
@@ -741,8 +782,8 @@ def _check_unreachable_state():
         r = subprocess.run([sys.executable, os.path.abspath(__file__), "a (sw)"], capture_output=True, text=True,
                            encoding="utf-8", errors="replace",
                            env={**os.environ, "REW_API_URL": url, "PYTHONIOENCODING": "utf-8"}, timeout=120)
-        assert r.returncode == code and said in r.stdout and "MISSING" not in r.stdout and "Traceback" not in r.stderr, \
-            (url, r.returncode, r.stdout[-400:], r.stderr[-400:])
+        assert r.returncode == code and said in r.stdout + r.stderr and "MISSING" not in r.stdout \
+            and "Traceback" not in r.stderr, (url, r.returncode, r.stdout[-400:], r.stderr[-400:])
 
 
 def _check_protocol_error_state():
@@ -772,7 +813,10 @@ def _check_protocol_error_state():
             rc, out = _run_main(["verify.py", "a (sw)"])
             assert rc == 1 and "ERROR   a (sw)" in out and "MISSING" not in out, (exc, rc, out)
     # REW's address is no address (`config`, H I-5): REW was not asked, so it neither answered nor stayed silent --
-    # `reachable` null, `exists` null, the address's own words; 1, never 69 (REW down) and never "missing".
+    # `reachable` null, `exists` null, the address's own words; 1, never 69 (REW down) and never "missing". Not a
+    # verdict on any capture either (batch 3's re-review M5): counted apart, `not_asked`, never `invalid` -- and the
+    # command line refuses as a configuration error, one line on stderr, before any verdict line: it printed
+    # `ERROR   a (sw)` and "0/1 usable, 0 missing, 1 unusable".
     class Misaddressed(ValueError):
         rew_state = "config"
     said = "REW_API_URL 'localhost:4735' is not an address: it does not start with http:// or https://"
@@ -780,9 +824,12 @@ def _check_protocol_error_state():
         v = verify(["a (sw)"])[0]
         assert v["reachable"] is None and v["exists"] is None and v["valid"] is False and v["issues"] == [said], v
         s = summary([v])
-        assert (s["missing"], s["unreachable"], s["invalid"], s["ok"]) == (0, 0, 1, 0), s
-        rc, out = _run_main(["verify.py", "a (sw)"])
-        assert rc == 1 and "ERROR   a (sw)" in out and said in out and "MISSING" not in out, (rc, out)
+        assert (s["missing"], s["unreachable"], s["invalid"], s["ok"], s["not_asked"]) == (0, 0, 0, 0, 1), s
+        for argv in (["verify.py", "a (sw)"], ["verify.py", "a (sw)", "--json"], ["verify.py", "a (sw)", "--session"]):
+            err = io.StringIO()
+            with contextlib.redirect_stderr(err):
+                rc, out = _run_main(argv)
+            assert rc == 1 and not out and err.getvalue().strip() == f"error: {said}", (argv, rc, out, err.getvalue())
     # A listing read that failed on something that is not REW's -- a bug -- is never a verdict (H I-6): raised as it
     # is, by `verify` and by `verdict` reading the list itself, so `capture-check` exits 70 on it and records nothing.
     for call in (lambda: verify(["a (sw)"]), lambda: verdict("a (sw)")):
@@ -942,11 +989,54 @@ def _check_counts_add_up():
     assert flagged == {"w-L_00 (sw)": False, "w-L_01 (sw)": False, "w-L_02 (sw)": True}, flagged
 
 
+def _check_command_line_bug_exits_70():
+    """`verify.py`'s command line has the exit table's 70 (#134, batch 3's re-review O1): a bug -- one raised from REW's
+    listing read, which is never a verdict (H I-6) -- prints Python's traceback on stderr above `error: unexpected
+    <type>: <message>` and exits 70. It left `_main` and Python exited 1, the code an unusable title gives, so a shell
+    gate read a bug as a capture to measure again."""
+    err = io.StringIO()
+    with _rew_as(get_measurements=_raising(TypeError("a bug in the listing's reader"))), \
+            contextlib.redirect_stdout(io.StringIO()) as out, contextlib.redirect_stderr(err):
+        rc = main(["verify.py", "a (sw)"])
+    said = err.getvalue()
+    assert rc == EXIT_BUG and "Traceback" in said and said.strip().splitlines()[-1] == \
+        "error: unexpected TypeError: a bug in the listing's reader" and not out.getvalue(), (rc, said[-400:])
+    with _rew_as(get_measurements=_raising(_Down("refused"))), contextlib.redirect_stdout(io.StringIO()):
+        assert main(["verify.py", "a (sw)"]) == EXIT_REW_UNAVAILABLE, "REW down is still 69, never a bug"
+
+
+def _check_drift_says_what_was_not_read():
+    """The drift record names what is missing, and never REW down as missing (#134, batch 3's re-review O2). REW
+    stopped after its list -- both controls listed, neither curve read -- read "<ctl1> present, an impulse on both
+    missing"; it is `not_read`, REW having stopped. A ctl1 REW does not hold read "<ctl1> present" all the same; the
+    record names it as the one missing, and the line says only what is missing."""
+    def row(name, exists=True, reachable=True, peak=None):
+        stats = {} if peak is None else {"peak_time_ms": peak, "capture_rate_hz": 48000, "live_mean_dB": 80.0}
+        return {"name": name, "exists": exists, "reachable": reachable, "applicable": True,
+                "valid": bool(exists and reachable and peak is not None), "stats": stats,
+                "issues": [] if reachable else ["REW unavailable while reading the frequency response: refused"]}
+    c1, c3 = "m-L-ctl1_1 (sw)", "m-L-ctl3_1 (sw)"
+    stopped = session_report([row(c1, reachable=False), row(c3, reachable=False)], ir_of=None)
+    d = stopped["drift"]
+    assert d.get("not_read") and d.get("stopped") and "missing" not in d, d
+    line = [ln for ln in render_session(stopped).splitlines() if "drift" in ln]
+    assert line == [f"  drift: {c1} -> {c3} not read -- REW stopped answering before their curves were read"], line
+    gone = session_report([row(c1, exists=False), row(c3, peak=1.0)], ir_of=None)
+    assert gone["drift"].get("missing") == c1, gone["drift"]
+    line = [ln for ln in render_session(gone).splitlines() if "drift" in ln]
+    assert line == [f"  drift: {c1} -> {c3}: {c1} missing -- no drift record"] and "present" not in line[0], line
+    both = session_report([row(c1, peak=1.0), row(c3, exists=False)], ir_of=None)
+    line = [ln for ln in render_session(both).splitlines() if "drift" in ln]
+    assert line == [f"  drift: {c1} -> {c3}: {c3} missing -- no drift record"], line
+
+
 def _selftest():
-    """The outlier rule, offline. Everything else here needs REW, which a selftest must not."""
+    """Offline, REW never reached: REW's states through its readers stood in (`_rew_as`), REW's recorded answers
+    replayed (`testdata/rew/`), the command line at a dead port, the drift record, the counts and the outlier rule."""
     failures = []
     for check in (_check_unreachable_state, _check_protocol_error_state, _check_ir_failure_on_a_sweep,
-                  _check_recorded_no_impulse, _check_ambiguous_title, _check_drift_says_why, _check_counts_add_up):
+                  _check_recorded_no_impulse, _check_ambiguous_title, _check_drift_says_why, _check_counts_add_up,
+                  _check_command_line_bug_exits_70, _check_drift_says_what_was_not_read):
         try:
             check()
         except Exception as exc:  # noqa: BLE001 -- a check that raises is reported by name, like one that fails
@@ -1071,8 +1161,9 @@ def _selftest():
     assert "MOVED" in render_session(moved) and "no drift record" in render_session(lost)
 
     print("selftest OK — REW down is its own state (unreachable, `exists` null, exit 69), REW answering an error "
-          "is unusable, an address that is none is 1 with its words, and none is ever \"missing\"; a bug in reading "
-          "REW's list is raised, never a verdict; a title REW holds twice is AMBIGUOUS; a failed impulse read on a "
+          "is unusable, an address that is none is a configuration refusal (1, its words, no verdict, counted "
+          "`not_asked`), and none is ever \"missing\"; a bug in reading REW's list is raised, never a verdict, and "
+          "the command line exits 70 on it; a title REW holds twice is AMBIGUOUS; a failed impulse read on a "
           "sweep is an issue, REW's own \"no impulse\" answer (400 in its words, or a 404 naming the impulse "
           "response) let through -- replayed as REW sent it at the live pass; the counts add up; the post-sweep gate "
           "compares a driver against ITSELF: a 24 dB outlier "
@@ -1088,4 +1179,4 @@ if __name__ == "__main__":
     console.install()
     if len(sys.argv) > 1 and sys.argv[1] == "selftest":
         sys.exit(_selftest())
-    sys.exit(_main(sys.argv))
+    sys.exit(main(sys.argv))

@@ -664,8 +664,10 @@ def _check_write_fails_clean():
 def _check_create_exclusive():
     """Audit T-9: `create_exclusive` makes the file with the bytes `open(path, "w")` wrote -- the platform's line
     ending, the text's own with `newline=""` -- and a second create of that name raises `FileExistsError`, the first
-    file as it was; no temp is left either way. Where hard links are refused (`os.link` raising EPERM, as on FAT), the
-    name is still created exclusively, written in place, and a write that fails there leaves no name behind."""
+    file as it was; no temp is left either way -- but where the temp's own remove is refused (a scanner holding it),
+    which leaves it beside the version on purpose, a `*.tmp` no lister reads. Where hard links are refused
+    (`os.link` raising EPERM, as on FAT), the name is still created exclusively, written in place, and a write that
+    fails there leaves no name behind."""
     import errno
     d = _scratch()
     real_link, real_fsync, real_remove = os.link, os.fsync, os.remove

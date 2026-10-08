@@ -434,7 +434,18 @@ def _main(argv=None):
         return 2
     if not dry_run:
         os.makedirs(new_dir, exist_ok=True)
-    report = import_current_state(project_dir, new_dir, dry_run=dry_run)
+    try:
+        report = import_current_state(project_dir, new_dir, dry_run=dry_run)
+    except Exception as exc:  # noqa: BLE001 -- matched below; anything else still raises
+        # A refusal of the import -- `--into` over a `project.json` a newer method wrote (`Project.save`'s words), one
+        # that cannot be read, a ledger version that cannot be read -- is said in one line, exit 1 (#134, H 23, T m10).
+        # It ended in a traceback: nothing here caught it. A `ProjectError` is a `ValueError`, as is what the snapshot
+        # door raises for a file it cannot read.
+        if not (isinstance(exc, ValueError) or getattr(type(exc), "is_unreadable", False)
+                or getattr(type(exc), "is_snapshot_error", False)):
+            raise
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
     print(render_report(report, dry_run=dry_run))
     return 0
 
@@ -476,6 +487,21 @@ def _check_import_refuses_newer_project():
             with open(path, "rb") as fh:
                 assert fh.read() == raw, f"dry_run={dry_run}: project.json changed"
             assert sorted(os.listdir(new)) == ["project.json"], (dry_run, sorted(os.listdir(new)))
+        # The command line says it in those words, one line, exit 1 (#134, H 23, T m10): `_main` caught nothing, and
+        # the refusal ended in a `ProjectError` traceback.
+        import contextlib
+        import io
+        for extra in ([], ["--dry-run"]):
+            out, err = io.StringIO(), io.StringIO()
+            try:
+                with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                    rc = _main([old, "--into", new] + extra)
+            except Exception as exc:  # noqa: BLE001 -- a traceback is the failure under test
+                rc = f"raised {type(exc).__name__}: {exc}"
+            assert rc == 1 and err.getvalue().strip() == f"error: {words}" and not out.getvalue(), \
+                (extra, rc, err.getvalue()[-300:])
+            with open(path, "rb") as fh:
+                assert fh.read() == raw and sorted(os.listdir(new)) == ["project.json"], (extra, "written")
     finally:
         shutil.rmtree(old, ignore_errors=True)
         shutil.rmtree(new, ignore_errors=True)

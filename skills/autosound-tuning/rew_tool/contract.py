@@ -30,6 +30,7 @@ from datetime import datetime
 import os
 import re
 import sys
+import urllib.error
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 if _HERE not in sys.path:
@@ -550,14 +551,35 @@ def cross_check_tiers_vs_profile(profile_data, snapshots, project_data=None):
 
 def cross_check_rew(process_state, glossary, snapshots, project_data=None):
     """Best-effort: REW not running/reachable is reported, not a crash (`contract.py` runs as a
-    static project audit; requiring a live REW connection would make it useless offline)."""
+    static project audit; requiring a live REW connection would make it useless offline).
+
+    Which REW it met is said by the state on the exception's class (#134, batch 3's re-review O4), with `state`
+    carrying it: REW down `reachable: false` ("REW not reachable"); REW answering with an error or with something
+    that is no measurement list `reachable: true` -- REW is there -- its list not read; an address that is none
+    (`config`) `reachable: null`, nothing asked; a failure that is none of REW's (a bug, a `rew_api.py` that cannot be
+    loaded) `reachable: null` too, named with its type. Each was "REW not reachable", and TCC showed REW offline. The
+    note of the two with nothing asked or read starts "skipped", as `--no-rew`'s does: TCC leaves its REW dot alone."""
     try:
         import rew_api
 
         records = list(rew_api.get_measurements().values())
         titles = [m.get("title", "") for m in records]
-    except Exception as exc:  # noqa: BLE001 -- deliberately broad: any REW-unreachable reason
-        return {"reachable": False, "note": f"REW not reachable ({exc}) -- skipped"}
+    except Exception as exc:  # noqa: BLE001 -- deliberately broad: a report, never a crash; sorted by state below
+        state = getattr(type(exc), "rew_state", None)
+        if state is None and isinstance(exc, urllib.error.HTTPError):
+            state = "error"                                    # REW's own error answer: the stdlib's one class
+        if state == "unavailable":
+            return {"reachable": False, "state": state, "note": f"REW not reachable ({exc}) -- skipped"}
+        if state == "error":
+            return {"reachable": True, "state": state,
+                    "note": f"REW answered with an error ({exc}) -- its measurement list was not read; skipped"}
+        if state == "protocol":
+            return {"reachable": True, "state": state,
+                    "note": f"REW answered something that is not a measurement list ({exc}) -- skipped"}
+        if state == "config":
+            return {"reachable": None, "state": state, "note": f"skipped: REW was not asked -- {exc}"}
+        return {"reachable": None, "state": state,
+                "note": f"skipped: REW's measurement list was not read -- {type(exc).__name__}: {exc}"}
 
     # Checked FIRST and unconditionally, because it does not depend on a phase, a round or a
     # version: a title is supposed to be one measurement's stable identity (`naming-and-structure`
@@ -878,6 +900,10 @@ def check_project(project_dir, skip_rew=False):
     if not any(f["file"].startswith("state/") and f["exists"] for f in files):
         missing.append("state/<preset>/ (first ledger snapshot)")
     complete = ok and not missing
+    # A `project.json` that is there and cannot be read (#134, F M-5, H minor 8): what both gates name first. The
+    # glossary it carries reads as "missing" and its flaw map as "no rows yet" -- facts about a file nobody read.
+    unreadable = ([{"file": "project.json", "issue": (project_entry.get("issues") or ["cannot be read"])[0]}]
+                  if project_entry["exists"] and project_data is None else [])
     prose = looks_like_prose(project_dir, files)
     if prose:
         # The per-file hint is "run intake", which is right for an empty folder and wrong here —
@@ -906,19 +932,24 @@ def check_project(project_dir, skip_rew=False):
     # on Windows returns `state\FULL\v_001.json`. One report naming one file two ways is a
     # consumer that joins this field to the table by name and matches nothing -- and the field
     # exists precisely so a consumer would not have to parse our prose (TCC-007, 2026-09-07).
+    # A file the survey cannot open is never called UTF-8 by leaving it out (batch 2's re-review, Out of Scope 2): it
+    # goes into `encoding_unread`, `[{file, why}]`, and the report says it was not surveyed.
+    unread_files = []
     damaged = [os.path.relpath(e["path"], project_dir).replace(os.sep, "/")
-               for e in _load_vendored("state").encoding_survey(project_text_files(project_dir))]
+               for e in _load_vendored("state").encoding_survey(project_text_files(project_dir), unread_files)]
+    encoding_unread = [{"file": os.path.relpath(path, project_dir).replace(os.sep, "/"), "why": why}
+                       for path, why in unread_files]
     # S-045: WHICH LANGUAGE TO WRITE IN, in the one report a session reads before it speaks. It is
     # a field of its own rather than a line of prose for the same reason `encoding_damaged` is: a
     # front-end reads it, and the session has to ACT on it before the first reply — reading it and
     # answering in another language is the exact failure this carries.
     lang = project.reply_language(project_data)
-    return {"project_dir": project_dir, "ok": ok, "complete": complete, "missing": missing,
+    return {"project_dir": project_dir, "ok": ok, "complete": complete, "missing": missing, "unreadable": unreadable,
             "reply_language": lang["lang"], "reply_language_source": lang["source"],
             "map_ready": map_ready, "row_gaps": row_gaps, "to_confirm": to_confirm,
             "inherited": carried["inherited"], "sources_gone": carried["sources_gone"],
             "sources_gone_where": carried["sources_gone_where"],
-            "encoding_damaged": damaged,
+            "encoding_damaged": damaged, "encoding_unread": encoding_unread,
             # W-2 R: a ledger numbered per preset, with the move the session offers (not a gate item).
             "line_layout": _line_layout(project_dir),
             # hub #199: history and backup, as one line each and never a gate item.
@@ -1197,7 +1228,13 @@ def _verdict_line(report, gate=None):
 
     It said "**OK — nothing to fix.**" whatever the gate, so `check <empty> --gate` exited 1 under a last line saying
     all was well. Not ready with nothing missing is something there being wrong, and is said so -- not "0 missing".
-    The phase-0 lines name the step they gate, leaving phase 0 (R27), and say which half is not there."""
+    The phase-0 lines name the step they gate, leaving phase 0 (R27), and say which half is not there. A `project.json`
+    that is there and cannot be read is what both gates name first (#134, F M-5, H minor 8): its glossary read as
+    missing and its flaw map as "no flaw rows yet"."""
+    unreadable = ", ".join(u["file"] for u in report.get("unreadable") or [])
+    if unreadable and gate in ("phase0", "intake"):
+        step = "to leave phase 0" if gate == "phase0" else "for phase 0"
+        return f"**NOT READY {step} — {unreadable} cannot be read: mend it first (its row above says how).**"
     if gate == "phase0":
         if not flaw_rows(report):
             return "**NOT READY to leave phase 0 — no flaw rows yet.**"
@@ -1299,6 +1336,11 @@ def render_report(report, gate=None):
         lines.append("")
         lines.append(f"    python3 {os.path.abspath(__file__)} repair-encoding "
                      f"{report['project_dir']}")
+        lines.append("")
+    if report.get("encoding_unread"):
+        lines.append(f"**Not surveyed for its encoding — {len(report['encoding_unread'])} file(s) could not be "
+                     "opened:** " + "; ".join(f"{u['file']} ({u['why']})" for u in report["encoding_unread"])
+                     + ". Whether each is UTF-8 is not known; run the check again once it can be read.")
         lines.append("")
     if report.get("unsealed"):
         state_py = os.path.join(os.path.dirname(os.path.abspath(__file__)), "state", "state.py")
@@ -1434,7 +1476,9 @@ def render_report(report, gate=None):
                      + ". What came from it stays valid, but cannot be re-checked until it is found")
     # Every row standing on a measurement is said of a map that has rows: of an empty one it was true and said nothing.
     rows = flaw_rows(report)
-    if report.get("row_gaps") and not rows:
+    if any(u["file"] == "project.json" for u in report.get("unreadable") or []):
+        lines.append("- flaw map: not read -- project.json cannot be read.")      # never "no rows" (H minor 8)
+    elif report.get("row_gaps") and not rows:
         lines.append("- flaw map: no rows yet.")
     elif rows and report.get("map_ready"):
         lines.append("- flaw map: every row stands on a measurement.")
@@ -1552,8 +1596,15 @@ def _main(argv):
                 print("error: repair-encoding: --set-aside is a run of its own -- set the lines aside, then rewrite "
                       "the rest with --from <page>", file=sys.stderr)
                 return 2
-            # The journal lines no code page makes JSON of (#134, R56): moved, on the person's word, bytes kept.
-            moved = state_mod.set_aside(paths, unread)
+            # The journal lines no code page makes JSON of (#134, R56): moved, on the person's word, bytes kept. A
+            # write the disk refuses is one line, exit 1, with what landed (n1): it was a traceback.
+            try:
+                moved = state_mod.set_aside(paths, unread)
+            except Exception as exc:  # noqa: BLE001 -- matched by its attribute; anything else still raises
+                if not getattr(type(exc), "repair_refused", False):
+                    raise
+                print(f"error: {exc}", file=sys.stderr)
+                return 1
             if unread:
                 print(f"nothing was set aside under {project_dir}: every journal is read before any line moves",
                       file=sys.stderr)
@@ -1576,21 +1627,28 @@ def _main(argv):
         except state_mod.SnapshotError as exc:
             print(str(exc), file=sys.stderr)
             return 3
+        except Exception as exc:  # noqa: BLE001 -- matched by its attribute; anything else still raises
+            if not getattr(type(exc), "repair_refused", False):         # a write the disk refused (n1)
+                raise
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
         if unread:
             print(f"nothing was rewritten under {project_dir}: every file is read before any is rewritten",
                   file=sys.stderr)
             return state_mod.said_unread(unread)
         if not done:
-            print(f"every file the method owns under {project_dir} is UTF-8 — nothing was written")
+            print(f"no file the method owns under {project_dir} is in another code page — nothing was written")
         rewritten = [d for d in done if d["backup"]]
         for d in rewritten:
             print(f"{d['path']} — rewritten as UTF-8 (was {d['codec']}); original bytes kept at "
                   f"{os.path.basename(d['backup'])}")
         for d in done:
             if d.get("left"):
-                # No page rewrites these (R56): the way that takes them out is said, never left unsaid.
+                # No page rewrites these (R56): the way that takes them out is said, never left unsaid -- on stderr
+                # when nothing else was rewritten, the run's exit 3, as its other exit 3 is said (n1).
                 print(f"{d['path']} -- line {', '.join(map(str, d['left']))} left as it was: no code page makes JSON "
-                      f"of it -- set such lines aside, bytes kept: {set_aside_command}")
+                      f"of it -- set such lines aside, bytes kept: {set_aside_command}",
+                      file=sys.stdout if rewritten else sys.stderr)
         return 0 if rewritten or not done else 3
     if argv[1] == "version":
         info = {"contract_version": CONTRACT_VERSION, "format_version": FORMAT_VERSION,
@@ -1835,6 +1893,116 @@ def _check_set_aside_verb():
         shutil.rmtree(d, ignore_errors=True)
 
 
+def _check_repair_encoding_refusals():
+    """`repair-encoding`'s refusals are one line, exit 1, with what landed (#134, batch 2's second re-review n1-n3).
+
+    n1: a write the disk refuses during `--set-aside` or `--from` -- a read-only folder, a `<journal>.set-aside` that is
+    a folder -- was a bare traceback, exit 1; it is `error: <file> could not be written (...) -- <repair>; ...` or
+    `cannot be opened`, nothing set aside or rewritten, no temp left. And `--from`'s exit 3 over lines only a set-aside
+    takes says so on stderr, as its other exit 3 does (it printed on stdout).
+    n2: a lone line cut in a legacy page -- nothing glued after it -- was said as "(a write cut off, another glued on)";
+    the cause is said for both shapes now.
+    n3: one `.json` no code page reads stops the whole `--from` run (judged before the first write, m3), and said only
+    "Offered: none": it names the way -- the file's own history -- and that nothing was rewritten."""
+    import contextlib
+    import io
+    import shutil
+    import tempfile
+
+    def run(*argv):
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            try:
+                rc = _main(["contract.py", *argv])
+            except Exception as exc:  # noqa: BLE001 -- a traceback is the failure under test
+                rc = f"raised {type(exc).__name__}: {exc}"
+        return rc, out.getvalue(), err.getvalue()
+    failures = []
+    process_mod = _load_vendored("process")
+    d = tempfile.mkdtemp(prefix="autosound_contract_repair_refusals_")
+    try:
+        proc_dir = os.path.join(d, "process")
+        with contextlib.redirect_stdout(io.StringIO()):
+            process_mod.Process(proc_dir).enter_phase("-1")
+        journal = os.path.join(proc_dir, "journal.jsonl")
+        with open(journal, "rb") as f:
+            whole = f.read()
+        # n2: a lone line cut in a legacy page, the journal's last: nothing glued on.
+        lone = '{"type": "user_decision", "question": "лишаємо 45'.encode("cp1251")
+        with open(journal, "ab") as f:
+            f.write(lone + b"\n")
+        damaged = whole + lone + b"\n"
+        try:
+            process_mod.Process(proc_dir)._events()
+            failures.append("n2: a lone cut legacy line was read")
+        except Exception as exc:  # noqa: BLE001 -- the kind is what is under test
+            if "(a write cut off, another glued on)" in str(exc) or "a write cut off in it" not in str(exc):
+                failures.append(f"n2: the refusal says {str(exc)[-200:]!r}")
+        rc, out, err = run("repair-encoding", d)
+        if "(a write cut off, another glued on)" in out or "a write cut off in it" not in out:
+            failures.append(f"n2: the survey says {out[-300:]!r}")
+        rc, out, err = run("repair-encoding", d, "--from", "cp1251")
+        if rc != 3 or "--set-aside" not in err or "--set-aside" in out:
+            failures.append(f"n1: --from over set-aside lines alone: rc {rc}, out {out[-200:]!r}, err {err[-200:]!r}")
+        if os.name == "posix" and os.geteuid() != 0:            # root writes a read-only folder all the same
+            target = journal + ".set-aside"
+            listed = sorted(os.listdir(proc_dir))
+            os.chmod(proc_dir, 0o555)
+            try:
+                rc, out, err = run("repair-encoding", d, "--set-aside")
+            finally:
+                os.chmod(proc_dir, 0o755)
+            lines = err.strip().splitlines()
+            if rc != 1 or out.strip() or len(lines) != 1 or not lines[0].startswith(
+                    f"error: {target} could not be written (") or "nothing was set aside" not in lines[0]:
+                failures.append(f"n1: --set-aside, process/ read-only: rc {rc!r}, said {lines[-2:]!r}")
+            os.makedirs(target)
+            try:
+                rc, out, err = run("repair-encoding", d, "--set-aside")
+            finally:
+                os.rmdir(target)
+            lines = err.strip().splitlines()
+            if rc != 1 or len(lines) != 1 or not lines[0].startswith(f"error: {target} is a directory"):
+                failures.append(f"n1: --set-aside over a folder: rc {rc!r}, said {lines[-2:]!r}")
+            with open(journal, "rb") as f:
+                if f.read() != damaged:
+                    failures.append("n1: a refused set-aside changed the journal")
+            if sorted(os.listdir(proc_dir)) != listed:          # no temp, no set-aside file: nothing left behind
+                failures.append(f"n1: something left: {sorted(set(os.listdir(proc_dir)) - set(listed))}")
+            # --from, the project's own folder read-only: the backup cannot be written.
+            with open(journal, "wb") as f:
+                f.write(whole)
+            pj = os.path.join(d, "project.json")
+            with open(pj, "wb") as f:
+                f.write(json.dumps({"note": "лишаємо"}, ensure_ascii=False).encode("cp1251"))
+            os.chmod(d, 0o555)
+            try:
+                rc, out, err = run("repair-encoding", d, "--from", "cp1251")
+            finally:
+                os.chmod(d, 0o755)
+            lines = err.strip().splitlines()
+            if rc != 1 or len(lines) != 1 or not lines[0].startswith(f"error: {pj}.cp1251.orig could not be "
+                                                                       "written (") \
+                    or f"{pj} is as it was" not in lines[0]:
+                failures.append(f"n1: --from, the folder read-only: rc {rc!r}, said {lines[-2:]!r}")
+            os.remove(pj)
+        # n3: a `.json` no code page reads, beside a journal one does: `--from` names the way and rewrites nothing.
+        with open(journal, "wb") as f:
+            f.write(whole + json.dumps({"type": "user_decision", "question": "лишаємо"},
+                                       ensure_ascii=False).encode("cp1251") + b"\n")
+        broken = os.path.join(d, "glossary.json")
+        with open(broken, "wb") as f:
+            f.write(b'{"channels": "\x98\x00 cut')
+        rc, out, err = run("repair-encoding", d, "--from", "cp1251")
+        said = err.strip()
+        if rc != 3 or "Offered: none" in said or "checkout HEAD -- glossary.json" not in said \
+                or "nothing was rewritten" not in said:
+            failures.append(f"n3: rc {rc!r}, said {said[-300:]!r}")
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+    assert not failures, "\n  ".join(["repair-encoding's refusals:"] + failures)
+
+
 def _check_never_sealed_after_the_first_seal():
     """"banked, never sealed" counts only a version banked after its ledger line's first seal (#134, R54). A ledger
     holds versions from before seals existed (#58 P1), and `migrate.py --into` imports a version and seals nothing, so
@@ -1948,6 +2116,124 @@ def _check_gate_last_line():
             with contextlib.redirect_stdout(out):
                 rc = _main(["contract.py", "check", d, "--no-rew", "--phase0-gate"])
             assert (out.getvalue().rstrip("\n").splitlines()[-1], rc) == (line, code), (out.getvalue()[-300:], rc)
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+
+
+def _check_encoding_survey_in_check():
+    """`check`'s encoding survey names only what a code page spoiled, and says what it could not read (#134, batch 2's
+    re-review, Out of Scope 1 and 2). A `.json` cut inside its last character was listed under `encoding_damaged`, with
+    `repair-encoding` offered for it -- a cut file, which no page mends (its own row names the committed copy). And a
+    file the survey could not open dropped out of the field without a word: it is in `encoding_unread` now, `[{file,
+    why}]`, and the report says it was not surveyed."""
+    import shutil
+    import tempfile
+    d = tempfile.mkdtemp(prefix="autosound_contract_survey_")
+    try:
+        proc = os.path.join(d, "process")
+        os.makedirs(proc)
+        whole = json.dumps({"schema_version": 3, "note": "тест"}, ensure_ascii=False).encode("utf-8")
+        cut = whole[: whole.index("т".encode("utf-8")) + 1]          # inside the first `т`: a write cut off
+        with open(os.path.join(proc, "process-state.json"), "wb") as fh:
+            fh.write(cut)
+        report = check_project(d, skip_rew=True)
+        assert report["encoding_damaged"] == [], ("a cut file listed as another code page", report["encoding_damaged"])
+        if os.name == "posix" and os.geteuid() != 0:            # root opens a mode-0 file all the same
+            held = os.path.join(proc, "extra.json")
+            with open(held, "w", encoding="utf-8") as fh:
+                fh.write("{}")
+            os.chmod(held, 0)
+            try:
+                report = check_project(d, skip_rew=True)
+            finally:
+                os.chmod(held, 0o644)
+            unread = report.get("encoding_unread")
+            assert [u["file"] for u in unread or []] == ["process/extra.json"] and "Permission denied" in \
+                unread[0]["why"], unread
+            assert any(ln.startswith("**Not surveyed for its encoding — 1 file(s) could not be opened:** "
+                                     "process/extra.json") for ln in render_report(report).splitlines()), \
+                render_report(report)[-600:]
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+
+
+def _check_rew_block_by_state():
+    """`check`'s REW block says which REW it met, by the state on the exception's class (#134, batch 3's re-review O4):
+    REW down is `reachable: false`, "REW not reachable ... -- skipped", as it was; REW answering with an error or
+    with something that is no measurement list is `reachable: true` -- REW is there -- and its list not read; an
+    address that is none (`config`) is `reachable: null`, "skipped: REW was not asked ..."; a failure that is none of
+    REW's (a bug, a `rew_api.py` that cannot be loaded) is `reachable: null`, "skipped: ... not read -- <type>:
+    <message>". Every one of them read "REW not reachable", and TCC's REW dot (which reads `reachable` unless the
+    note starts "skipped") showed REW offline. `state` carries the state."""
+    import urllib.error
+    import rew_api as api
+
+    class Misaddressed(ValueError):
+        rew_state = "config"
+    real = api.get_measurements
+    failures = []
+    try:
+        for exc, reachable, state, starts in (
+                (api.RewUnavailable(ConnectionRefusedError(61, "Connection refused"), "http://127.0.0.1:1/measurements"),
+                 False, "unavailable", "REW not reachable (REW is not answering at"),
+                (urllib.error.HTTPError("http://127.0.0.1:1/measurements", 500, "Server Error -- REW said: busy", {},
+                                        None), True, "error", "REW answered with an error (HTTP Error 500"),
+                (api.RewProtocolError("REW's measurement list is not a map of measurements: list"), True, "protocol",
+                 "REW answered something that is not a measurement list ("),
+                (Misaddressed("REW_API_URL 'localhost:4735' is not an address: it does not start with http://"), None,
+                 "config", "skipped: REW was not asked -- REW_API_URL 'localhost:4735' is not an address"),
+                (TypeError("a bug in the listing's reader"), None, None,
+                 "skipped: REW's measurement list was not read -- TypeError: a bug in the listing's reader")):
+            def listing(_exc=exc):
+                raise _exc
+            api.get_measurements = listing
+            got = cross_check_rew({}, None, {})
+            if (got.get("reachable"), got.get("state")) != (reachable, state) or \
+                    not str(got.get("note", "")).startswith(starts):
+                failures.append(f"{type(exc).__name__}: {got}")
+            elif reachable is not False and "REW not reachable" in got["note"]:
+                failures.append(f"{type(exc).__name__}: said as REW not running: {got['note']}")
+    finally:
+        api.get_measurements = real
+    assert not failures, "\n  ".join(["the REW block:"] + failures)
+
+
+def _check_gates_name_an_unreadable_project_json():
+    """A `project.json` that is there and cannot be read is what both gates' last lines name (#134, F M-5, H minor 8,
+    T m11) -- never the glossary it carries, never "no flaw rows yet" of a map nobody could read. `--phase0-gate`
+    ended `**NOT READY to leave phase 0 — no flaw rows yet.**` and its body said `- flaw map: no rows yet.` over a
+    file holding rows; `--gate` counted the glossary inside it as missing. Both still exit 1; the report names the
+    file in `unreadable` (`[{file, issue}]`), and its row keeps the repair."""
+    import contextlib
+    import io
+    import shutil
+    import tempfile
+    d = tempfile.mkdtemp(prefix="autosound_contract_cut_project_")
+    try:
+        row = {"f_hz": 150.0, "level_db": -9.0, "kind": "cabin_null", "action": "no_boost", "why": "a null",
+               "evidence": ["w-L_01 (sw)"], "channels": ["w-L"], "at": "2026-01-01T00:00:00Z"}
+        whole = json.dumps({"schema_version": project.SCHEMA_VERSION, "acoustics": {"flaws": [row]},
+                            "glossary": {"schema_version": 1, "channels": [{"code": "w-L", "active": True}]}})
+        with open(os.path.join(d, "project.json"), "w", encoding="utf-8") as fh:
+            fh.write(whole[: len(whole) // 2])
+        report = check_project(d, skip_rew=True)
+        said = report.get("unreadable") or []
+        assert [u["file"] for u in said] == ["project.json"] and "cannot be read" in said[0]["issue"], said
+        for gate, flag, line in (
+                ("phase0", "--phase0-gate", "**NOT READY to leave phase 0 — project.json cannot be read: mend it "
+                                            "first (its row above says how).**"),
+                ("intake", "--gate", "**NOT READY for phase 0 — project.json cannot be read: mend it first (its row "
+                                     "above says how).**")):
+            text = render_report(report, gate=gate).splitlines()
+            assert text[-1] == line, (gate, text[-1])
+            assert "- flaw map: no rows yet." not in text and \
+                "- flaw map: not read -- project.json cannot be read." in text, (gate, [t for t in text if "flaw" in t])
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                rc = _main(["contract.py", "check", d, "--no-rew", flag])
+            assert (rc, out.getvalue().rstrip("\n").splitlines()[-1]) == (1, line), (flag, rc, out.getvalue()[-300:])
+        assert check_project(tempfile.gettempdir() + "/autosound-no-such-project", skip_rew=True)["unreadable"] == [], \
+            "a project.json that is not there is no unreadable file"
     finally:
         shutil.rmtree(d, ignore_errors=True)
 
@@ -2105,6 +2391,8 @@ def _selftest():
     failures = []
     for check in (_check_invalid_project_json, _check_unreadable_process_state, _check_journal_reported,
                   _check_set_aside_verb, _check_never_sealed_after_the_first_seal, _check_gate_last_line,
+                  _check_gates_name_an_unreadable_project_json, _check_rew_block_by_state,
+                  _check_encoding_survey_in_check, _check_repair_encoding_refusals,
                   _check_unreadable_profile_and_seals_reported, _check_version_verb, _check_version_shape,
                   _check_skill_version, _check_skill_sha):
         try:

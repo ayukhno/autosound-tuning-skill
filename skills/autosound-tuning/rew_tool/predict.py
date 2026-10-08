@@ -41,7 +41,8 @@ swept under LR24 @1000, mids and centre under LR24 @100). v7 files say what was 
 (`rewSource.protectiveHighPass`); live REW solos are answered by the capture round's protective record
 (`--process DIR`, the same record `analyze-joints --process` reads). The same rules as there: marked
 raw -> de-embedded, `protective.de_embed`'s boost cap reported; recorded as unfiltered -> unchanged;
-unmarked at baseline (`--baseline`) -> the channel is refused, not guessed.
+unmarked at baseline (`--baseline`) -> the channel is refused, not guessed; a leg the method has no model
+for (a Chebyshev, `CH`) -> the channel is refused, never taken out as another family (#134, R52).
 
 Deliberately NOT modelled, and said so in the output rather than silently skipped:
 
@@ -277,8 +278,13 @@ def _leg(leg):
         return None
     if leg.get("slope") in (None, "OFF", "off", 0):
         return None
-    return {"f": float(leg["f"]), "type": str(leg.get("type", "LR")).upper(),
-            "slope": int(leg["slope"])}
+    family = str(leg.get("type", "LR")).upper()
+    if family not in dsp_math.MODELLABLE_FAMILIES:
+        # A family the method has no model for (#134, R49): the row is left out and says why, never modelled as
+        # another family -- `dsp_math` built a Butterworth for anything that was not BE or LR, a Chebyshev included.
+        raise PredictError(f"crossover {family}{leg['slope']} at {leg['f']:g} Hz: the method has no model for "
+                           f"{family} (it models LR, BW and BE) -- never another family in its place")
+    return {"f": float(leg["f"]), "type": family, "slope": int(leg["slope"])}
 
 
 def chain_from_anchor(d):
@@ -495,7 +501,17 @@ def de_embed_solos(loaded, freqs, record=None, baseline=None):
             verdict, detail = "no", ("protectiveHighPass is null and the file predates the "
                                      "protectiveState mark (writer <= 3.0.27) -- read as unfiltered")
         if verdict == "yes":
-            corrected, dinfo = prot.de_embed(f, H, detail)
+            try:
+                corrected, dinfo = prot.de_embed(f, H, detail)
+            except Exception as exc:  # noqa: BLE001 -- matched by its attribute below; anything else still raises
+                # A leg the method does not model -- a Chebyshev, recorded as typed (#134, R49, R52): the channel is
+                # refused as an unmarked baseline one is, with the leg and the way on. It was taken out as a
+                # Butterworth, and the note said the Chebyshev was.
+                if not getattr(type(exc), "is_unmodelled", False):
+                    raise
+                refused.append(code)
+                notes.append(f"{code}: REFUSED -- {exc}")
+                continue
             solos[code] = corrected
             legs_s = " ".join(f"{k.upper()} {v['f']:g} {v.get('type', 'LR')}{v.get('slope', 24)}"
                               for k, v in ((k, prot._live(detail.get(k))) for k in ("hp", "lp")) if v)
@@ -1065,16 +1081,20 @@ APF_HINT_DIP_DB = -3.0     # a junction dip worse than this after delay/polarity
 
 
 def _profile_limits(project_dir):
-    """(processing rate, delay ceiling ms) from the project's `dsp_profile.json`, each None if unknown."""
+    """(processing rate, delay ceiling ms) from the project's `dsp_profile.json`, each None if unknown.
+
+    A profile that is there and cannot be read, or that a newer method wrote, raises `load_profile`'s exception (#134,
+    H I-4): it was (None, None), "unknown", and `--align` took a 0.01 ms grid and no ceiling over a profile that
+    states both. `main` refuses it in one line; `bind_model_rate` has refused it before this is reached."""
     if not project_dir:
         return None, None
     path = os.path.join(project_dir, "dsp_profile.json")
-    if not os.path.isfile(path):
+    if not os.path.lexists(path):
         return None, None
     import dsp_profile as _dp
     try:
         data = _dp._unwrap(_dp.load_profile(path))
-    except Exception:  # noqa: BLE001 -- a broken profile is the profile's problem, said elsewhere
+    except FileNotFoundError:
         return None, None
     rate = _dp.processing_rate_hz(data)
     delay = (data.get("delay") or {}).get("max_ms") if isinstance(data.get("delay"), dict) else None
@@ -2009,11 +2029,13 @@ def plot(result, path):
 # ---------------------------------------------------------------- CLI
 def main(argv=None):
     """The command line (`_main`), and its refusal of a project file it reads and cannot (#134, R53): the journal held,
-    a line in it in another code page -- one line, `error: <file> <reason> -- <repair>`, exit 1, never a traceback."""
+    a line in it in another code page, a `dsp_profile.json` cut off or a newer method's (H I-4) -- one line,
+    `error: <file> <reason> -- <repair>`, exit 1, never a traceback. So is a filter the method has no model for met in
+    the model itself (`is_unmodelled`, R49): a crossover of an anchors-style state, an edge of `--ladder-edge`."""
     try:
         return _main(argv)
     except Exception as exc:  # noqa: BLE001 -- matched by its attribute below; anything else still raises
-        if not getattr(type(exc), "is_unreadable", False):
+        if not (getattr(type(exc), "is_unreadable", False) or getattr(type(exc), "is_unmodelled", False)):
             raise
         print(f"error: {exc}", file=sys.stderr)
         return 1
@@ -2430,6 +2452,150 @@ def _main(argv=None):
 
 
 # ---------------------------------------------------------------- selftest
+def _check_unmodelled_protective_refused():
+    """A protective leg the method cannot model refuses its channel, never "taken out" (#134, R49, R52).
+
+    `protective.de_embed` built a Butterworth for a Chebyshev leg, and `de_embed_solos` said `m-L: protective HP 100
+    CH24 taken out of the solo` over a BW taken out. Now the channel is refused, as a baseline channel nobody marked
+    is: left out of the solos, in `refused`, with a note naming the channel, the leg and the person's way on. A REW
+    solo (the round's record) and a v7 solo (its file's mark) alike; a modelled leg is taken out as before. A ledger
+    row with such a crossover is left out of the chains, said, never modelled as another family; and one met where
+    no row is read (a `--ladder-edge`) refuses the run in one line, exit 1."""
+    import contextlib
+    import io as _io
+    f = grid(20, 20000, 24)
+    flat = np.ones(len(f), dtype=complex)
+    ch = {"hp": {"f": 100.0, "type": "CH", "slope": 24}, "lp": "OFF"}
+    record = {"series": "cap_001", "channels": {"m-L": ch, "w-L": "OFF"}}
+    for label, loaded, rec in (
+            ("REW solo, the round's record", {"m-L": (flat, {"source": "rew"}), "w-L": (flat, {"source": "rew"})},
+             record),
+            ("v7 solo, the file's mark", {"m-L": (flat, {"source": "v7", "protective": _legs_from_v7(
+                {"hz": 100, "family": "CH", "slopeDbPerOct": 24})}),
+                "w-L": (flat, {"source": "v7", "protective": {"hp": "OFF", "lp": "OFF"},
+                               "protective_state": "bare"})}, None)):
+        solos, notes, refused = de_embed_solos(loaded, f, record=rec)
+        said = [n for n in notes if n.startswith("m-L:")]
+        assert refused == ["m-L"] and "m-L" not in solos and "w-L" in solos, (label, refused, sorted(solos))
+        assert said and said[0].startswith("m-L: REFUSED -- protective HP 100 Hz CH24 cannot be taken out") \
+            and "LR, BW or BE" in said[0] and "taken out of the solo" not in said[0], (label, said)
+    lr = {"m-L": (flat, {"source": "rew"})}
+    solos, notes, refused = de_embed_solos(lr, f, record={"channels": {"m-L": {
+        "hp": {"f": 100.0, "type": "LR", "slope": 24}, "lp": "OFF"}}})
+    assert not refused and "m-L" in solos and "protective HP 100 LR24 taken out of the solo" in notes[0], notes
+    chains = chains_from_snapshot({"channels": {"m-L": {"hp": {"f": 300, "type": "CH", "slope": 24}, "lp": "OFF",
+                                                        "gain_db": 0.0, "ta_ms": 0.0, "polarity": "NORM"}}})
+    why = chains["m-L"].get("unmodellable") or ""
+    assert "CH24" in why and "LR, BW and BE" in why, chains
+    # Where no ledger row is read -- an anchors-style state -- the crossover is met in the model itself: the run
+    # refuses in one line, exit 1, nothing on stdout, never a traceback.
+    import shutil
+    import tempfile
+    import resonalyze_ir as ri
+    top = tempfile.mkdtemp(prefix="autosound_predict_unmodelled_")
+    try:
+        solos = os.path.join(top, "solos")
+        os.makedirs(solos)
+        x = np.zeros(1 << 15)
+        x[96] = 0.5
+        doc = ri.build_v7(x, 96000, 0.0, low_hz=20.0, high_hz=20000.0)
+        ri.write_v7(doc[0] if isinstance(doc, tuple) else doc, os.path.join(solos, "w_L.json"))
+        anchors = os.path.join(top, "anchors.json")
+        with open(anchors, "w", encoding="utf-8") as fh:
+            json.dump({"w-L": {"hpf": {"hz": 60, "family": "CH", "slope": 24}, "delay_ms": 0, "gain_db": 0}}, fh)
+        out, err = _io.StringIO(), _io.StringIO()
+        try:
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                rc = main(["--solos", solos, "--state-json", anchors, "--json"])
+        except Exception as exc:  # noqa: BLE001 -- a traceback is the failure under test
+            rc = f"raised {type(exc).__name__}: {exc}"
+        lines = err.getvalue().strip().splitlines()
+        assert rc == 1 and lines and lines[-1].startswith("error: dsp_math has no model for a 'CH' filter") \
+            and "Traceback" not in err.getvalue() and not out.getvalue(), (rc, err.getvalue()[-300:])
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_profile_read_strictly():
+    """A `dsp_profile.json` that is there and cannot be read, or that a newer method wrote, refuses the run before
+    anything is computed (#134, H I-4): `error: <file> <reason> -- <repair>`, exit 1, nothing on stdout. It was read
+    as "no rate stated" -- the advice "State dsp_processing_rate_hz in the profile" over a profile cut off after
+    stating it -- and the run modelled at the assumed rate, with `--align` on a 0.01 ms grid and no delay ceiling.
+    `_profile_limits` refuses it too, where it answered (None, None). No profile is still no rate, and the run goes
+    on."""
+    import contextlib
+    import io as _io
+    import shutil
+    import tempfile
+    import resonalyze_ir as ri
+    state_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "state")
+    if state_dir not in sys.path:
+        sys.path.insert(0, state_dir)
+    import state as st
+    import project as _project_mod
+    import dsp_profile as _dp
+    fs = 96000
+    top = tempfile.mkdtemp(prefix="autosound_predict_profile_")
+    saved_env = os.environ.pop("AUTOSOUND_PROJECT_DIR", None)
+
+    def run(argv):
+        out, err = _io.StringIO(), _io.StringIO()
+        try:
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                rc = main(argv)
+        except Exception as exc:  # noqa: BLE001 -- a traceback is the failure under test
+            rc = f"raised {type(exc).__name__}: {exc}"
+        return rc, out.getvalue(), err.getvalue()
+    try:
+        proj = os.path.join(top, "project")
+        os.makedirs(proj)
+        pj = _project_mod.Project(proj)
+        pj.save(pj.load())
+        snap = {"schema_version": 3, "preset": "SQ", "sample_rate": fs, "channels": {
+            "w-L": {"hp": {"f": 60, "type": "LR", "slope": 24}, "lp": {"f": 400, "type": "LR", "slope": 24},
+                    "gain_db": 0.0, "ta_ms": 0.0, "polarity": "NORM", "eq": []}}}
+        root = os.path.join(proj, "state")
+        st.PresetHistory(root, "SQ", project_dir=proj).snapshot(snap, note="the design")
+        st.Registry(root).set_active("SQ")
+        solos = os.path.join(top, "solos")
+        os.makedirs(solos)
+        x = np.zeros(1 << 15)
+        x[96] = 0.5
+        doc = ri.build_v7(x, fs, 0.0, low_hz=20.0, high_hz=20000.0)
+        ri.write_v7(doc[0] if isinstance(doc, tuple) else doc, os.path.join(solos, "w_L.json"))
+        argv = ["--solos", solos, "--project", proj, "--json"]
+        rc, out, err = run(argv)
+        assert rc == 0 and isinstance(json.loads(out), dict), ("no profile: the run goes on", rc, err[-300:])
+        path = os.path.join(proj, "dsp_profile.json")
+        newer = _dp.SCHEMA_VERSION + 1
+        failures = []
+        for label, raw, said in (
+                ("cut after its rate", b'{"dsp_profile": {"name": "X", "vendor": "Y", "dsp_processing_rate_hz": '
+                                       b'96000, "gro', "checkout HEAD -- dsp_profile.json"),
+                ("a newer method's", json.dumps({"schema_version": newer, "dsp_profile": {
+                    "name": "X", "vendor": "Y", "groups": []}}).encode("utf-8"), f"is schema v{newer}")):
+            with open(path, "wb") as fh:
+                fh.write(raw)
+            for extra in ([], ["--align"]):
+                rc, out, err = run(argv + extra)
+                lines = err.strip().splitlines()
+                if rc != 1 or out.strip() or len(lines) != 1 or not lines[0].startswith(f"error: {path} ") \
+                        or said not in lines[0]:
+                    failures.append(f"{label} {extra}: rc {rc!r}, stdout {len(out)} chars, said {lines[-3:]!r}")
+            try:
+                got = _profile_limits(proj)
+            except Exception as exc:  # noqa: BLE001 -- the kind is what is under test
+                if not getattr(type(exc), "is_unreadable", False):
+                    failures.append(f"{label}: _profile_limits raised {type(exc).__name__}")
+            else:
+                failures.append(f"{label}: _profile_limits read it as {got!r}")
+        assert not failures, "\n  ".join(["a profile predict could not read:"] + failures)
+    finally:
+        if saved_env is not None:
+            os.environ["AUTOSOUND_PROJECT_DIR"] = saved_env
+        shutil.rmtree(top, ignore_errors=True)
+
+
 def _check_knobs_read_strictly():
     """The knobs a series was taken at are read from the journal as the method reads it, strictly (#134, R53): a
     journal that cannot be opened -- mode 0 -- or that holds a line in another code page refuses the run in one line,
@@ -3224,6 +3390,8 @@ def _selftest():
     assert len(short) == NOTES_SHOWN + 1 and "--verbose" in short[-1], short
     assert len(compact_notes(many, verbose=True)) == 7
     _check_knobs_read_strictly()
+    _check_unmodelled_protective_refused()
+    _check_profile_read_strictly()
     print("selftest[predict] OK -- chain arithmetic (gain/pol/delay/LR corner/PK), ledger row == anchors "
           "entry, a phase angle is realized at the row's configured reference (LPF on a sub, HPF "
           "otherwise; slope OFF keeps it), delivered AT the reference, capped by name, refused without "

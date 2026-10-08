@@ -1132,12 +1132,49 @@ def _main(argv=None):
 
 
 # ---------------------------------------------------------------- selftest
+def _check_profile_read_strictly():
+    """A `dsp_profile.json` that is there and cannot be read, or that a newer method wrote, refuses the run before
+    anything is read or modelled (#134, H I-4): `error: <file> <reason> -- <repair>`, exit 1, one line, nothing on
+    stdout. It was read as "no rate stated" (`bind_model_rate`), and the model went on at the assumed rate."""
+    import contextlib
+    import io as _io
+    import shutil
+    import tempfile
+    import dsp_profile as _dp
+    d = tempfile.mkdtemp(prefix="autosound_eq_propose_profile_")
+    try:
+        path = os.path.join(d, "dsp_profile.json")
+        newer = _dp.SCHEMA_VERSION + 1
+        failures = []
+        for label, raw, said in (
+                ("cut after its rate", b'{"dsp_profile": {"name": "X", "dsp_processing_rate_hz": 48000, "gro',
+                 "checkout HEAD -- dsp_profile.json"),
+                ("a newer method's", json.dumps({"schema_version": newer, "dsp_profile": {"name": "X"}}).encode(),
+                 f"is schema v{newer}")):
+            with open(path, "wb") as fh:
+                fh.write(raw)
+            out, err = _io.StringIO(), _io.StringIO()
+            try:
+                with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                    rc = main(["--project", d, "--house", os.path.join(d, "house.txt"), "--solos", d])
+            except BaseException as exc:  # noqa: BLE001 -- a traceback or a usage exit is the failure under test
+                rc = f"raised {type(exc).__name__}: {exc}"
+            lines = err.getvalue().strip().splitlines()
+            if rc != 1 or out.getvalue() or len(lines) != 1 or not lines[0].startswith(f"error: {path} ") \
+                    or said not in lines[0]:
+                failures.append(f"{label}: rc {rc!r}, said {lines[-2:]!r}")
+        assert not failures, "\n  ".join(["a profile eq_propose could not read:"] + failures)
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+
+
 def _selftest():
     """Anchored to the definitions: a driver resonance is cut where it is, a comb is not boosted,
     a moving peak is not proposed, an L/R shelf difference goes to the pair package, a tonal
     offset moves the pair on the macro scale and leaves the fine residual alone."""
     import tempfile
     import ellipsoid as E
+    _check_profile_read_strictly()
     f = P.grid(20, 20000, 96)
 
     class House:

@@ -745,8 +745,12 @@ def _write_free(folder, stamp, role, suffix, text, names=_REVIEW_NAMES):
     Opened with "x", never over a file: a name another writer took between the look and the open sends the write to
     the next base. A writer of the other kind (a review and a package) can take the same base at once, each creating
     its own name: so each looks at the base's other names AFTER its create, and steps aside to the next base when one
-    is there -- of two that created at once, the later always sees the earlier. UTF-8 in the platform's line ending,
-    as the "w" it replaces wrote."""
+    is there -- of two that created at once, at least the later sees the earlier; both may, and then both step aside
+    to later bases, neither lost. UTF-8 in the platform's line ending, as the "w" it replaces wrote.
+
+    A step-aside whose remove is refused (a Windows scanner holding the new file, #134, T m12, H minor 9) keeps the
+    base: the text is on disk under it, beside the other writer's file, and it is said on stderr, with the cause --
+    it raised, the caller said "not saved", and no `REVIEW_FILE` named a review that was there."""
     for _ in range(100):
         base = _free_base(folder, stamp, role, names)
         path = os.path.join(folder, base + suffix)
@@ -755,8 +759,15 @@ def _write_free(folder, stamp, role, suffix, text, names=_REVIEW_NAMES):
                 fh.write(text)
         except FileExistsError:
             continue
-        if any(os.path.exists(os.path.join(folder, base + name)) for name in names if name != suffix):
-            os.remove(path)
+        others = [base + name for name in names
+                  if name != suffix and os.path.exists(os.path.join(folder, base + name))]
+        if others:
+            try:
+                os.remove(path)
+            except OSError as exc:
+                print(f">> {path} is written and stays under the base {base}, beside {', '.join(others)}: it was to "
+                      f"step aside to the next base and could not be removed ({exc})", file=sys.stderr)
+                return base
             continue
         return base
     raise FileExistsError(f"{folder}: no free name for {stamp}-{role} after 100 tries")
@@ -1517,11 +1528,72 @@ def _check_review_names_unique():
                 os.environ[k] = v
 
 
+def _check_step_aside_refused_remove():
+    """A review that steps aside -- a package took its base at the same moment -- and whose remove is refused (a Windows
+    scanner holding it) is on disk, and said so (#134, T m12, H minor 9): the remove raised, `_persist_review` said
+    "not saved" and printed no `REVIEW_FILE`, over a review that was there. Now the base is kept: the review stays
+    under it, beside the package, stderr names both and why, and `REVIEW_FILE` names the review."""
+    import contextlib
+    import io
+    real_dt, real_free, real_remove = globals()["datetime"], globals().get("_free_base"), os.remove
+    saved = {k: os.environ.pop(k, None) for k in ("AUTOSOUND_PROJECT_DIR", "AUTOSOUND_REVIEW_RAW_DIR")}
+
+    class Frozen(real_dt):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2026, 10, 7, 1, 2, 3, tzinfo=tz)
+    try:
+        with tempfile.TemporaryDirectory() as project:
+            open(os.path.join(project, "project.json"), "w", encoding="utf-8").close()
+            os.environ["AUTOSOUND_PROJECT_DIR"] = project
+            globals()["datetime"] = Frozen
+            reviews = os.path.join("process", "reviews")
+            folder = os.path.join(project, reviews)
+            os.makedirs(folder)
+            base = "2026-10-07T01-02-03-critic"
+            with open(os.path.join(folder, base + "-package.md"), "x", encoding="utf-8") as fh:
+                fh.write("another writer's package")
+            mine = os.path.join(folder, base + ".md")
+            looks = []
+
+            def look(*args, **kw):                  # the look saw the base free; the package took it before the check
+                looks.append(args)
+                return base if len(looks) == 1 else real_free(*args, **kw)
+
+            def refused(path, *args, **kw):
+                if os.path.abspath(path) == os.path.abspath(mine):
+                    raise PermissionError(13, "The process cannot access the file because it is being used by "
+                                              "another process", path)
+                return real_remove(path, *args, **kw)
+            err = io.StringIO()
+            globals()["_free_base"], os.remove = look, refused
+            try:
+                with contextlib.redirect_stderr(err):
+                    got = _persist_review("critic", "the critique", "m", "api")
+            finally:
+                globals()["_free_base"], os.remove = real_free, real_remove
+            said = err.getvalue()
+            assert got == os.path.join(reviews, base + ".md"), (got, said[-400:])
+            assert f"REVIEW_FILE: {got}" in said and "could not be removed" in said and f"{base}-package.md" in said, \
+                said[-400:]
+            with open(mine, encoding="utf-8") as fh:
+                assert fh.read().endswith("the critique"), "the review on disk is not the one written"
+    finally:
+        globals()["datetime"] = real_dt
+        if real_free is not None:
+            globals()["_free_base"] = real_free
+        os.remove = real_remove
+        for k, v in saved.items():
+            os.environ.pop(k, None)
+            if v is not None:
+                os.environ[k] = v
+
+
 def _selftest():
     """Offline: a retired model becomes a CHOICE carrying the key's list (never a fall-through),
     the list is parsed from the API's shape, and a run with a key and no model stops on the list."""
     failures = []
-    for check in (_check_review_names_unique,):
+    for check in (_check_review_names_unique, _check_step_aside_refused_remove):
         try:
             check()
         except AssertionError as exc:
