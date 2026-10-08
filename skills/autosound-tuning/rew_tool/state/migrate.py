@@ -627,7 +627,7 @@ def _check_import_refuses_newer_project():
             words = str(exc)
         else:
             raise AssertionError("Project.save wrote down facts a newer method wrote")
-        for dry_run in (False, True):
+        for dry_run in (True, False):              # the dry run first: it meets the folder as it was, and takes no lock
             had = sorted(os.listdir(new))
             try:
                 import_current_state(old, new, dry_run=dry_run)
