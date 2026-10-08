@@ -487,7 +487,11 @@ def seed(source, target, *, include_findings=False, copy_profile=True, note=DEFA
     try:
         project.Project(target).save(seeded)
     except Exception as exc:                # noqa: BLE001 -- the validator, or a disk that said no
-        return Seeded(False, problem=f"{type(exc).__name__}: {exc}")
+        # Another writer holding the new project's lock past the wait (#141, R14) is said in the lock's own sentence --
+        # the lock file, nothing written, safe to retry -- with no class name in front: TCC's new-project dialog
+        # shows this text as it is.
+        said = str(exc) if getattr(type(exc), "is_busy", False) else f"{type(exc).__name__}: {exc}"
+        return Seeded(False, problem=said)
     result.written.append("project.json")
 
     os.makedirs(target, exist_ok=True)
@@ -654,9 +658,41 @@ def _source_project(root):
     return root
 
 
+def _check_a_held_lock_said_in_the_result():
+    """A seed meets the new project's writer lock at its first write, `project.json` (#141, R14). Under another writer's
+    lock it waits AUTOSOUND_LOCK_TIMEOUT_S and refuses as a seed refuses -- `ok` false, nothing written -- and its
+    `problem` is the lock's own sentence: `busy: <the lock file> is held by another writer -- nothing was written, safe
+    to retry`. TCC's new-project dialog shows that text, so it names the lock and says a retry is safe, in one line
+    with no class name stuck in front. Let go, the seed lands."""
+    import tempfile
+    import project
+    with tempfile.TemporaryDirectory() as tmp:
+        src = _source_project(os.path.join(tmp, "old-car"))
+        dst = os.path.join(tmp, "new-car")
+        lock_file = project._write_lock().lock_path(dst)
+        with project._held_elsewhere(dst), project._env(AUTOSOUND_LOCK_TIMEOUT_S="0.2"):
+            out = seed(src, dst, today=date(2026, 10, 8))
+            listed = sorted(os.listdir(dst))
+        said = out.problem or ""
+        assert not out.ok, "a seed went through under another writer's lock"
+        assert said == f"busy: {lock_file} is held by another writer -- nothing was written, safe to retry", said
+        assert listed == [".autosound"], f"written under another writer's lock: {listed}"
+        with project._env(AUTOSOUND_LOCK_TIMEOUT_S="0.2"):
+            again = seed(src, dst, today=date(2026, 10, 8))
+        assert again.ok and os.path.isfile(os.path.join(dst, "project.json")), again.problem
+
+
 def _selftest():
     os.environ["AUTOSOUND_NO_GH"] = "1"          # a seed makes a repository; the test never reaches GitHub
     import tempfile
+
+    failures = []
+    for check in (_check_a_held_lock_said_in_the_result,):
+        try:
+            check()
+        except AssertionError as exc:
+            failures.append(f"{check.__name__}: {exc}")
+    assert not failures, "\n".join(failures)
 
     with tempfile.TemporaryDirectory() as tmp:
         src = _source_project(os.path.join(tmp, "old-car"))
@@ -851,7 +887,8 @@ def _selftest():
           f"only measurements_repo of 4 paths, project_rev 1 not inherited, "
           f"profile carried with {out.profile_open} facts still open, re-seed refused; "
           f"a new processor keeps the car and drops all {len(DSP_KEYS)} DSP-bound keys, "
-          f"findings still on offer there")
+          f"findings still on offer there; under another writer's lock a seed refuses with the lock's own "
+          f"busy line -- the lock file, nothing written, safe to retry -- and nothing written (#141, R14)")
 
 
 if __name__ == "__main__":

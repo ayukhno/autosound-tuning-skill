@@ -206,36 +206,40 @@ def run(project_dir, transcription_path, atf=None, write=False, preset=None, not
     root = os.path.join(project_dir, "state")
     hist = _state.PresetHistory(root, preset, project_dir=project_dir)
     rate = dsp_profile.processing_rate_hz(profile)
-    try:
-        hist.load()
-        has_history = True
-    except FileNotFoundError:
-        has_history = False
-    if not has_history:
-        rows = {}
-        for code, ch in doc["channels"].items():
-            row = {"hp": ch.get("hp", "OFF"), "lp": ch.get("lp", "OFF"),
-                   "gain_db": ch.get("gain_db", 0.0), "ta_ms": ch.get("ta_ms", 0.0),
-                   "polarity": ch.get("polarity", "NORM"), "eq": ch.get("eq", [])}
-            for k in ("mute", "off", "phase_deg", "tag"):
-                if k in ch:
-                    row[k] = ch[k]
-            rows[code] = row
-        state = {"schema_version": _state.SCHEMA_VERSION, "preset": preset, "sample_rate": rate,
-                 "channels": rows, "provenance": prov}
-        version = hist.snapshot(state, note=note or f"read from the DSP: {prov['source']}")
-        reg = _state.Registry(root)
-        if reg.get_active() is None:
-            reg.set_active(preset)
-        result["version"] = version
-        result["mode"] = "seeded"
-    else:
-        res = _apply.propose(hist, {"channels": doc["channels"]},
-                             note=note or f"re-read from the DSP: {prov['source']}",
-                             provenance=prov, registry=_state.Registry(root))
-        result["version"] = res["version"]
-        result["mode"] = "proposed"
-        result["diff"] = res.get("diff")
+    # One hold of the project's writer lock from the read that decides seed or proposal to the last write (#141, R14):
+    # the bank, the slot and the proposal re-enter it, so a ledger another writer seeded meanwhile is not seeded over,
+    # and a busy lock's "nothing was written" is true.
+    with _state._hold(hist.project_dir):
+        try:
+            hist.load()
+            has_history = True
+        except FileNotFoundError:
+            has_history = False
+        if not has_history:
+            rows = {}
+            for code, ch in doc["channels"].items():
+                row = {"hp": ch.get("hp", "OFF"), "lp": ch.get("lp", "OFF"),
+                       "gain_db": ch.get("gain_db", 0.0), "ta_ms": ch.get("ta_ms", 0.0),
+                       "polarity": ch.get("polarity", "NORM"), "eq": ch.get("eq", [])}
+                for k in ("mute", "off", "phase_deg", "tag"):
+                    if k in ch:
+                        row[k] = ch[k]
+                rows[code] = row
+            state = {"schema_version": _state.SCHEMA_VERSION, "preset": preset, "sample_rate": rate,
+                     "channels": rows, "provenance": prov}
+            version = hist.snapshot(state, note=note or f"read from the DSP: {prov['source']}")
+            reg = _state.Registry(root)
+            if reg.get_active() is None:
+                reg.set_active(preset)
+            result["version"] = version
+            result["mode"] = "seeded"
+        else:
+            res = _apply.propose(hist, {"channels": doc["channels"]},
+                                 note=note or f"re-read from the DSP: {prov['source']}",
+                                 provenance=prov, registry=_state.Registry(root))
+            result["version"] = res["version"]
+            result["mode"] = "proposed"
+            result["diff"] = res.get("diff")
     return result
 
 
@@ -298,12 +302,82 @@ def _check_cli_refuses_unreadable_profile():
         shutil.rmtree(proj, ignore_errors=True)
 
 
+def _check_write_waits_for_the_lock():
+    """`--write` banks under the project's writer lock, one hold from the read that decides seed or proposal to its
+    last write (#141, R14): under another writer's lock it waits AUTOSOUND_LOCK_TIMEOUT_S and exits 75 with one `busy:`
+    line, no traceback, and nothing banked. An AUTOSOUND_LOCK_TIMEOUT_S that is no number of seconds is a usage error,
+    exit 2, nothing banked. Let go, the reading is banked."""
+    import shutil
+    import tempfile
+    import project as _project
+    top = tempfile.mkdtemp(prefix="setup_import_busy_")
+    failures = []
+    try:
+        proj = os.path.join(top, "proj")
+        os.makedirs(os.path.join(proj, "state"))
+        dsp_profile.save_profile(dsp_profile.profile_path(proj),
+                                 dsp_profile.find_bundled("Audiotec-Fischer", "Helix DSP Ultra S"))
+        _project.Project(proj).save({"schema_version": _project.SCHEMA_VERSION,
+                                     "channels": [{"code": "m-L", "role": "mid", "tier": "channels"}]})
+        doc = os.path.join(top, "reading.json")
+        with open(doc, "w", encoding="utf-8") as fh:
+            json.dump({"preset": "SQ", "source": "PC-Tool 6 screens", "read_on": "2026-10-08", "channels": {
+                "m-L": {"hp": {"f": 300, "type": "LR", "slope": 24}, "lp": {"f": 3000, "type": "LR", "slope": 24},
+                        "gain_db": -3.0, "ta_ms": 2.35, "polarity": "NORM", "eq": []}}}, fh)
+        before = _project._files_in(proj)
+        with _project._held_elsewhere(proj):
+            rc, out, err = _project._run_cli(_main, [proj, doc, "--write"], AUTOSOUND_LOCK_TIMEOUT_S="0.2")
+            why = _project._said_busy(rc, err, proj)
+            if why or len([ln for ln in err.splitlines() if ln.startswith("busy: ")]) != 1:
+                failures.append(f"under a held lock: {why or err.strip()[-200:]!r}")
+            if _project._files_in(proj) != before:
+                failures.append("banked under another writer's lock")
+        rc, out, err = _project._run_cli(_main, [proj, doc, "--write"], AUTOSOUND_LOCK_TIMEOUT_S="soon")
+        lines = err.strip().splitlines()
+        if rc != 2 or len(lines) != 1 or "AUTOSOUND_LOCK_TIMEOUT_S=soon" not in lines[0] \
+                or _project._files_in(proj) != before:
+            failures.append(f"a bad wait: rc {rc}, said {err.strip()[-200:]!r}")
+        # Let go, the reading is banked -- seeded, then proposed -- and everything it reads or writes is reached with
+        # the lock held already: one hold from the decision to the last write.
+        lock, seen = _project._write_lock(), []
+        watch = {(_state.PresetHistory, "load"), (_state.PresetHistory, "snapshot"), (_state.Registry, "set_active")}
+        real = {(owner, name): getattr(owner, name) for owner, name in watch}
+        real_propose = _apply.propose
+
+        def watched(key):
+            def call(*args, **kwargs):
+                seen.append((key[1], lock.held_here(proj)))
+                return real[key](*args, **kwargs)
+            return call
+
+        def propose(*args, **kwargs):
+            seen.append(("propose", lock.held_here(proj)))
+            return real_propose(*args, **kwargs)
+        try:
+            for key in watch:
+                setattr(key[0], key[1], watched(key))
+            _apply.propose = propose
+            for mode in ("seeded", "proposed"):
+                rc, out, err = _project._run_cli(_main, [proj, doc, "--write"], AUTOSOUND_LOCK_TIMEOUT_S="0.2")
+                if rc != 0 or f"{mode}" not in out:
+                    failures.append(f"let go, the reading was not {mode}: rc {rc}, said {(err or out).strip()[-200:]!r}")
+        finally:
+            for key, fn in real.items():
+                setattr(key[0], key[1], fn)
+            _apply.propose = real_propose
+        if not seen or not all(held for _name, held in seen):
+            failures.append(f"read or written with the lock free: {seen}")
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["--write and the project's lock:"] + failures)
+
+
 def _selftest():
     import shutil
     import tempfile
 
     failures = []
-    for check in (_check_cli_refuses_unreadable_profile,):
+    for check in (_check_cli_refuses_unreadable_profile, _check_write_waits_for_the_lock):
         try:
             check()
         except AssertionError as exc:
@@ -401,7 +475,9 @@ def _selftest():
     print("selftest OK -- off-grid delay, out-of-range gain, bad polarity, foreign EQ type and "
           "out-of-range EQ gain are each refused by name and nothing is written; ATF LS_Q->LSH with "
           "disabled bands dropped; the first write seeds with provenance (transcription, "
-          "verified_by_file=false) and the second goes through apply.propose; no profile = refusal")
+          "verified_by_file=false) and the second goes through apply.propose; no profile = refusal; "
+          "--write under another writer's lock exits 75 with one busy line, nothing banked, a bad "
+          "AUTOSOUND_LOCK_TIMEOUT_S is exit 2, and the decision and the bank are one hold (#141, R14)")
     return 0
 
 
@@ -429,8 +505,17 @@ def _main(argv=None):
         print(f"REFUSED -- {exc}", file=sys.stderr)
         return 3
     except Exception as exc:  # noqa: BLE001 -- matched by its attribute; anything else still raises
+        # The project's writer lock first (#141, R14, `write_lock.py`): another writer held it past the wait -- 75, its
+        # one `busy:` line, nothing written, safe to retry -- or the wait, AUTOSOUND_LOCK_TIMEOUT_S, is no number of
+        # seconds: a usage error, said before anything was taken.
+        if getattr(type(exc), "is_busy", False):
+            return _state._write_lock().busy_exit(exc)
+        if getattr(type(exc), "exit_code", None) == 2:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
         # A profile that is there and cannot be read, or that a newer method wrote (#136): `load_profile` raises its
         # own exception for it now, and it is refused as such a profile was before -- named, with its repair, exit 3.
+        # A project folder the lock cannot be made in (#141, `write_lock.Unwritable`) is refused the same way.
         if not getattr(exc, "is_unreadable", False):
             raise
         print(f"REFUSED -- {exc}", file=sys.stderr)

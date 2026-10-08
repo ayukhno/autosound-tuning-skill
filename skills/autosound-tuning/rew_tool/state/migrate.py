@@ -455,26 +455,33 @@ def import_current_state(old_dir, new_dir, dry_run=False):
             profile = None
 
     if not dry_run:
-        proj.save(data)
-        written = ["project.json"]
-        for preset, (_path, snap) in sorted(newest.items()):
-            preset_dir = os.path.join(new_dir, "state", preset)
-            os.makedirs(preset_dir, exist_ok=True)
-            snap["project_rev"] = proj.load()["project_rev"]
-            # Claimed by creating its file, never by writing over one, as a bank claims its number (CONTRACT.md item 8):
-            # `project_there` found no ledger, and a name taken since is the same refusal, saying what this run wrote.
-            # The text is the one `_write_json` wrote; `HEAD` is replaced whole, as a bank replaces it.
-            try:
-                io_.create_exclusive(os.path.join(preset_dir, "v_001.json"),
-                                     json.dumps(snap, indent=2, sort_keys=True, ensure_ascii=False))
-            except FileExistsError:
-                landed = (written[0] if len(written) == 1 else ", ".join(written[:-1]) + " and " + written[-1])
-                raise _into_refused(new_dir, [f"state/{preset}/v_001.json"],
-                                    landed=f"{landed} {'is' if len(written) == 1 else 'are'} written") from None
-            io_.atomic_write_text(os.path.join(preset_dir, "HEAD"), "v_001\n")
-            written += [f"state/{preset}/v_001.json", f"state/{preset}/HEAD"]
+        # Every write of the import under one hold of the new project's writer lock (#141, R14) -- `project.json`, the
+        # ledger written here, the profile -- each writer re-entering it: they land together or not at all, so a busy
+        # lock's "nothing was written" is true. A profile's stamp asks git, so then the wait is read and git asked
+        # first, with the lock still free.
         if profile is not None:
-            _dsp_profile.save_profile(os.path.join(new_dir, "dsp_profile.json"), profile)
+            _dsp_profile._ready_to_hold()
+        with _project._hold(new_dir):
+            proj.save(data)
+            written = ["project.json"]
+            for preset, (_path, snap) in sorted(newest.items()):
+                preset_dir = os.path.join(new_dir, "state", preset)
+                os.makedirs(preset_dir, exist_ok=True)
+                snap["project_rev"] = proj.load()["project_rev"]
+                # Claimed by creating its file, never by writing over one, as a bank claims its number (CONTRACT.md item
+                # 8): `project_there` found no ledger, and a name taken since is the same refusal, saying what this run
+                # wrote. The text is the one `_write_json` wrote; `HEAD` is replaced whole, as a bank replaces it.
+                try:
+                    io_.create_exclusive(os.path.join(preset_dir, "v_001.json"),
+                                         json.dumps(snap, indent=2, sort_keys=True, ensure_ascii=False))
+                except FileExistsError:
+                    landed = (written[0] if len(written) == 1 else ", ".join(written[:-1]) + " and " + written[-1])
+                    raise _into_refused(new_dir, [f"state/{preset}/v_001.json"],
+                                        landed=f"{landed} {'is' if len(written) == 1 else 'are'} written") from None
+                io_.atomic_write_text(os.path.join(preset_dir, "HEAD"), "v_001\n")
+                written += [f"state/{preset}/v_001.json", f"state/{preset}/HEAD"]
+            if profile is not None:
+                _dsp_profile.save_profile(os.path.join(new_dir, "dsp_profile.json"), profile)
     report["project_rev"] = proj.load()["project_rev"] if not dry_run else 1
     report["files"].append("project.json")
     if profile is not None:
@@ -556,6 +563,15 @@ def _main(argv=None):
         # field, say -- is a bug, and raises with its traceback, where it was printed `error: could not convert ...`
         # with no file named. Every refusal comes before the first write (Out of Scope 4), so nothing was written --
         # but a version's name taken after the look, which says what this run had written.
+        # The new project's writer lock first (#141, R14, `write_lock.py`): another writer held it past the wait -- 75,
+        # its one `busy:` line, nothing written (one hold covers every write), safe to retry -- or the wait,
+        # AUTOSOUND_LOCK_TIMEOUT_S, is no number of seconds: a usage error, said before anything was taken. A folder
+        # the lock cannot be made in (`write_lock.Unwritable`, `is_unreadable`) is one line, exit 1, below.
+        if getattr(type(exc), "is_busy", False):
+            return _project._write_lock().busy_exit(exc)
+        if getattr(type(exc), "exit_code", None) == 2:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
         if not (isinstance(exc, _project.ProjectError) or getattr(type(exc), "is_unreadable", False)
                 or getattr(type(exc), "is_snapshot_error", False) or getattr(type(exc), "is_into_refused", False)):
             raise
@@ -833,6 +849,61 @@ def _check_bytes_under_leaves_the_lock_out():
         shutil.rmtree(top, ignore_errors=True)
 
 
+def _check_into_waits_for_the_lock():
+    """`--into` writes the new project -- its `project.json`, its ledger, its profile -- under the new project's writer
+    lock, one hold over every write (#141, R14): under another writer's lock it waits AUTOSOUND_LOCK_TIMEOUT_S and exits
+    75 with one `busy:` line, no traceback, and nothing written. An AUTOSOUND_LOCK_TIMEOUT_S that is no number of
+    seconds is a usage error, exit 2, the new folder not even made. Let go, the import lands -- its profile stamped
+    with git asked before the hold."""
+    import shutil
+    import tempfile
+    old = tempfile.mkdtemp(prefix="autosound_migrate_busy_old_")
+    top = tempfile.mkdtemp(prefix="autosound_migrate_busy_new_")
+    failures = []
+    try:
+        _two_x(old)
+        new = os.path.join(top, "new")
+        with _project._held_elsewhere(new):
+            rc, out, err = _project._run_cli(_main, [old, "--into", new], AUTOSOUND_LOCK_TIMEOUT_S="0.2")
+            why = _project._said_busy(rc, err, new)
+            if why or len([ln for ln in err.splitlines() if ln.startswith("busy: ")]) != 1:
+                failures.append(f"under a held lock: {why or err.strip()[-200:]!r}")
+            if _bytes_under(new):
+                failures.append(f"written under another writer's lock: {sorted(_bytes_under(new))}")
+        fresh = os.path.join(top, "fresh")
+        rc, out, err = _project._run_cli(_main, [old, "--into", fresh], AUTOSOUND_LOCK_TIMEOUT_S="soon")
+        lines = err.strip().splitlines()
+        if rc != 2 or len(lines) != 1 or "AUTOSOUND_LOCK_TIMEOUT_S=soon" not in lines[0] or os.path.exists(fresh):
+            failures.append(f"a bad wait: rc {rc}, said {err.strip()[-200:]!r}, made {os.path.exists(fresh)}")
+        # Let go, the import lands -- `project.json` and the profile each reached with the lock held already: one hold
+        # over every write, the ledger written between them included.
+        lock, seen = _project._write_lock(), []
+        real_save, real_profile = _project.Project.save, _dsp_profile.save_profile
+
+        def save(self, data):
+            seen.append(("project.json", lock.held_here(new)))
+            return real_save(self, data)
+
+        def save_profile(path, data):
+            seen.append(("dsp_profile.json", lock.held_here(new)))
+            return real_profile(path, data)
+        _project.Project.save, _dsp_profile.save_profile = save, save_profile
+        try:
+            rc, out, err = _project._run_cli(_main, [old, "--into", new], AUTOSOUND_LOCK_TIMEOUT_S="0.2")
+        finally:
+            _project.Project.save, _dsp_profile.save_profile = real_save, real_profile
+        if rc != 0 or sorted(_bytes_under(new)) != ["dsp_profile.json", "project.json", "state/SQ/HEAD",
+                                                    "state/SQ/v_001.json"]:
+            failures.append(f"let go, the import did not land: rc {rc}, wrote {sorted(_bytes_under(new))}, "
+                            f"said {err.strip()[-200:]!r}")
+        if [name for name, _held in seen] != ["project.json", "dsp_profile.json"] or not all(h for _n, h in seen):
+            failures.append(f"written with the lock free: {seen}")
+    finally:
+        shutil.rmtree(old, ignore_errors=True)
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["--into and the lock:"] + failures)
+
+
 def _check_into_a_project_refused():
     """`migrate --into` a folder that holds a project's ledger or DSP profile is refused before anything is written,
     in one line naming each and the way on, exit 1, with `--dry-run` too; every byte of the folder stays as it was
@@ -1052,7 +1123,7 @@ def _selftest():
     for check in (_check_import_refuses_newer_project, _check_main_refuses_only_refusals,
                   _check_import_refusals_in_one_line, _check_import_reads_before_it_writes,
                   _check_into_a_project_refused, _check_version_claimed_exclusively,
-                  _check_bytes_under_leaves_the_lock_out):
+                  _check_bytes_under_leaves_the_lock_out, _check_into_waits_for_the_lock):
         try:
             check()
         except AssertionError as exc:
@@ -1239,7 +1310,9 @@ def _selftest():
           f"newest snapshot winning and intake's own answer left intact, tag_value became a "
           f"hardware control, the current state landed as v_001 at project_rev={report['project_rev']} and "
           f"validated, the settings sheet kept its Slot column, --dry-run wrote nothing, a re-run "
-          f"into the project it made was refused with every byte kept. root={root}")
+          f"into the project it made was refused with every byte kept; --into under another writer's lock "
+          f"exits 75 with one busy line and nothing written, a bad AUTOSOUND_LOCK_TIMEOUT_S is exit 2 with the "
+          f"folder not made, and every write is one hold (#141, R14). root={root}")
     return 0
 
 

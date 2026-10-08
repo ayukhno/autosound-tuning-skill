@@ -260,6 +260,10 @@ def _load_from_rew(project_dir, ver, f, channels=None, process_dir=None):
 
 def run(project_dir, solos_dir=None, ellipsoid_dir=None, write=False, rew_ver=None, channels=None,
         process_dir=None):
+    if write:
+        # The wait of the lock the rows are written under, read first (#141, R14): an AUTOSOUND_LOCK_TIMEOUT_S that is
+        # no number of seconds is a usage error before REW is asked.
+        _project._write_lock().timeout_s()
     f = P.grid(20, 20000, 96)
     record, rew_notes = None, []
     if rew_ver is not None:
@@ -308,9 +312,12 @@ def run(project_dir, solos_dir=None, ellipsoid_dir=None, write=False, rew_ver=No
         result["left_out"] += left
     result["settle"] = settling_request(result["rows"], rew_ver)
     if write and result["rows"]:
+        # One hold of the project's writer lock over every row (#141, R14), each `add_flaw` re-entering it: the rows land
+        # together or not at all, so a busy lock's "nothing was written" is true. Worked out above, with the lock free.
         pj = _project.Project(project_dir)
-        for row in result["rows"]:
-            pj.add_flaw(**{k: v for k, v in row.items() if k != "width_oct"})
+        with _project._hold(project_dir):
+            for row in result["rows"]:
+                pj.add_flaw(**{k: v for k, v in row.items() if k != "width_oct"})
         result["written"] = len(result["rows"])
     return result
 
@@ -440,12 +447,74 @@ def _check_rew_reads_the_glossary_strictly():
         shutil.rmtree(proj, ignore_errors=True)
 
 
+def _check_write_waits_for_the_lock():
+    """`--write` records its rows under the project's writer lock, one hold over all of them (#141, R14): under another
+    writer's lock it waits AUTOSOUND_LOCK_TIMEOUT_S and exits 75 with one `busy:` line, no traceback, and not a row
+    written -- so the line's "nothing was written" is true however many rows there were. An AUTOSOUND_LOCK_TIMEOUT_S
+    that is no number of seconds is a usage error, exit 2, nothing written. Let go, the rows land. They are worked out
+    before the hold: REW is never read under it."""
+    import shutil
+    import tempfile
+    import path_check
+    top = tempfile.mkdtemp(prefix="autosound_flaw_map_busy_")
+    failures = []
+    try:
+        solos = os.path.join(top, "set1")
+        path_check._make_capture_set(solos, chains=None, protectives=True, resonance=("m-L", 1000.0, 5.0, 4.0))
+        proj = os.path.join(top, "proj")
+        os.makedirs(proj)
+        pj = _project.Project(proj)
+        pj.save(pj.load())
+        argv = ["--project", proj, "--solos", solos, "--write"]
+        before = _project._files_in(proj)
+        with _project._held_elsewhere(proj):
+            rc, out, err = _project._run_cli(_main, argv, AUTOSOUND_LOCK_TIMEOUT_S="0.2")
+            why = _project._said_busy(rc, err, proj)
+            busy_lines = [ln for ln in err.splitlines() if ln.startswith("busy: ")]
+            if why or len(busy_lines) != 1:
+                failures.append(f"under a held lock: {why or err.strip()[-200:]!r}")
+            if _project._files_in(proj) != before:
+                failures.append("rows written under another writer's lock")
+        rc, out, err = _project._run_cli(_main, argv, AUTOSOUND_LOCK_TIMEOUT_S="soon")
+        lines = err.strip().splitlines()
+        if rc != 2 or len(lines) != 1 or "AUTOSOUND_LOCK_TIMEOUT_S=soon" not in lines[0] \
+                or _project._files_in(proj) != before:
+            failures.append(f"a bad wait: rc {rc}, said {err.strip()[-200:]!r}")
+        # With `--rew` the wait is read before REW is asked -- or the round, or the glossary: exit 2 first.
+        try:
+            rc, out, err = _project._run_cli(_main, ["--project", proj, "--rew", "1", "--channels", "m-L", "--write"],
+                                             AUTOSOUND_LOCK_TIMEOUT_S="soon")
+        except SystemExit as exc:
+            rc, err = f"SystemExit {exc.code!r}", ""
+        if rc != 2 or "AUTOSOUND_LOCK_TIMEOUT_S=soon" not in err:
+            failures.append(f"a bad wait with --rew, not said first: rc {rc}, said {err.strip()[-200:]!r}")
+        # Let go, the rows land -- each one reached with the lock held already: one hold over them all.
+        lock, real, held = _project._write_lock(), _project.Project.add_flaw, []
+
+        def watched(self, **fields):
+            held.append(lock.held_here(proj))
+            return real(self, **fields)
+        _project.Project.add_flaw = watched
+        try:
+            rc, out, err = _project._run_cli(_main, argv, AUTOSOUND_LOCK_TIMEOUT_S="0.2")
+        finally:
+            _project.Project.add_flaw = real
+        if rc != 0 or not (_project.Project(proj).load().get("acoustics") or {}).get("flaws"):
+            failures.append(f"let go, the rows did not land: rc {rc}, said {err.strip()[-200:]!r}")
+        if not held or not all(held):
+            failures.append(f"rows written with the lock let go between them: {held}")
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["--write and the project's lock:"] + failures)
+
+
 def _selftest():
     import shutil
     import tempfile
 
     failures = []
-    for check in (_check_refusal_names_its_reason, _check_rew_reads_the_glossary_strictly):
+    for check in (_check_refusal_names_its_reason, _check_rew_reads_the_glossary_strictly,
+                  _check_write_waits_for_the_lock):
         try:
             check()
         except AssertionError as exc:
@@ -583,7 +652,9 @@ def _selftest():
           "read from REW (--rew) with the round's protective record gives the same rows, and with no "
           "round on record it refuses; a run with ASSUMED rows ends with the REQUEST -- the peak "
           "channels, `<ch> p1..p9_<N> (sw)` and the capture-start line -- and the phase gate reads "
-          "the same sentence back (S-047)")
+          "the same sentence back (S-047); --write under another writer's lock exits 75 with one busy "
+          "line and no row written, a bad AUTOSOUND_LOCK_TIMEOUT_S is exit 2 before REW is asked, and "
+          "the rows land under one hold (#141, R14)")
     return 0
 
 
@@ -605,8 +676,17 @@ def _main(argv=None):
         r = run(args.project, args.solos, args.ellipsoid, args.write, rew_ver=args.rew, channels=channels,
                 process_dir=args.process)
     except Exception as exc:  # noqa: BLE001 -- matched by its attribute below; anything else still raises
-        # A project file this reads and cannot -- the journal held, a line in it in another code page (#134, R53):
-        # one line, `error: <file> <reason> -- <repair>`, exit 1, never a traceback.
+        # `--write` and the project's writer lock first (#141, R14, `write_lock.py`): another writer held it past the
+        # wait -- 75, its one `busy:` line, nothing written, safe to retry -- or the wait, AUTOSOUND_LOCK_TIMEOUT_S, is no
+        # number of seconds: a usage error, said before anything was taken.
+        if getattr(type(exc), "is_busy", False):
+            return _project._write_lock().busy_exit(exc)
+        if getattr(type(exc), "exit_code", None) == 2:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        # A project file this reads and cannot -- the journal held, a line in it in another code page (#134, R53) --
+        # or a project folder the lock cannot be made in (#141, `write_lock.Unwritable`): one line, `error: <file>
+        # <reason> -- <repair>`, exit 1, never a traceback.
         if not getattr(type(exc), "is_unreadable", False):
             raise
         print(f"error: {exc}", file=sys.stderr)

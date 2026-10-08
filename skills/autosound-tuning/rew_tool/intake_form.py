@@ -1407,9 +1407,13 @@ def _coerce(field_id, value):
 def _refusal(exc):
     """Is `exc` a refusal the page reports (an answer refused, the method's words handed back verbatim)? The method's
     own, a `ValueError`, and a file that is there and cannot be read (`is_unreadable`, #136) -- which is neither an
-    `OSError` nor a `ValueError`, so it ended the whole request and the page heard nothing."""
+    `OSError` nor a `ValueError`, so it ended the whole request and the page heard nothing. So did the project's
+    writer lock (#141, R14): another writer holding it past the wait -- its `busy:` line names the lock, says nothing
+    was written and that a retry is safe -- and an AUTOSOUND_LOCK_TIMEOUT_S that is no number of seconds."""
     return (isinstance(exc, (intake.IntakeError, project.ProjectError, ValueError))
-            or bool(getattr(exc, "is_unreadable", False)))
+            or bool(getattr(exc, "is_unreadable", False))
+            or bool(getattr(type(exc), "is_busy", False))
+            or getattr(type(exc), "exit_code", None) == 2)
 
 
 def apply_save(project_dir, payload):
@@ -1660,6 +1664,69 @@ def _check_unreadable_profile_shown_and_refused():
         shutil.rmtree(root, ignore_errors=True)
 
 
+def _check_save_answers_under_a_held_lock():
+    """A save under another writer's lock is answered, not dropped (#141, R14): the writer waits
+    AUTOSOUND_LOCK_TIMEOUT_S, and its one `busy:` line -- the lock file, nothing written, safe to retry -- is the
+    answer's error: 400 alone, each answer's error in a batch. Nothing is written. It is neither an `OSError` nor a
+    `ValueError`, so it ended the request: the server printed a traceback and the page heard nothing. An
+    AUTOSOUND_LOCK_TIMEOUT_S that is no number of seconds is answered the same way, in its own words. Let go, the save
+    lands."""
+    import shutil
+    import tempfile
+    import threading
+    import urllib.error
+    import urllib.request
+    top = tempfile.mkdtemp(prefix="autosound_form_busy_")
+    httpd = None
+    failures = []
+    try:
+        root = os.path.join(top, "car")
+        project.Project(root).save({"schema_version": project.SCHEMA_VERSION, "channels": []})
+        handler = type("_Bound", (_Handler,), {"project_dir": root, "lang": "uk"})
+        httpd = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        threading.Thread(target=httpd.serve_forever, daemon=True).start()
+        base = f"http://127.0.0.1:{httpd.server_address[1]}/"
+
+        def post(payload):
+            req = urllib.request.Request(base + "save", headers={"Content-Type": "application/json"},
+                                         data=json.dumps(payload).encode("utf-8"))
+            try:
+                with urllib.request.urlopen(req, timeout=30) as r:
+                    return r.status, json.loads(r.read())
+            except urllib.error.HTTPError as exc:
+                return exc.code, json.loads(exc.read())
+            except Exception as exc:  # noqa: BLE001 -- a request the server dropped is the failure under test
+                return "dropped", f"{type(exc).__name__}: {exc}"
+        car = {"car": {"make": "VW", "model": "Passat", "generation": "B8", "body": "sedan"}}
+        busy = f"busy: {project._write_lock().lock_path(root)} is held by another writer -- nothing was written, " \
+               "safe to retry"
+        before = project._files_in(root)
+        with project._held_elsewhere(root), project._env(AUTOSOUND_LOCK_TIMEOUT_S="0.2"):
+            code, said = post(car)
+            if code != 400 or said != {"error": busy}:
+                failures.append(f"one answer: {code}, {said!r}")
+            code, said = post({"batch": [car, {"field": "project.language", "value": "uk"}]})
+            if code != 200 or [e.get("error") for e in said.get("errors", [])] != [busy, busy] or said["results"]:
+                failures.append(f"a batch: {code}, {said!r}")
+            if project._files_in(root) != before:
+                failures.append("written under another writer's lock")
+        with project._env(AUTOSOUND_LOCK_TIMEOUT_S="soon"):
+            code, said = post(car)
+        if code != 400 or "AUTOSOUND_LOCK_TIMEOUT_S=soon" not in str(said.get("error") if isinstance(said, dict)
+                                                                     else said):
+            failures.append(f"a bad wait: {code}, {said!r}")
+        with project._env(AUTOSOUND_LOCK_TIMEOUT_S="0.2"):
+            code, said = post(car)
+        if code != 200 or project.Project(root).load()["car"].get("model") != "Passat":
+            failures.append(f"let go, the save did not land: {code}, {said!r}")
+    finally:
+        if httpd is not None:
+            httpd.shutdown()
+            httpd.server_close()
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["a save under the project's lock:"] + failures)
+
+
 def _check_unreadable_gate_file_named():
     """The page's gate stays shut over a gate file that is there and cannot be read -- a `glossary.json` cut off --
     and says the file, why and its repair with the page's refusals (#134, batch 4's re-review N4): the gate read "no
@@ -1694,7 +1761,8 @@ def _selftest():
     import tempfile
 
     failures = []
-    for check in (_check_unreadable_profile_shown_and_refused, _check_unreadable_gate_file_named):
+    for check in (_check_unreadable_profile_shown_and_refused, _check_unreadable_gate_file_named,
+                  _check_save_answers_under_a_held_lock):
         try:
             check()
         except Exception as exc:  # noqa: BLE001 -- a check that raises is reported by name, like one that fails
@@ -1970,7 +2038,9 @@ def _selftest():
           "confirmed, a new processor gets its own page and its map from it, the page loads nothing "
           "from the network (one link out: NTT), and every write goes through intake's own writers; "
           "a profile that cannot be read is shown on the page with its repair, and a save through it is refused "
-          "as that answer's, the rest going in (#136)")
+          "as that answer's, the rest going in (#136); a save under another writer's lock is answered with its "
+          "busy line -- 400 alone, each answer's error in a batch -- nothing written, and a bad "
+          "AUTOSOUND_LOCK_TIMEOUT_S is said the same way (#141, R14)")
     return 0
 
 
