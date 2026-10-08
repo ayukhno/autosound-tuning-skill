@@ -3090,16 +3090,19 @@ class Process:
 
     def _require_home(self, verb):
         """Refuse a write into a process folder that is no project's, before anything is made (#141, W-8's R46): the
-        writer lock's hold makes the project's `.autosound/`, and the first write the folder itself, so a mistyped path
-        -- `<project>/process-typo` -- got a process of its own. `verb` names the writer asking: a method's name, or
-        `enter-phase <N>`, `session-close` and `capture-close` for the command line's own. Only `enter-phase -1`, the
-        intake, starts a project where there is none yet.
+        writer lock's hold makes `.autosound/` in a project folder that is there, and the first write the process folder
+        itself, so a mistyped path -- `<project>/process-typo` -- got a process of its own. `verb` names the writer
+        asking: a method's name, or `enter-phase <N>`, `session-close` and `capture-close` for the command line's own.
+        Two writers start a project where there is none yet.
 
         * the folder is there: nothing to check;
         * it is not, and is not called `process`: refused -- the method's process folder is called process;
         * it is not, is called `process`, and `project.json` stands beside it: the project's first process write;
-        * it is not, is called `process`, and no `project.json` is beside it: `enter-phase -1` alone -- any other
-          writer is refused, not a project yet. TCC's new-project dialog writes `project.json` before any verb."""
+        * it is not, is called `process`, and no `project.json` is beside it: `enter-phase -1`, the intake, starts a
+          project there; `session-start` (`record_session`) does too where the project folder itself is there (R19):
+          TCC's gate takes an empty folder and runs `session-start`, then `enter-phase -1`, in one `try`, so a refusal
+          of the first skipped the second. Any other writer is refused, not a project yet -- and `session-start` on a
+          project folder that is not there."""
         folder = os.path.abspath(self.dir)
         if os.path.isdir(folder):
             return
@@ -3107,6 +3110,8 @@ class Process:
             raise ProcessError(f"{folder} does not exist, and the method's process folder is called process -- a "
                                "mistyped path? nothing was written")
         if verb == "enter-phase -1" or os.path.isfile(os.path.join(self.project_dir, "project.json")):
+            return
+        if verb == "record_session" and os.path.isdir(self.project_dir):
             return
         raise ProcessError(f"{self.project_dir} holds no project.json: not a project yet -- the intake starts one with "
                            "enter-phase -1; nothing was written")
@@ -7669,7 +7674,8 @@ def _check_a_mistyped_process_folder_starts_nothing():
 def _check_a_new_project_still_starts():
     """The rule against a mistyped folder stops no project starting (#141, R46). A folder called `process` that is not
     there yet is a project's first process write where `project.json` stands beside it -- TCC's new-project dialog
-    writes that file first -- and, with none, the intake's own `enter-phase -1`, which starts the project. Any other
+    writes that file first -- and, with none, the intake's own `enter-phase -1`, which starts the project, as
+    `session-start` does in a project folder that is there (R19, `_check_session_start_starts_a_project`). Any other
     verb there first is refused, exit 1, "not a project yet", and nothing is made."""
     import shutil
     import tempfile
@@ -7681,7 +7687,7 @@ def _check_a_new_project_still_starts():
         rc, out, err = _run_main(["process.py", d, "enter-phase", "-1"])
         if rc != EXIT_OK or Process(d).load(strict=True).get("active_phase") != "-1":
             failures.append(f"enter-phase -1, the intake: rc {rc}, said {err.strip()[-200:]!r}")
-        for n, argv in enumerate(a for a in _WRITING_RUNS if a != ["enter-phase", "-1"]):
+        for n, argv in enumerate(a for a in _WRITING_RUNS if a != ["enter-phase", "-1"] and a[0] != "session-start"):
             proj = os.path.join(top, f"first-{n}")
             os.makedirs(proj)
             rc, out, err = _run_main(["process.py", os.path.join(proj, "process"), *argv])
@@ -7703,6 +7709,50 @@ def _check_a_new_project_still_starts():
     finally:
         shutil.rmtree(top, ignore_errors=True)
     assert not failures, "\n  ".join(["a new project:"] + failures)
+
+
+def _check_session_start_starts_a_project():
+    """TCC's first two verbs on an empty folder go through (#141, R19). TCC's project gate takes an empty folder -- the
+    intake fills it -- and at a session's start runs `session-start`, then `enter-phase -1`, in one `try`
+    (main_window.py): `session-start` was refused there, "holds no project.json", and `enter-phase -1` never ran. So
+    `session-start` starts a project as `enter-phase -1` does, where the project folder itself is there: its process
+    folder is called `process`, and no `project.json` is beside it yet. A mistyped `process-typo` stays refused, and so
+    does a project folder that is not there, with nothing made."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_process_session_first_")
+    failures = []
+    try:
+        proj = os.path.join(top, "empty")
+        os.makedirs(proj)
+        d = os.path.join(proj, "process")
+        rc, out, err = _run_main(["process.py", d, "session-start", "tcc", "opus"])
+        started = [e for e in Process(d).events() if e.get("type") == EV_SESSION_STARTED]
+        if rc != EXIT_OK or out.strip() != "session recorded: tcc / opus" or err.strip() or len(started) != 1:
+            failures.append(f"session-start on an empty folder: rc {rc}, said {(err or out).strip()[-200:]!r}, "
+                            f"{len(started)} session event(s)")
+        rc, out, err = _run_main(["process.py", d, "enter-phase", "-1"])
+        if rc != EXIT_OK or Process(d).load(strict=True).get("active_phase") != "-1":
+            failures.append(f"enter-phase -1 after it: rc {rc}, said {(err or out).strip()[-200:]!r}")
+        proj = os.path.join(top, "bare")
+        os.makedirs(proj)
+        typo = os.path.join(proj, "process-typo")
+        rc, out, err = _run_main(["process.py", typo, "session-start", "tcc", "opus"])
+        want = (f"error: {typo} does not exist, and the method's process folder is called process -- a mistyped "
+                "path? nothing was written")
+        if rc != EXIT_NO or err.strip().splitlines() != [want] or out.strip() or os.listdir(proj):
+            failures.append(f"session-start on process-typo: rc {rc}, said {(err or out).strip()[-200:]!r}, "
+                            f"made {sorted(os.listdir(proj))}")
+        gone = os.path.join(top, "gone")
+        rc, out, err = _run_main(["process.py", os.path.join(gone, "process"), "session-start", "tcc", "opus"])
+        want = (f"error: {gone} holds no project.json: not a project yet -- the intake starts one with enter-phase -1; "
+                "nothing was written")
+        if rc != EXIT_NO or err.strip().splitlines() != [want] or out.strip() or os.path.lexists(gone):
+            failures.append(f"session-start on a project folder that is not there: rc {rc}, said "
+                            f"{(err or out).strip()[-200:]!r}, made it: {os.path.lexists(gone)}")
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["TCC's first verbs:"] + failures)
 
 
 def _check_the_plan_file_is_said():
@@ -7809,8 +7859,8 @@ def _selftest():
                   _check_capture_check_reads_rew_unlocked, _check_enter_phase_gates_run_unlocked,
                   _check_the_sha_is_asked_before_the_hold, _check_a_close_lands_state_first,
                   _check_capture_close_closes_the_round_it_read, _check_a_mistyped_process_folder_starts_nothing,
-                  _check_a_new_project_still_starts, _check_the_plan_file_is_said,
-                  _check_a_project_folder_that_cannot_be_written):
+                  _check_a_new_project_still_starts, _check_session_start_starts_a_project,
+                  _check_the_plan_file_is_said, _check_a_project_folder_that_cannot_be_written):
         try:
             check()
         except AssertionError as exc:
