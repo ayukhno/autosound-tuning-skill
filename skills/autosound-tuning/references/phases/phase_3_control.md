@@ -14,7 +14,7 @@ This phase acts as the final technical gate before proceeding to subjective list
 
 **Required evidence:** the full verification MMM set (each `_final` channel, Ws/Ms/TWs, sw+Ws, L/R sides, `ALL_final`); independent Claude + Gemini analyses.
 
-**✅ Quality gate → Phase 4/5 (Technical Lock):** verification scans captured; **two independent (cross-vendor) verdicts**; **a minimum ear assessment passed** — **stage** (mono-center / EMMA) **and overall tonal balance** — with an honest read of the result logged and the **Arbiter satisfied** (or the dissatisfaction resolved by an adjustment / a step back); disagreements resolved or escalated to the Arbiter (Disagreement Table at 3/3); config backed up to `dsp-config/`, changelog/dsp-state/audit-trail updated.
+**✅ Quality gate → Phase 4/5 (Technical Lock):** verification scans captured; **two independent (cross-vendor) verdicts**; **a minimum ear assessment passed** — **stage** (mono-center / EMMA) **and overall tonal balance** — with an honest read of the result logged and the **Arbiter satisfied** (or the dissatisfaction resolved by an adjustment / a step back); disagreements resolved or escalated to the Arbiter (Disagreement Table at 3/3); config backed up to `dsp-config/`, changelog and audit-trail updated; `dsp-state-current` re-rendered (generated, never edited).
 
 **⚠️ Failure modes:** endless review rounds (cap at 3/3 → Disagreement Table) · locking without a backup · a single-perspective verdict (must be cross-vendor).
 
@@ -26,11 +26,11 @@ This phase acts as the final technical gate before proceeding to subjective list
 
 ### 1. Verification Measurement Checklist
 Instruct the user to run a complete, disciplined series of MMM RTA measurements using the locked spatial pattern. Collect and save the following:
-* **Each individual channel:** `sw_final`, `w-L_final`, `w-R_final`, `m-L_final`, `m-R_final`, `tw-L_final`, `tw-R_final`.
-* **The summed band pairs (L+R):** `Ws_final`, `Ms_final`, `TWs_final`.
-* **The low-frequency joint:** `sw+Ws_final` (Subwoofer + both Midbasses; two subs: `SWs_final` and `SWs+Ws_final`).
-* **The individual sides:** Left-side-only (no sub), Right-side-only (no sub).
-* **The complete front system:** `ALL_final` (all front channels active together).
+* **Each individual channel:** `sw_final (rta)`, `w-L_final (rta)`, `w-R_final (rta)`, `m-L_final (rta)`, `m-R_final (rta)`, `tw-L_final (rta)`, `tw-R_final (rta)`.
+* **The summed band pairs (L+R):** `Ws_final (rta)`, `Ms_final (rta)`, `TWs_final (rta)`.
+* **The low-frequency joint:** `SW+Ws_final (rta)` (Subwoofer + both Midbasses; two subs: `SWs_final (rta)` and `SWs+Ws_final (rta)`).
+* **The individual sides:** `L_final (rta)`, `R_final (rta)` — Left-side-only (no sub), Right-side-only (no sub).
+* **The complete front system:** `ALL_final (rta)` (all front channels active together).
 
 ---
 
