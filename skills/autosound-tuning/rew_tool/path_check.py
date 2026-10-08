@@ -451,7 +451,7 @@ def _selftest():
     atf = os.path.join(root, "tw-L.atf")
     rc, out = _run(tool("eq_export.py"), proj, "tw-L", "--out", atf, env=env, ok=(0, 3))
     assert "5000" in open(atf, encoding="utf-8").read() and "format:" in out, out[-400:]
-    # ---- 1.4 · levels read off the measurement: refuses without the knob assertion, then gives
+    # ---- 1.6 · levels read off the measurement: refuses without the knob assertion, then gives
     #      cut-only offsets with the quietest driver at 0 -- every driver here was "swept" at the
     #      same level, so the offsets are the drivers' own sensitivities, not a knob ------------
     rc, out = _run(tool("level_offsets.py"), "--solos", set1, "--ver", "1", "--project", proj, env=env, ok=(3,))
@@ -463,7 +463,7 @@ def _selftest():
     assert len(offs) == len(DRIVERS), (offs, out[-600:])
     assert max(offs) == 0.0 and all(o <= 0.0 for o in offs), ("cut-only, quietest = 0", offs)
 
-    # ---- 1.5 · a setup transcribed from the DSP's screens: validated against the profile, refused
+    # ---- -1.1 · a setup transcribed from the DSP's screens: validated against the profile, refused
     #      by name when a value is one the DSP cannot hold, and carried with provenance ---------
     transcription = {"preset": "SQ", "source": "path_check screens", "read_on": "2026-08-26",
                      "channels": {c: {"hp": DESIGN[c]["hp"], "lp": DESIGN[c]["lp"], "gain_db": 0.0,
@@ -486,7 +486,7 @@ def _selftest():
         assert j["sum_loss_avg_db"] > -0.3 and j["worst_null_db"] > -2.0, j
     chains3 = P.chains_from_snapshot(hist.load())
 
-    # ---- 2.1 · EQ as packages: a driver resonance planted on m-L is proposed as ONE cut in the
+    # ---- 1.4 · EQ as packages: a driver resonance planted on m-L is proposed as ONE cut in the
     #      mids' resonance package, banked as one version, and the prediction shows it gone ------
     set1r = os.path.join(root, "set_1r")
     _make_capture_set(set1r, chains=None, protectives=True, resonance=("m-L", 1000.0, 5.0, 4.0))

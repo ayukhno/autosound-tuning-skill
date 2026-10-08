@@ -138,7 +138,7 @@ Read the active phase from `process/process-state.json` (`python3 rew_tool/state
 * **Phase 3: Technical Verdict & Lock** ──► [phase_3_control.md](references/phases/phase_3_control.md)
 * **Phase 4: Targeted Listening → Feedback → Close** ──► [phase_4_listening.md](references/phases/phase_4_listening.md)
 * **Phase 5: Variations (cyclical) — Voicing + Center/Rear** ──► [phase_5_variations.md](references/phases/phase_5_variations.md)
-* **Virtual-first happy path** (one capture → desk design → verify) across Phases 0–3 ──► [virtual-first.md](references/phases/virtual-first.md) · [capture-session-sheet.md](references/phases/capture-session-sheet.md) Its commands, in path order: `capture-check --session` (0.6) · `ellipsoid` (0.3 → 1.1) · `predict --align` (1.5 joints) · `eq_propose` (1.4 coarse EQ / 2.1 second part / 3.3 fine EQ over MMM) · `verify_prediction --entry` (3.1) · `ear_suspects` (3.3) — all in [`tooling/rew-tool-docs.md`](references/tooling/rew-tool-docs.md).
+* **Virtual-first happy path** (one capture → desk design → verify) across Phases 0–3 ──► [virtual-first.md](references/phases/virtual-first.md) · [capture-session-sheet.md](references/phases/capture-session-sheet.md) Its commands, in path order: `ellipsoid` (0.3 → 1.1) · `capture-check --session` (0.6) · `eq_propose` (1.4 coarse EQ / 2.1 second part / 3.3 fine EQ over MMM) · `predict --align` (1.5 joints) · `verify_prediction --entry` (3.1) · `ear_suspects` (3.3) — all in [`tooling/rew-tool-docs.md`](references/tooling/rew-tool-docs.md).
 
 ---
 

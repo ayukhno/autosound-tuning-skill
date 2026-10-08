@@ -1165,7 +1165,7 @@ WITNESSES_APART_CYCLES = 0.5
 
 def align_joints(freqs, solos, chains, joints=None, *, step_ms=0.01, max_delay_ms=3.0,
                  band_oct=1.0, tie_db=0.02, apf=False, delay_max_ms=None, witness_cuts=None):
-    """Delay x polarity per junction, bottom-up, by sum loss -- the desk half of Phase 1.3.
+    """Delay x polarity per junction, bottom-up, by sum loss -- the desk half of 1.5 joints.
 
     Each junction is read on the SOLOS x the ledger chains (crossovers, gains and EQ the tune
     already has are in), and the correction found for the UPPER member is written into its chain
