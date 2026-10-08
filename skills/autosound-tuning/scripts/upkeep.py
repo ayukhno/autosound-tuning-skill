@@ -931,7 +931,26 @@ def _selftest():
     reset; the clone update lands the tag in refs/tags (describe names it) and refuses a dirty clone; tools are
     updated the way they were installed; pip is asked to upgrade."""
     tmp = tempfile.mkdtemp(prefix="autosound_upkeep_")
-    # GNUPGHOME in this temp dir: no check may reach the person's own ~/.gnupg, whatever a check gets wrong.
+    # GNUPGHOME in this temp dir for the whole process, not only in the `env` the checks hand git (#142): whatever runs
+    # git with the process's own environment -- update_clone, keep_local, verify_copy, a verify_tag that lost its `env`
+    # -- cannot reach the person's ~/.gnupg either. The stub-git check stops the rest when git is not given its `env`,
+    # but only where a stand-in `git` can run: on Windows it returns at once.
+    isolated = {"GNUPGHOME": os.path.join(tmp, "gnupg")}
+    saved = {name: os.environ.get(name) for name in isolated}
+    os.environ.update(isolated)
+    try:
+        return _selftest_in(tmp)
+    finally:
+        for name, value in saved.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
+
+
+def _selftest_in(tmp):
+    """`_selftest`'s checks, in `tmp`, with the process's environment already pointed there."""
+    # The `env` the checks hand git: no global or system config, and GNUPGHOME in this temp dir, as the process's.
     env = dict(os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t", GIT_COMMITTER_NAME="t",
                GIT_COMMITTER_EMAIL="t@t", GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1",
                GNUPGHOME=os.path.join(tmp, "gnupg"))
@@ -977,7 +996,8 @@ def _selftest():
     assert newest_tag(origin) == "v3.0.66", newest_tag(origin)
     # T-35 (#142): a signature is the author's or nothing, whatever the person's git or GPG configuration says. The
     # stub-git check runs first, and the rest only once it passed: it is the one that sees a verify_tag no longer
-    # handing git its `env` -- and then the OpenPGP check would give a PGP block to the person's own gpg.
+    # handing git its `env` -- and then the OpenPGP check would give a PGP block to the person's own gpg, which finds
+    # only this process's temporary GNUPGHOME (above), on Windows too, where this check returns at once.
     fx = _signature_fixture(tmp, env, anchor, os.path.join(tmp, "author"))
     failures = []
     for check in (_check_a_git_that_says_good_is_not_believed, _check_a_signing_helper_is_not_asked,
