@@ -38,29 +38,30 @@ posłuchaj, pojedź, wróć, posłuchaj znowu. W drodze uszy się resetują.
 ## Cechy — słownik
 
 `label` to krótka forma do menu; `name` — pełna. „Brzmi dobrze” i „brzmi źle” to dwa samodzielne
-zwroty, pisane tak, by wstawić je w zdanie. `route` to krok metody, do którego idzie ✗ (stół 1.3 =
-złącza, 1.4 = poziomy, 2.1 = zgrubna EQ, 3.3 = dokładna EQ po MMM). Cecha oznaczona „wyższa liga” nie
-jest na pierwsze przejście.
+zwroty, pisane tak, by wstawić je w zdanie. `route` to krok metody, do którego idzie ✗, według numeru
+i nazwy w `virtual-first.md` (stół 1.3 zwrotnice, 1.4 zgrubna EQ, 1.5 złącza, 1.6 poziomy; auto
+3.3 dokładna EQ po MMM; przyjęcie −1.3 filtry ochronne). Cecha oznaczona „wyższa liga” nie jest na
+pierwsze przejście.
 
 | id | label | name | sounds right | sounds wrong | where a ✗ goes |
 |---|---|---|---|---|---|
-| c01 | środek mono | Środek mono — fundament L/R | ciasny punkt na środku, na wysokości, który stoi w miejscu | rozmyty, wędruje w lewo lub w prawo, szeroki, albo zmienia miejsce z nutą | fundament: poziomy L/R, czas dojścia, polaryzacja (stół 1.3 / 1.4) — nigdy EQ obrazu |
-| c02 | pozycje | Pozycje L · LC · C · RC · R | każdy instrument to jeden punkt na swoim miejscu | pozycje ściśnięte ku środkowi albo dwie dzielą jedno miejsce | poziomy L/R; stromość zboczy zwrotnic w strefie nakładania się średnicy (1.2 / 1.4) |
-| c03 | ostrość | Ostrość i rozmiar obrazu | hierarchia rozmiarów — bas największy, trójkąt najmniejszy; wokal trzyma rozmiar na wszystkich nutach | każdy obraz tego samego rozmiaru; wokal rośnie albo pływa na niektórych nutach | styk średniotonowy↔wysokotonowy (1.3); poziomy (1.4) |
-| c04 | balans | Balans tonalny | instrumenty grają razem, nic nie wystaje, bez „koca na głośnikach” | cienko, grubo lub mętnie, jasno lub krzykliwie, koc na głośnikach | szerokie nachylenie względem celu MMM (3.3); ostre pasmo dostaje jedno punktowe cięcie (3.3) |
-| c05 | punch / szew | Punch i szew sub↔midbas | uderzenie ląduje w piersi, sub nie odpada pod nim, dwa basy czyta się osobno | wiotki, rozmyty, przesuszony, niski bas odrywa się od stopy, albo papka | styk sub↔midbas (1.3); L/R midbasów 100–200 Hz (1.3) |
-| c06 | sub <40 | Sub poniżej 40 Hz | trzyma, pod kontrolą, na granicy wciąż muzycznie | buczy, wysycha albo wydaje niemuzyczne dźwięki na granicy | dolnoprzepust i poziom suba (1.2 / 1.4); ochrona głośnika |
-| c07 | góra / sybilanty | Góra i sybilanty | „s” i „sz” naturalne, ani się nie odrywają, ani nie znikają; talerze — trwałe migotanie | sybilanty odrywają się lub znikają; talerze jak żuta folia albo głuche „pssz” | punktowe cięcia w warstwie wirtualnej (3.3); styk średniotonowy↔wysokotonowy (1.3) |
-| c08 | kłucie w głosie | Głos — kłujące pasma w średnicy | naturalny głos, osadzony w piersi, bez nacisku | wierci w uszach, naciska albo brzmi anorektycznie, bez ciała | własne pasmo kłucia (3.3) — nie fundament |
-| c09 | głębia | Głębia i przestrzeń | scena za maską, warstwy czytelne, szept pod solówką wciąż słyszalny | płaski obraz, wszystko z przodu | styk średniotonowy↔wysokotonowy (1.3) albo góra gorętsza od basu (3.3) |
-| c10 | separacja | Separacja pod obciążeniem | mikrozdarzenia zostają osobno, gdy miks jest gęsty | papka, nuda albo przytłoczenie | zwykle za dużo EQ — zdejmij część (2.1 / 3.3); rzadko styk (1.3) |
-| c11 | atak | Atak i transjenty | początek uderzenia ostry, bębny napięte | początki rozmyte, bębny miękkie | kontrola wzmacniacza i głośników, nie EQ; styk midbas↔średniotonowy (1.3) |
-| c12 | uniwersalność | Uniwersalność między nagraniami | różne nagrania brzmią różnie | „następna w radiu” — wszystko podobne | nachylenie albo przesada w EQ (3.3) |
-| c13 | długi odsłuch | Długi odsłuch — album, 15–20 min, na luzie | pozostaje lekki i zapraszający | męczy: grubo, jasno lub ciemno (nachylenie), albo martwo, sucho, klinicznie (przekorygowanie) | nachylenie → szerokie nachylenie po MMM, nigdy wąskie wycięcia; martwo → zdejmij EQ, nie dodawaj (3.3) |
-| c14 | tekstura basu | Tekstura niskich częstotliwości — kontrabas | sprężyście, z ciałem i detalem | nadęty, dudniący albo przesuszony i cienki | poziomy i szew sub↔midbas (1.3 / 1.4); szerokie nachylenie (3.3) |
-| c15 | wysokość / szerokość | Wysokość i szerokość sceny — wyższa liga | scena na wysokości deski rozdzielczej i sięga za słupki A z czystymi krawędziami | opada na podłogę na niektórych nutach, albo krawędzie postrzępione i scena się sypie | styk średniotonowy↔wysokotonowy (1.3); poziomy L/R (1.4) — druga wizyta w fazie 4 |
+| c01 | środek mono | Środek mono — fundament L/R | ciasny punkt na środku, na wysokości, który stoi w miejscu | rozmyty, wędruje w lewo lub w prawo, szeroki, albo zmienia miejsce z nutą | fundament: poziomy L/R, czas dojścia, polaryzacja (stół 1.5 złącza / 1.6 poziomy) — nigdy EQ obrazu |
+| c02 | pozycje | Pozycje L · LC · C · RC · R | każdy instrument to jeden punkt na swoim miejscu | pozycje ściśnięte ku środkowi albo dwie dzielą jedno miejsce | poziomy L/R; stromość zboczy zwrotnic w strefie nakładania się średnicy (1.6 poziomy / 1.3 zwrotnice) |
+| c03 | ostrość | Ostrość i rozmiar obrazu | hierarchia rozmiarów — bas największy, trójkąt najmniejszy; wokal trzyma rozmiar na wszystkich nutach | każdy obraz tego samego rozmiaru; wokal rośnie albo pływa na niektórych nutach | styk średniotonowy↔wysokotonowy (1.5 złącza); poziomy (1.6 poziomy) |
+| c04 | balans | Balans tonalny | instrumenty grają razem, nic nie wystaje, bez „koca na głośnikach” | cienko, grubo lub mętnie, jasno lub krzykliwie, koc na głośnikach | szerokie nachylenie względem celu MMM (3.3 dokładna EQ); ostre pasmo dostaje jedno punktowe cięcie (3.3 dokładna EQ) |
+| c05 | punch / szew | Punch i szew sub↔midbas | uderzenie ląduje w piersi, sub nie odpada pod nim, dwa basy czyta się osobno | wiotki, rozmyty, przesuszony, niski bas odrywa się od stopy, albo papka | styk sub↔midbas (1.5 złącza); L/R midbasów 100–200 Hz (1.5 złącza) |
+| c06 | sub <40 | Sub poniżej 40 Hz | trzyma, pod kontrolą, na granicy wciąż muzycznie | buczy, wysycha albo wydaje niemuzyczne dźwięki na granicy | dolnoprzepust i poziom suba (1.3 zwrotnice / 1.6 poziomy); ochrona głośnika |
+| c07 | góra / sybilanty | Góra i sybilanty | „s” i „sz” naturalne, ani się nie odrywają, ani nie znikają; talerze — trwałe migotanie | sybilanty odrywają się lub znikają; talerze jak żuta folia albo głuche „pssz” | punktowe cięcia w warstwie wirtualnej (3.3 dokładna EQ); styk średniotonowy↔wysokotonowy (1.5 złącza) |
+| c08 | kłucie w głosie | Głos — kłujące pasma w średnicy | naturalny głos, osadzony w piersi, bez nacisku | wierci w uszach, naciska albo brzmi anorektycznie, bez ciała | własne pasmo kłucia (3.3 dokładna EQ) — nie fundament |
+| c09 | głębia | Głębia i przestrzeń | scena za maską, warstwy czytelne, szept pod solówką wciąż słyszalny | płaski obraz, wszystko z przodu | styk średniotonowy↔wysokotonowy (1.5 złącza) albo góra gorętsza od basu (3.3 dokładna EQ) |
+| c10 | separacja | Separacja pod obciążeniem | mikrozdarzenia zostają osobno, gdy miks jest gęsty | papka, nuda albo przytłoczenie | zwykle za dużo EQ — zdejmij część (1.4 zgrubna EQ / 3.3 dokładna EQ); rzadko styk (1.5 złącza) |
+| c11 | atak | Atak i transjenty | początek uderzenia ostry, bębny napięte | początki rozmyte, bębny miękkie | kontrola wzmacniacza i głośników, nie EQ; styk midbas↔średniotonowy (1.5 złącza) |
+| c12 | uniwersalność | Uniwersalność między nagraniami | różne nagrania brzmią różnie | „następna w radiu” — wszystko podobne | nachylenie albo przesada w EQ (3.3 dokładna EQ) |
+| c13 | długi odsłuch | Długi odsłuch — album, 15–20 min, na luzie | pozostaje lekki i zapraszający | męczy: grubo, jasno lub ciemno (nachylenie), albo martwo, sucho, klinicznie (przekorygowanie) | nachylenie → szerokie nachylenie po MMM, nigdy wąskie wycięcia; martwo → zdejmij EQ, nie dodawaj (3.3 dokładna EQ) |
+| c14 | tekstura basu | Tekstura niskich częstotliwości — kontrabas | sprężyście, z ciałem i detalem | nadęty, dudniący albo przesuszony i cienki | poziomy i szew sub↔midbas (1.5 złącza / 1.6 poziomy); szerokie nachylenie (3.3 dokładna EQ) |
+| c15 | wysokość / szerokość | Wysokość i szerokość sceny — wyższa liga | scena na wysokości deski rozdzielczej i sięga za słupki A z czystymi krawędziami | opada na podłogę na niektórych nutach, albo krawędzie postrzępione i scena się sypie | styk średniotonowy↔wysokotonowy (1.5 złącza); poziomy L/R (1.6 poziomy) — druga wizyta w fazie 4 |
 | c17 | +6 dB | To samo, o dwa lub trzy kroki głośności głośniej | balans, punch i głosy trzymają to, co trzymały na poziomie roboczym | coś, co było równe, zaczyna naciskać, albo pojawia się ostrość, której nie było | to, na co wskazuje cichsze przejście — ale werdykt GŁOŚNIEJ to ten, który słyszy sędzia (EMMA Judge Book 2024 §4.5, „Overall Spectral Balance at higher volume”) |
-| c16 | dynamika | Dynamika przy głośności — zapas | od cicho do głośno bez wysiłku, szczyty czyste | szczyty się spłaszczają lub zniekształcają, dźwięk dusi się przy głośności | struktura wzmocnienia i granice głośników — nie EQ; filtry ochronne (1.2) |
+| c16 | dynamika | Dynamika przy głośności — zapas | od cicho do głośno bez wysiłku, szczyty czyste | szczyty się spłaszczają lub zniekształcają, dźwięk dusi się przy głośności | struktura wzmocnienia i granice głośników — nie EQ; filtry ochronne (−1.3 filtry ochronne) |
 
 Kolejność ma znaczenie: **najpierw c01 – c03.** Jeśli środek albo pozycje nie przechodzą, reszty za
 wcześnie oceniać.

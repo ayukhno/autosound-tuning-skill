@@ -112,7 +112,7 @@ Measure and analyze the MMM RTA of the following combinations:
 ---
 
 ## 2d — Final EQ to Target, then the Centre and the Rear
-Shape the technical response of the entire summed system — the `(rta)` of the summed groups vs the target — to the session's target curve. **Then the centre under everything, then the rear**, each as its own zone: the centre is read against both sides where the front mids play (1–4 kHz) and summed under the condition it was measured in (`virtual-first.md` 1.5, 1.7); a rear pair sits in its side's sum.
+Shape the technical response of the entire summed system — the `(rta)` of the summed groups vs the target — to the session's target curve. **Then the centre under everything, then the rear**, each as its own zone: the centre is read against both sides where the front mids play (1–4 kHz) and summed under the condition it was measured in (`virtual-first.md` 1.5 joints, 1.8 predict); a rear pair sits in its side's sum.
 
 ### Rules of Action
 * Apply **broad, smooth acoustic moves** (tilts, shelves, high/low Q shaping).

@@ -45,7 +45,7 @@ the same capture, with one block and one candidate more:
    (series M): per channel and for ALL within 1 dB → the transcription and the model agree. A channel that misses is a value typed
    wrong from the screens or a processing block left on, and it is fixed before any variant is read —
    every variant is described against this tune, so an error in it moves all of them.
-4. **Desk — the variants against the current tune** (1.3–1.7 as below), with `resonalyze_engine.py run
+4. **Desk — the variants against the current tune** (1.3 crossovers to 1.8 predict, as below), with `resonalyze_engine.py run
    <p> <set> --current <current>`. The current tune is a candidate on the same trade-off front as the
    engine's best, its alternatives and the wishes — its EQ set aside, as every candidate's is — and so
    is **the current crossovers re-timed** (its edges and levels kept, Auto delay again). Each
@@ -90,7 +90,7 @@ transcribed once from the PC-Tool screens.)
 ## The path, phase by phase (input → action → output)
 
 Step names describe the action, not a command. The joint and L/R **phase** is the foundation: it is
-**set in 1.3, checked on the prediction in 1.5, and checked again after EQ in 2.2**.
+**set in 1.5 joints, checked on the prediction in 1.8 predict, and checked again in 2.2 check after EQ**.
 
 ### Phase −1 · Intake (desk) — *goal: decide nothing in the car, and be surprised by nothing*
 - **−1.1** log Phase −1; run the intake (`phase_-1_intake.md §0.5`); read the current DSP settings
@@ -143,7 +143,7 @@ tripod block; every channel both `(sw)` and `(rta)`.
   the drift record, in capture samples, written on the round. Re-take whatever failed now, while the
   tripod stands. **What goes to the Arbiter is what the CHECK said** — usable, flagged, unchecked
   and why, the drift record — and then the step reply's one line about what is next. The arrivals
-  are in the round and Phase 1 reads them (1.3); a prose reading here has none of that step's
+  are in the round and Phase 1 reads them (1.5 joints); a prose reading here has none of that step's
   guards, and it is a habit of the text rather than one session's slip (SKILL.md `✍️ Output Style`).
 - **0.7** mark the protectives on the round (`capture-protective`); the `.mdat` into the project;
   finish the passport (temperature by eye, optional). **Tripod untouched** → the desk.
@@ -194,14 +194,14 @@ reveals a broken driver or wiring); without a rig, Fs from the datasheet with ma
     **Phase 1 then runs the per-driver way, which is the path this method had before the engine and
     still keeps in full:** candidates per driver (`xover_candidates` → `xover_select`, every corner
     through `crossover_checks` and the wish check), delays and polarity joint by joint bottom-up
-    (`predict --align` with the RES-013/RES-016 guard at 1.5), levels from the geometry and then from
-    the measurement (1.6), the sums and the description (1.7), EQ by `eq_propose`, the scene presets by
-    `scene_presets`. What is NOT available without the engine, and should be said to the tuner rather
-    than worked around: the whole configuration proposed at once (every junction, both sides, the centre
-    and the rear as their own zones), Resonalyze's Auto delay staging and its gain balance, and what a
-    wish costs — neither the junction probe nor the whole-configuration variant. Those are proposals,
-    not measurements: a tune done without them is a tune done the way every tune here was done until
-    2026-09-17. The choice is made at 1.7, after the sums are predicted. **Two leaders** (hub `RES-014`): beside the engine's best, the alternative by the experimental group-delay term — the crossover pair's swing against the Blauert & Laws threshold at each junction, 1 dB per ms over it, clamped below 500 Hz — shown with each junction's swing/threshold; the run continues with the engine's leader, the alternative's edges are on the table for the tuner.
+    (`predict --align` with the RES-013/RES-016 guard at 1.5 joints), levels from the geometry and then
+    from the measurement (1.6 levels), the sums and the description (1.8 predict), EQ by `eq_propose`,
+    the scene presets by `scene_presets`. What is NOT available without the engine, and should be said
+    to the tuner rather than worked around: the whole configuration proposed at once (every junction,
+    both sides, the centre and the rear as their own zones), Resonalyze's Auto delay staging and its gain
+    balance, and what a wish costs — neither the junction probe nor the whole-configuration variant.
+    Those are proposals, not measurements: a tune done without them is a tune done the way every tune
+    here was done until 2026-09-17. The choice is made at 1.8 predict, after the sums are predicted. **Two leaders** (hub `RES-014`): beside the engine's best, the alternative by the experimental group-delay term — the crossover pair's swing against the Blauert & Laws threshold at each junction, 1 dB per ms over it, clamped below 500 Hz — shown with each junction's swing/threshold; the run continues with the engine's leader, the alternative's edges are on the table for the tuner.
 - **1.4** **coarse EQ per driver — BEFORE the delays** (the user's decision, 2026-09-17; Resonalyze's
   order too): the first part of `eq_propose` (`--part 1`) — resonances per driver group — cuts of minimum-phase
   peaks that stay across the positions, away from the junctions, Q no narrower than the ellipsoid's
@@ -269,7 +269,7 @@ reveals a broken driver or wiring); without a rig, Fs from the datasheet with ma
   margins on every term are named as close, worth taking both to the car to listen. An alternative whose
   edge was moved to the nearest allowed has the junction beside it re-tuned inside the limits, in the same
   family and slope, so its numbers are its own configuration's.
-- **1.7** **predict the sums, describe the variants, and the tuner chooses** (`predict`): L, R, ALL; the
+- **1.8** **predict the sums, describe the variants, and the tuner chooses** (`predict`): L, R, ALL; the
   sum loss per joint; L−R per band; a graph — for each variant on the table, with its per-term numbers
   **and in words**: what changes and how it will sound, written by the generator and reviewed by the
   critic. The predicted sums go into the target-curve visualizer beside the target — `sums_export.py --predicted

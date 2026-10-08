@@ -1775,11 +1775,11 @@ def run_verdict(v):
                        + (f"; {len(low)} of {len(rows)} placements at LOW confidence" if low
                           else f"; none of {len(rows)} placements at LOW confidence")
                        + f" ({'Auto delay after the repairs' if after else 'Auto delay'})")
-    # virtual-first.md 1.7: the sums are predicted and the variants described BEFORE the tuner picks; only the pick
+    # virtual-first.md 1.8: the sums are predicted and the variants described BEFORE the tuner picks; only the pick
     # he OKs reaches him, as a yellow version.
-    offer = ("predict and describe the variants on the trade-off front below (1.7, predict); the one the tuner OKs "
+    offer = ("predict and describe the variants on the trade-off front below (1.8, predict); the one the tuner OKs "
              "goes" if v.get("front") else
-             "predict the sums with the crossovers below (1.7, predict); with the tuner's OK they go") \
+             "predict the sums with the crossovers below (1.8, predict); with the tuner's OK they go") \
         + " to him as a yellow version (apply.propose)"
     step = (f"settle the {_count(len(flagged), 'edge')} under \"still to settle\" with the tuner, then {offer}"
             if flagged else offer)
@@ -2768,13 +2768,13 @@ def _selftest():
     assert "2 of 2 crossover edges inside this car's limits (the final settings" in top[1], top
     assert "largest level step -1.8 dB at C Mid ↔ D Tweeter (own-band level + gain" in top[2], top
     assert "longest delay 14.30 ms on E Rear L of the device's 41.64 ms; 1 of 2 placements at LOW" in top[3], top
-    assert top[4] == "    → predict the sums with the crossovers below (1.7, predict); with the tuner's OK they go to " \
+    assert top[4] == "    → predict the sums with the crossovers below (1.8, predict); with the tuner's OK they go to " \
                      "him as a yellow version (apply.propose)", top
     top = run_verdict(dict(clean, checks_final=[ok_edge, caution], front={"picks": []}))
     assert top[0].startswith("  ▶ PROPOSED, 1 EDGE TO SETTLE"), top
     assert "1 of 2 crossover edges inside this car's limits, 1 to settle: 1 CAUTION" in top[1], top
     assert 'settle the 1 edge under "still to settle" with the tuner, then predict and describe the variants on ' \
-           "the trade-off front below (1.7, predict); the one the tuner OKs goes" in top[-1], top
+           "the trade-off front below (1.8, predict); the one the tuner OKs goes" in top[-1], top
     # exit 3: the crossovers came back, Auto delay did not fit; the repairs never ran, and the way out is the fill
     over_rear = {"channel": "F Rear L", "neededMs": 23.67, "limitMs": 20.82, "rearFillMs": 15.0, "widestCarriesFill": True}
     no_fit = {"delays": {"autoDelay": {"error": "does not fit", "overRange": over_rear},

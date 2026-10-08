@@ -130,6 +130,7 @@
     "err_still_missing": "Nothing new to save. Still missing: {n} — marked in red.",
     "err_refused": "Not saved:",
     "err_some_refused": "Saved, except {n} — marked in red.",
+    "unreadable": "Not read — a save that needs this file is refused until it is put right:",
     "saved_ok": "Saved.",
     "saved_missing": "Saved. Still missing: {n} — marked in red.",
     "seat_once": "Selected once: cannot be changed after saving.",

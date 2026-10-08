@@ -44,28 +44,29 @@ sittings** — listen, drive, come back, listen again. Ears reset on the road.
 
 `label` is the short form for a menu; `name` the full one. `sounds right` and `sounds wrong` are two
 free-standing phrases, written to be dropped into a sentence. `route` is the step of the method a ✗
-goes to (desk 1.3 = the joints, 1.4 = levels, 2.1 = the coarse EQ, 3.3 = the fine EQ over MMM). A
+goes to, by its number and its name in `virtual-first.md` (desk 1.3 crossovers, 1.4 coarse EQ,
+1.5 joints, 1.6 levels; car 3.3 fine EQ over MMM; intake −1.3 protective filters). A
 characteristic marked `next league` is not for the first pass.
 
 | id | label | name | sounds right | sounds wrong | where a ✗ goes |
 |---|---|---|---|---|---|
-| c01 | mono centre | Mono centre — the L/R foundation | a tight point at the centre, at height, that stays put | smeared, wanders left or right, wide, or changes place with the note | the foundation: L/R level, arrival, polarity (desk 1.3 / 1.4) — never imaging EQ |
-| c02 | positions | Positions L · LC · C · RC · R | each instrument is one point in its own place | positions squeezed towards the centre, or two share a place | L/R levels; crossover slopes in the mid overlap (1.2 / 1.4) |
-| c03 | focus | Focus and image size | a size hierarchy — the bass biggest, the triangle smallest; a vocal keeps its size across notes | every image the same size; a vocal grows or drifts on some notes | the mid↔tweeter joint (1.3); levels (1.4) |
-| c04 | balance | Tonal balance | instruments play together, nothing sticks out, no blanket over the speakers | thin, thick or muddy, bright or shouty, a blanket over the speakers | a broad tilt against the MMM target (3.3); a harsh band gets one surgical cut (3.3) |
-| c05 | punch / seam | Punch and the sub↔midbass seam | the hit lands in the chest, the sub does not fall away under it, two basses read separately | limp, smeared, over-dried, the low bass detaches from the kick, or mush | the sub↔midbass joint (1.3); L/R midbass 100–200 Hz (1.3) |
-| c06 | sub <40 | Sub below 40 Hz | holds, controlled, still musical at the limit | drones, dries up, or makes non-musical noises at the limit | sub low-pass and level (1.2 / 1.4); driver protection |
-| c07 | top / sibilants | Top and sibilants | "s" and "sh" natural, neither detaching nor vanishing; cymbals a sustained shimmer | sibilants detach or disappear; cymbals like chewed foil or a dull "pssh" | surgical cuts in the virtual layer (3.3); the mid↔tweeter joint (1.3) |
-| c08 | voice cutters | Voice — cutters in the mids | a natural voice with chest and no pressure | drills the ears, presses, or sounds anorexic with no body | the cutter's own band (3.3) — not the foundation |
-| c09 | depth | Depth and space | the stage behind the hood, layers read, a whisper under a solo still reads | a flat picture with everything forward | the mid↔tweeter joint (1.3), or a top hotter than the bass (3.3) |
-| c10 | separation | Separation under load | micro-events stay separate when the mix is dense | mush, boring, or oppressive | usually too much EQ — remove some (2.1 / 3.3); rarely a joint (1.3) |
-| c11 | attack | Attack and transients | the start of a hit is crisp, drums taut | starts smeared, drums soft | amplifier and driver control, not EQ; the midbass↔mid joint (1.3) |
-| c12 | universality | Universality across recordings | different recordings sound different | "the next one on the radio" — everything alike | a tilt, or EQ overreach (3.3) |
-| c13 | long listen | The long listen — an album, 15–20 min, relaxed | stays easy and inviting | tires you: thick, bright or dark (a tilt), or dead, dry, clinical (over-correction) | a tilt → a broad tilt against MMM, never narrow notches; dead → remove EQ, do not add (3.3) |
-| c14 | LF texture | Low-frequency texture — the double bass | springy, with body and detail | bloated, boomy, or dried out and thin | levels and the sub↔midbass seam (1.3 / 1.4); a broad tilt (3.3) |
-| c15 | height / width | Stage height and width — next league | the stage sits at dash height and reaches past the A-pillars with clean edges | drops to the floor on some notes, or the edges are ragged and the stage collapses | the mid↔tweeter joint (1.3); L/R levels (1.4) — a second visit to Phase 4 |
+| c01 | mono centre | Mono centre — the L/R foundation | a tight point at the centre, at height, that stays put | smeared, wanders left or right, wide, or changes place with the note | the foundation: L/R level, arrival, polarity (desk 1.5 joints / 1.6 levels) — never imaging EQ |
+| c02 | positions | Positions L · LC · C · RC · R | each instrument is one point in its own place | positions squeezed towards the centre, or two share a place | L/R levels; crossover slopes in the mid overlap (1.6 levels / 1.3 crossovers) |
+| c03 | focus | Focus and image size | a size hierarchy — the bass biggest, the triangle smallest; a vocal keeps its size across notes | every image the same size; a vocal grows or drifts on some notes | the mid↔tweeter joint (1.5 joints); levels (1.6 levels) |
+| c04 | balance | Tonal balance | instruments play together, nothing sticks out, no blanket over the speakers | thin, thick or muddy, bright or shouty, a blanket over the speakers | a broad tilt against the MMM target (3.3 fine EQ); a harsh band gets one surgical cut (3.3 fine EQ) |
+| c05 | punch / seam | Punch and the sub↔midbass seam | the hit lands in the chest, the sub does not fall away under it, two basses read separately | limp, smeared, over-dried, the low bass detaches from the kick, or mush | the sub↔midbass joint (1.5 joints); L/R midbass 100–200 Hz (1.5 joints) |
+| c06 | sub <40 | Sub below 40 Hz | holds, controlled, still musical at the limit | drones, dries up, or makes non-musical noises at the limit | sub low-pass and level (1.3 crossovers / 1.6 levels); driver protection |
+| c07 | top / sibilants | Top and sibilants | "s" and "sh" natural, neither detaching nor vanishing; cymbals a sustained shimmer | sibilants detach or disappear; cymbals like chewed foil or a dull "pssh" | surgical cuts in the virtual layer (3.3 fine EQ); the mid↔tweeter joint (1.5 joints) |
+| c08 | voice cutters | Voice — cutters in the mids | a natural voice with chest and no pressure | drills the ears, presses, or sounds anorexic with no body | the cutter's own band (3.3 fine EQ) — not the foundation |
+| c09 | depth | Depth and space | the stage behind the hood, layers read, a whisper under a solo still reads | a flat picture with everything forward | the mid↔tweeter joint (1.5 joints), or a top hotter than the bass (3.3 fine EQ) |
+| c10 | separation | Separation under load | micro-events stay separate when the mix is dense | mush, boring, or oppressive | usually too much EQ — remove some (1.4 coarse EQ / 3.3 fine EQ); rarely a joint (1.5 joints) |
+| c11 | attack | Attack and transients | the start of a hit is crisp, drums taut | starts smeared, drums soft | amplifier and driver control, not EQ; the midbass↔mid joint (1.5 joints) |
+| c12 | universality | Universality across recordings | different recordings sound different | "the next one on the radio" — everything alike | a tilt, or EQ overreach (3.3 fine EQ) |
+| c13 | long listen | The long listen — an album, 15–20 min, relaxed | stays easy and inviting | tires you: thick, bright or dark (a tilt), or dead, dry, clinical (over-correction) | a tilt → a broad tilt against MMM, never narrow notches; dead → remove EQ, do not add (3.3 fine EQ) |
+| c14 | LF texture | Low-frequency texture — the double bass | springy, with body and detail | bloated, boomy, or dried out and thin | levels and the sub↔midbass seam (1.5 joints / 1.6 levels); a broad tilt (3.3 fine EQ) |
+| c15 | height / width | Stage height and width — next league | the stage sits at dash height and reaches past the A-pillars with clean edges | drops to the floor on some notes, or the edges are ragged and the stage collapses | the mid↔tweeter joint (1.5 joints); L/R levels (1.6 levels) — a second visit to Phase 4 |
 | c17 | +6 dB | The same, two or three volume steps louder | balance, punch and voices hold what they held at working level | something that was even starts to press, or a harshness appears that was not there | whatever the quieter pass points at — but the LOUDER verdict is the one a judge hears (EMMA Judge Book 2024 §4.5, "Overall Spectral Balance at higher volume") |
-| c16 | dynamics | Dynamics at volume — headroom | quiet to loud without strain, peaks stay clean | peaks squash or distort, the sound closes up as it gets loud | gain structure and driver limits — not EQ; the protection filters (1.2) |
+| c16 | dynamics | Dynamics at volume — headroom | quiet to loud without strain, peaks stay clean | peaks squash or distort, the sound closes up as it gets loud | gain structure and driver limits — not EQ; the protection filters (−1.3 protective filters) |
 
 Order matters: **c01 – c03 first.** If the centre or the positions fail, the rest is too early to
 judge.

@@ -130,6 +130,7 @@
     "err_still_missing": "Keine neuen Daten zum Speichern. Noch nicht ausgefüllt: {n} – rot markiert.",
     "err_refused": "Nicht gespeichert:",
     "err_some_refused": "Gespeichert, außer {n} – rot markiert.",
+    "unreadable": "Nicht gelesen — ein Speichern, das diese Datei benötigt, wird verweigert, bis sie in Ordnung gebracht ist:",
     "saved_ok": "Gespeichert.",
     "saved_missing": "Gespeichert. Noch nicht ausgefüllt: {n} – rot markiert.",
     "seat_once": "Wird einmalig festgelegt: kann nach dem Speichern nicht mehr geändert werden.",

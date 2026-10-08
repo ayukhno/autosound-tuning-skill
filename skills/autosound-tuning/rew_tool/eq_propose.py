@@ -11,7 +11,7 @@ decides what a deviation is.
 
   * broad (> 2/3 oct)             -> TONE: the pair moves toward the target, together, gently
   * medium (1/6..2/3 oct), a PEAK, present in every position (the ellipsoid), minimum-phase (the
-    excess-phase gate), away from a junction (+-1 oct: that is the delay's business, 1.3),
+    excess-phase gate), away from a junction (+-1 oct: that is the delay's business, 1.5 joints),
     above Schroeder a peak only   -> a DRIVER RESONANCE: cut it, Q no narrower than the ceiling
   * narrow, or a dip, or moving   -> the POSITION, not the car: not a filter (listed, not proposed)
 
@@ -342,7 +342,7 @@ def package_lr(f, pair, members, meas, targets, tol_db=LR_TOL_DB, live_bands=Non
     read = (float(f[live].min()), float(f[live].max()))
     d = _smooth(f, meas[L], 3) - _smooth(f, meas[R], 3)
     # A level difference is not a shape difference (analysis-playbook): the pair's overall offset
-    # is the GAIN's business (1.4) and is reported, not equalised; what is left is shape.
+    # is the GAIN's business (1.6 levels) and is reported, not equalised; what is left is shape.
     level_diff = float(np.median(d[live]))
     d = d - level_diff
     before = [(lo, hi, float(np.mean(d[(f >= lo) & (f < hi) & live])))
@@ -412,7 +412,7 @@ def package_res(f, group, codes, meas, targets, joints, ellipsoids, gates, allow
                 reason = (f"outside where the channel plays ({_hz(band)}, within {LIVE_BAND_DB:g} dB of its "
                           f"passband level) -- the target says it should, the curve says it does not (#56 item 7)")
             elif excl[k]:
-                reason = "within an octave of a junction -- delay/polarity/APF territory (1.3), not EQ"
+                reason = "within an octave of a junction -- delay/polarity/APF territory (1.5 joints), not EQ"
             elif ft["kind"] == "dip":
                 reason = ("a dip: a boost needs --allow-boost and the excess-phase gate"
                           if fc < SCHROEDER_HZ else
@@ -1243,15 +1243,31 @@ def _check_refused_notes_never_cut():
     assert note_lines(notes, verbose=True) == notes
 
 
+def _check_junction_band_names_its_step():
+    """A resonance within an octave of a junction is left out, and the reason names the step that owns that band as
+    `virtual-first.md` numbers it -- 1.5 joints, not the 1.3 the crossover choice took in the renumber (#138, I-6)."""
+    f = P.grid(20, 20000, 96)
+    meas = {"m-L": _db(dsp_math.peq_response(f, "PK", 1000.0, 5.0, 4.0))}
+    pk = package_res(f, "mid", ["m-L"], meas, {"m-L": np.zeros_like(f)}, [("m-L", "tw-L", 1500.0)], {}, {})
+    reasons = [lo["reason"] for lo in pk["left_out"] if abs(math.log2(lo["f"] / 1000.0)) < 1 / 6]
+    assert reasons and all("junction" in r and "(1.5 joints)" in r for r in reasons), reasons
+    assert not pk["bands"]["m-L"], pk["bands"]
+
+
 def _selftest():
     """Anchored to the definitions: a driver resonance is cut where it is, a comb is not boosted,
     a moving peak is not proposed, an L/R shelf difference goes to the pair package, a tonal
     offset moves the pair on the macro scale and leaves the fine residual alone."""
     import tempfile
     import ellipsoid as E
-    _check_profile_read_strictly()
-    _check_refusal_names_its_reason()
-    _check_refused_notes_never_cut()
+    failures = []
+    for check in (_check_profile_read_strictly, _check_refusal_names_its_reason, _check_refused_notes_never_cut,
+                  _check_junction_band_names_its_step):
+        try:
+            check()
+        except AssertionError as exc:
+            failures.append(f"{check.__name__}: {exc}")
+    assert not failures, "\n".join(failures)
     f = P.grid(20, 20000, 96)
 
     class House:

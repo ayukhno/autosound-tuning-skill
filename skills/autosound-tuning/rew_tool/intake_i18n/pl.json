@@ -130,6 +130,7 @@
     "err_still_missing": "Brak nowych danych do zapisania. Nadal nieuzupełnione: {n} — zaznaczone na czerwono.",
     "err_refused": "Nie zapisano:",
     "err_some_refused": "Zapisano, z wyjątkiem {n} — zaznaczone na czerwono.",
+    "unreadable": "Nie odczytano — zapis wymagający tego pliku jest odrzucany, dopóki nie zostanie on poprawiony:",
     "saved_ok": "Zapisano.",
     "saved_missing": "Zapisano. Nadal nieuzupełnione: {n} — zaznaczone na czerwono.",
     "seat_once": "Wybór jednorazowy: po zapisaniu nie można zmienić.",

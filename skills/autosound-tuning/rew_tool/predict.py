@@ -1079,7 +1079,7 @@ def _gate_label(spec):
     return None
 
 
-# ---------------------------------------------------------------- alignment (Phase 1.3)
+# ---------------------------------------------------------------- alignment (1.5 joints)
 APF_HINT_DIP_DB = -3.0     # a junction dip worse than this after delay/polarity earns an APF hint
 
 
@@ -2151,7 +2151,7 @@ def _main(argv=None):
     ap.add_argument("--out", metavar="DIR", default=None, help="write predicted.json here")
     ap.add_argument("--plot", action="store_true", help="also write predicted.png (matplotlib)")
     ap.add_argument("--json", action="store_true", help="print the JSON instead of the table")
-    al = ap.add_argument_group("alignment (Phase 1.3)")
+    al = ap.add_argument_group("alignment (1.5 joints)")
     al.add_argument("--align", action="store_true",
                     help="find delay x polarity per junction by sum loss, bottom-up, and print the "
                          "proposal; the prediction that follows is of the ALIGNED state")
@@ -3175,7 +3175,7 @@ def _selftest():
     except PredictError as e:
         assert "VXX" in str(e)
 
-    # 7. Alignment by sum loss, bottom-up, on the DSP's grid (Phase 1.3 as a command). Anchored
+    # 7. Alignment by sum loss, bottom-up, on the DSP's grid (1.5 joints as a command). Anchored
     #    to arrivals the fixtures DEFINE, never to a stored answer.
     step = 1000.0 / fs
     # (a) check 3's pair with the ledger's delay removed: m-L arrives 0.5 ms after w-L. The upper

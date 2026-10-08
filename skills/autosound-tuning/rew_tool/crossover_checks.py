@@ -142,7 +142,7 @@ def junction_cost(fc, phon=70.0):
         v = CAUTION
         why = (f"the ear is {cost:.1f} dB more sensitive at {float(fc):.0f} Hz than at 1 kHz -- every "
                f"error in this junction is heard at that advantage. Cross elsewhere if the drivers "
-               f"allow it; if they do not, this junction earns the time budget in 1.3")
+               f"allow it; if they do not, this junction earns the time budget in 1.5 joints")
     else:
         v = OK
         why = (f"the ear is {cost:+.1f} dB relative to 1 kHz at {float(fc):.0f} Hz -- no sensitivity "

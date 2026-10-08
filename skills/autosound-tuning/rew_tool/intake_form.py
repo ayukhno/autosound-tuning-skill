@@ -1627,6 +1627,8 @@ def _check_unreadable_profile_shown_and_refused():
                 page = r.read().decode("utf-8")
                 assert r.status == 200 and 'class="note err refusal"' in page, (route, r.status)
                 assert _esc(m["refusals"][0]) in page, (route, page[:300])
+                # the banner speaks the page's language: uk.json carries it (#138, R65), English is the fallback
+                assert _esc(labels("uk")["ui"]["unreadable"]) + " " + _esc(m["refusals"][0]) in page, (route, page[:300])
         with urllib.request.urlopen(base + "state") as r:
             assert r.status == 200 and json.loads(r.read())["refusals"] == m["refusals"], "the /state answer"
 

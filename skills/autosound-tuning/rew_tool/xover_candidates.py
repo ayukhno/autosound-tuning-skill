@@ -12,7 +12,7 @@ For each candidate:
   magnitude   fit against the driver's target (RMS in the trust band); the level AT each corner,
               which for LR is -6.02 dB and for BW -3.01 dB by definition (an anchor, not a result)
   phase       the electrical phase at each corner and how far it turns across the corner octave --
-              the number the junction alignment (1.3) will have to absorb
+              the number the junction alignment (1.5 joints) will have to absorb
   impulse     the group delay the filters ADD (max in the trust band), against Blauert & Laws via
               `crossover_checks.gd_budget`; a family's ringing character by definition
   the driver  how far each corner sits from the driver's OWN -6 dB points on the measured solo:

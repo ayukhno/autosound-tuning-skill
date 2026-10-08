@@ -591,7 +591,7 @@ def _selftest():
 _USAGE = """usage: eq_export.py <project-dir> <channel> [--preset P] [--version v_NNN] [--fmt NAME] [--out FILE]
 
   One channel's EQ (and crossover legs where the format carries them) from the project's ledger,
-  rendered in the format the project's DSP profile takes -- what Phase 2.3 hands the tuner to
+  rendered in the format the project's DSP profile takes -- what the 2.4 sheet hands the tuner to
   import. Prints the text, then the format's name and everything LEFT OUT, on stderr; --out writes
   the text to a file. Default preset: the registry's active slot; default version: HEAD.
 """
