@@ -204,7 +204,8 @@ class ProcessError(ValueError):
 # tool of the method returned them before (PLAN-AUDIT §8 M1): REW did not answer, and nothing was written; an
 # unexpected error, a bug, with its traceback on stderr above the line that names it -- where it exited 1 like a
 # refusal, or escaped as a traceback; the project busy: another writer held the project's lock past the wait
-# (`write_lock.py`, #141), nothing written, safe to retry.
+# (`write_lock.py`, #141), nothing written, safe to retry -- but by `capture-close` stopped past its first hold, whose
+# own `busy:` line says what had landed by then (R9, `_close_stopped`).
 EXIT_OK = 0
 EXIT_NO = 1
 EXIT_USAGE = 2
@@ -232,6 +233,19 @@ class _StateWithoutItsEvent(ProcessError):
     checks -- tells it from one that wrote nothing, and refuses with it (batch 3's re-review O3): swallowed, it was
     cut to 160 characters, the line to append lost, and the round closed."""
     state_written = True
+
+
+class _RoundMoved(ProcessError):
+    """The capture round a writer read was closed or replaced by another writer before its hold (#141): refused,
+    nothing written by it. `round_moved` on the class, so that `capture-close` -- whose reconcile, checks and close each
+    take the lock for themselves -- tells it from a refusal it may go on past, and stops (Task 2's review): it was read
+    as "checks not run", and the close went on over the round that replaced it. On the instance, the round read
+    (`read`) and the one open now (`now`, None when none is), for the line that says what landed before it."""
+    round_moved = True
+
+    def __init__(self, message, read, now=None):
+        super().__init__(message)
+        self.read, self.now = read, now
 
 
 # Phase 0 selects the target curve and every later phase is measured against it, so leaving 0
@@ -1779,7 +1793,7 @@ class Process:
         return path, None
 
     @_locked
-    def reconcile_captures(self, rew_titles):
+    def reconcile_captures(self, rew_titles, round_id=None):
         """Close the open round's list against what REW holds, however it was captured (skill #77, rule 3).
 
         The Arbiter measures outside TCC as often as inside it, so the round is not told what was taken -- it
@@ -1790,9 +1804,10 @@ class Process:
         are not this round's business. A row the round SUPERSEDED is skipped (N17, #134): it is a typo's trace, so
         REW still holding its title takes nothing back and counts nowhere -- not among the titles held, the renames,
         or the extra taken beyond the list. Returns the verdict (`naming.validate_series` plus `missing_optional`),
-        those titles left out.
+        those titles left out. `round_id`, given, is the round the caller read (`capture-close`, #141, R7): another
+        open by this hold is refused, `round_moved`, nothing written.
         """
-        state, round_ = self._require_capture()
+        state, round_ = self._require_capture(round_id)
         naming = _load_naming()
         if naming is None:
             raise ProcessError(f"naming.py could not be loaded{_load_failure('naming.py')} -- the round cannot be read "
@@ -2532,7 +2547,7 @@ class Process:
         it cannot be loaded: unavailable arithmetic is "cannot tell", never "bad"."""
         return _load_sibling("verify.py")
 
-    def check_captures(self, titles=None, verifier=None, session=False):
+    def check_captures(self, titles=None, verifier=None, session=False, round_id=None):
         """Run the skill's own verdict over the open round and record it (SCR-040).
 
         The arithmetic lives in `verify.py` and is called here rather than reimplemented by a
@@ -2564,11 +2579,13 @@ class Process:
         under it, into the state as it is THEN, by title: a writer that wrote meanwhile keeps its change. The round
         must still be the one the check was asked of, open: closed or replaced while REW was read, it is refused and
         nothing is written -- its verdicts would land on a round that did not ask for them. A folder that is no
-        project's is refused first, before REW is read (#141, R46).
+        project's is refused first, before REW is read (#141, R46). `round_id`, given, is the round the caller read
+        (`capture-close`, R7): another open by this check's own read is refused the same way. Either refusal is
+        `round_moved` on its class, which `capture-close` stops at.
         """
         self._require_home("check_captures")
         self._ready_to_hold()
-        round_ = self._require_capture()[1]
+        round_ = self._require_capture(round_id)[1]
         verifier = self._load_verifier() if verifier is None else verifier
         if verifier is None:
             # With the reason (H 12): what to install, or which file to mend, is in it.
@@ -2654,8 +2671,9 @@ class Process:
             state = self.load(strict=True)
             live = state.get("capture") or {}
             if live.get("id") != round_["id"] or live.get("closed"):
-                raise ProcessError(f"round {round_['id']} was closed or replaced while REW was read -- nothing was "
-                                   "written; run capture-check again")
+                raise _RoundMoved(f"round {round_['id']} was closed or replaced while REW was read -- nothing was "
+                                  "written; run capture-check again", round_["id"],
+                                  None if live.get("closed") else live.get("id"))
             taken, checks = live.setdefault("taken", {}), live.setdefault("checks", {})
             for title, verified in checked:
                 checks[title] = dict(verified)          # every title checked, held or not (T-1)
@@ -2742,10 +2760,10 @@ class Process:
         state = self.load(strict=True)  # every caller writes (#136, R25)
         round_ = state.get("capture")
         if round_id is not None and (not round_ or round_.get("id") != round_id or round_.get("closed")):
-            now = (f"{round_['id']} is the open round now" if round_ and not round_.get("closed")
-                   else "no round is open now")
-            raise ProcessError(f"round {round_id} was closed or replaced after capture-close read it ({now}) -- "
-                               "nothing was written")
+            now = round_["id"] if round_ and not round_.get("closed") else None
+            raise _RoundMoved(f"round {round_id} was closed or replaced after capture-close read it "
+                              f"({f'{now} is the open round now' if now else 'no round is open now'}) -- nothing was "
+                              "written", round_id, now)
         if not round_ or round_.get("closed"):
             raise ProcessError(
                 "no capture round is open: `capture-start <version> [expected ...]` first. "
@@ -3326,6 +3344,7 @@ _USAGE = """usage: process.py <process-dir> <command> [args]
 exit  0 done · 1 refused · 2 usage · 69 REW did not answer, nothing written
       · 70 unexpected error (a bug: the traceback is above it)
       · 75 project busy: another writer holds its lock, nothing written, safe to retry
+           (capture-close stopped past its first hold says what had landed: its reconcile, maybe its checks)
 """
 
 #: The verbs that only DISPLAY (#136, the read rule): they write nothing and show a `process-state.json` that cannot
@@ -3604,6 +3623,27 @@ def _verb_usage(verb):
         if into is not None:
             into.append(line)
     return "\n".join(own + [""] + table)
+
+
+def _close_stopped(exc, landed, missed):
+    """`capture-close`'s own line, and its exit code, when a stage after its first is stopped (#141, R9; Task 2's
+    review): another writer holds the project's lock past the wait (75), or closed or replaced the round (1). The
+    reconcile has landed by then, and maybe the checks (`landed`); `missed` is what did not. Said so, with whether a
+    retry is safe: write_lock's own line says "nothing was written", true at the first hold alone. None for anything
+    else, and when nothing landed -- the exception says itself, truly."""
+    if not landed:
+        return None
+    done = " and ".join(landed)
+    if getattr(type(exc), "is_busy", False):
+        safe = "the reconcile is" if len(landed) == 1 else "the reconcile and the checks are"
+        return (f"busy: {getattr(exc, 'path', 'the project lock')} is held by another writer -- {done} landed; "
+                f"{missed} did not; run capture-close again ({safe} safe to repeat)", EXIT_BUSY)
+    if getattr(type(exc), "round_moved", False):
+        now = getattr(exc, "now", None)
+        return (f"error: round {getattr(exc, 'read', '?')} was closed or replaced by another writer while capture-close "
+                f"ran ({f'{now} is the open round now' if now else 'no round is open now'}) -- {done} landed; {missed} "
+                "did not", EXIT_NO)
+    return None
 
 
 def _seed_intake(root):
@@ -6854,7 +6894,10 @@ def _check_close_checks_stage_refusals():
     close went on over a read it could not make (or refused at the next one); and the checks' journal line refused
     after their state write landed -- "is written, but its journal line is not", cut to 160 characters with its line
     to append lost, and the round closed. The project's lock held past the wait there is 75, the round open (#141): the
-    checks take their own hold, and a busy one is no reason to close unchecked. And a `rew_api.py` that cannot be loaded
+    checks take their own hold, and a busy one is no reason to close unchecked -- said as what landed before it, the
+    reconcile and maybe the checks (R9), never "nothing was written", which only the first hold may say. So is the
+    round another writer replaced while the checks read REW: exit 1, the round as that writer left it, where it was
+    "checks not run" and the close went on over the round that replaced it. And a `rew_api.py` that cannot be loaded
     refuses the close before anything is read or written, naming why and `--no-rew` (M1): it closed the round unchecked
     under "not read against REW"."""
     import shutil
@@ -6862,7 +6905,7 @@ def _check_close_checks_stage_refusals():
     global _load_sibling
     rew_api = _siblings().load("rew_api.py")
     real_list, real_verifier, real_check = rew_api.get_measurements, Process._load_verifier, Process.check_captures
-    real_event, real_load = Process._append_event, _load_sibling
+    real_event, real_load, real_close = Process._append_event, _load_sibling, Process.close_capture
     top = tempfile.mkdtemp(prefix="autosound_process_close_checks_")
 
     class Verifier:
@@ -6914,22 +6957,65 @@ def _check_close_checks_stage_refusals():
                 failures.append(f"{what}: rc {rc}, closed {closed!r}, out {out.strip()[-160:]!r}, err {err.strip()[-200:]!r}")
             if patch[0] == "_append_event" and f"append this line to {Process(d).journal_path}" not in err:
                 failures.append(f"{what}: the line to append is not said: {err.strip()[-300:]!r}")
-        # The project's lock held past the wait at the checks (#141): 75 and its one line, the round left open -- never
-        # closed unchecked because another writer held the lock for a moment.
-        d = fresh()
-        busy = _write_lock().Busy(_write_lock().lock_path(os.path.dirname(d)), 0.3)
+        # The project's lock held past the wait at a hold after the first (#141; R9): 75, the round left open -- never
+        # closed unchecked because another writer held the lock for a moment -- and one line saying what landed: the
+        # reconcile has, and the checks may have, so write_lock's own "nothing was written" would be false there. The
+        # journal holds what the line says. The first hold's busy -- the close's own, REW not read -- keeps that line:
+        # there it is true.
+        lock = _write_lock()
+        for what, argv, at, landed, said in (
+                ("busy at the checks", [], "check_captures", [EV_CAPTURE_RECONCILED],
+                 "the reconcile of cap_001 landed; the checks and the close did not; run capture-close again (the "
+                 "reconcile is safe to repeat)"),
+                ("busy at the close, the checks in", [], "close_capture", [EV_CAPTURE_RECONCILED, EV_CAPTURE_VERIFIED],
+                 "the reconcile of cap_001 and its checks landed; the close did not; run capture-close again (the "
+                 "reconcile and the checks are safe to repeat)"),
+                ("busy at the close, its first hold", ["--no-rew"], "close_capture", [], None)):
+            d = fresh()
+            busy = lock.Busy(lock.lock_path(os.path.dirname(d)), 0.3)
 
-        def busy_at_the_checks(self, *args, **kwargs):
-            raise busy
-        Process.check_captures = busy_at_the_checks
+            def busy_here(self, *args, busy=busy, **kwargs):
+                raise busy
+            n = len(Process(d).events())
+            setattr(Process, at, busy_here)
+            try:
+                rc, out, err = _run_main(["process.py", d, "capture-close", *argv])
+            finally:
+                Process.check_captures, Process.close_capture = real_check, real_close
+            want = str(busy) if said is None else f"busy: {busy.path} is held by another writer -- {said}"
+            kinds = [e.get("type") for e in Process(d).events()[n:]]
+            closed = Process(d).load()["capture"].get("closed")
+            if rc != EXIT_BUSY or err.strip().splitlines()[-1:] != [want] or "closes on the record" in out or closed \
+                    or kinds != landed:
+                failures.append(f"{what}: rc {rc}, closed {closed!r}, the journal {kinds}, out {out.strip()[-160:]!r}, "
+                                f"err {err.strip()[-300:]!r}")
+        # Another writer replacing the round while the checks read REW (Task 2's review): the checks refuse, and the
+        # verb with them -- exit 1, the round as the other writer left it, nothing closed, one line saying what landed.
+        # The refusal was read as "checks not run", and the close went on over the round that replaced it, exit 0.
+        d = fresh()
+        n, raised = len(Process(d).events()), []
+
+        class Replacing(Verifier):
+            def verify(self, titles, d=d):
+                raised.append(_from_another_thread(lambda: Process(d).start_capture("1", expected=["m-R_1 (sw)"])))
+                return Verifier.verify(self, titles)
+        Process._load_verifier = lambda self: Replacing()
         try:
             rc, out, err = _run_main(["process.py", d, "capture-close"])
         finally:
-            Process.check_captures = real_check
-        closed = Process(d).load()["capture"].get("closed")
-        if rc != EXIT_BUSY or err.strip().splitlines()[-1:] != [str(busy)] or "closes on the record" in out or closed:
-            failures.append(f"the lock held at the checks: rc {rc}, closed {closed!r}, out {out.strip()[-160:]!r}, "
-                            f"err {err.strip()[-200:]!r}")
+            Process._load_verifier = lambda self: Verifier()
+        live = Process(d).load()["capture"]
+        rounds = [(e.get("type"), e.get("capture")) for e in Process(d).events()[n:]
+                  if e.get("type") in (EV_CAPTURE_RECONCILED, EV_CAPTURE_VERIFIED, EV_CAPTURE_CLOSED, EV_CAPTURE_ISSUED)]
+        want = ("error: round cap_001 was closed or replaced by another writer while capture-close ran (cap_002 is the "
+                "open round now) -- the reconcile of cap_001 landed; the checks and the close did not")
+        if rc != EXIT_NO or err.strip().splitlines()[-1:] != [want] or "closes on the record" in out \
+                or live.get("id") != "cap_002" or live.get("closed") or raised != [None] \
+                or rounds != [(EV_CAPTURE_RECONCILED, "cap_001"), (EV_CAPTURE_CLOSED, "cap_001"),
+                              (EV_CAPTURE_ISSUED, "cap_002")]:
+            failures.append(f"the round replaced while the checks read REW: rc {rc}, open {live.get('id')!r} closed "
+                            f"{live.get('closed')!r}, the journal {rounds}, the other writer {raised}, out "
+                            f"{out.strip()[-160:]!r}, err {err.strip()[-300:]!r}")
         # A journal the close cannot append to is refused before a line is printed (batch 2's re-review, Out of Scope
         # 5): with REW down, "REW not reached ...: closing on the record alone" was printed, and then the close refused.
         if _mode_refuses("a journal capture-close cannot open, REW down"):
@@ -6980,6 +7066,7 @@ def _check_close_checks_stage_refusals():
     finally:
         rew_api.get_measurements, Process._load_verifier = real_list, real_verifier
         Process.check_captures, Process._append_event, _load_sibling = real_check, real_event, real_load
+        Process.close_capture = real_close
         shutil.rmtree(top, ignore_errors=True)
     assert not failures, "\n  ".join(["capture-close's checks stage:"] + failures)
 
@@ -7460,19 +7547,26 @@ def _check_capture_close_closes_the_round_it_read():
             failures.append(f"the other writer: {raised!r}")
         return got
     try:
+        # In code, each of the three stages held to the round read (the reconcile and the checks too, so that what a
+        # stopped capture-close says landed is said of the right round): another open, or none, is refused naming
+        # both, `round_moved` on its class, nothing written.
+        stages = (("close_capture", lambda q: q.close_capture("done", round_id="cap_001")),
+                  ("reconcile_captures", lambda q: q.reconcile_captures(["m-L_1 (sw)"], round_id="cap_001")),
+                  ("check_captures", lambda q: q.check_captures(verifier=Verifier(), round_id="cap_001")))
         for what, meanwhile, now in (
                 ("replaced", lambda q: q.start_capture("1", expected=["m-R_1 (sw)"]), "(cap_002 is the open round now)"),
                 ("closed", lambda q: q.close_capture("closed meanwhile"), "(no round is open now)")):
-            d = fresh()
-            meanwhile(Process(d))
-            before = _project_bytes(d)
-            caught = _raised(lambda: Process(d).close_capture("done", round_id="cap_001"))
-            said = str(caught)
-            if not isinstance(caught, ProcessError) or not said.startswith("round cap_001 ") or now not in said \
-                    or "nothing was written" not in said:
-                failures.append(f"{what}, in code: {type(caught).__name__}: {said}")
-            if _project_bytes(d) != before:
-                failures.append(f"{what}, in code: wrote")
+            for stage, call in stages:
+                d = fresh()
+                meanwhile(Process(d))
+                before = _project_bytes(d)
+                caught = _raised(lambda: call(Process(d)))
+                said = str(caught)
+                if not isinstance(caught, ProcessError) or not getattr(type(caught), "round_moved", False) \
+                        or not said.startswith("round cap_001 ") or now not in said or "nothing was written" not in said:
+                    failures.append(f"{stage}, {what}, in code: {type(caught).__name__}: {said}")
+                if _project_bytes(d) != before:
+                    failures.append(f"{stage}, {what}, in code: wrote")
         d = fresh()
         closed = _raised(lambda: Process(d).close_capture("done", round_id="cap_001"))
         if closed is not None or closes(d) != [("cap_001", "done")]:
@@ -9134,6 +9228,8 @@ def _main(argv):
             # The close is of this round or refused, naming both -- it closed the round open by then, one this verb
             # never read against REW nor checked. No round open is refused here, before a line is printed.
             pinned = p._require_capture()[1]["id"]
+            # What this verb wrote before a later hold stopped it, for the line that says so (R9, `_close_stopped`).
+            landed = []
             if not no_rew:
                 rew_api = _load_sibling("rew_api.py")
                 if rew_api is None:
@@ -9163,35 +9259,52 @@ def _main(argv):
                     # Outside the `try`: the reconcile's own refusals -- the state it cannot read, naming.py that
                     # cannot be loaded -- are this verb's refusal (1), never "not read against REW" over a round that
                     # then closed unchecked (T I4's probe), and a bug in it is 70.
-                    checked = p.reconcile_captures(titles)
-            if checked is not None:
-                print(f"  read against REW: {len(checked['matched'])} of {len(checked['expected'])} on the list held"
-                      + (f", {len(p.load(strict=True)['capture'].get('reconciled', {}).get('extra') or [])} taken "
-                         "beyond it")
-                      + (f", {len(checked['renames'])} under another spelling" if checked["renames"] else ""))
-                for actual, canonical in sorted(checked["renames"].items()):
-                    print(f"    REW holds `{actual}` for `{canonical}` -- rename it there (REW's uuid survives)")
-                now = p.load(strict=True)["capture"]
-                taken_now = sorted(t for t in now.get("taken") or {} if _is_taken(now, t))   # N17: no superseded row
-                if taken_now:
-                    try:
-                        p.check_captures(taken_now)
-                        print(f"  checks run on {len(taken_now)} taken capture(s) (capture-check for the verdicts)")
-                    except Exception as exc:  # noqa: BLE001 -- the close goes on (exit 0): the checks are not the close
-                        # ...but never over a refusal (#134, batch 3's re-review O3): the state that cannot be read at
-                        # this stage, and the checks' journal line refused after their state write landed, are this
-                        # verb's refusal, whole, the round left open. They read as "checks not run", and the close went
-                        # on over a read it could not make, or over a state write whose event is missing. So is the
-                        # project's lock held past the wait at the checks (#141): 75, safe to retry, the round open --
-                        # never a round closed unchecked because another writer held the lock for a moment.
-                        if getattr(type(exc), "is_unreadable", False) or getattr(type(exc), "state_written", False) \
-                                or getattr(type(exc), "is_busy", False):
-                            raise
-                        # Said as what happens (#134): the round is closing, so a check cannot be run on it again.
-                        print(f"  checks not run on the taken captures ({type(exc).__name__}: {str(exc)[:160]}): "
-                              "the round closes on the record, unchecked")
-            outstanding = p.capture_outstanding(p.load(strict=True))   # what the close is about to say (#136)
-            round_ = p.close_capture(" ".join(args) or None, round_id=pinned)
+                    checked = p.reconcile_captures(titles, round_id=pinned)
+                    landed.append(f"the reconcile of {pinned}")
+            missed = "the close"
+            try:
+                if checked is not None:
+                    print(f"  read against REW: {len(checked['matched'])} of {len(checked['expected'])} on the list "
+                          "held"
+                          + (f", {len(p.load(strict=True)['capture'].get('reconciled', {}).get('extra') or [])} taken "
+                             "beyond it")
+                          + (f", {len(checked['renames'])} under another spelling" if checked["renames"] else ""))
+                    for actual, canonical in sorted(checked["renames"].items()):
+                        print(f"    REW holds `{actual}` for `{canonical}` -- rename it there (REW's uuid survives)")
+                    now = p.load(strict=True)["capture"]
+                    taken_now = sorted(t for t in now.get("taken") or {} if _is_taken(now, t))   # N17: no superseded
+                    if taken_now:
+                        missed = "the checks and the close"
+                        try:
+                            p.check_captures(taken_now, round_id=pinned)
+                            landed.append("its checks")
+                            print(f"  checks run on {len(taken_now)} taken capture(s) (capture-check for the verdicts)")
+                        except Exception as exc:  # noqa: BLE001 -- the close goes on (exit 0): the checks are not the close
+                            # ...but never over a refusal (#134, batch 3's re-review O3): the state that cannot be read
+                            # at this stage, and the checks' journal line refused after their state write landed, are
+                            # this verb's refusal, whole, the round left open. They read as "checks not run", and the
+                            # close went on over a read it could not make, or over a state write whose event is missing.
+                            # So is the project's lock held past the wait at the checks (#141): 75, safe to retry, the
+                            # round open -- never a round closed unchecked because another writer held the lock for a
+                            # moment. And so is the round another writer closed or replaced meanwhile (Task 2's review):
+                            # read as "checks not run", the close went on over the round that replaced it.
+                            if getattr(type(exc), "is_unreadable", False) or getattr(type(exc), "state_written", False) \
+                                    or getattr(type(exc), "is_busy", False) or getattr(type(exc), "round_moved", False):
+                                raise
+                            # Said as what happens (#134): the round is closing, so a check cannot be run on it again.
+                            print(f"  checks not run on the taken captures ({type(exc).__name__}: {str(exc)[:160]}): "
+                                  "the round closes on the record, unchecked")
+                        missed = "the close"
+                outstanding = p.capture_outstanding(p.load(strict=True))   # what the close is about to say (#136)
+                round_ = p.close_capture(" ".join(args) or None, round_id=pinned)
+            except Exception as exc:  # noqa: BLE001 -- a later hold's stop is said below; anything else raises as it is
+                # The reconcile landed, and maybe the checks: a busy lock or a moved round at a later hold says that
+                # (R9), never write_lock's "nothing was written", nor the checks' "run capture-check again".
+                stopped = _close_stopped(exc, landed, missed)
+                if stopped is None:
+                    raise
+                print(stopped[0], file=sys.stderr)
+                return stopped[1]
             print(
                 f"{round_['id']} closed: {sum(1 for t in round_['taken'] if _is_taken(round_, t))} taken, "
                 f"{len(round_['skipped'])} skipped, {len(outstanding)} outstanding"
