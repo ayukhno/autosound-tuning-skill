@@ -397,20 +397,26 @@ def import_current_state(old_dir, new_dir, dry_run=False):
 
     # The import's refusals first, each on a read that holds nothing (#141, R27): the folder `--into` names may be no
     # project at all -- a mistaken target -- and a hold taken before them left the lock's `.autosound/` there under every
-    # refusal. The read of the new folder's `project.json` here decides only whether to refuse.
+    # refusal. The reads of the new folder's `project.json` here decide only whether to refuse: a newer method's file,
+    # the versions, the old profile, and the facts the import would write -- that file with the import merged in,
+    # checked as `Project.save` checks them (a channel code twice), which `save` decided under the hold and a dry run
+    # never asked. A dry run only reads, and takes no lock: its report is that merge.
     proj = _project.Project(new_dir)
     io_ = _project_io()
     _facts_to_merge_into(proj, io_)
     _check_versions(old_dir, newest, report)
     profile = _old_profile(old_dir, report, io_)
-    if dry_run:                                      # a dry run only reads, and takes no lock
-        _merged(proj, io_, identity, newest, old_dir, report)
-    else:
+    _project.validate(dict(_merged(proj, io_, identity, newest, old_dir, report), project_rev=0))
+    if not dry_run:
         # Then the new project's writer lock, from a fresh read of its `project.json` to the import's last write (#141,
         # R14, R23): the import's facts are merged into that file as it stands under the hold, so a change another
-        # writer made since the read above is not written over. Nothing slow runs under it -- files read, merged and
-        # written. A profile's stamp asks git, so that is asked first, with the lock still free, and the wait read: a
-        # bad one is exit 2 before anything.
+        # writer made since the reads above is not written over. Of the import's refusals two can come under the hold,
+        # no other: such a change -- a `project.json` another writer made a newer method's, unreadable, or one the
+        # merge leaves `save` refusing -- refused before anything is written; and a version's name another writer took
+        # since the look, refused once `project.json` has landed, saying so (`_into_refused`). The lock's own -- busy,
+        # a folder that cannot be made -- come at the hold and at the first write. Nothing slow runs under it -- files
+        # read, merged and written. A profile's stamp asks git, so that is asked first, with the lock still free, and
+        # the wait read: a bad one is exit 2 before anything.
         if profile is not None:
             _dsp_profile._ready_to_hold()
         with _project._hold(new_dir):
@@ -506,9 +512,10 @@ def _old_profile(old_dir, report, io_):
 def _write_import(proj, new_dir, data, newest, profile, io_):
     """Every write of the import, under the caller's one hold of the new project's writer lock (#141, R14) --
     `project.json` (`data`, merged under that hold), the ledger written here, the profile -- each writer re-entering it.
-    A busy lock is met at that hold, before the fresh read and before any write, so its "nothing was written" is true
-    -- for a busy lock only: a version's name taken after the look is refused once `project.json` has landed, and says
-    so (`_into_refused`)."""
+    A busy lock is met at that hold, before the fresh read and before any write, so its "nothing was written" is true.
+    A `project.json` another writer changed since the look, so that the merge leaves `save` refusing it, is refused
+    before anything is written too. A version's name taken since the look is refused once `project.json` has landed,
+    and says so (`_into_refused`)."""
     proj.save(data)
     written = ["project.json"]
     for preset, (_path, snap) in sorted(newest.items()):
@@ -600,7 +607,8 @@ def _main(argv=None):
         # (`IntoRefused`, the re-review's probe of `--into`): any other `ValueError` -- a `float()` on a malformed
         # field, say -- is a bug, and raises with its traceback, where it was printed `error: could not convert ...`
         # with no file named. Every refusal comes before the first write (Out of Scope 4), so nothing was written --
-        # but a version's name taken after the look, which says what this run had written.
+        # but a version's name taken after the look, which says what this run had written -- and every one the import
+        # makes from its reads comes before the new project's lock too (R27), so it makes nothing at all.
         # The new project's writer lock first (#141, R14, `write_lock.py`): another writer held it past the wait -- 75,
         # its one `busy:` line, nothing written (one hold covers every write), safe to retry -- or the wait,
         # AUTOSOUND_LOCK_TIMEOUT_S, is no number of seconds: a usage error, said before anything was taken. A folder
@@ -1023,23 +1031,65 @@ def _check_into_an_existing_folder_refused_makes_nothing():
         shutil.rmtree(top, ignore_errors=True)
 
 
+def _check_into_refuses_the_merged_facts_first():
+    """The facts the import would write -- the new folder's `project.json` with the import merged in -- are checked as
+    `Project.save` checks them on the reads that hold nothing too (#141, R27): a `project.json` that holds one channel
+    code twice is refused before the new project's lock is taken, so the refusal makes nothing in the folder, not the
+    lock's `.autosound/` either, and `--dry-run` says that refusal. `save` decided it under the hold, leaving the lock's
+    folder in a folder that may be no project at all, and the dry run said "would import", exit 0."""
+    import contextlib
+    import io
+    import shutil
+    import tempfile
+    old = tempfile.mkdtemp(prefix="autosound_migrate_merged_old_")
+    top = tempfile.mkdtemp(prefix="autosound_migrate_merged_new_")
+    failures = []
+    try:
+        _two_x(old)
+        for extra in ([], ["--dry-run"]):
+            new = os.path.join(top, "dry" if extra else "real")
+            os.makedirs(new)
+            _write_json(os.path.join(new, "project.json"), {"schema_version": _project.SCHEMA_VERSION, "project_rev": 4,
+                                                            "channels": [{"code": "x"}, {"code": "x"}]})
+            listed, before = sorted(os.listdir(new)), _bytes_under(new)
+            out, err = io.StringIO(), io.StringIO()
+            try:
+                with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                    rc = _main([old, "--into", new] + extra)
+            except Exception as exc:  # noqa: BLE001 -- a traceback is a failure under test
+                rc = f"raised {type(exc).__name__}: {exc}"
+            label = " ".join(["--into"] + extra)
+            if (rc, out.getvalue(), err.getvalue()) != (1, "", "error: duplicate channel code 'x'\n"):
+                failures.append(f"{label}: rc {rc!r}, said {(err.getvalue() or out.getvalue())[-200:]!r}")
+            if sorted(os.listdir(new)) != listed or _bytes_under(new) != before:
+                failures.append(f"{label}: the folder holds {sorted(os.listdir(new))}, was {listed}")
+    finally:
+        shutil.rmtree(old, ignore_errors=True)
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["merged facts this method's check refuses:"] + failures)
+
+
 def _check_into_holds_from_its_read():
     """`--into` a folder holding a `project.json` merges into it as it stands under the new project's lock, and holds the
     lock to its last write (#141, R23, R27): a change another writer made to that `project.json` once the import's
-    refusals were read -- before the hold -- stays, and another writer -- a thread, through the real lock -- that
-    changes it while the import works under the hold waits until the import has written, and its change stays too. The
-    import read the file before its hold, and saved what it had read over the change. Its refusals are still read
-    first, holding nothing: a refusal makes nothing (`_check_into_an_existing_folder_refused_makes_nothing`)."""
+    refusals were read and its merge checked -- before the hold -- stays, and another writer -- a thread, through the
+    real lock -- that changes it while the import works under the hold waits until the import has written, and its
+    change stays too. The import read the file before its hold, and saved what it had read over the change. Its
+    refusals are still read first, holding nothing: a refusal makes nothing
+    (`_check_into_an_existing_folder_refused_makes_nothing`, `_check_into_refuses_the_merged_facts_first`). The hooks
+    tell the two by the lock: the merge checked before the hold reads `project.json` too, and starts no writer."""
     import shutil
     import tempfile
     import threading
     old = tempfile.mkdtemp(prefix="autosound_migrate_read_old_")
     top = tempfile.mkdtemp(prefix="autosound_migrate_read_new_")
-    real_fold, real_profile, got, threads = fold_identity, _old_profile, [], []
+    real_fold, real_ready, got, threads = fold_identity, _dsp_profile._ready_to_hold, [], []
+    lock = _project._write_lock()
 
-    def before_the_hold(old_dir, report, io_):        # the refusals are read: another writer writes, the lock free
-        _project.Project(new).update(lambda d: d.update(before_hold=True))
-        return real_profile(old_dir, report, io_)
+    def before_the_hold():          # the reads are done, the merge checked, git asked next: another writer writes
+        if not lock.held_here(new):                     # not `save_profile`'s own ask, under the import's hold
+            _project.Project(new).update(lambda d: d.update(before_hold=True))
+        return real_ready()
 
     def meanwhile():
         try:
@@ -1049,33 +1099,39 @@ def _check_into_holds_from_its_read():
         else:
             got.append(None)
 
-    def folding(data, identity):                        # the import has read project.json: another writer writes
-        t = threading.Thread(target=meanwhile, daemon=True)
-        t.start()
-        t.join(0.5)
-        threads.append(t)
+    def folding(data, identity):            # the import has read project.json under its hold: another writer writes
+        if lock.held_here(new):
+            t = threading.Thread(target=meanwhile, daemon=True)
+            t.start()
+            t.join(0.5)
+            threads.append(t)
         return real_fold(data, identity)
     try:
         _two_x(old)
         new = os.path.join(top, "new")
         os.makedirs(new)
         _project.Project(new).save({"schema_version": _project.SCHEMA_VERSION, "channels": []})
-        globals().update(fold_identity=folding, _old_profile=before_the_hold)
+        globals().update(fold_identity=folding)
+        _dsp_profile._ready_to_hold = before_the_hold
         try:
-            rc, out, err = _project._run_cli(_main, [old, "--into", new])
+            # The other writer waits up to 60 s for the import, whatever wait the shell running the check has set (as
+            # project.py's two writers do, R25): a short one there made it busy, and the check red for no fault.
+            rc, out, err = _project._run_cli(_main, [old, "--into", new], AUTOSOUND_LOCK_TIMEOUT_S="60")
         finally:
-            globals().update(fold_identity=real_fold, _old_profile=real_profile)
+            globals().update(fold_identity=real_fold)
+            _dsp_profile._ready_to_hold = real_ready
         for t in threads:
             t.join(30)
         data = _project.Project(new).load()
         assert rc == 0, f"the import: rc {rc}, said {err.strip()[-200:]!r}"
-        assert got == [None], f"the other writer: {got}"
         assert data.get("before_hold") is True, \
             "the import merged into a read made before its hold, over a change made since"
+        assert got == [None], f"the other writer: {got}"
         assert data.get("meanwhile") is True, "the import wrote over another writer's change to project.json"
         assert data.get("imported_from") == os.path.abspath(old), f"the import did not land: {sorted(data)}"
     finally:
-        globals().update(fold_identity=real_fold, _old_profile=real_profile)
+        globals().update(fold_identity=real_fold)
+        _dsp_profile._ready_to_hold = real_ready
         shutil.rmtree(old, ignore_errors=True)
         shutil.rmtree(top, ignore_errors=True)
 
@@ -1300,7 +1356,8 @@ def _selftest():
                   _check_import_refusals_in_one_line, _check_import_reads_before_it_writes,
                   _check_into_a_project_refused, _check_version_claimed_exclusively,
                   _check_bytes_under_leaves_the_lock_out, _check_into_waits_for_the_lock,
-                  _check_into_holds_from_its_read, _check_into_an_existing_folder_refused_makes_nothing):
+                  _check_into_holds_from_its_read, _check_into_an_existing_folder_refused_makes_nothing,
+                  _check_into_refuses_the_merged_facts_first):
         try:
             check()
         except AssertionError as exc:
@@ -1489,9 +1546,10 @@ def _selftest():
           f"validated, the settings sheet kept its Slot column, --dry-run wrote nothing, a re-run "
           f"into the project it made was refused with every byte kept; --into under another writer's lock "
           f"exits 75 with one busy line and nothing written, a bad AUTOSOUND_LOCK_TIMEOUT_S is exit 2 with the "
-          f"folder not made; its refusals are read holding nothing, and make nothing in a folder that is there -- not "
-          f"the lock's .autosound/ either -- and then one hold covers a fresh read of the new project.json and every "
-          f"write, another writer's change to it kept (#141, R14, R23, R27). root={root}")
+          f"folder not made; its refusals are read holding nothing -- the merged facts checked as save checks them "
+          f"among them, a dry run saying the same -- and make nothing in a folder that is there, not the lock's "
+          f".autosound/ either, nor under a parent this user may not write; then one hold covers a fresh read of the "
+          f"new project.json and every write, another writer's change to it kept (#141, R14, R23, R27). root={root}")
     return 0
 
 
