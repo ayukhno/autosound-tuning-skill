@@ -1653,14 +1653,23 @@ class Process:
         # A round still open closes only now, past every refusal above (#134, H I-3): the close is an event in the
         # append-only journal, and a `--plan` refused after it left the journal saying the round closed while the state
         # held it open -- and the next round closed it a second time.
+        landed = None
         if previous and not previous.get("closed"):
             self._close_capture(state, previous, reason="superseded")
+            # The close is in the journal before the state is written -- the order is W-9's (J2b) -- so a write refused
+            # below says so, never "it is as it was" of the journal (part A's re-review, N-1).
+            landed = (f"{previous['id']}'s close (superseded) is in the journal already: the state holds "
+                      f"{previous['id']} open, and opening the round again closes it in the journal a second time -- "
+                      f"that order is W-9's (J2b)")
         state["capture"] = round_
         # One state write, the plan path in it (the final review's M3). The round went in first and its plan path in a
         # second write, and that one refused -- a Windows holder past the retries -- said "it is as it was" over a
-        # state holding the round, with no `capture_issued`: the next round closed it as superseded. The plan file is
-        # written once the guards pass, before the state, so a refused guard leaves nothing beside it.
-        self._write(state, before_write=lambda: round_.update(plan_path=self._write_capture_plan(round_)))
+        # state holding the round, with no `capture_issued`: the next round closed it as superseded. The plan FILE goes
+        # down once the round is recorded (part A's re-review, N-3): written before the move, a move a holder refused
+        # left the plan of a round that never opened, over the open round's own on the same series. Best effort, as
+        # ever: the round is the record, and the file is where he reads it.
+        round_["plan_path"] = self._capture_plan_path(round_)
+        self._write(state, landed=landed)
         self._append(
             EV_CAPTURE_ISSUED,
             capture=round_["id"],
@@ -1677,14 +1686,25 @@ class Process:
             step=step,
             note=note,
         )
+        self._write_capture_plan(round_)
         return round_
 
+    @staticmethod
+    def _capture_plan_label(round_):
+        return round_["version"] if round_.get("version_kind") == "ledger" else f"_{round_['version']}"
+
+    def _capture_plan_path(self, round_):
+        """Where the round's plan file goes, relative to the project: `docs/plans/<_N|v_NNN>-capture.md` (skill #61)."""
+        return f"docs/plans/{self._capture_plan_label(round_)}-capture.md"
+
     def _write_capture_plan(self, round_):
-        """The round's list as a file the person can take to the car: `<project>/docs/plans/<_N|v_NNN>-capture.md`
-        (skill #61). Best effort: the round is the record, this is where he reads it. Returns the path or None."""
-        folder = os.path.join(self.project_dir, "docs", "plans")
-        label = round_["version"] if round_.get("version_kind") == "ledger" else f"_{round_['version']}"
-        path = os.path.join(folder, f"{label}-capture.md")
+        """The round's list as a file the person can take to the car, at its `plan_path` (skill #61). Best effort: the
+        round is the record, this is where he reads it -- written once the round is recorded, so a round a refusal
+        never opened leaves no file, and never rewrites the open round's. Returns the path or None."""
+        label = self._capture_plan_label(round_)
+        rel = round_.get("plan_path") or self._capture_plan_path(round_)
+        path = os.path.join(self.project_dir, *rel.split("/"))
+        folder = os.path.dirname(path)
         try:
             os.makedirs(folder, exist_ok=True)
             with open(path, "w", encoding="utf-8") as fh:
@@ -1696,7 +1716,7 @@ class Process:
                     fh.write(f"\n{round_['note']}\n")
         except OSError:
             return None
-        return os.path.relpath(path, self.project_dir).replace(os.sep, "/")
+        return rel
 
     def reconcile_captures(self, rew_titles):
         """Close the open round's list against what REW holds, however it was captured (skill #77, rule 3).
@@ -2905,10 +2925,11 @@ class Process:
             raise ProcessError(f"no such step {step_id!r}")
         return entry
 
-    def _write(self, state, before_write=None):
-        """Write the state, once its guards pass. `before_write`, when given, runs between the guards and the write: what
-        goes into the state from a file written beside it (`start_capture`'s plan path), so that file is never written
-        beside a state the guards refuse, and the state is written once (the final review's M3)."""
+    def _write(self, state, landed=None):
+        """Write the state, once its guards pass. `landed`, when given, names what the transition already put in the
+        journal before this write (`start_capture`'s close of the round it supersedes, an order W-9's J2b settles): a
+        move refused by a holder then says so beside "the state is as it was", and never "it is as it was" of the
+        journal too (part A's re-review, N-1)."""
         state["updated"] = _now()
         validate(state)
         # Strictly first (#136, audit K-2): a file that is there and cannot be read is never replaced. Each transition
@@ -2922,8 +2943,6 @@ class Process:
         # the write left the change in the state with no line in the journal.
         self._require_journal()
         os.makedirs(self.dir, exist_ok=True)  # first real write is what creates `process/`
-        if before_write is not None:
-            before_write()
         # A temp of this writer's own, then one move (skill #135): a crash mid-write would otherwise leave truncated
         # JSON, and the next session would read an empty process and think nothing had happened; a fixed temp name
         # was shared by every writer of the file (audit T-8).
@@ -2934,7 +2953,8 @@ class Process:
             # A refusal, exit 1, not a bug (H minor 2): on Windows a holder past the retries -- a sync client, a scanner
             # -- as the same hold is on the read. The move either lands or leaves the file whole, and no temp behind.
             raise ProcessError(f"{self.state_path} could not be written ({exc}) -- "
-                               f"{io_.repair_for(exc, writing=True)}; it is as it was") from exc
+                               f"{io_.repair_for(exc, writing=True)}; "
+                               + (f"the state is as it was, but {landed}" if landed else "it is as it was")) from exc
         # Owed from here: the event that goes with this change (`_append` says it, if it cannot be appended).
         self._unjournaled = True
 
@@ -6380,9 +6400,11 @@ def _check_capture_start_said_as_it_landed():
     """`capture-start` refused at a state write says what landed (the final review's M3): it wrote the state twice --
     the round, then its plan path -- and a second write refused (a Windows holder past the retries) said "it is as it
     was" over a state holding the open round, with no `capture_issued` in the journal; the next round then closed it
-    as superseded, a close for a round never issued. Whichever state write a holder refuses, the state and the journal
-    agree after it: refused, both are as they were, byte for byte; through, the round is open, its plan path recorded
-    and its `capture_issued` in the journal."""
+    as superseded, a close for a round never issued. Now the state is written once. Refused, the state is as it was,
+    byte for byte -- and so is the journal here, with no round open before; a round it supersedes is already closed in
+    the journal -- that order is W-9's (J2b), and the refusal names that close
+    (`_check_capture_start_held_names_the_close_that_landed`). Through, the round is open, its plan path recorded and
+    its `capture_issued` in the journal."""
     import shutil
     import tempfile
     io_ = _project_io()
@@ -6449,6 +6471,72 @@ def _check_capture_start_said_as_it_landed():
         io_.atomic_write_json = real
         shutil.rmtree(top, ignore_errors=True)
     assert not failures, "\n  ".join(["capture-start refused at a state write:"] + failures)
+
+
+def _second_capture_start_held(top):
+    """`cap_001` open on series 1, its plan file written; then a second `capture-start 1` whose one state write a holder
+    refuses past the retries (`PermissionError` 13). Returns (exit code, stderr, the process, the open round's plan file
+    before and after) -- the case of part A's re-review, N-1 and N-3."""
+    io_ = _project_io()
+    real = io_.atomic_write_json
+    d = os.path.join(top, "process")
+    p = Process(d)
+    p.enter_phase("-1")
+    p.start_capture("1", ["w-L_1 (sw)"])
+    plan = os.path.join(p.project_dir, "docs", "plans", "_1-capture.md")
+    with open(plan, "rb") as fh:
+        before = fh.read()
+
+    def held(path, data, *args, **kwargs):
+        if os.path.basename(path) == "process-state.json":
+            raise PermissionError(13, "The process cannot access the file because it is being used by another "
+                                      "process", path)
+        return real(path, data, *args, **kwargs)
+    io_.atomic_write_json = held
+    try:
+        rc, _out, err = _run_main(["process.py", d, "capture-start", "1", "w-R_1 (sw)", "tw-R_1 (sw)"])
+    finally:
+        io_.atomic_write_json = real
+    with open(plan, "rb") as fh:
+        after = fh.read()
+    return rc, err, Process(d), before, after
+
+
+def _check_capture_start_held_names_the_close_that_landed():
+    """`capture-start` over an open round closes that round first, and the close is a journal event appended before the
+    one state write (part A's re-review, N-1). A holder refusing that write left the state as it was -- and the
+    refusal said "it is as it was" -- with the close in the journal, so a retry closed the round there a second time.
+    The order is W-9's (J2b) and stays; the refusal says what landed: the round's close, in the journal already."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_process_supersede_held_")
+    try:
+        rc, err, p, _before, _after = _second_capture_start_held(top)
+        said = " ".join(err.split())
+        round_ = p.load().get("capture") or {}
+        closes = [(e.get("capture"), e.get("reason")) for e in p.events() if e.get("type") == EV_CAPTURE_CLOSED]
+        assert rc == EXIT_NO, (rc, said)
+        assert round_.get("id") == "cap_001" and not round_.get("closed"), round_
+        assert closes == [("cap_001", "superseded")], closes          # the order as it stands, J2b's to change
+        assert "cap_001's close (superseded) is in the journal already" in said and "J2b" in said, said
+        assert not said.endswith("it is as it was"), said
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_capture_start_held_leaves_the_open_rounds_plan():
+    """The plan file goes down once the state is written (part A's re-review, N-3): written before the state's move, a
+    move a holder refused left the plan of a round that never opened -- on the same series, over the open round's
+    own `docs/plans/_1-capture.md`, which then listed the refused round's captures."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_process_plan_held_")
+    try:
+        rc, err, _p, before, after = _second_capture_start_held(top)
+        assert rc == EXIT_NO, (rc, err)
+        assert after == before, f"the open round's plan file, after a refused capture-start: {after[:160]!r}"
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
 
 
 def _check_close_checks_stage_refusals():
@@ -6683,7 +6771,8 @@ def _selftest():
                   _check_intake_gate_names_an_unreadable_glossary, _check_plan_names_the_naming_load_error,
                   _check_phase1_gate_names_an_unreadable_glossary, _check_capture_verbs_read_the_glossary_strictly,
                   _check_rate_note_reads_the_rule, _check_evidence_verdicts_name_the_naming_load_error,
-                  _check_capture_start_said_as_it_landed, _check_says_what_it_did_not_check):
+                  _check_capture_start_said_as_it_landed, _check_capture_start_held_names_the_close_that_landed,
+                  _check_capture_start_held_leaves_the_open_rounds_plan, _check_says_what_it_did_not_check):
         try:
             check()
         except AssertionError as exc:
