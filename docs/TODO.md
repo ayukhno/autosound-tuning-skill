@@ -1629,7 +1629,7 @@ four assessment lines, and nothing is built before his `ok` on that task. Resume
 
 ## S-102 · W-9 is collecting: the audit's second wave, findings go to this pool
 
-**Status**: open 2026-10-08 · collecting, on the Arbiter's «починай» (2026-10-08, after v3.1.2); the milestone `W-9 · v3.1.3` opens on his «збір закінчено»; nothing built
+**Status**: open 2026-10-08 · milestone `W-9 · v3.1.3` (milestone 8) opened on the Arbiter's «збір закінчено» with eight issues, each with the four assessment lines and its group — #141 J2b (writers and the lock); #142 J6a (installs); #143 J8, #144 J7, #145 S2 (what a session reads); #146 S6, #147 and #148 W-8's leftovers (silent failures, round 2); no `ok` yet, nothing built · was: open 2026-10-08 · collecting, on the Arbiter's «починай» (2026-10-08, after v3.1.2); the milestone `W-9 · v3.1.3` opens on his «збір закінчено»; nothing built
 
 The number is read: no milestone is open in skill (W-8 closed with v3.1.2); TCC's `W-9 · v1.1.3` is open, and the
 audit plan (`docs/PLAN-AUDIT-2026-10.md` §5) names this row W-9, the same number. The version is a patch, `v3.1.3`:
