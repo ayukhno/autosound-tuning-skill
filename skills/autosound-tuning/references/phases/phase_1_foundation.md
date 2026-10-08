@@ -40,8 +40,7 @@ Phase 0 already captured each isolated driver raw (`<ch>_1 (sw)` + `<ch>_1 (rta)
 * **De-embed before reading phase (doctrine 2026-08-24).** The `_1` solos were taken behind protective filters, and those filters are in the recording. `python3 rew_tool/rew_tool.py analyze-joints --process <project>/process --ver 1 --no-pair …` takes them back out from the capture round's record before any delay / polarity / APF is computed, and answers **`check`** for a channel nobody recorded — that is the Arbiter's question, not a number to enter. `--no-pair` because the baseline has no measured pairs yet: the reading is asked for without one and every row says **NOT BANKABLE** — the pair that verifies a junction comes with the Phase-2 capture, and without the flag the tool gives no verdict and names it. Since a front-end writes `OFF` or a filter for every channel it captures (ruling 2026-09-06), `check` means the record came from somewhere else, or did not get written; `OFF` itself is the default answer and asks for nothing. One home for the rule: [`project-intake.md §3`](references/core/project-intake.md).
 
 > [!IMPORTANT]
-> **Set a consistent Time Offset on the sweeps BEFORE reading phase:**
-> Set a shared Time Offset ≈ the physical arrival of the reference speaker, applied to all sweeps. This keeps the phase flat and readable (especially at HF) instead of wrapping into a dense linear ramp. Read `rew-api-quirks.md` "Timing" for details.
+> **Do not set a Time Offset on a measurement:** the tools read arrivals with loopback timing at offset 0, and `resonalyze_ir` refuses a measurement whose offset is not 0. Read `rew-api-quirks.md` "Timing" for details.
 
 ### 2. Gross / Arrival Time-Alignment (TA)
 Equalize the physical flight times of sound from each driver to the microphone.
@@ -107,7 +106,7 @@ The first part of EQ is Phase 1's (the user's decision, 2026-09-17; Resonalyze's
 * **Delays (TA)** — per channel, in **samples AND ms** (state the assumed DSP sample rate).
 * **Gains** — per-channel levels (from `level_offsets.py`).
 * **EQ** — the coarse per-driver package of §5.5, as a file import (`atf_eq.py` on a Helix); the rest is Phase 2.
-* **REW sweep Time Offset** — set it (≈ the reference driver's arrival) **before** the sweeps, so phase reads flat.
+* **No REW Time Offset** — do not set a Time Offset on a measurement: the tools read arrivals with loopback timing at offset 0, and `resonalyze_ir` refuses a measurement whose offset is not 0.
 
 **Then re-measure each channel** post-`v1` — `<ch>_2 (sw)` + `<ch>_2 (rta)`. This `_2` set (not the raw `_1` baseline) is what Phase 2 works on.
 
