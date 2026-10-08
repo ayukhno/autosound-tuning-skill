@@ -12,8 +12,11 @@ blocking and polled, so one deadline covers this process's threads and the other
 thread: a writer that calls another writer (capture-import -> start/record/close) takes it once.
 
 The lock never makes the project folder (R23). A hold on a folder that is not there -- a mistyped path, one gone --
-is this process's thread lock alone, and makes nothing. The writer's own first write makes the folder, and the next
-hold makes the lock and takes it; two processes creating one new project at the same moment are not ordered by it.
+is this process's thread lock alone, and makes nothing. The writer's own first write makes the folder (`make_folder`,
+which refuses one it cannot make as `Unwritable`), and the next hold makes the lock and takes it. What that costs: a
+hold that found no folder stays the thread lock alone until it ends, so what it writes once the folder is there is not
+ordered against another process's writer of that project -- two processes creating one new project at the same moment
+are not ordered by the lock.
 
 A folder that cannot be locked at all (some shared or cloud folders refuse every lock) is written WITHOUT the lock,
 and the writer says so on stderr, once per process for each folder: two writers there can still lose a change, as
@@ -24,14 +27,16 @@ anything is taken. `probe(project_dir)` tells, holding nothing and making nothin
 now -- free, held, one that cannot lock, or one with no lock file yet (R26): `contract.py check` reports it.
 
 TCC reads this file as TEXT, never imports it, for the line below (`core/project_lock.py` `locks_itself`): a copy
-that declares it locks itself. Today's TCC keeps its own serialisation as it is -- `process/.process-write.lock`, held
-around the child it runs, a lock this module never takes (it would wait on its own parent).
+that declares it locks itself. Today's TCC keeps its own serialisation as it is -- its thread lock, and on POSIX a
+flock on `process/.process-write.lock` held around the child it runs; on Windows the thread lock alone, nothing across
+processes. This module never takes TCC's file (it would wait on its own parent).
 """
 PROTOCOL = 1
 
 import errno
 import math
 import os
+import stat
 import sys
 import threading
 import time
@@ -106,8 +111,9 @@ class BadTimeout(Exception):
 
 class Unwritable(Exception):
     """The lock cannot be made in the project -- its folder `.autosound/`, the `.gitignore` there, or `write.lock`: a
-    project folder this user may not write, a read-only disk, a file where the folder belongs (#141, R6). A refusal,
-    not a bug: raised before anything is taken, and nothing written. It carries what
+    project folder this user may not write, a read-only disk, a file where the folder belongs (#141, R6) -- or, by
+    `make_folder`, the project's folder itself, which a creator's first write makes. A refusal, not a bug: raised
+    before anything is taken, and nothing written. It carries what
     `project_io.Unreadable` carries -- `.path`, `.reason`, `.repair` -- and says itself the same way, so every command
     line that refuses that one in one line (exit 1) refuses this one too. Matched by `is_unreadable`, never by its
     class: a copy of this module loaded under another name has its own."""
@@ -148,6 +154,19 @@ def _unwritable(project_dir, exc):
 def lock_path(project_dir):
     """`<project>/.autosound/write.lock`, absolute."""
     return os.path.join(os.path.abspath(project_dir), LOCK_DIR, LOCK_FILE)
+
+
+def make_folder(path):
+    """Make `path`, a folder of a project, with its parents: what a creator's first write does where the project folder
+    is not there yet, the lock never making it (R23). One there already is passed over. One that cannot be made -- under
+    a folder this user may not write, on a read-only disk, a file where a folder of the path belongs -- is `Unwritable`
+    (#141), as a lock that cannot be made is: every command line says it in one line, exit 1. It was a raw `OSError` --
+    a traceback, or a bug's 70."""
+    try:
+        os.makedirs(path, exist_ok=True)
+    except OSError as exc:
+        raise Unwritable(exc.filename or os.path.abspath(path),
+                         f"cannot be made ({exc.strerror or exc}), so nothing was written", _repair_for(exc)) from exc
 
 
 def timeout_s():
@@ -315,9 +334,16 @@ def _take(fd, project_dir, path, start, deadline):
 
 def _opened(project_dir, path, undo):
     """The lock file, open, its folder made first -- its close put on `undo` -- or None where the project folder itself
-    is not there: the lock never makes it (R23). An `OSError` making either is `Unwritable`, a refusal (R6)."""
-    if not os.path.lexists(os.path.abspath(project_dir)):
+    is not there: the lock never makes it (R23). Not there is nothing standing at the path, `FileNotFoundError` alone: a
+    path that cannot be looked at -- a parent this user may not search, a file where a folder of it belongs, a loop of
+    links, a name too long, the disk's error -- goes on to be made, and is refused there. An `OSError` making either is
+    `Unwritable`, a refusal (R6)."""
+    try:
+        os.lstat(os.path.abspath(project_dir))
+    except FileNotFoundError:
         return None
+    except OSError:
+        pass                             # cannot be looked at: making the lock's folder meets it too, and refuses it
     try:
         _prepare(project_dir)
         fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o644)
@@ -337,7 +363,8 @@ def hold(project_dir, timeout_s=None):
     nothing. The lock's folder and file are made next, before anything is taken: ones that cannot be made -- a
     project folder this user may not write -- are `Unwritable`, a refusal (#141, R6). A project folder that is not
     there is never made (R23): the hold is this process's thread lock alone, under the same deadline, and makes
-    nothing -- but a folder made while this thread waited for that lock is locked as any other."""
+    nothing -- but a folder made while this thread waited for that lock is locked as any other. Not there is nothing
+    at the path: one that cannot be looked at (a parent this user may not search) is `Unwritable` too."""
     start = time.monotonic()
     deadline = start + _wait_s(timeout_s)
     path = lock_path(project_dir)
@@ -373,16 +400,24 @@ def probe(project_dir):
     * `("held", None)` -- another writer holds it: the lock working;
     * `("cannot_lock", <the OS's reason>)` -- the OS refuses the lock itself: the writers write here WITHOUT it, each
       saying so in a `note:` line;
+    * `("cannot_lock", "<path> is not a file")`, or `"<path> is not a folder"` -- something that is not a file stands
+      at the lock file's path (a folder), or something that is not a folder at its folder's, `.autosound` (a file):
+      the lock cannot be made there, and every writer refuses to write, `Unwritable`, until it is moved aside;
     * `("no_lock_file", None)` -- `<project>/.autosound/write.lock` is not there: no writer has made it yet, or the
       project folder is not there. It is not tried, for it would have to be made.
 
     The existing file is opened read-write, never created: nothing is made, nothing in it changes. The OS lock is tried
     without waiting, as a hold tries it, and a refusal read as a hold reads it -- on Windows only ERROR_LOCK_VIOLATION
     is held. No thread lock is taken, so this process's own hold reads as held too. Any other error -- the file there
-    and not to be opened -- is raised as it is."""
+    and not to be opened, a folder on its path not to be searched -- is raised as it is."""
     path = lock_path(project_dir)
-    if not os.path.isfile(path):
-        return "no_lock_file", None
+    for where, kind, what in ((os.path.dirname(path), stat.S_ISDIR, "a folder"), (path, stat.S_ISREG, "a file")):
+        try:
+            mode = os.stat(where).st_mode
+        except FileNotFoundError:
+            return "no_lock_file", None
+        if not kind(mode):
+            return "cannot_lock", f"{where} is not {what}"
     fd = os.open(path, os.O_RDWR)
     try:
         try:
@@ -761,6 +796,7 @@ def _check_a_missing_project_is_not_made():
     block nothing is there. The writer's own first write makes the folder, and the next hold the lock -- as does a
     hold that queued while the folder came. A file standing at the project path is no missing folder: `Unwritable`, as
     before. A hold made `<typo>/.autosound/`, under verbs that went on to say "nothing was written"."""
+    global _opened
     top = _scratch()
     gone, later = os.path.join(top, "gone"), os.path.join(top, "later")
     try:
@@ -785,22 +821,33 @@ def _check_a_missing_project_is_not_made():
             refused = _probe(gone)
             assert refused is not None and _held(refused), f"the next hold took no OS lock: {refused!r}"
         # A hold that queued on the thread lock while the folder was missing, let in once a writer made it, takes the
-        # OS lock as every hold on a folder that is there does.
-        got, queued = [], threading.Event()
+        # OS lock as every hold on a folder that is there does. The folder is made once the waiter has LOOKED and found
+        # none -- its `_opened` answered None -- never after a sleep: a waiter slow to start under load found the
+        # folder made, and the leg passed without the case it is for.
+        real_opened = _opened
+        got, looked = [], threading.Event()
+
+        def opened(project_dir, path, undo):
+            fd = real_opened(project_dir, path, undo)
+            if fd is None and project_dir == later:
+                looked.set()
+            return fd
 
         def waiter():
-            queued.set()
             try:
                 with hold(later, timeout_s=30):
                     got.append(_probe(later))
             except Exception as exc:  # noqa: BLE001 -- carried to the main thread, which names it
                 got.append(exc)
         with hold(later, timeout_s=0):
-            t = threading.Thread(target=waiter, daemon=True)
-            t.start()
-            queued.wait(60)
-            time.sleep(0.2)                                # it found no folder, and waits on the thread lock
-            os.makedirs(later)
+            _opened = opened                               # after this thread's own look: the waiter's alone is seen
+            try:
+                t = threading.Thread(target=waiter, daemon=True)
+                t.start()
+                assert looked.wait(60), "the waiter never looked for the folder"
+                os.makedirs(later)                         # it found no folder, and waits on the thread lock
+            finally:
+                _opened = real_opened
         t.join(60)
         assert len(got) == 1 and got[0] is not None and _held(got[0]), \
             f"a hold let in once the folder came took no OS lock: {got}"
@@ -991,6 +1038,108 @@ def _check_a_file_where_the_lock_folder_belongs():
         _drop(p)
 
 
+def _check_a_project_folder_not_to_be_looked_at():
+    """Only a project folder where NOTHING stands is one that is not there (#141, R23): a path that cannot be looked at
+    -- a file where a folder of the path belongs, a loop of links, a name too long, a parent this user may not search
+    -- is no missing folder. Its lock's folder is made, and refused: `Unwritable` (R6), nothing taken, nothing made.
+    Each was read as missing, and the hold went through as the thread lock alone with no word; the writer's own I/O
+    then failed raw. POSIX's errors, so POSIX alone; the parent's search right needs a mode and a user it refuses (not
+    root). Returns what ran -- "all", "no search" (root), or None (not POSIX) -- and the OK line claims only that."""
+    if os.name != "posix":
+        return None
+    top = _scratch()
+    failures = []
+    access = "this user may not write there: give it access (its owner and mode, `ls -l`) and run again"
+
+    def refused(project_dir, label, repair=None):
+        caught = _raised(lambda: _enter(project_dir, timeout_s=0))
+        if not getattr(type(caught), "is_unreadable", False):
+            failures.append(f"{label}: {'the hold went through' if caught is None else repr(caught)}")
+        elif not caught.reason.startswith("cannot be made for the project's writer lock (") \
+                or (repair is not None and caught.repair != repair):
+            failures.append(f"{label}: said {str(caught)!r}")
+        if held_here(project_dir):
+            failures.append(f"{label}: held here after it")
+    try:
+        a_file = os.path.join(top, "a-file")
+        with open(a_file, "w", encoding="utf-8") as f:
+            f.write("not a folder\n")
+        refused(os.path.join(a_file, "car"), "a file where a folder of the path belongs",
+                "a file stands where a folder of its path belongs: move that file aside and run again")
+        os.symlink("loop", os.path.join(top, "loop"))
+        refused(os.path.join(top, "loop", "car"), "a loop of links")
+        refused(os.path.join(top, "x" * 300), "a name too long")
+        ran = "no search"
+        if os.geteuid() != 0:
+            locked = os.path.join(top, "locked")
+            os.makedirs(os.path.join(locked, "car"))
+            os.chmod(locked, 0o600)                        # read and write, no search
+            try:
+                refused(os.path.join(locked, "car"), "a project folder whose parent this user may not search", access)
+                refused(os.path.join(locked, "gone"), "a path under a parent this user may not search", access)
+            finally:
+                os.chmod(locked, 0o755)
+            if os.listdir(os.path.join(locked, "car")) or os.listdir(locked) != ["car"]:
+                failures.append(f"made under the parent: {sorted(os.listdir(locked))}, "
+                                f"{sorted(os.listdir(os.path.join(locked, 'car')))}")
+            ran = "all"
+        with open(a_file, encoding="utf-8") as f:
+            if f.read() != "not a folder\n":
+                failures.append("the file in the path was changed")
+        if sorted(os.listdir(top)) != sorted(["a-file", "loop"] + (["locked"] if ran == "all" else [])):
+            failures.append(f"made {sorted(os.listdir(top))}")
+    finally:
+        _drop(top)
+    assert not failures, "\n  ".join(["a project folder that cannot be looked at:"] + failures)
+    return ran
+
+
+def _check_a_folder_that_cannot_be_made():
+    """`make_folder` makes a folder of a project -- the project folder itself where a creator's first write meets none,
+    the lock never making it (R23) -- with its parents, and passes over one that is there. One that cannot be made is
+    `Unwritable` (#141), as a lock that cannot be made is: `.path` what could not be made, `.reason` `cannot be made
+    (<why>), so nothing was written`, the repair its cause allows -- so every command line says it in one line, exit 1.
+    A creator met a raw `OSError`: a traceback, or a bug's 70. A file where the folder belongs is met on every system;
+    a parent this user may not write needs a POSIX mode and a user it refuses (not root): elsewhere it is not checked,
+    and the OK line says so (False)."""
+    top = _scratch()
+    try:
+        deep = os.path.join(top, "new", "process")
+        make_folder(deep)
+        assert os.path.isdir(deep), "not made, with its parent"
+        make_folder(deep)                                  # there already: passed over
+        a_file = os.path.join(top, "a-file")
+        with open(a_file, "w", encoding="utf-8") as f:
+            f.write("not a folder\n")
+        caught = _raised(lambda: make_folder(a_file))
+        assert getattr(type(caught), "is_unreadable", False) is True, f"a file where the folder belongs: {caught!r}"
+        assert caught.path == a_file, f"path {caught.path!r}"
+        assert caught.reason.startswith("cannot be made (") and caught.reason.endswith("), so nothing was written"), \
+            f"reason {caught.reason!r}"
+        assert caught.repair == "a file stands where a folder of its path belongs: move that file aside and run " \
+                               "again", f"repair {caught.repair!r}"
+        with open(a_file, encoding="utf-8") as f:
+            assert f.read() == "not a folder\n", "the file was changed"
+        if os.name != "posix" or os.geteuid() == 0:
+            return False
+        ro = os.path.join(top, "ro")
+        os.makedirs(ro)
+        os.chmod(ro, 0o555)
+        try:
+            new = os.path.join(ro, "car")
+            caught = _raised(lambda: make_folder(os.path.join(new, "process")))
+            said = (f"{new} cannot be made (Permission denied), so nothing was written -- this user may not write "
+                    "there: give it access (its owner and mode, `ls -l`) and run again")
+            assert getattr(type(caught), "is_unreadable", False) is True and str(caught) == said, \
+                f"under a parent this user may not write: {caught!r}"
+            assert os.listdir(ro) == [], f"made {sorted(os.listdir(ro))}"
+        finally:
+            os.chmod(ro, 0o755)
+        return True
+    finally:
+        _drop(top)
+
+
 def _check_refusals_are_no_oserror_or_valueerror():
     """`Busy`, `BadTimeout` and `Unwritable` subclass neither `OSError` nor `ValueError`: the command lines catch those
     two by class BEFORE they read the lock's refusals by attribute (project.py, state/apply.py, setup_import.py,
@@ -1087,6 +1236,21 @@ def _check_the_probe_answers():
             failures.append(f"a folder that cannot lock: {(answer, why)!r}, not ('cannot_lock', {said!r})")
         if probe(p) != ("free", None):
             failures.append(f"free again once the OS takes the lock: {probe(p)!r}")
+        # Something that is not a file where the lock belongs -- a folder at the lock file's path, a file at its
+        # folder's -- is refused by every writer, `Unwritable`: cannot lock, naming it, and nothing changes. It read as
+        # no lock file yet, and `check` said nothing while every writer refused.
+        a_folder, a_file = os.path.join(top, "a-folder"), os.path.join(top, "a-file")
+        os.makedirs(lock_path(a_folder))
+        os.makedirs(a_file)
+        with open(os.path.join(a_file, LOCK_DIR), "w", encoding="utf-8") as f:
+            f.write("not the lock's folder\n")
+        for folder, said in ((a_folder, f"{lock_path(a_folder)} is not a file"),
+                             (a_file, f"{os.path.dirname(lock_path(a_file))} is not a folder")):
+            got = probe(folder)
+            if got != ("cannot_lock", said):
+                failures.append(f"{said}: {got!r}")
+        if os.listdir(lock_path(a_folder)) or os.listdir(a_file) != [LOCK_DIR]:
+            failures.append(f"the probe changed what stands there: {sorted(os.listdir(a_file))}")
     finally:
         _os_lock = real
         with open(os.path.join(signals, "go"), "w", encoding="utf-8"):
@@ -1124,7 +1288,8 @@ def _selftest():
         _check_a_free_lock_with_zero_wait, _check_a_folder_that_cannot_lock, _check_a_project_that_cannot_be_written,
         _check_busy_exit_says_one_line, _check_a_missing_project_is_not_made, _check_which_refusals_are_held,
         _check_a_share_refusing_the_lock_is_noted, _check_the_note_once_per_folder, _check_an_error_inside_lets_go,
-        _check_one_deadline, _check_a_file_where_the_lock_folder_belongs, _check_refusals_are_no_oserror_or_valueerror,
+        _check_one_deadline, _check_a_file_where_the_lock_folder_belongs, _check_a_project_folder_not_to_be_looked_at,
+        _check_a_folder_that_cannot_be_made, _check_refusals_are_no_oserror_or_valueerror,
         _check_the_access_repair_fits_the_system, _check_a_broken_check_shows_its_traceback,
         _check_the_probe_answers))
     if failures:
@@ -1134,10 +1299,19 @@ def _selftest():
     git = seen["_check_folder_ignores_itself"]
     if not git:                                    # the OK line below claims only what ran
         print("write_lock: git add -A in a project was not checked here -- no git on PATH")
+    no_mode = "run as root, whom no file mode refuses" if os.name == "posix" else "Windows keeps no POSIX mode"
     unwritable = seen["_check_a_project_that_cannot_be_written"]
     if not unwritable:
-        print("write_lock: a project folder this user may not write was not checked here -- "
-              + ("run as root, whom no file mode refuses" if os.name == "posix" else "Windows keeps no POSIX mode"))
+        print(f"write_lock: a project folder this user may not write was not checked here -- {no_mode}")
+    looked = seen["_check_a_project_folder_not_to_be_looked_at"]
+    if looked is None:
+        print("write_lock: a project path that cannot be looked at (a file in it, a loop of links, a name too long, a "
+              "parent this user may not search) was not checked here -- POSIX's errors, asked on POSIX alone")
+    elif looked != "all":
+        print(f"write_lock: a project folder whose parent this user may not search was not checked here -- {no_mode}")
+    made = seen["_check_a_folder_that_cannot_be_made"]
+    if not made:
+        print(f"write_lock: a project folder under a parent this user may not write was not checked here -- {no_mode}")
     share = seen["_check_a_share_refusing_the_lock_is_noted"]
     if not share:
         print("write_lock: LockFileEx refused by a share (ERROR_ACCESS_DENIED, faked at the call) was not checked "
@@ -1156,9 +1330,15 @@ def _selftest():
           f"locked written without the lock, said in one note line once per folder; an error inside lets every lock "
           f"go; a file where the lock's folder belongs refused as Unwritable (EEXIST); "
           f"{'a project folder this user may not write refused as Unwritable, nothing taken or made; ' if unwritable else ''}"
+          + (f"a project path that cannot be looked at -- a file in it, a loop of links, a name too long"
+             f"{', a parent this user may not search' if looked == 'all' else ''} -- refused as Unwritable, never taken "
+             f"for a folder that is not there; " if looked else "")
+          + f"make_folder makes a project's folder with its parents and refuses one it cannot make as Unwritable (a file "
+          f"in its place{', a parent this user may not write' if made else ''}); "
           f"the access repair fits the system; the refusals are no OSError or ValueError; busy_exit says one line and "
           f"returns 75; a check that breaks shows its traceback; probe answers no_lock_file (making nothing), free, "
-          f"held by a spawned process and cannot_lock with the OS's reason, keeping nothing")
+          f"held by a spawned process, cannot_lock with the OS's reason, and cannot_lock naming a folder at the lock "
+          f"file's path or a file at its folder's, keeping nothing")
     return 0
 
 

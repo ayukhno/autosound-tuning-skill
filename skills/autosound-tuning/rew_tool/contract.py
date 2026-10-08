@@ -412,7 +412,9 @@ def _lock_line(project_dir):
     """One status line when this project's writer lock cannot be taken in its folder (#141, R22) -- the OS refuses the
     lock itself, as some network, cloud and VM shared folders do -- else None. There the method's writers write
     WITHOUT the lock, each saying so in a `note:` line on stderr with exit 0, which a front end that drops stderr on
-    exit 0 never shows: `check`, which TCC runs at every launch, says it in its report.
+    exit 0 never shows: `check`, which TCC runs at every launch, says it in its report. Where something that is not a
+    file stands at the lock file's path (a folder), or that is not a folder at its folder's, the line says so instead:
+    there every writer refuses, `Unwritable`, and none writes.
 
     The answer is `write_lock.probe`'s (R26): the lock tried as a hold tries it, and let go at once. Another writer
     holding it is the lock working: no line. No lock file yet -- a project no writer of this copy has written -- is not
@@ -420,12 +422,15 @@ def _lock_line(project_dir):
     and not to be opened, anything else -- is said in the line, never a crash of the check TCC runs at every launch."""
     folder = os.path.abspath(project_dir)
     try:
-        answer, why = project._write_lock().probe(project_dir)
+        lock = project._write_lock()
+        answer, why = lock.probe(project_dir)
     except Exception as exc:  # noqa: BLE001 -- a report line, never a reason for the check to fail
         return (f"{folder}: whether the project's writer lock can be taken here could not be told "
                 f"({type(exc).__name__}: {exc})")
     if answer != "cannot_lock":
         return None
+    if not os.path.isfile(lock.lock_path(project_dir)):      # not the OS refusing: no lock file can be made there
+        return f"{folder} cannot be locked ({why}): the method's writers refuse to write here until it is moved aside"
     return (f"{folder} cannot be locked ({why}): the method's writers write here without the project lock, each saying "
             "so in a note: line on stderr -- two writers at once can lose a change; run one at a time, or keep the "
             "project on a local disk")
@@ -2235,7 +2240,8 @@ def _check_check_names_a_folder_that_cannot_lock():
     front end that drops stderr on exit 0 never shows. The report's `lock` is that line (JSON) and its text a
     `**Writer lock:**` line; None, and no line, where the lock can be taken, where another writer holds it (the lock
     working), and where there is no lock file yet to try -- `check` makes nothing, and that file comes with the first
-    write. Never part of `ok`. The OS's refusal is faked at the lock's own call. The answer is `write_lock.probe`'s
+    write. Never part of `ok`. The OS's refusal is faked at the lock's own call. A folder at the lock file's path is
+    said as what it is -- every writer refuses there, none writes without the lock. The answer is `write_lock.probe`'s
     (R26), and a probe that breaks is said in the line, never a crash of the check TCC runs at every launch."""
     import errno
     import shutil
@@ -2282,6 +2288,15 @@ def _check_check_names_a_folder_that_cannot_lock():
             failures.append(f"its line in the report: {shown}")
         if json.loads(json.dumps(report)).get("lock") != want:
             failures.append("not in the JSON")
+        # A folder where the lock file belongs: every writer refuses there (`Unwritable`), none writes without the lock
+        # -- said so, the probe naming it. It read as no lock file yet, and the report said nothing.
+        e = os.path.join(top, "folder-at-the-lock")
+        os.makedirs(lock.lock_path(e))
+        got = check_project(e, skip_rew=True).get("lock")
+        want = (f"{os.path.abspath(e)} cannot be locked ({lock.lock_path(e)} is not a file): the method's writers refuse "
+                "to write here until it is moved aside")
+        if got != want:
+            failures.append(f"a folder at the lock file's path: {got!r}")
         lock.probe = broken
         try:
             report = _raised_or(lambda: check_project(d, skip_rew=True))
@@ -3637,8 +3652,9 @@ def _selftest():
           f"the journal lines no code page reads, bytes kept, and the journal reads again (#134, R56); its rewrites "
           f"answer another writer's lock with 75 and a bad AUTOSOUND_LOCK_TIMEOUT_S with 2, and make nothing on a "
           f"project folder that is not there; check names a folder whose writer lock cannot be taken in one status "
-          f"line, and nothing where it can, where another writer holds it, or where no lock file is yet, as "
-          f"write_lock.probe answers -- a probe that breaks said in that line, never a crash (#141). root={root}")
+          f"line -- one with a folder at the lock file's path as one every writer refuses -- and nothing where it "
+          f"can, where another writer holds it, or where no lock file is yet, as write_lock.probe answers -- a probe "
+          f"that breaks said in that line, never a crash (#141). root={root}")
     return 0
 
 
