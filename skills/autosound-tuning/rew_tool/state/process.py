@@ -1518,12 +1518,13 @@ class Process:
         Which one this round means is now RECORDED (`version_kind`) instead of left to a reader's
         guess, and a ledger version is CHECKED against the snapshots on disk.
 
-        **The ledger is a precondition of a ledger-bound round, not of the capture flow** (TCC-022,
-        the Arbiter's stopper 2026-09-20). A Phase-0 baseline is measured before anything is banked
-        and opens at `_1` with no ledger at all -- that is correct and stays correct. Naming a
-        `v_NNN` says the opposite: that these measurements were taken under a CONFIGURATION, and a
-        round pointing at a version nobody banked cannot answer which one, while still looking
-        complete. Four such rounds were opened in a row on a project made by TCC's Copy car -- which
+        **The ledger is a precondition of a ledger-bound round; this call does not check it for a series
+        round** (TCC-022, the Arbiter's stopper 2026-09-20). A Phase-0 baseline opens at its SERIES number,
+        which names no configuration -- but by the one recipe (`capture-session-sheet.md` Block 0), whose
+        first line, `enter-phase 0`, is the Phase -1 gate and refuses while `state/<preset>/` is missing:
+        the first snapshot is banked before the baseline is measured. Naming a `v_NNN` says more: that
+        these measurements were taken under a CONFIGURATION, and a round pointing at a version nobody
+        banked cannot answer which one, while still looking complete. Four such rounds were opened in a row on a project made by TCC's Copy car -- which
         carries `project.json` and the profile and deliberately no `state/` -- and the flow's other
         half failed silently on the same fact: `apply.propose` could not produce a settings sheet
         and never said why. One half was lenient, the other mute; now both name the ledger.
@@ -1551,9 +1552,9 @@ class Process:
                       "  - the measurements are of a banked state -> bank it first "
                       "(`apply.propose`; phase -1's first ledger snapshot for a new project), then "
                       "open the round at the version it wrote;\n"
-                      "  - the measurements are a baseline, taken before anything is banked -> "
-                      "open the round at its SERIES number instead (`capture-start 1 ...`), which "
-                      "is what Phase 0 does and needs no ledger."
+                      "  - the measurements are a baseline -> bank the first snapshot "
+                      "(`phase_-1_intake.md` §5), enter Phase 0 and open the round at its SERIES number "
+                      "(`capture-session-sheet.md` Block 0)."
                 )
         # The ledger version these measurements were taken UNDER (#57 P0). A series names the measurements; the
         # configuration in the processor while they were taken is a second fact, and the tools that divide it
@@ -7344,10 +7345,15 @@ def _selftest():
         raise AssertionError("a round was opened at a ledger version nobody had banked")
     except ProcessError as exc:
         # The refusal has to carry BOTH ways on, because they are different questions -- bank the
-        # state, or open the round at its series number because nothing is banked yet on purpose.
-        assert "no ledger at all" in str(exc) and "capture-start 1" in str(exc), str(exc)
-        assert "apply.propose" in str(exc), str(exc)
-    # A baseline round needs no ledger and says so: `series` is explicitly not ledger-bound.
+        # state, or a baseline: the first snapshot, Phase 0 entered, the round at its series number by the
+        # one recipe. Never "capture-start 1 ... needs no ledger": the recipe's first line, `enter-phase 0`,
+        # is the Phase -1 gate and refuses while `state/<preset>/` is missing (the S1 review, Important 4).
+        assert "no ledger at all" in str(exc) and "apply.propose" in str(exc), str(exc)
+        assert "bank the first snapshot (`phase_-1_intake.md` §5), enter Phase 0 and open the round at its " \
+               "SERIES number (`capture-session-sheet.md` Block 0)" in str(exc), str(exc)
+        assert "capture-start 1" not in str(exc) and "needs no ledger" not in str(exc), str(exc)
+    # A series round is not ledger-bound, and this call opens one with no ledger: the gate before a baseline is
+    # `enter-phase 0`'s, not this call's.
     baseline = cap.start_capture("1", ["w-L_1 (sw)"])
     assert baseline["version_kind"] == "series", baseline
     issued = [e for e in cap.events() if e["type"] == EV_CAPTURE_ISSUED][-1]

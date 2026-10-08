@@ -213,11 +213,13 @@ appended line is fsynced (and the folder, when the append made the file), so it 
 - **A round says WHICH counter its version is, and a ledger version must exist** (TCC-022). The two
   are different counters and neither is derived from the other: a **series** `_N` numbers a set of
   measurements, a **ledger version** `v_NNN` is the configuration they were taken under. So the
-  ledger is a precondition of a LEDGER-BOUND round, not of the capture flow — a Phase-0 baseline is
-  measured before anything is banked, opens at `_1`, and records `version_kind: "series"`, which is
-  the round saying it is not ledger-bound. Naming a `v_NNN` with no snapshot on disk is refused, and
-  the refusal carries both ways on: bank the state (`apply.propose`), or open the round at its
-  series number. Bought on a project made by TCC's Copy car — which carries `project.json` and the
+  ledger is a precondition of a LEDGER-BOUND round, and `capture-start` checks it for no other — a
+  Phase-0 baseline opens at its series number and records `version_kind: "series"`, which is the
+  round saying it is not ledger-bound; Phase 0 itself is entered only once Phase −1 banked the first
+  snapshot (`enter-phase 0` refuses while `state/<preset>/` is missing). Naming a `v_NNN` with no
+  snapshot on disk is refused, and the refusal carries both ways on: bank the state
+  (`apply.propose`), or, for a baseline, bank the first snapshot, enter Phase 0 and open the round at
+  its series number (`capture-session-sheet.md` Block 0). Bought on a project made by TCC's Copy car — which carries `project.json` and the
   profile and deliberately no `state/`: four rounds opened in a row at a `v_001` that did not exist,
   while the flow's other half, `apply.propose`, failed silently on the same fact and never said
   what was missing.

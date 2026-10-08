@@ -32,6 +32,8 @@ Instruct the user to run a complete, disciplined series of MMM RTA measurements 
 * **The individual sides:** `L_final (rta)`, `R_final (rta)` — Left-side-only (no sub), Right-side-only (no sub).
 * **The complete front system:** `ALL_final (rta)` (all front channels active together).
 
+Open the round with these titles — `--plan` builds only from a series number, and `_final` is none: `python3 rew_tool/naming.py <project> expect 3 final` prints them, and `python3 rew_tool/state/process.py <project>/process capture-start final "<title>" …` opens it.
+
 ---
 
 ## 2. Independent Technical Verdicts
