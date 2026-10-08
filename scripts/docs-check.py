@@ -48,6 +48,11 @@ Rules:
    the method runs on. No document may still say the plugin is "pinned at 2.8.3" while the catalogue
    installs another release — a session that believed it told a plugin user to uninstall.
 
+10. **`owner-sentence`** (#138, I-11). Nothing about the owner's symptom line gates phase 0 (the
+    Arbiter's ruling, 2026-09-08, skill #22): the gate stands on evidence. No document, and not
+    `rew_tool/project.py`'s text (`catch-up`'s usage and docstring), may say the gate still wants the
+    owner's own sentence.
+
 Run: `scripts/docs-check.py` (from anywhere), `--selftest` for the checker's own mechanics.
 stdlib only.
 """
@@ -440,6 +445,35 @@ def rule_plugin_route(root: str) -> list[str]:
     return bad
 
 
+#: What the text said while the phase-0 gate waited for the owner's own words. It has not since the Arbiter's ruling
+#: of 2026-09-08 (skill #22): the gate stands on evidence, and the owner's symptom line is optional.
+OWNER_SENTENCE_GONE = ("sentence is still owed", "still wants the owner's own sentence",
+                       "would close the gate on nobody's words")
+PROJECT_PY = os.path.join(SKILL, "rew_tool", "project.py")
+
+
+def rule_owner_sentence(root: str) -> list[str]:
+    """No text says the phase-0 gate still waits for the owner's own sentence (#138, I-11).
+
+    The Arbiter's ruling of 2026-09-08 (skill #22) took the owner's symptom line out of the gate: a flaw is computed,
+    not heard, so the map stands on its measurements, and the symptom is an optional communication line for the
+    finished tune. `contract.py` has gated on evidence alone since. The always-loaded `SKILL.md`, `project.py
+    catch-up`'s usage and its docstring kept saying the gate wanted the owner's sentence, which sends a session to
+    collect sentences about things nobody has heard yet -- the invented perception the ruling removed.
+    """
+    bad = []
+    files = _md_files(root)
+    if os.path.isfile(os.path.join(root, PROJECT_PY)):
+        files.append(os.path.join(root, PROJECT_PY))
+    for path in files:
+        rel = os.path.relpath(path, root)
+        for phrase in OWNER_SENTENCE_GONE:
+            for n in _hits(path, phrase):
+                bad.append(f"{rel}:{n}: says '{phrase}' — nothing about the owner's symptom line gates phase 0 "
+                           f"(the Arbiter's ruling, 2026-09-08, skill #22): the gate stands on evidence")
+    return bad
+
+
 RULES = [("data-not-instructions", rule_data_not_instructions),
          ("phase-source", rule_phase_source),
          ("references-orphans", rule_references_orphans),
@@ -448,7 +482,8 @@ RULES = [("data-not-instructions", rule_data_not_instructions),
          ("ledger-root", rule_ledger_root),
          ("install-ref", rule_install_ref),
          ("protective-floor", rule_protective_floor),
-         ("plugin-route", rule_plugin_route)]
+         ("plugin-route", rule_plugin_route),
+         ("owner-sentence", rule_owner_sentence)]
 
 
 def run(root: str) -> int:
@@ -656,6 +691,28 @@ def _selftest() -> int:
         # a catalogue that cannot be read is said, never taken for one that pins nothing
         assert any("cannot be read" in c for c in rule_plugin_route(plugin_tree(supported, "{"))), "unread catalogue"
 
+        # -- rule 10: the owner's sentence gates nothing (#138, I-11) -- in the documents and in project.py's text
+        def owner_tree(skill_md: str, project_py: str):
+            root = tempfile.mkdtemp(dir=tmp)
+            os.makedirs(os.path.join(root, SKILL, "rew_tool"))
+            open(os.path.join(root, SKILL, "SKILL.md"), "w", encoding="utf-8").write(skill_md)
+            open(os.path.join(root, PROJECT_PY), "w", encoding="utf-8").write(project_py)
+            return root
+
+        owed = ("# S\n\nIt invents no fact and it does NOT close the phase-0 gate — the owner's own sentence is "
+                "still owed.\n")
+        # the usage text as `project.py` wraps it: the phrase split across a line and a column of spaces
+        wrapped = ('USAGE = """\n  catch-up   the draft is a marked placeholder and the phase-0 gate\n'
+                   "             still wants the owner's own\n             sentence. Run it when a project is opened\n"
+                   '"""\n\n# a fill that pretended otherwise would close the gate on nobody’s words\n')
+        said = rule_owner_sentence(owner_tree(owed, wrapped))
+        assert any("SKILL.md:3:" in c and "sentence is still owed" in c for c in said), said
+        assert any("project.py:3:" in c and "still wants the owner's own sentence" in c for c in said), said
+        assert any("project.py:7:" in c and "nobody's words" in c for c in said), said
+        optional = ("# S\n\nIt invents no fact. The owner's symptom line is optional — a communication line for the "
+                    "finished tune; nothing about it gates phase 0 (the Arbiter's ruling, 2026-09-08).\n")
+        assert rule_owner_sentence(owner_tree(optional, 'USAGE = """catch-up  invents no fact"""\n')) == []
+
         # and the tree itself, which is the point of the whole file
         assert run(ROOT) == 0, "the tree must be clean, or the selftest measures a fake"
     finally:
@@ -670,7 +727,9 @@ def _selftest() -> int:
           "named; a mapped file, its translation and an honest off-map declaration are not; a "
           "protective floor that drifted from the gate's constants, in a document or in the gate, "
           "is named; a document saying the plugin is pinned at 2.8.3 while the catalogue installs 3.x is "
-          "named, wrapped and in bold too, and a catalogue that cannot be read is said")
+          "named, wrapped and in bold too, and a catalogue that cannot be read is said; a document or "
+          "project.py's text saying the phase-0 gate still waits for the owner's own sentence is named, "
+          "wrapped across a column of spaces too")
     return 0
 
 

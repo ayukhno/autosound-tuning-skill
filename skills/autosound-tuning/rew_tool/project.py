@@ -972,9 +972,11 @@ class Project:
         The draft is the interesting one, and the line it walks is the point. A `symptom` is what
         the OWNER hears, and no machine knows that — so this does not write one. It writes the
         marked placeholder that `flaw_map` now writes on new rows, so an old project's map has the
-        same shape as a new one's, and `contract.py check --phase0-gate` still refuses until a
-        person replaces it. Filling the space is a machine's job; saying what the car sounds like
-        is not, and a fill that pretended otherwise would close the gate on nobody's words.
+        same shape as a new one's; a person's line replaces it if the owner ever gives one. Filling
+        the space is a machine's job; saying what the car sounds like is not. The owner's symptom
+        line is optional — a communication line for the finished tune; nothing about it gates
+        phase 0 (the Arbiter's ruling, 2026-09-08): `contract.py check --phase0-gate` stands on
+        evidence.
 
         Returns what changed (or would, when `write` is false).
         """
@@ -1469,8 +1471,10 @@ _USAGE = """usage: project.py <project-dir> <command> [args]
                                                legacy names, `tier` off the ledger, and a DRAFT
                                                symptom on every owner-facing flaw row that has
                                                none. Idempotent, additive, invents no fact: the
-                                               draft is a marked placeholder and the phase-0 gate
-                                               still wants the owner's own sentence. Run it when a
+                                               draft is a marked placeholder. The owner's symptom
+                                               line is optional — a communication line for the
+                                               finished tune; nothing about it gates phase 0 (the
+                                               Arbiter's ruling, 2026-09-08). Run it when a
                                                project is opened — a field lands in the model at
                                                once and in the cars on disk never (CAR-007)
   migrate-fields [--dry-run]                   rename legacy field names in project.json
