@@ -26,7 +26,7 @@ This phase establishes the physical foundation of the tune: the tuner's wishes c
 
 **✅ Quality gate → Phase 2:** the tuner's wishes checked (`xover_wishes`) and the variants described — at most three, the choice recorded with the tuner's OK; arrival TA set from the tools' reading, cross-checked in the GUI where a tool says ILL-POSED or UNVERIFIED; L/R-symmetric crossovers agreed via the review loop and applied to the DSP; the coarse per-driver EQ (§5.5) banked with them, the delays computed with it in the chains; per-band NTT targets generated, verified (`_SUM` +3…6 dB vs single) and loaded; `<prefix>_v1_foundation.pct6` saved to `rew_analitic/dsp-config/`.
 
-**⚠️ Failure modes:** trusting REW auto-delay (locks onto reflections / prior DSP offsets) → the tools' leading-edge reading, the GUI where a tool says ILL-POSED or UNVERIFIED · assuming the midbass is latest → measure it · detuning crossovers L/R to fix a cabin asymmetry (kills the phantom center) → fix with EQ instead.
+**⚠️ Failure modes:** trusting REW auto-delay (locks onto reflections / prior DSP offsets) → the tools' leading-edge reading, a prior chain divided out by the round's `--under` (`virtual-first.md` §Phases 1–2), the GUI where a tool says ILL-POSED or UNVERIFIED · assuming the midbass is latest → measure it · detuning crossovers L/R to fix a cabin asymmetry (kills the phantom center) → fix with EQ instead.
 
 **🧩 Common patterns (hypotheses):** filter type by driver spacing (BE4 close/coplanar · LR4 far-apart) → [`filter-types-car-audio.md`](references/core/filter-types-car-audio.md); heavy midbass → align to IR peak → [`car-eq-patterns.md`](references/patterns/car-eq-patterns.md).
 
