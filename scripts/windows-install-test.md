@@ -140,6 +140,8 @@ Every real run, `install.cmd` included. Written for v3.1.3; none of it has run o
 | the last line of the run | `Installed.` — or `Installed, NOT ready: <names>`, then one `!` line for each name saying what to do | the end did not run, or a check did not name its part with `Add-Missing` |
 | `install.cmd`, double-clicked | `Finished with exit code 0` when ready, `3` when NOT ready, `1` after a stop | the code did not reach cmd: as a file through `exit`, fetched through `$global:AutosoundInstallExit` |
 | `%LOCALAPPDATA%\autosound\install-receipt.json` | `"status"` `ready`, `not ready` (with `missing` naming the same parts) or `stopped`; `installer_version` the release; `python` `…\.local\bin\python3.exe 3.12.x` | `Write-Receipt` failed, and its `try`/`catch` kept that quiet |
+| `n` at «Go ahead?» | `Nothing installed. Re-run when you want to.`; `install.cmd` says `Finished with exit code 1`; the receipt says `stopped` | the decline still ends 0, which a script reads as ready |
+| Ctrl-C in the middle of a run, after «Go ahead?» | the receipt says `stopped` — never the `ready` of the run before | the receipt the run writes as it goes ahead (`Write-Receipt "stopped"`) did not run |
 
 ## 3. An older app ref — the deliberate gap
 

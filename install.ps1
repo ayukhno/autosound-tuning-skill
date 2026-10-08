@@ -134,12 +134,12 @@ function Write-Receipt {
     } catch { $null = $_ }
 }
 # What the run leaves not ready, by short names (#142) -- install.sh's MISSING. Each check that finds a part not ready
-# says why and adds it with Add-Missing; the end reads this list and nothing else. $script: wherever it is read or
-# written, as $script:SignatureRefused is.
+# says why and adds it with Add-Missing, which names a part once; the end reads this list and nothing else. $script:
+# wherever it is read or written, as $script:SignatureRefused is.
 $script:Missing = @()
 function Add-Missing {
     param([string]$Name)
-    $script:Missing += $Name
+    if ($script:Missing -notcontains $Name) { $script:Missing += $Name }
 }
 
 # Native commands (git, winget, uv, claude...) write ordinary progress to stderr, and under
@@ -820,13 +820,18 @@ if ($WantGitHub -eq "0") {
     Say "Optional: -GitHub also installs GitHub's gh, to back each car's record up to a free, private"
     Say "repository -- the ledger, the journal, the DSP config backups; the measurements stay on your disk."
 }
+# Declined -- or no console to ask on and no -Yes, which takes the default -- it is a stop, 1, nothing installed (#142):
+# it ended 0, which a script read as ready. install.sh's consent.
 if (-not $DryRun) {
     if (-not (Ask "Go ahead?" "n")) {
         Write-Host ""
-        Say "Nothing installed. Re-run when you want to."
-        Stop-Installer 0; return
+        Warn "Nothing installed. Re-run when you want to."
+        Stop-Installer 1; return
     }
 }
+# From here the run is going ahead (#142): the receipt says `stopped` until the end writes how the run ended, so a
+# terminating error, Ctrl-C or a closed window leaves no earlier run's `ready` standing -- install.sh's going_ahead.
+Write-Receipt "stopped"
 if (-not $DryRun) { New-Item -ItemType Directory -Force -Path $LocalBin | Out-Null }
 $env:Path = "$LocalBin;$env:Path"
 
@@ -1285,8 +1290,9 @@ if ((-not $linkExists) -or $isOurs) {
 
 # The beta channel's copy (autosound-hub #145): the newest release OR candidate, in a checkout of
 # its own that no junction points at. Claude Code in a terminal never loads it; an app that asks
-# for beta runs it by path and declares it in AUTOSOUND_SKILL_ROOT. A failure here is a warning --
-# the terminal's method above is already in place.
+# for beta runs it by path and declares it in AUTOSOUND_SKILL_ROOT. A failure here is no stop -- the
+# terminal's method above is already in place -- but the copy the channel was asked for is not this
+# run's candidate, so it counts as missing (R38, #142): the run ends 3, not 0. install.sh's beta block.
 if ($Channel -eq "beta") {
     $betaRef = $null
     if (Have git) {
@@ -1296,10 +1302,12 @@ if ($Channel -eq "beta") {
     }
     if (-not $betaRef) {
         Warn "could not read the method's candidates -- the beta channel's copy was left as it is"
+        Add-Missing "the beta copy"
     } else {
         Say "beta channel: $betaRef in $(Pretty $SkillBetaSrc) -- only an app that asks for beta runs it"
         if (-not (Sync-MethodCheckout $SkillBetaSrc $betaRef "the beta channel's copy")) {
             Warn "the beta channel's copy is not on $betaRef -- see above; the terminal's method is not affected"
+            Add-Missing "the beta copy"
         }
     }
 }
@@ -1723,12 +1731,12 @@ if (Test-Path (Join-Path $SkillHome "rew_tool\contract.py")) {
     Warn "no tuning method at $SkillHome"; Add-Missing "the method"
 }
 if ($Channel -eq "beta" -and -not $DryRun) {
-    if (Test-Path (Join-Path $SkillBetaSrc "skills\autosound-tuning\rew_tool\contract.py")) {
+    if (-not (Test-Path (Join-Path $SkillBetaSrc "skills\autosound-tuning\rew_tool\contract.py"))) {
+        Warn "no beta channel copy at $(Pretty $SkillBetaSrc) -- an app asking for beta has nothing to run"; Add-Missing "the beta copy"
+    } elseif ($script:Missing -notcontains "the beta copy") {   # not on this run's candidate: the beta block said so
         $betaAt = (& git -C $SkillBetaSrc describe --tags --always 2>$null)
         $termAt = if (Test-Path (Join-Path $SkillSrc ".git")) { (& git -C $SkillSrc describe --tags --always 2>$null) } else { "?" }
         Say "OK   the beta channel's copy, $betaAt -- for the app; the terminal stays on $termAt"
-    } else {
-        Warn "no beta channel copy at $(Pretty $SkillBetaSrc) -- an app asking for beta has nothing to run"; Add-Missing "the beta copy"
     }
 }
 if ($Mode -eq "tcc" -and -not $DryRun) {
@@ -1955,7 +1963,7 @@ else {
                 Warn "$(Pretty $SkillHome) is the 2.x line, which TCC cannot drive -- move it aside, then run this again"
             }
             "the beta copy" {
-                Warn "no beta channel copy at $(Pretty $SkillBetaSrc) -- an app asking for beta has nothing to run; run this again"
+                Warn "no beta channel copy on this run's candidate at $(Pretty $SkillBetaSrc) -- an app asking for beta runs an older one, or nothing; the beta block above says why; run this again"
             }
             "TCC" {
                 Warn "the app was not installed$(if ($TccRefused) { ": $TccRefused" }) -- the app's block above says why; the method is installed and works without it"

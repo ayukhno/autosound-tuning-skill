@@ -562,7 +562,7 @@ def selection_problems(sh, ps1):
         shutil.rmtree(tmp, ignore_errors=True)
     stop_ps1 = ("could not read the method's release tags (no network?) -- nothing was installed or changed for the "
                 "method; run again when GitHub answers, or name a tag with -SkillRef")
-    read = (("install.sh", 'SKILL_REF="$(pick_method_ref "$SKILL_REF")" || exit $?', True),
+    read = (("install.sh", 'SKILL_REF="$(pick_method_ref "$SKILL_REF")" || stop $?', True),
             ("install.sh", 'SKILL_REF="main"', False),
             ("install.sh", "could not read the app's release tags (no network?)", True),
             ("install.ps1", "$SkillRef = Select-MethodRef $SkillRef", True),
@@ -737,15 +737,21 @@ def checkout_problems(sh, ps1):
 def exit_contract_problems(sh, ps1):
     """#142 (T-44, J6a item 4): the exit table and the receipt; [] when both installers keep them.
 
-    install.sh's `finish` and `stop` are cut out and RUN, each into a temp XDG_DATA_HOME: nothing missing ends 0 with
-    `Installed.`, a missing part 3 with `Installed, NOT ready: <names>`, a stop 1 -- and every one of them writes a
-    receipt that parses as JSON with RECEIPT_FIELDS in that order, `status` and `missing` as the run ended, even with a
-    quote, a backslash and a tab in the engine's line: once with a python3 to build it, once with the shell's own
-    builder. `plugin-ready` is asked for only on a ready install; a dry run writes nothing and ends 0. install.ps1 is
-    READ: Stop-Installer writes `stopped`, the end writes its receipt and then stops with 3 under `-not $ok`,
-    `plugin-ready` sits under `$ok`, Write-Receipt's fields are RECEIPT_FIELDS in order. Every part that is not ready
-    goes through `missing` / `Add-Missing`, every stop through `stop` -- no `exit 1` and no `ok=0` left in install.sh --
-    and the installers' version is plugin.json's.
+    install.sh's `finish` and `stop` are cut out and RUN, each into a temp XDG_DATA_HOME under `set -euo pipefail`, with
+    `going_ahead`'s trap in place: nothing missing ends 0 with `Installed.`, a missing part 3 with `Installed, NOT
+    ready: <names>` (a part named twice is named once), a stop 1 -- and every one of them writes a receipt that parses
+    as JSON with RECEIPT_FIELDS in that order, `status` and `missing` as the run ended, even with a quote, a backslash
+    and a tab in the engine's line: once with a python3 to build it, once with the shell's own builder. `plugin-ready`
+    is asked for only on a ready install; a dry run writes nothing and ends 0. A declined "Go ahead?" (`consent`, no
+    terminal and no --yes) is a stop, 1; a run that fails under `set -e` -- with 1, or with a 3 of its own -- or on an
+    unbound variable (bash 3.2 hands the trap 0) ends 1, and one that ends where no trap sees it says `stopped`: an
+    earlier run's `ready` never stands over it. install.ps1
+    is READ: Stop-Installer writes `stopped`, a declined "Go ahead?" stops with 1 and the receipt says `stopped` right
+    after it, the end writes its receipt and then stops with 3 under `-not $ok`, `plugin-ready` is called once, under
+    `$ok`, Write-Receipt's fields are RECEIPT_FIELDS in order, Add-Missing names a part once. Every part that is not
+    ready goes through `missing` / `Add-Missing`, every stop through `stop` -- no `exit 1` and no `ok=0` left in
+    install.sh -- the beta channel's copy not on this run's candidate is missing in both (R38), and the installers'
+    version is plugin.json's.
     """
     import hashlib
     import json
@@ -781,6 +787,20 @@ def exit_contract_problems(sh, ps1):
         out.append("a part that is not ready is not named the same in both installers -- "
                    + "; ".join([f"install.sh has no `missing {n}`" for n in names_sh]
                                + [f"install.ps1 has no `Add-Missing \"{n}\"`" for n in names_ps]) + " (#142)")
+    # The consent, and the moment the run goes ahead (Task 8's review): `consent`, then `going_ahead`, one after the
+    # other at the top level -- from there the receipt says `stopped` until the run's own end writes how it ended.
+    top = [line.rstrip() for _, line in code if not line[:1].isspace()]
+    if "consent" not in top or top.index("consent") + 1 >= len(top) or top[top.index("consent") + 1] != "going_ahead":
+        out.append("install.sh: the top level does not run `consent` and then `going_ahead`, one after the other -- an "
+                   "earlier run's receipt stands over a run that ends neither in `stop` nor in `finish` (#142)")
+    # R38: the beta channel's copy, when it is not on this run's candidate -- the candidates unread, or the update refused
+    # -- counts missing in its own block, in both installers; the checks count a copy that is not there at all.
+    beta_sh = re.search(r'^if \[ "\$CHANNEL" = "beta" \]; then\n.*?^fi\n', sh, re.M | re.S)
+    beta_ps = re.search(r'^if \(\$Channel -eq "beta"\) \{\n.*?^\}\n', ps1, re.M | re.S)
+    if (not beta_sh or beta_sh.group(0).count('missing "the beta copy"') != 2
+            or not beta_ps or beta_ps.group(0).count('Add-Missing "the beta copy"') != 2):
+        out.append("the beta channel's copy is not counted missing in both installers' beta block when it is not on "
+                   "this run's candidate -- the candidates unread, or its update refused; it ended 0 (R38, #142)")
 
     # install.ps1, READ.
     stop_fn = re.search(r"^function Stop-Installer \{\n.*?^\}$", ps1, re.M | re.S)
@@ -807,14 +827,29 @@ def exit_contract_problems(sh, ps1):
         ps_wrong.append("its end does not write the receipt before its `Stop-Installer 3`")
     if not re.search(r"if \(\$ok\b[^\n{]*\)\s*\{[^}]*plugin-ready --root", ps1):
         ps_wrong.append("`plugin-ready` is not under `if ($ok ...)`")
+    ready_calls = [ln for ln in ps1.splitlines() if "plugin-ready --root" in ln and not ln.lstrip().startswith("#")]
+    if len(ready_calls) != 1:
+        ps_wrong.append(f"`plugin-ready --root` is called {len(ready_calls)} times -- once, under `if ($ok ...)`")
     if re.search(r"\$ok\s*=\s*\$false", ps1):
         ps_wrong.append("`$ok = $false` is still set beside the list -- a part not ready goes through Add-Missing")
+    # The consent (Task 8's review): declined -- or no terminal and no -Yes -- it is a stop, 1 (it ended 0, which a
+    # script read as ready), and once given the receipt says `stopped` until the end writes how the run ended.
+    if not re.search(r'Ask "Go ahead\?" "n"\)\) \{[^{}]*Stop-Installer 1; return', ps1):
+        ps_wrong.append('a declined "Go ahead?" does not stop with `Stop-Installer 1; return`')
+    asked, first_dir = ps1.find('Ask "Go ahead?"'), ps1.find("New-Item -ItemType Directory -Force -Path $LocalBin")
+    if not any(asked < m.start() < first_dir for m in re.finditer(r'^Write-Receipt "stopped"\s*$', ps1, re.M)):
+        ps_wrong.append('the receipt does not say `stopped` (`Write-Receipt "stopped"`, at the top level) between the '
+                        'consent and the first install step -- an earlier run\'s receipt stands over one that dies')
+    add_fn = re.search(r"^function Add-Missing \{\n.*?^\}$", ps1, re.M | re.S)
+    if not add_fn or "-notcontains $Name" not in add_fn.group(0):
+        ps_wrong.append("Add-Missing adds a name already listed -- a part is named once, as install.sh's `missing`")
     if ps_wrong:
         out.append("install.ps1's end is not the exit contract: " + "; ".join(ps_wrong) + " (#142)")
 
     # install.sh, RUN.
-    functions, missing = cut_functions(sh, ("say", "warn", "have", "on_mac", "runs_ok", "usable", "pretty",
-                                            "json_str", "write_receipt", "missing", "stop", "finish"))
+    functions, missing = cut_functions(sh, ("say", "warn", "have", "on_mac", "runs_ok", "usable", "pretty", "ask",
+                                            "json_str", "write_receipt", "is_missing", "missing", "stop", "finish",
+                                            "consent", "going_ahead", "unplanned_end"))
     if missing:
         return out + [f"install.sh: no `{name}() {{ ... }}` -- the exit contract cannot be run (#142)"
                       for name in missing]
@@ -823,14 +858,18 @@ def exit_contract_problems(sh, ps1):
         return out + [f"{why} -- install.sh's exit contract cannot be run, and unrun is not agreed"]
     tmp = tempfile.mkdtemp(prefix="autosound_exit_")
 
-    def run(case, body, builder, dry, plugin):
+    def run(case, body, builder, dry, plugin, before=None):
         home = Path(tmp, case)
         home.mkdir()
         data, mark = home / "data", home / "plugin-ready-calls"
+        if before is not None:                          # an earlier run's receipt, there before this one
+            (data / "autosound").mkdir(parents=True)
+            (data / "autosound" / "install-receipt.json").write_text(json.dumps(before), encoding="utf-8")
         # A file, so $0 is one: the receipt's sha256 is this script's, as it is install.sh's when it runs as a file.
-        text = ('export PATH="/usr/bin:$PATH"\n' + functions + FAKE_PYTHON3
-                + ("usable() { return 1; }\n" if builder == "shell" else "")
-                + f'DRY_RUN={dry}\nMODE=terminal\nSKILL_REF=v3.1.2\nINSTALLER_VERSION="{version}"\n'
+        # Under the installer's own `set -euo pipefail`; `tty_ok` answers "no terminal", so `ask` takes its default.
+        text = ('set -euo pipefail\nexport PATH="/usr/bin:$PATH"\n' + functions + FAKE_PYTHON3
+                + "tty_ok() { return 1; }\n" + ("usable() { return 1; }\n" if builder == "shell" else "")
+                + f'DRY_RUN={dry}\nASSUME_YES=0\nMODE=terminal\nSKILL_REF=v3.1.2\nINSTALLER_VERSION="{version}"\n'
                 + f"ENGINE_DID={bash_literal(HOSTILE_ENGINE)}\nMISSING=\"\"\nTCC_REFUSED=\"\"\n"
                 + f'SKILL_HOME="{home.as_posix()}/skill"\nSKILL_BETA_SRC="{home.as_posix()}/beta"\n'
                 + (f'PLUGIN_ROOT="{home.as_posix()}/plugin"\nPLUGIN_VERSION=3.1.2\n' if plugin else 'PLUGIN_ROOT=""\n')
@@ -852,27 +891,56 @@ def exit_contract_problems(sh, ps1):
         return r.returncode, said, receipt, unreadable, calls, hashlib.sha256(text).hexdigest()
 
     flat = "".join(ch for ch in HOSTILE_ENGINE if ord(ch) >= 32)
-    # (case, body, builder, dry run, --plugin, exit, words, never, status (None: no receipt), missing, plugin-ready)
-    cases = (("ready", "finish\n", "python3", "0", True, 0, ("Installed.",), ("NOT ready",), "ready", [], 1),
-             ("not-ready", "MISSING=numpy\nfinish\n", "python3", "0", True, 3, ("Installed, NOT ready: numpy",
-              "set-up note comes back"), (), "not ready", ["numpy"], 0),
-             ("two-parts", 'missing numpy\nmissing "Claude Code"\nfinish\n', "python3", "0", False, 3,
+    # An earlier run's receipt: this run's end -- whatever it is -- must not leave it standing.
+    earlier = {"installer": "install.sh", "status": "ready", "missing": [], "at": "2026-10-01T00:00:00Z"}
+    # Every run goes ahead as install.sh's does -- `going_ahead` after the consent -- so its trap is there when `stop` and
+    # `finish` end it; a dry run passes `consent` without a question.
+    go = "going_ahead\n"
+    # (case, body, builder, dry run, --plugin, exit, words, never, status (None: no receipt), missing, plugin-ready
+    # [, the receipt there before])
+    cases = (("ready", go + "finish\n", "python3", "0", True, 0, ("Installed.",), ("NOT ready",), "ready", [], 1),
+             ("not-ready", go + "MISSING=numpy\nfinish\n", "python3", "0", True, 3, ("Installed, NOT ready: numpy",
+              "set-up note comes back"), (), "not ready", ["numpy"], 0, earlier),
+             ("two-parts", go + 'missing numpy\nmissing "Claude Code"\nfinish\n', "python3", "0", False, 3,
               ("Installed, NOT ready: numpy, Claude Code",), (), "not ready", ["numpy", "Claude Code"], 0),
-             ("a-stop", 'stop 1 "could not read the tags -- nothing was installed"\nsay "past the stop"\n', "python3",
-              "0", False, 1, ("could not read the tags -- nothing was installed",), ("past the stop", "Installed"),
-              "stopped", [], 0),
-             ("ready-no-python3", "finish\n", "shell", "0", True, 0, ("Installed.",), ("NOT ready",), "ready", [], 1),
-             ("not-ready-no-python3", 'missing numpy\nmissing TCC\nfinish\n', "shell", "0", True, 3,
+             ("the-same-part-twice", go + 'missing "the beta copy"\nmissing "the beta copy"\nfinish\n', "python3", "0",
+              False, 3, ("Installed, NOT ready: the beta copy\n",), ("the beta copy, the beta copy",), "not ready",
+              ["the beta copy"], 0),
+             ("a-stop", go + 'stop 1 "could not read the tags -- nothing was installed"\nsay "past the stop"\n',
+              "python3", "0", False, 1, ("could not read the tags -- nothing was installed",),
+              ("past the stop", "Installed", "stopped (exit"), "stopped", [], 0),
+             ("ready-no-python3", go + "finish\n", "shell", "0", True, 0, ("Installed.",), ("NOT ready",), "ready", [],
+              1),
+             ("not-ready-no-python3", go + 'missing numpy\nmissing TCC\nfinish\n', "shell", "0", True, 3,
               ("Installed, NOT ready: numpy, TCC",), (), "not ready", ["numpy", "TCC"], 0),
-             ("a-stop-no-python3", 'stop 1 "stopped: no tag"\n', "shell", "0", False, 1, ("stopped: no tag",), (),
+             ("a-stop-no-python3", go + 'stop 1 "stopped: no tag"\n', "shell", "0", False, 1, ("stopped: no tag",), (),
               "stopped", [], 0),
-             ("a-dry-run", "MISSING=numpy\nfinish\n", "python3", "1", True, 0, ("Nothing was installed",),
-              ("NOT ready",), None, None, 0),
-             ("a-stop-in-a-dry-run", 'stop 1 "stopped: no tag"\n', "python3", "1", False, 1, ("stopped: no tag",), (),
-              None, None, 0))
+             ("a-dry-run", "consent\n" + go + "MISSING=numpy\nfinish\n", "python3", "1", True, 0,
+              ("Nothing was installed",), ("NOT ready", "Go ahead"), None, None, 0),
+             ("a-stop-in-a-dry-run", "consent\n" + go + 'stop 1 "stopped: no tag"\n', "python3", "1", False, 1,
+              ("stopped: no tag",), (), None, None, 0),
+             # Task 8's review: a declined "Go ahead?" -- here no terminal and no --yes, which takes the default "n" --
+             # is a stop, 1, nothing installed; it ended 0, which a script read as ready. Given, the run goes on.
+             ("declined", "consent\n" + go + "finish\n", "python3", "0", False, 1,
+              ("Nothing installed. Re-run when you want to.",), ("Installed",), "stopped", [], 0, earlier),
+             ("consented", "ASSUME_YES=1\nconsent\n" + go + "finish\n", "python3", "0", False, 0, ("Installed.",),
+              ("Nothing installed",), "ready", [], 0, earlier),
+             # ...and a run that ends neither in `stop` nor in `finish`: a failure under `set -e` is a stop, 1 -- also
+             # when the failing command's own code is the table's 3 -- and the receipt says `stopped`; where no trap
+             # sees the end (Ctrl-C under bash 3.2, a kill; here `exec`), it says `stopped` from going ahead on.
+             ("a-failure", go + "missing numpy\nfalse\nfinish\n", "python3", "0", False, 1,
+              ("stopped (exit 1) -- the lines above say where",), ("Installed",), "stopped", ["numpy"], 0, earlier),
+             ("a-failure-coded-3", go + "missing numpy\nsh -c 'exit 3'\nfinish\n", "python3", "0", False, 1,
+              ("stopped (exit 3) -- the lines above say where",), ("Installed",), "stopped", ["numpy"], 0, earlier),
+             ("an-end-no-trap-sees", go + "missing numpy\nexec false\n", "python3", "0", False, 1, (), ("Installed",),
+              "stopped", [], 0, earlier),
+             # An unbound variable under `set -u`: bash 3.2 (macOS's) hands the trap $? = 0, and a trap that trusted it
+             # ended the run 0 -- ready.
+             ("an-unbound-variable", go + 'missing numpy\n: "$NOT_SET_ANYWHERE"\nfinish\n', "python3", "0", False, 1,
+              ("unbound variable", "stopped (exit"), ("Installed",), "stopped", ["numpy"], 0, earlier))
     try:
-        for case, body, builder, dry, plugin, want_rc, words, never, status, missing_want, want_calls in cases:
-            rc, said, receipt, unreadable, calls, sha = run(case, body, builder, dry, plugin)
+        for case, body, builder, dry, plugin, want_rc, words, never, status, missing_want, want_calls, *before in cases:
+            rc, said, receipt, unreadable, calls, sha = run(case, body, builder, dry, plugin, *before)
             wrong = []
             if rc != want_rc:
                 wrong.append(f"exit {rc}, want {want_rc}")
@@ -1207,10 +1275,13 @@ def main():
         checked.append("the exit contract: install.sh's finish ends 0 `Installed.` or 3 `Installed, NOT ready: "
                        "<names>`, and stop ends 1, each writing a receipt that parses with its eleven fields in "
                        "install.ps1's order -- with a quote, a backslash and a tab in the engine's line, built by "
-                       "python3 and by the shell -- plugin-ready only when ready, and a dry run writes nothing (run); "
-                       "install.ps1's Stop-Installer writes `stopped`, its end the receipt and then `Stop-Installer 3` "
-                       "under -not $ok, plugin-ready under $ok (read); no `exit 1` or `ok=0` left in install.sh, and "
-                       "the parts not ready named alike in both (#142)")
+                       "python3 and by the shell -- plugin-ready only when ready, and a dry run writes nothing; a "
+                       "declined consent ends 1, and a run that dies after it -- set -e, an unbound variable, an exec "
+                       "-- ends 1 with `stopped`, never an earlier `ready` (run, under set -euo pipefail); "
+                       "install.ps1's Stop-Installer writes `stopped`, a declined consent stops with 1 and the receipt "
+                       "says `stopped` after it, its end the receipt and then `Stop-Installer 3` under -not $ok, one "
+                       "plugin-ready under $ok (read); no `exit 1` or `ok=0` left in install.sh, the parts not ready "
+                       "named alike and once in both, and the beta copy off its candidate among them (#142, R38)")
         installer_version, _ = one(r'^INSTALLER_VERSION="([^"]+)"', sh, "INSTALLER_VERSION", "install.sh")
         checked.append(f"install.sh's INSTALLER_VERSION, install.ps1's $InstallerVersion and plugin.json's version "
                        f"agree ({installer_version})")

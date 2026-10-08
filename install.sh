@@ -152,6 +152,9 @@ TCC_REF=""
 #: The parts this run leaves not ready, by their short names, ", "-joined (#142): each check that finds one says why
 #: and adds it with `missing`; `finish` reads this and nothing else -- empty is exit 0, anything else exit 3.
 MISSING=""
+#: Set by `stop` and `finish` as they end the run (#142): `going_ahead`'s EXIT trap leaves an exit that came through
+#: them as it is, and makes any other one a stop.
+ENDED=""
 # Saved before anything is installed: the uv step exports ~/.local/bin into THIS script's PATH so
 # the rest of the run can call what it just installed. That made the summary print "✓
 # autosound-tcc installed" to somebody whose own shell could not find it, because the check was
@@ -379,7 +382,8 @@ clt_present() { if on_mac; then xcode-select -p >/dev/null 2>&1; else return 0; 
 # ── how the run ends (#142) ───────────────────────────────────────────────────
 # The exit code a script reads: 0 ready · 1 stopped -- the method was not installed or not changed (the steps before
 # it, Apple's tools and Claude Code, may have run) · 2 a usage error, before anything ran · 3 installed, NOT ready, the
-# missing parts named. A stop and the end each write the receipt; a usage error writes none.
+# missing parts named. A stop and the end each write the receipt; a usage error writes none; from the consent on, the
+# receipt says `stopped` until one of them does (`going_ahead`).
 
 # <text> as a JSON string: `\` and `"` escaped, control characters dropped. sed, byte by byte, and not ${var//}: bash
 # 5.2's patsub_replacement gives `&` and `\` in a replacement meanings of their own.
@@ -444,19 +448,22 @@ stop() {  # stop <code> <line> [<line>...]
   _st_code="$1"; shift
   for _st_line in "$@"; do warn "$_st_line"; done
   write_receipt stopped
+  ENDED=1
   exit "$_st_code"
 }
 
 # A part this run leaves not ready, by its short name: numpy, scipy, the method, the method (2.x line), the beta copy,
-# TCC, Claude Code -- the names install.ps1's Add-Missing records. The check that calls it has said why.
-missing() { MISSING="${MISSING:+$MISSING, }$1"; }
+# TCC, Claude Code -- the names install.ps1's Add-Missing records. The check that calls it has said why; a part already
+# named is named once.
+is_missing() { case ", ${MISSING:-}, " in *", $1, "*) return 0 ;; *) return 1 ;; esac; }
+missing() { is_missing "$1" || MISSING="${MISSING:+$MISSING, }$1"; }
 
 # The run's last statement: the verdict, last on screen, then the receipt, the plugin's note and the exit code -- 0
 # `Installed.`, or 3 `Installed, NOT ready: <names>` with a line for each saying what to do. A dry run did nothing: it
 # says so and ends 0, with no receipt.
 finish() {
   say ""
-  if [ "${DRY_RUN:-0}" = 1 ]; then say "Nothing was installed — this was a dry run."; exit 0; fi
+  if [ "${DRY_RUN:-0}" = 1 ]; then say "Nothing was installed — this was a dry run."; ENDED=1; exit 0; fi
   if [ -z "${MISSING:-}" ]; then
     say "Installed."
     write_receipt ready
@@ -466,6 +473,7 @@ finish() {
       python3 "$SKILL_HOME/scripts/upkeep.py" plugin-ready --root "$PLUGIN_ROOT" \
         || warn "could not write down that v$PLUGIN_VERSION is set up -- the next session will offer the setup again"
     fi
+    ENDED=1
     exit 0
   fi
   say "Installed, NOT ready: $MISSING"
@@ -482,8 +490,8 @@ finish() {
       "the method (2.x line)")
         warn "$(pretty "$SKILL_HOME") is the 2.x line, which TCC cannot drive -- move it aside, then run this again" ;;
       "the beta copy")
-        warn "no beta channel copy at $(pretty "$SKILL_BETA_SRC") -- an app asking for beta has nothing to run;" \
-             "run this again" ;;
+        warn "no beta channel copy on this run's candidate at $(pretty "$SKILL_BETA_SRC") -- an app asking for beta" \
+             "runs an older one, or nothing; the beta block above says why; run this again" ;;
       TCC)
         warn "the app was not installed${TCC_REFUSED:+: $TCC_REFUSED} -- the app's block above says why; the method" \
              "is installed and works without it" ;;
@@ -495,7 +503,36 @@ finish() {
   done
   [ -z "${PLUGIN_ROOT:-}" ] || warn "the plugin's set-up note comes back at the next session until an install is ready"
   write_receipt "not ready"
+  ENDED=1
   exit 3
+}
+
+# The consent, given once and in full: nothing below asks again until the sign-ins, which are offers, not questions --
+# and `ASSUME_YES` is left as the person set it, because "yes to every question" also tells the sign-in block to print
+# commands instead of opening a browser (setting it here made every interactive install end with "run this later",
+# 2026-08-17). Declined -- or no terminal to ask on and no --yes, which takes the default -- it is a stop, 1, nothing
+# installed (#142): it ended 0, which a script read as ready. A dry run is not asked.
+consent() {
+  [ "$DRY_RUN" = 1 ] && return 0
+  ask "Go ahead?" n && return 0
+  say ""
+  stop 1 "Nothing installed. Re-run when you want to."
+}
+
+# From here the run is going ahead (#142). The receipt says `stopped` until `stop` or `finish` writes how the run
+# ended: an end neither reaches -- a failure under `set -e`, Ctrl-C, a kill -- leaves no earlier run's `ready` standing.
+# Bash 3.2 runs no EXIT trap on Ctrl-C; the receipt written here says `stopped` all the same.
+going_ahead() {
+  write_receipt stopped
+  trap unplanned_end EXIT
+}
+# going_ahead's EXIT trap: an end that came through neither `stop` nor `finish` is a stop, 1 -- a failing command's own
+# code is not the table's 2 or 3. Whatever $? says: under bash 3.2 an unbound variable (`set -u`) reaches this trap as
+# 0, and without it the run would end 0, ready.
+unplanned_end() {
+  _ue_rc=$?
+  [ -n "${ENDED:-}" ] && return 0
+  stop 1 "stopped (exit $_ue_rc) -- the lines above say where; run this again"
 }
 
 # THIS SCRIPT NEVER ASKS FOR YOUR PASSWORD. It used to: `sudo -v` read the password straight out
@@ -900,17 +937,8 @@ if [ "$WANT_GITHUB" = 0 ]; then
   say "  Optional: --github also installs GitHub's gh, to back each car's record up to a free, private"
   say "  repository — the ledger, the journal, the DSP config backups; the measurements stay on your disk."
 fi
-if [ "$DRY_RUN" = 0 ]; then
-  # Consent given once, in full. Nothing below asks again until the sign-ins, which are offers,
-  # not questions — and `ASSUME_YES` is left as the person set it, because "yes to every question"
-  # is also what tells the sign-in block to print commands instead of opening a browser (setting it
-  # here made every interactive install end with "run this later", 2026-08-17).
-  if ! ask "Go ahead?" n; then
-    say ""
-    say "  Nothing installed. Re-run when you want to."
-    exit 0
-  fi
-fi
+consent
+going_ahead
 
 # Everything below lands in ~/.local/bin, and every installer that follows checks whether that
 # folder is on PATH — Claude's prints a "run this echo >> ~/.zshrc" note when it is not, uv's and
@@ -1195,8 +1223,9 @@ else
   # development lands, and an installer should put you on a release unless you say otherwise. On
   # EITHER channel: this is the copy Claude Code in a terminal loads, and the terminal runs releases
   # (autosound-hub #145). A candidate goes into its own copy, below.
-  # $(...) is a subshell: the stop inside it has said why and written the receipt, and this carries its exit code out.
-  SKILL_REF="$(pick_method_ref "$SKILL_REF")" || exit $?
+  # $(...) is a subshell: the stop inside it has said why and written the receipt, and `stop $?` carries its code out
+  # as this shell's own stop -- a bare exit here would read to going_ahead's trap as a failure nobody explained.
+  SKILL_REF="$(pick_method_ref "$SKILL_REF")" || stop $?
 fi
 if [ -z "$PLUGIN_ROOT" ]; then
 say "  version $SKILL_REF"
@@ -1235,16 +1264,20 @@ fi
 # The beta channel's copy (autosound-hub #145): the newest release OR candidate, in a checkout of
 # its own that no link points at. Claude Code in a terminal never loads it; an app that asks for
 # beta runs it by path and declares it in AUTOSOUND_SKILL_ROOT, which rew_tool/deployment.py
-# checks. A failure here is a warning -- the terminal's method above is already in place.
+# checks. A failure here is no stop -- the terminal's method above is already in place -- but the copy the channel was
+# asked for is not this run's candidate, so it counts as missing (R38, #142): the run ends 3, not 0.
 if [ "$CHANNEL" = "beta" ]; then
   SKILL_BETA_REF="$(git ls-remote --tags --refs "$SKILL_REPO" "$SKILL_TAG_GLOB" "$SKILL_BETA_GLOB" 2>/dev/null \
       | awk -F/ '{print $NF}' | newest_on_channel)" || SKILL_BETA_REF=""
   if [ -z "$SKILL_BETA_REF" ]; then
     warn "could not read the method's candidates -- the beta channel's copy was left as it is"
+    missing "the beta copy"
   else
     say "  beta channel: $SKILL_BETA_REF in $(pretty "$SKILL_BETA_SRC") -- only an app that asks for beta runs it"
-    checkout_method "$SKILL_BETA_SRC" "$SKILL_BETA_REF" "the beta channel's copy" \
-      || warn "the beta channel's copy is not on $SKILL_BETA_REF -- see above; the terminal's method is not affected"
+    if ! checkout_method "$SKILL_BETA_SRC" "$SKILL_BETA_REF" "the beta channel's copy"; then
+      warn "the beta channel's copy is not on $SKILL_BETA_REF -- see above; the terminal's method is not affected"
+      missing "the beta copy"
+    fi
   fi
 fi
 fi   # not --plugin
@@ -1709,11 +1742,11 @@ elif [ "$DRY_RUN" = 0 ]; then
   missing "the method"
 fi
 if [ "$CHANNEL" = "beta" ] && [ "$DRY_RUN" = 0 ]; then
-  if [ -f "$SKILL_BETA_SRC/skills/autosound-tuning/rew_tool/contract.py" ]; then
-    say "  ✓ the beta channel's copy, $(git -C "$SKILL_BETA_SRC" describe --tags --always 2>/dev/null || echo '?') — for the app; the terminal stays on $(git -C "$SKILL_SRC" describe --tags --always 2>/dev/null || echo '?')"
-  else
+  if [ ! -f "$SKILL_BETA_SRC/skills/autosound-tuning/rew_tool/contract.py" ]; then
     warn "no beta channel copy at $(pretty "$SKILL_BETA_SRC") — an app asking for beta has nothing to run"
     missing "the beta copy"
+  elif ! is_missing "the beta copy"; then   # not on this run's candidate: the beta block said so, and counted it
+    say "  ✓ the beta channel's copy, $(git -C "$SKILL_BETA_SRC" describe --tags --always 2>/dev/null || echo '?') — for the app; the terminal stays on $(git -C "$SKILL_SRC" describe --tags --always 2>/dev/null || echo '?')"
   fi
 fi
 if [ "$MODE" = "tcc" ] && [ "$DRY_RUN" = 0 ]; then
