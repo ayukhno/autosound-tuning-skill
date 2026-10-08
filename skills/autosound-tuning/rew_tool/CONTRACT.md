@@ -378,10 +378,11 @@ channels into one `project.json` lost 40 of the 80 (`project.py`'s selftest, run
   do; on Windows, any refusal of `LockFileEx` but ERROR_LOCK_VIOLATION -- is written WITHOUT the lock, and the writer
   says so on stderr, once per process for each folder (R22): `note: <project> cannot be locked (<why>) -- writing
   without the project lock; two writers at once can lose a change here`. A `note:` line on stderr with exit 0 means
-  the write landed WITHOUT the lock -- show it. TCC's own lock refused such a folder. `contract.py check` names such a
-  folder in one line of its report (`lock`, item 3) once a writer has made the lock file there. Refused, the method
-  would stop every write in such a folder. Not promised: a lock between two machines on one shared folder -- a Mac and
-  its Windows VM -- where each side's lock may be its own, unseen by the other, and then nothing is said.
+  the write landed WITHOUT the lock -- show it. TCC's own lock refused such a folder (its flock, on POSIX; on Windows
+  it takes none across processes). `contract.py check` names such a folder in one line of its report (`lock`, item
+  3) once a writer has made the lock file there. Refused, the method would stop every write in such a folder. Not
+  promised: a lock between two machines on one shared folder -- a Mac and its Windows VM -- where each side's lock may
+  be its own, unseen by the other, and then nothing is said.
 - **A lock that cannot be made** -- `.autosound/`, its `.gitignore` or `write.lock`: a project folder this user may
   not write, a read-only disk, a file where the folder belongs -- is refused before anything is taken:
   `write_lock.Unwritable`, `is_unreadable` on its class, `.path`, `.reason` and `.repair`, said as
