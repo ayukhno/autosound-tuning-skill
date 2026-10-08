@@ -45,7 +45,7 @@ Die App lässt sich mit einem einzigen Befehl installieren. An Hardware und Abon
 
 ## Installation und Start
 
-**Standardmäßig richtet der Installer Folgendes ein:** Claude Code, die Tuning-Methode samt den für ihre Werkzeuge benötigten Python-Bibliotheken, die Desktop-App **Autosound TCC** und den Gemini-Reviewer (`agy`). Das dauert 10–20 Minuten. Je nach System bitten eventuell weitere Installationsprogramme zwischendurch um Erlaubnis – das ist normal (Details in der FAQ).
+**Standardmäßig richtet der Installer Folgendes ein:** Claude Code, die Tuning-Methode samt den für ihre Werkzeuge benötigten Python-Bibliotheken, die Desktop-App **Autosound TCC** und den Gemini-Reviewer (`agy`). Das dauert beim ersten Mal auf einem Mac ohne die Entwicklertools 10–20 Minuten, ansonsten wenige Minuten. Je nach System bitten eventuell weitere Installationsprogramme zwischendurch um Erlaubnis – das ist normal (Details in der FAQ).
 
 **macOS** — öffne das Terminal (⌘-Leertaste, „terminal“ eintippen, Enter) und füge Folgendes ein:
 ```sh
@@ -76,6 +76,7 @@ und unter Windows als zwei Zeilen:
 $i = irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.1.2/install.ps1
 & ([scriptblock]::Create($i)) -WithOmp -GitHub
 ```
+**Wie es endete**, steht im Exit-Code des Installers: `0` bereit · `1` gestoppt — die Methode wurde nicht installiert oder geändert · `2` eine falsche Option für `install.sh` oder ein ungültiges `-Channel` oder `-Plugin` für `install.ps1` (PowerShell selbst lehnt eine Option, die sie nicht kennt, mit `1` ab) · `3` installiert, aber nicht bereit, seine letzten Zeilen nennen, was fehlt und was zu tun ist.
 
 **Bereits in Claude Code unterwegs?** Die Methode lässt sich auch als Plugin installieren:
 ```sh

@@ -260,3 +260,10 @@ jobs:
       # note -- and a second process told busy, then let in. The author's Mac runs only the POSIX half. stdlib only.
       - name: the project lock on Windows (write_lock's selftest)
         run: python skills/autosound-tuning/rew_tool/write_lock.py --selftest
+      # The update path TCC calls, on the system whose line endings and git differ (#142, R33): the plugin's ready file
+      # read byte for byte -- Windows' text mode wrote "\r\n", and the set-up note never went away -- and the
+      # SessionStart hook run by Git for Windows' bash; the signature checks through Git for Windows' own ssh-keygen and
+      # sh. The fake tools are shell scripts Windows cannot start: that part runs on POSIX only. Its argv is
+      # scripts/run-selftests.sh's; stdlib only.
+      - name: the update path on Windows (upkeep's selftest)
+        run: python skills/autosound-tuning/scripts/upkeep.py selftest

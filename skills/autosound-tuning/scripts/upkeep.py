@@ -269,7 +269,9 @@ def plugin_ready(root, path=None):
         have = []
     if f"v{version}" not in have:
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, "a", encoding="utf-8") as fh:
+        # "\n" on every platform (T-39, #142): the hook reads each line whole (`grep -x`), and Windows' text mode
+        # wrote "\r\n" -- the set-up note never went away there.
+        with open(path, "a", encoding="utf-8", newline="\n") as fh:
             fh.write(f"v{version}\n")
     return {"root": os.path.abspath(root), "version": f"v{version}", "file": path}
 
@@ -924,6 +926,78 @@ def _check_a_min_trust_level_is_not_the_persons(fx):
     assert ok and "signature good" in said, said
 
 
+#: The plugin's SessionStart hook: at the root of a checkout or a plugin copy, two folders above this skill.
+_HOOK = os.path.normpath(os.path.join(SKILL_DIR, "..", "..", "hooks", "session-start.sh"))
+
+
+def _a_bash():
+    """A bash that runs a script, or None. On Windows it is Git for Windows' own, found beside `git`: the `bash` a bare
+    name reaches there is often WSL's launcher in System32, which runs nothing without a Linux installed."""
+    if os.name != "nt":
+        return shutil.which("bash")
+    found = shutil.which("git")
+    if not found:
+        return None
+    here = os.path.dirname(os.path.realpath(found))          # ...\Git\cmd, or ...\Git\mingw64\bin
+    for up in (here, os.path.dirname(here), os.path.dirname(os.path.dirname(here))):
+        for rel in (("bin", "bash.exe"), ("usr", "bin", "bash.exe")):
+            if os.path.isfile(os.path.join(up, *rel)):
+                return os.path.join(up, *rel)
+    return None
+
+
+def _plugin_root(folder, version):
+    """A plugin copy as the hook and `plugin_ready` read one: `.claude-plugin/plugin.json` naming `version`, no .git."""
+    os.makedirs(os.path.join(folder, ".claude-plugin"))
+    with open(os.path.join(folder, ".claude-plugin", "plugin.json"), "w", encoding="utf-8") as fh:
+        json.dump({"name": "autosound-tuning", "version": version}, fh)
+    return folder
+
+
+def _check_plugin_ready_writes_its_line_byte_for_byte(tmp):
+    """T-39 (#142): the ready file holds `v3.1.2` and "\\n", byte for byte, once. The hook reads each line whole (`grep
+    -x`), and on Windows a text-mode write ended it "\\r\\n": the set-up note never went away. Read in binary -- text
+    mode turns a "\\r\\n" back into "\\n" and hides it."""
+    root = _plugin_root(os.path.join(tmp, "ready-bytes"), "3.1.2")
+    ready = os.path.join(tmp, "ready-bytes", "plugin-ready")
+    for _ in range(2):
+        plugin_ready(root, path=ready)
+    with open(ready, "rb") as fh:
+        got = fh.read()
+    assert got == b"v3.1.2\n", f"the ready file holds {got!r}, want b'v3.1.2\\n'"
+
+
+def _check_the_hook_is_silent_once_set_up(tmp):
+    """The SessionStart hook reads what `plugin_ready` writes (T-39, #142): the note while this version is not set up,
+    nothing once `plugin_ready` has written it down, and nothing for a checkout -- `.git` a file in a submodule (TCC
+    vendors the skill as one, hub #238), a folder in a clone. Wherever a bash runs it, Git for Windows' on Windows: the
+    platform whose line ending kept the note on is the one it was never run on."""
+    if not os.path.isfile(_HOOK):
+        return                    # the skill folder alone, without the repository's root: the hook is not shipped here
+    bash = _a_bash()
+    assert bash, "no bash to run the SessionStart hook with -- on Windows, Git for Windows' own, beside git"
+    home = os.path.join(tmp, "hook-home")
+    root = _plugin_root(os.path.join(tmp, "hook-plugin"), "3.1.2")
+
+    def note():
+        r = subprocess.run([bash, _HOOK], env=dict(os.environ, HOME=home, CLAUDE_PLUGIN_ROOT=root),
+                           capture_output=True, text=True, timeout=30)
+        assert r.returncode == 0, f"the hook exited {r.returncode}: {r.stderr.strip()[-200:]}"
+        return r.stdout
+
+    assert "v3.1.2 is not set up" in note(), "a plugin copy not set up gets the note"
+    plugin_ready(root, path=os.path.join(home, ".config", "autosound", "plugin-ready"))
+    said = note()
+    assert said == "", f"set up by plugin_ready, the hook still says: {said[:120]!r}"
+    os.remove(os.path.join(home, ".config", "autosound", "plugin-ready"))
+    with open(os.path.join(root, ".git"), "w", encoding="utf-8") as fh:
+        fh.write("gitdir: ../.git/modules/skill\n")
+    assert note() == "", "a submodule checkout is a checkout"
+    os.remove(os.path.join(root, ".git"))
+    os.makedirs(os.path.join(root, ".git"))
+    assert note() == "", "a clone is a checkout"
+
+
 def _selftest():
     """Offline, in temporary repositories: a signed tag passes, an unsigned or foreign-signed one is refused, an
     old one predates signing; only the author's SSH signature is good, whatever the git configuration says (the
@@ -934,8 +1008,10 @@ def _selftest():
     # GNUPGHOME in this temp dir for the whole process, not only in the `env` the checks hand git (#142): whatever runs
     # git with the process's own environment -- update_clone, keep_local, verify_copy, a verify_tag that lost its `env`
     # -- cannot reach the person's ~/.gnupg either. The stub-git check stops the rest when git is not given its `env`,
-    # but only where a stand-in `git` can run: on Windows it returns at once.
-    isolated = {"GNUPGHOME": os.path.join(tmp, "gnupg")}
+    # but only where a stand-in `git` can run: on Windows it returns at once. And no global or system git config there
+    # either, as in that `env`: Git for Windows' own sets core.autocrlf, and a clone the checks make without it was
+    # then reset and patched with it (R33: this selftest runs in the Windows CI job).
+    isolated = {"GNUPGHOME": os.path.join(tmp, "gnupg"), "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
     saved = {name: os.environ.get(name) for name in isolated}
     os.environ.update(isolated)
     try:
@@ -1124,23 +1200,17 @@ def _selftest_in(tmp):
         for _ in range(2):
             assert plugin_ready(plugin_copy("v3.0.70"), path=ready)["version"] == "v3.0.70"
         assert open(ready, encoding="utf-8").read() == "v3.0.70\n", "one line per version, written once"
-        # The SessionStart hook reads the same file, and is silent for a checkout: `.git` a folder in a clone, a file
-        # in a submodule (TCC vendors the skill as one, hub #238). Only where the hook and bash are both here.
-        hook = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "hooks", "session-start.sh")
-        if os.path.isfile(hook) and shutil.which("bash") and os.name != "nt":
-            def note(root):
-                env = dict(os.environ, HOME=os.path.join(tmp, "nohome"), CLAUDE_PLUGIN_ROOT=root)
-                return subprocess.run(["bash", hook], env=env, capture_output=True, text=True).stdout
-            plug = plugin_copy("v3.0.70")
-            assert "not set up" in note(plug), "a plugin copy not set up gets the note"
-            with open(os.path.join(plug, ".git"), "w", encoding="utf-8") as fh:
-                fh.write("gitdir: ../.git/modules/skill\n")
-            assert note(plug) == "", "a submodule checkout is a checkout"
-            os.remove(os.path.join(plug, ".git"))
-            os.makedirs(os.path.join(plug, ".git"))
-            assert note(plug) == "", "a clone is a checkout"
     finally:
         SIGNING_PRINCIPAL, SIGNING_KEY = saved
+    # T-39 (#142): the ready file byte for byte, and the SessionStart hook that reads it -- on every platform a bash
+    # runs, Windows' Git Bash included (the hook's checks, POSIX only until now, are in the second).
+    failures = []
+    for check in (_check_plugin_ready_writes_its_line_byte_for_byte, _check_the_hook_is_silent_once_set_up):
+        try:
+            check(tmp)
+        except AssertionError as exc:
+            failures.append(f"{check.__name__}: {exc}")
+    assert not failures, "\n".join(failures)
 
     # Tools: the way each was installed decides the command; a tool that is not here is not added.
     brew_omp = "/opt/homebrew/Cellar/omp/17.2.9/bin/omp"
@@ -1178,13 +1248,16 @@ def _selftest_in(tmp):
             return {"stable": "2.1.285", "latest": "2.1.288", "next": "2.1.288"}
         return None
 
-    rows = tool_rows(env=fake_env, runner=fake, fetch=fake_fetch)
-    assert [r["name"] for r in rows] == ["omp", "agy"], "claude and gh are not here: not listed, not added"
-    omp = rows[0]
-    assert omp["installed"] == "17.2.9" and omp["available"] == "18.4.3" and omp["how"] == "self", omp
-    # W-6 #126 (hub #237): a self-installed agy reads its update server's manifest for this platform, a native
-    # Claude Code the npm dist-tag of its own channel; no answer is "" as before, never an exception.
-    assert rows[1]["available"] == "1.2.15" and fetched and "/manifests/" in fetched[0], (rows[1], fetched)
+    # The fake tools are shell scripts, and `tool_version` starts each one: Windows cannot start a shell script, so this
+    # part, and the update below, run on POSIX only.
+    if os.name != "nt":
+        rows = tool_rows(env=fake_env, runner=fake, fetch=fake_fetch)
+        assert [r["name"] for r in rows] == ["omp", "agy"], "claude and gh are not here: not listed, not added"
+        omp = rows[0]
+        assert omp["installed"] == "17.2.9" and omp["available"] == "18.4.3" and omp["how"] == "self", omp
+        # W-6 #126 (hub #237): a self-installed agy reads its update server's manifest for this platform, a native
+        # Claude Code the npm dist-tag of its own channel; no answer is "" as before, never an exception.
+        assert rows[1]["available"] == "1.2.15" and fetched and "/manifests/" in fetched[0], (rows[1], fetched)
     assert agy_platform("darwin", "arm64") == "darwin_arm64" and agy_platform("win32", "AMD64") == "windows_amd64"
     assert agy_platform("linux", "aarch64").startswith("linux_arm64") and agy_platform("sunos5", "sparc") == ""
     with tempfile.TemporaryDirectory() as fake_home:
@@ -1198,12 +1271,13 @@ def _selftest_in(tmp):
                                  home=fake_home) == "2.1.285", "the stable channel's newest"
     assert available_version("agy", "/x/agy", "self", "agy", fetch=lambda url, timeout=20: None) == ""
     assert available_version("claude", "/x/claude", "self", "c", fetch=lambda url, timeout=20: {"latest": "oops"}) == ""
-    calls.clear()
-    done = update_tools(env=fake_env, runner=fake)
-    assert [c[1:] for c in calls] == [["update"], ["update"]], calls
-    assert done[0]["ok"] and not done[1]["ok"] and "unreachable" in done[1]["why"], done
-    only = update_tools(only=["omp"], env=fake_env, runner=fake)
-    assert [t["name"] for t in only] == ["omp"], only
+    if os.name != "nt":      # the fake tools again (above): shell scripts, which Windows cannot start
+        calls.clear()
+        done = update_tools(env=fake_env, runner=fake)
+        assert [c[1:] for c in calls] == [["update"], ["update"]], calls
+        assert done[0]["ok"] and not done[1]["ok"] and "unreachable" in done[1]["why"], done
+        only = update_tools(only=["omp"], env=fake_env, runner=fake)
+        assert [t["name"] for t in only] == ["omp"], only
 
     # Libraries: pip is asked to UPGRADE, with the installers' flags.
     assert pip_command("py", "r.txt", in_venv=True)[-3:] == ["--disable-pip-version-check", "-r", "r.txt"]
@@ -1219,7 +1293,8 @@ def _selftest_in(tmp):
           "level); local changes "
           "(new files too) become a "
           "patch that brings them back, sent only when asked, and only then is the clone reset; the update lands "
-          "the tag in refs/tags and refuses a dirty clone or a bad signature; each tool is updated the way it was "
+          "the tag in refs/tags and refuses a dirty clone or a bad signature; the ready file is one line, \\n-ended, "
+          "and the SessionStart hook is silent once it is written; each tool is updated the way it was "
           "installed and a missing one is not added; pip is asked to upgrade with the installers' flags")
     return 0
 

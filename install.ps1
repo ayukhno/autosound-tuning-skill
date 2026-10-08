@@ -44,12 +44,12 @@
 #   .\install.ps1 -Plugin             run from inside a plugin copy (/plugin install): the method IS that copy,
 #                                     checked against its signed release, not cloned (W-6 #120)
 #   .\install.ps1 -Yes                yes to every question; sign-ins are printed, not run
-#   .\install.ps1 -SkillRef v3.0.33   a specific skill version (default: the newest 3.x tag)
+#   .\install.ps1 -SkillRef v3.1.0    a specific skill version (default: the newest 3.x tag)
 #   .\install.ps1 -Channel beta       also release candidates: for the app, and in a SECOND copy of the
 #                                     method that only an app asking for beta runs -- the terminal's
 #                                     copy stays on releases (default: stable, releases only;
 #                                     -SkillRef sets the terminal's copy, -TccRef the app)
-#   .\install.ps1 -TccRef v0.1.22     the app version released WITH that one -- quote the two
+#   .\install.ps1 -TccRef v1.1.0      the app version released WITH that one -- quote the two
 #                                     together or not at all; a mixed pair is untested
 #   .\install.ps1 -Uninstall          remove what this script installed -- NEVER your projects
 #   .\install.ps1 -Uninstall -All     also uv, Claude Code and ~\.claude, agy/gh/omp when this
@@ -242,11 +242,11 @@ Autosound tuning -- installer for Windows
   install.ps1 -Plugin             from inside a plugin copy (/plugin install): the method is that copy,
                                   checked against its signed release, not cloned
   install.ps1 -Yes                yes to every question; sign-ins are printed, not run
-  install.ps1 -SkillRef v3.0.33   a specific skill version (default: the newest 3.x tag)
+  install.ps1 -SkillRef v3.1.0    a specific skill version (default: the newest 3.x tag)
   install.ps1 -Channel beta       also release candidates: for the app, and in a SECOND copy of
                                   the method that only an app asking for beta runs -- the
                                   terminal's copy stays on releases (default: stable)
-  install.ps1 -TccRef v0.1.22     the app version released WITH that one -- quote the two
+  install.ps1 -TccRef v1.1.0      the app version released WITH that one -- quote the two
                                   together or not at all; a mixed pair is untested
   install.ps1 -Uninstall          remove what this script installed -- NEVER your projects
   install.ps1 -Uninstall -All     also uv, Claude Code and ~\.claude, agy/gh/omp when this
@@ -800,7 +800,7 @@ if (-not $HaveGit) {
     Say "Everything goes into your user profile except Git, which installs for the whole PC and"
     Say "asks Windows' permission once (a dialog: click Yes). It signs you in nowhere -- that comes at"
     Say "the end, in your browser -- and never touches a project folder."
-    Say "Downloads $size; 5 to 15 minutes. After the dialog you can walk away."
+    Say "Downloads $size; a few minutes. After the dialog you can walk away."
 } else {
     Say "Everything goes into your user profile. It signs you in nowhere -- that comes at the end,"
     Say "in your browser -- and never touches a project folder."
@@ -1265,6 +1265,17 @@ if ((-not $linkExists) -or $isOurs) {
             Warn "update failed -- see above"
             Stop-Installer 1; return
         }
+        # T-38 (#142): a re-run repairs the junction. Removed -- by hand, by a tidy-up -- it left the method installed
+        # and invisible to Claude Code, while every re-run said "updating". Only a missing one: a link that is not
+        # ours, or a real folder, was left and warned about above, as for a new copy. install.sh's update branch.
+        if (-not $linkExists) {
+            if ($DryRun) {
+                Say "would make the missing junction ~\.claude\skills\autosound-tuning again"
+            } else {
+                Say "the junction ~\.claude\skills\autosound-tuning was missing -- made again"
+                New-Item -ItemType Junction -Path $SkillHome -Target (Join-Path $SkillSrc "skills\autosound-tuning") | Out-Null
+            }
+        }
     } else {
         Say "into ~\.claude\skills\autosound-tuning"
         if (-not $DryRun) { New-Item -ItemType Directory -Force -Path (Split-Path $SkillHome) | Out-Null }
@@ -1358,12 +1369,15 @@ if ($DryRun -and -not (Test-Path $reqs)) {
 Step "Phase 1's desk engine"
 $EnginePy = Join-Path $SkillHome "rew_tool\resonalyze_engine.py"
 $HaveDotnet = (Have dotnet) -or (Test-Path (Join-Path $HOME ".dotnet\dotnet.exe"))
+# T-40 (#142): the SDK builds the wrapper from the method's own checkout -- `git submodule update` fetches the fork --
+# and a plugin copy is none (no .git above it): there "auto" fetches the prebuilt engine, as where there is no SDK.
+$MethodIsCheckout = -not ($PluginRoot -and -not (Test-Path (Join-Path $PluginRoot ".git")))
 $EngineDid = "not reached"
 if ($WantEngine -eq "0") {
     $EngineDid = "not fetched: -NoEngine"
     Say "-NoEngine: not fetched. It builds from the .NET SDK on first use, or later with"
     Say "  `"$Py3`" `"$EnginePy`" fetch-binary --tag $SkillRef"
-} elseif ($WantEngine -eq "auto" -and $HaveDotnet -and -not $DryRun -and (Test-Path $Py3) -and (Test-Path $EnginePy)) {
+} elseif ($WantEngine -eq "auto" -and $MethodIsCheckout -and $HaveDotnet -and -not $DryRun -and (Test-Path $Py3) -and (Test-Path $EnginePy)) {
     # The Arbiter, 2026-09-23: the engine is installed WITH the skill and checked -- built now, not on first use.
     Say "the .NET SDK is here -- building the engine from the method's own checkout now, then running it once"
     Say "(-Engine fetches the prebuilt one instead: no build, no SDK needed)"
@@ -1377,7 +1391,7 @@ if ($WantEngine -eq "0") {
         Warn "the engine did not build or run -- the method is installed and works; Phase 1's desk step waits for it:"
         Warn $engineSaid
     }
-} elseif ($WantEngine -eq "auto" -and $HaveDotnet) {
+} elseif ($WantEngine -eq "auto" -and $MethodIsCheckout -and $HaveDotnet) {
     $EngineDid = "not built: the .NET SDK is here and builds it on first use"
     Say "the .NET SDK is here -- the engine builds from the method's own checkout on first use"
 } elseif (-not (Test-Path $Py3)) {
@@ -1390,14 +1404,18 @@ if ($WantEngine -eq "0") {
     Warn "no $(Pretty $EnginePy) -- the method's checkout is not where this script expects it;"
     Warn "the engine was not fetched, and Phase 1's desk step will ask for one when it is reached"
 } else {
+    if (-not $MethodIsCheckout -and $HaveDotnet) {
+        Say "the .NET SDK is here, but a plugin copy is no checkout to build the engine from -- fetching it"
+    }
     Say "~30 MB for $SkillRef, checked against the release's SHA256SUMS"
     $global:LASTEXITCODE = 0
     & $Py3 $EnginePy fetch-binary --tag $SkillRef
     $engineRc = $LASTEXITCODE
-    # 0 installed (the method printed where it landed) · 4 this release carries none for this
-    # machine · anything else, something went wrong and the install carries on regardless.
+    # fetch-binary's answers (T-44, #142), written into the receipt in install.sh's words: 0 installed -- fetched now,
+    # or already here from this tag, with nothing downloaded -- · 3 refused · 4 none for this machine · 5 no answer;
+    # anything else, something went wrong, and the install carries on regardless.
     if ($engineRc -eq 0) {
-        $EngineDid = "fetched for $SkillRef and checked against SHA256SUMS"
+        $EngineDid = "installed for $SkillRef and checked against SHA256SUMS"
         # ...and run once: a file that matches its checksum can still fail to start on this machine.
         $global:LASTEXITCODE = 0
         $engineSaid = (& $Py3 $EnginePy check 2>&1 | Out-String).Trim()
@@ -1410,9 +1428,17 @@ if ($WantEngine -eq "0") {
             Warn $engineSaid
         }
     }
-    if ($engineRc -eq 4) {
+    if ($engineRc -eq 3) {
+        $EngineDid = "refused: the archive for $SkillRef does not match its SHA256SUMS -- nothing installed"
+        Warn "the engine's archive for $SkillRef does not match its SHA256SUMS -- refused, nothing installed;"
+        Warn "the method is installed and works; Phase 1's desk step is the part that waits for an engine"
+    } elseif ($engineRc -eq 4) {
         $EngineDid = "not fetched: $SkillRef carries no engine for this machine"
         Say "so the engine builds from the .NET SDK when there is one; nothing else is affected"
+    } elseif ($engineRc -eq 5) {
+        $EngineDid = "not fetched: the release could not be reached -- run the installer again later"
+        Warn "the release could not be reached -- run the installer again later; the method is installed and works,"
+        Warn "and Phase 1's desk step is the part that waits for an engine"
     } elseif ($engineRc -ne 0) {
         $EngineDid = "not fetched: fetch-binary failed (code $engineRc)"
         Warn "the engine was not fetched (code $engineRc) -- the method is installed and works;"

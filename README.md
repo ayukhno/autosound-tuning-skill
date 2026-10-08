@@ -45,7 +45,7 @@ The app installs with a single command. For hardware and subscriptions, you'll n
 
 ## How to Install and Start
 
-**By default the installer sets up:** Claude Code, the tuning method with the Python libraries its tools need, the **Autosound TCC** desktop app, and the Gemini reviewer (`agy`). It takes 10–20 minutes. Depending on your system, other installers may ask for permission along the way — that is normal (details in the FAQ).
+**By default the installer sets up:** Claude Code, the tuning method with the Python libraries its tools need, the **Autosound TCC** desktop app, and the Gemini reviewer (`agy`). It takes 10–20 minutes the first time on a Mac without the developer tools, a few minutes otherwise. Depending on your system, other installers may ask for permission along the way — that is normal (details in the FAQ).
 
 **macOS** — open Terminal (⌘-Space, type "terminal", Enter) and paste:
 ```sh

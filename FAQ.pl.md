@@ -91,7 +91,7 @@ Będziesz potrzebować laptopa, mikrofonu pomiarowego, procesora DSP w aucie ora
    ```bash
    curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.1.2/install.sh | bash
    ```
-- W zależności od systemu inne instalatory mogą poprosić o uprawnienia; to normalne. Poczekaj 10–20 minut.
+- W zależności od systemu inne instalatory mogą poprosić o uprawnienia; to normalne. Poczekaj 10–20 minut za pierwszym razem na Macu bez narzędzi programistycznych, w przeciwnym razie kilka minut.
 
 </details>
 
@@ -106,6 +106,8 @@ Będziesz potrzebować laptopa, mikrofonu pomiarowego, procesora DSP w aucie ora
 - W zależności od systemu inne instalatory mogą poprosić o uprawnienia; to normalne. Skrypt utworzy skrót **REW (API on)** na twoim Pulpicie.
 
 </details>
+
+Jak zakończyło się uruchomienie, widać w jego kodzie wyjścia: `0` gotowe · `1` zatrzymano — metoda nie została zainstalowana ani zmieniona · `2` błędna opcja dla `install.sh` albo nieprawidłowy `-Channel` lub `-Plugin` dla `install.ps1` (sam PowerShell odrzuca opcję, której nie zna, z `1`) · `3` zainstalowane, ale niegotowe, ostatnie linie wskazują, czego brakuje i co zrobić.
 
 ### Od instalacji do auta
 

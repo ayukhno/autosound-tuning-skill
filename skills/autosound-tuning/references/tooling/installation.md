@@ -15,13 +15,15 @@ keeps every README and FAQ on the same tag): `install.sh` on macOS/Linux, `insta
 clones the method at the newest `v3.*` release into `~/.claude/skills/.autosound-tuning-src` and links
 `~/.claude/skills/autosound-tuning` at it — a clone plus a symlink, done for you.
 
-* **Update:** run the same one-liner again; it moves the clone to the newest release.
+* **Update:** run the same one-liner again; it moves the clone to the newest release, and makes the
+  `~/.claude/skills/autosound-tuning` link again when it is gone.
 * **Options:** `install.sh --help` / `install.ps1 -Help` (the method only with `--terminal`, the
   GitHub backup with `--github`, the beta channel below).
 * **Phase 1's desk engine comes with it on a machine that cannot build one.** The engine is a
   self-contained binary attached to the tag's own release (~30 MB, one per platform); the installer
-  fetches it **only when there is no .NET SDK** to build the wrapper from, checks it against the
-  release's `SHA256SUMS`, and says which way it went. `--engine` / `-Engine` fetches it anyway,
+  fetches it **only when nothing can build the wrapper** — no .NET SDK, or a plugin copy, which is no git
+  checkout to build from — checks it against the release's `SHA256SUMS`, and says which way it went (a
+  release that does not answer is said too, and a re-run tries again). `--engine` / `-Engine` fetches it anyway,
   `--no-engine` / `-NoEngine` never. A release that carries no archive for this platform or this
   engine pin — only `win-x64`, `win-arm64` and `osx-arm64` are built — is said out loud, and the
   SDK route stands. By hand later, from the method's own folder:

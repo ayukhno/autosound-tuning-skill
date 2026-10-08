@@ -350,21 +350,31 @@ def _sum_for(sums_text, name):
     return None
 
 
+#: `fetch-binary`'s exit code for each of fetch_binary's answers (T-44, #142) -- the installers read it and write the
+#: answer into their receipt: 0 installed · 3 refused, nothing installed · 4 none for this machine · 5 no answer.
+FETCH_EXIT = {"installed": 0, "refused": EXIT_REFUSED, "absent": 4, "unreachable": 5}
+
+
 def fetch_binary(tag, get=_http_get):
     """Fetch THIS pin and platform's prebuilt engine from `tag`'s release, check it, install it.
 
-    `{"status": ..., "detail": ...}`, and the status is the whole point:
+    `{"status": ..., "detail": ...}`, and the status is the whole point (`FETCH_EXIT` gives each its exit code):
 
-    * `installed` -- the digest matched `SHA256SUMS` and the engine is where `engine_command` looks;
+    * `installed` -- the digest matched `SHA256SUMS` and the engine is where `engine_command` looks; or it is there
+      already, fetched from this tag (its mark says so), and nothing is downloaded again (T-44, #142): every re-run of an
+      installer fetched ~30 MB it had;
+    * `refused` -- an archive ARRIVED and its digest disagrees with `SHA256SUMS`: nothing is installed. The one outcome
+      worse than no engine is a binary nobody can account for;
     * `absent` -- that release carries no archive for this pin and platform. Ordinary, not an error: the engine pin
       moves with the submodule rather than with the tag, and only three platforms are built. The SDK is the way then,
       and a caller must SAY which way it went rather than fall through in silence;
-    * `unreachable` -- nothing answered.
-
-    A file that ARRIVES and whose digest disagrees is REFUSED (`SystemExit`), never installed: the one outcome worse
-    than no engine is a binary nobody can account for.
+    * `unreachable` -- nothing answered: a later run may get it, which `absent` will not.
     """
     name = archive_name()
+    exe = os.path.join(installed_dir(), _exe_name())
+    if (_prebuilt_mark() or {}).get("tag") == tag and os.path.isfile(exe) and os.access(exe, os.X_OK):
+        return {"status": "installed", "name": name, "tag": tag, "exe": exe,
+                "detail": f"{name} from {tag} is already installed in {installed_dir()} -- nothing downloaded"}
     base = f"{RELEASE_DOWNLOAD}/{tag}"
     sums, why = get(f"{base}/{SUMS_NAME}")
     if sums is None:
@@ -383,7 +393,8 @@ def fetch_binary(tag, get=_http_get):
                 "detail": f"{name} is listed in {SUMS_NAME} but did not download ({why})"}
     got = hashlib.sha256(blob).hexdigest()
     if got != want:
-        raise SystemExit(f"{name} from {tag} does not match {SUMS_NAME}: {got} != {want} -- nothing was installed")
+        return {"status": "refused", "name": name, "tag": tag,
+                "detail": f"{name} from {tag} does not match {SUMS_NAME}: {got} != {want} -- nothing was installed"}
     with tempfile.TemporaryDirectory() as tmp:
         zip_path = os.path.join(tmp, name)
         with open(zip_path, "wb") as fh:
@@ -2342,9 +2353,110 @@ def _check_chebyshev_solo_refused_on_the_front():
         shutil.rmtree(d, ignore_errors=True)
 
 
+def _check_fetch_binary_answers_in_four_codes():
+    """T-44 (#142): `fetch-binary`'s exit codes, which the installers write into the receipt's `engine`: 0 installed,
+    and 0 again with nothing downloaded once this tag's engine is here · 3 an archive that arrives and is not the one
+    `SHA256SUMS` lists, nothing installed · 4 a release that carries none for this machine · 5 a release that does not
+    answer (127.0.0.1:1). Through `main` and the module's own download (`_http_get`, fetch_binary's `get`), against a
+    release folder served on this machine -- never a real release; the request count is the server's."""
+    import contextlib
+    import functools
+    import http.server
+    import io
+    import threading
+    import zipfile
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr(_exe_name(), "#!/bin/sh\nexit 0\n")
+        z.writestr("License.md", "the fork's licence")
+    archive, name = buf.getvalue(), archive_name()
+    ours = f"{hashlib.sha256(archive).hexdigest()}  ./{name}\n"
+    elsewhere = f"{'0' * 64}  ./resonalyze-engine-{ENGINE_PIN}-somewhere-else.zip\n"
+    root = tempfile.mkdtemp(prefix="autosound_release_")
+    # v9.9.1 and v9.9.5 carry this machine's archive; v9.9.2 only another platform's; v9.9.3 no release at all; v9.9.4
+    # an archive whose bytes are not the ones its SHA256SUMS lists.
+    for tag, sums, blob in (("v9.9.1", ours, archive), ("v9.9.5", ours, archive), ("v9.9.2", elsewhere, None),
+                            ("v9.9.4", ours, b"another build entirely")):
+        os.makedirs(os.path.join(root, tag))
+        with open(os.path.join(root, tag, SUMS_NAME), "wb") as fh:
+            fh.write(sums.encode("utf-8"))
+        if blob is not None:
+            with open(os.path.join(root, tag, name), "wb") as fh:
+                fh.write(blob)
+    asked = []
+
+    class Release(http.server.SimpleHTTPRequestHandler):
+        def do_GET(self):  # noqa: N802 -- the stdlib's name
+            asked.append(self.path)
+            super().do_GET()
+
+        def log_message(self, *args):  # a request is counted, not printed
+            pass
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), functools.partial(Release, directory=root))
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    real = {key: globals()[key] for key in ("RELEASE_DOWNLOAD", "installed_dir")}
+    home = os.path.join(root, "home")
+    saved_proxy = {key: os.environ.get(key) for key in ("no_proxy", "NO_PROXY")}
+    failures = []
+
+    def answer(tag):
+        out, err = io.StringIO(), io.StringIO()
+        try:
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                rc = main(["fetch-binary", "--tag", tag])
+        except SystemExit as exc:  # a refusal that exits instead of answering: what the process would end with
+            rc = exc.code if isinstance(exc.code, int) else 1
+        return rc, (out.getvalue() + err.getvalue()).strip()
+
+    def installed():
+        return sorted(os.listdir(installed_dir())) if os.path.isdir(installed_dir()) else []
+
+    try:
+        os.environ.update(no_proxy="127.0.0.1", NO_PROXY="127.0.0.1")   # this machine's server, never a proxy's
+        globals()["installed_dir"] = lambda: os.path.join(home, "engines", ENGINE_PIN, rid())
+        globals()["RELEASE_DOWNLOAD"] = "http://127.0.0.1:%d" % server.server_address[1]
+        for tag, want, words, what in (("v9.9.2", 4, rid(), "a release with no archive for this machine"),
+                                       ("v9.9.3", 4, SUMS_NAME, "a tag with no release"),
+                                       ("v9.9.4", 3, "nothing was installed", "an archive that is not the listed one")):
+            rc, said = answer(tag)
+            if rc != want or words not in said or installed():
+                failures.append(f"{what} ({tag}): exit {rc}, want {want} and {words!r}, nothing installed -- said "
+                                f"{said[-160:]!r}, installed {installed()}")
+        rc, said = answer("v9.9.1")
+        if rc != 0 or _exe_name() not in installed():
+            failures.append(f"v9.9.1 carries this machine's engine: exit {rc}, want 0 with {_exe_name()} installed -- "
+                            f"said {said[-160:]!r}")
+        asked.clear()
+        rc, said = answer("v9.9.1")
+        if rc != 0 or asked:
+            failures.append(f"v9.9.1 again, its engine already here: exit {rc}, asked the release {asked}, want 0 and "
+                            f"nothing downloaded -- said {said[-160:]!r}")
+        asked.clear()
+        rc, said = answer("v9.9.5")
+        if rc != 0 or not asked:
+            failures.append(f"v9.9.5, the same pin from another tag: exit {rc}, asked {asked} -- another tag's engine "
+                            f"may be another wrapper, so it is fetched")
+        globals()["RELEASE_DOWNLOAD"] = "http://127.0.0.1:1/releases"   # nothing listens there
+        rc, said = answer("v9.9.6")
+        if rc != 5:
+            failures.append(f"a release that does not answer: exit {rc}, want 5 -- said {said[-160:]!r}")
+    finally:
+        globals().update(real)
+        for key, value in saved_proxy.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+        server.shutdown()
+        server.server_close()
+        shutil.rmtree(root, ignore_errors=True)
+    assert not failures, "fetch-binary's answers:\n  " + "\n  ".join(failures)
+
+
 def _selftest():
     failures = []
-    for check in (_check_chebyshev_solo_refused_on_the_front,):
+    for check in (_check_chebyshev_solo_refused_on_the_front, _check_fetch_binary_answers_in_four_codes):
         try:
             check()
         except AssertionError as exc:
@@ -2557,16 +2669,13 @@ def _selftest():
     assert got["status"] == "installed" and got["sha256"] == _digest and got["name"] == _name, got
     assert got["exe_there"] and got["exe_name"] == _exe_name() and got["licence_there"], got
 
-    # A file that ARRIVES and does not match is the one case that must not degrade quietly.
+    # A file that ARRIVES and does not match is the one case that must not degrade quietly: refused, nothing installed.
     def _mismatched():
-        try:
-            fetch_binary("v9.9.9", get=_server((_sums, None), (b"another build entirely", None)))
-        except SystemExit as e:
-            return str(e), glob.glob(os.path.join(installed_dir(), "*"))
-        raise AssertionError("a zip that does not match SHA256SUMS was accepted")
-    (said, left), _ = _with_temp_home(_mismatched)
-    assert SUMS_NAME in said and "nothing was installed" in said, said
-    assert not left, left
+        got = fetch_binary("v9.9.9", get=_server((_sums, None), (b"another build entirely", None)))
+        return got, glob.glob(os.path.join(installed_dir(), "*"))
+    (refused, left), _ = _with_temp_home(_mismatched)
+    assert refused["status"] == "refused" and SUMS_NAME in refused["detail"], refused
+    assert "nothing was installed" in refused["detail"] and not left, (refused, left)
     # A tag whose run attached nothing, a pin no archive was built for, a platform nobody builds:
     # one answer, and it names this machine so the line a person reads says why.
     absent, _ = _with_temp_home(lambda: fetch_binary("v3.0.56", get=_server((None, "HTTP 404"), (None, "HTTP 404"))))
@@ -2889,7 +2998,9 @@ def _selftest():
           "990 Hz; wishes as probes and tunes, the broken and the unsure not computed; a tune's best at the window's "
           "edge and in CAUTION said so; the cross-OS tolerance; the PEQ Q the same on both sides; and the prebuilt "
           "engine fetched by its computed name with the digest checked -- a mismatch refused with nothing installed, "
-          "a release that carries none answered rather than failed; and a wish's whole-configuration variant: the "
+          "a release that carries none answered rather than failed, fetch-binary's 0/3/4/5 through the module's own "
+          "download from a local release, and an engine already here from that tag not downloaded again; and a "
+          "wish's whole-configuration variant: the "
           "settings that stand given rather than searched, the wish's edges at its own junction and nowhere else, "
           "every junction read as it stands, and the answer taken against the best -- delays, polarity and all; and "
           "`engine_status` answers the doctor's question without building anything (S-049)")
@@ -2967,9 +3078,9 @@ def main(argv=None):
         return 0
     if a.cmd == "fetch-binary":
         got = fetch_binary(a.tag)
-        print(f"  {got['status']}: {got['detail']}")
-        # 0 installed · 4 nothing to install, and the caller says which way it went · 3 refused (above, loudly).
-        return 0 if got["status"] == "installed" else 4
+        # 0 installed · 3 refused, said on stderr · 4 none for this machine, 5 no answer: the caller says which way it went.
+        print(f"  {got['status']}: {got['detail']}", file=sys.stderr if got["status"] == "refused" else sys.stdout)
+        return FETCH_EXIT[got["status"]]
     if a.cmd == "acceptance":
         return acceptance(a.set, a.project, keep=a.keep)
     if a.cmd == "smoke":

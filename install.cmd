@@ -28,7 +28,7 @@ REM                                  on a machine with no .NET SDK to build it f
 REM
 REM  To pin versions, pass BOTH as one pair -- they are released and tested
 REM  together, and a mixed pair is untested:
-REM    install.cmd -SkillRef v3.0.33 -TccRef v0.1.22
+REM    install.cmd -SkillRef v3.1.0 -TccRef v1.1.0
 REM
 REM  Plain ASCII on purpose: cmd reads this file in the console code page, and
 REM  a stray non-ASCII byte in an echo line prints as junk.

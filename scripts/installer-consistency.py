@@ -135,6 +135,22 @@ MISSING_NAMES = ("numpy", "scipy", "the method", "the method (2.x line)", "the b
 #: What ENGINE_DID can carry -- the engine's own last line: a quote, a backslash, a tab. The receipt is JSON whatever it
 #: holds: python's builder keeps the tab, escaped; the shell's drops control characters.
 HOSTILE_ENGINE = 'built or run failed: "C:\\dotnet\\sdk" said\tno'
+#: E-pair (#142): the version pair the installers' help shows -- a method and an app released together, the minor pair
+#: the hub's tag ledger records (hub #239). Nine places: install.sh's header and usage each name the method's
+#: (--skill-ref) and the app's (--tcc-ref), install.ps1's the same (-SkillRef, -TccRef), install.cmd's one line both.
+EXAMPLE_PAIR = ("v3.1.0", "v1.1.0")
+EXAMPLE_PLACES = {"install.sh": 2, "install.ps1": 2, "install.cmd": 1}
+#: T-44 (#142): fetch-binary's answers, as the installers write them into the receipt's `engine` -- the same words in
+#: both, `<tag>` the tag's variable in each. Any other code is "fetch-binary failed (code N)".
+ENGINE_ANSWERS = {0: "installed for <tag> and checked against SHA256SUMS",
+                  3: "does not match its SHA256SUMS -- nothing installed",
+                  4: "carries no engine for this machine",
+                  5: "the release could not be reached -- run the installer again later"}
+#: E-time (#142): how long an install takes, said one way -- 10 to 20 minutes only on a Mac without Apple's Command
+#: Line Tools (Apple's ~1 GB, through their own window), a few minutes everywhere else: the installers' plan screen per
+#: machine, and README.md and FAQ.md in this sentence. They said 10-20 for everyone, and install.ps1 5 to 15.
+INSTALL_TIMES = {"install.sh": ["10 to 20 minutes", "a few minutes"], "install.ps1": ["a few minutes", "a few minutes"]}
+INSTALL_TIME_DOCS = "10–20 minutes the first time on a Mac without the developer tools, a few minutes otherwise"
 #: The `python3` a run of `finish` sees: a `plugin-ready` call is written down in $PLUGIN_MARK, anything else goes to
 #: the interpreter running this check -- so the receipt's JSON is built the same way on every platform.
 FAKE_PYTHON3 = ('python3() {\n'
@@ -734,6 +750,37 @@ def checkout_problems(sh, ps1):
     return out
 
 
+def relink_problems(sh, ps1):
+    """T-38 (#142): a re-run repairs the link; [] when both installers' update branch does.
+
+    The branch that updates the method's copy already there made no `~/.claude/skills/autosound-tuning` when it was
+    missing -- removed by hand, or by a tidy-up -- and every re-run said "updating" over a method Claude Code could not
+    see. Each update branch now makes it again, under the test that it is missing (a link that is not ours, and a real
+    folder, were left and warned about before the branch, as for a new copy), and after the update's stops: a stop is
+    "nothing changed". READ, the text's shape: the branch is top-level script, not a function to cut out and run.
+    """
+    out = []
+    branches = (
+        ("install.sh", re.search(r'^elif \[ -d "\$SKILL_SRC/\.git" \]; then\n(.*?)^else\n', sh, re.M | re.S),
+         r"\bstop 1\b", 'ln -s "$SKILL_SRC/skills/autosound-tuning" "$SKILL_HOME"', '[ ! -L "$SKILL_HOME" ]'),
+        ("install.ps1", re.search(r'^    if \(Test-Path \(Join-Path \$SkillSrc "\.git"\)\) \{\n(.*?)^    \} else \{\n', ps1,
+                                  re.M | re.S),
+         r"Stop-Installer 1; return",
+         'New-Item -ItemType Junction -Path $SkillHome -Target (Join-Path $SkillSrc "skills\\autosound-tuning")',
+         "-not $linkExists"))
+    for where, branch, stop_re, link, when_missing in branches:
+        if not branch:
+            out.append(f"{where}: no update branch to read -- the method's copy already there (T-38)")
+            continue
+        body = branch.group(1)
+        last_stop = max((m.end() for m in re.finditer(stop_re, body)), default=0)
+        tail = body[last_stop:]
+        if link not in tail or when_missing not in tail or tail.find(when_missing) > tail.find(link):
+            out.append(f"{where}: the update branch does not make a missing link again after its stops -- want "
+                       f"`{link}` under `{when_missing}` (T-38)")
+    return out
+
+
 def exit_contract_problems(sh, ps1):
     """#142 (T-44, J6a item 4): the exit table and the receipt; [] when both installers keep them.
 
@@ -1134,35 +1181,39 @@ def main():
     # drifted unseen: `install.sh` said `v3.0.3`, `install.ps1` said `v3.0.4`, `install.cmd` said
     # nothing, and every FAQ page copied the pair out of that help text (found 2026-08-26). The
     # example teaches the reader which two versions belong together, so a mismatched pair here
-    # teaches the opposite of the thing the pairing exists for. Same versions in every file that
-    # shows the example, and the skill/app versions quoted as ONE pair.
-    ex_sh = set(re.findall(r"--skill-ref\s+(v[0-9.]+)", sh)) , set(re.findall(r"--tcc-ref\s+(v[0-9.]+)", sh))
-    ex_ps = set(re.findall(r"-SkillRef\s+(v[0-9.]+)", ps1)), set(re.findall(r"-TccRef\s+(v[0-9.]+)", ps1))
-    ex_cmd = set(re.findall(r"-SkillRef\s+(v[0-9.]+)", cmd)), set(re.findall(r"-TccRef\s+(v[0-9.]+)", cmd))
-    for what, a, b in (("skill", ex_sh[0], ex_ps[0]), ("app", ex_sh[1], ex_ps[1])):
-        if not a or not b:
-            problems.append(f"the {what} version example is missing from "
-                            f"{'install.sh' if not a else 'install.ps1'} — the pin example is part "
-                            f"of what the triplet must agree on")
-        elif len(a) > 1 or len(b) > 1:
-            problems.append(f"the {what} version example is not one value — install.sh {sorted(a)}, "
-                            f"install.ps1 {sorted(b)}")
-        elif a != b:
-            problems.append(f"the {what} version example differs — install.sh {a.pop()} vs "
-                            f"install.ps1 {b.pop()}")
-        else:
-            v = a.pop()
-            # install.cmd passes every option through to install.ps1 and lists them, so its own
-            # example must name the same pair -- it is the file a Windows user double-clicks.
-            c = ex_cmd[0] if what == "skill" else ex_cmd[1]
-            if c and c != {v}:
-                problems.append(f"the {what} version example in install.cmd is {sorted(c)}, "
-                                f"not {v} like the other two")
-            elif not c:
-                problems.append(f"install.cmd shows no {what} version example — it lists the "
-                                f"options it forwards, so it must show the same pair")
-            else:
-                checked.append(f"{what} version example agrees in all three ({v})")
+    # teaches the opposite of the thing the pairing exists for. One pair, released together (EXAMPLE_PAIR), in every
+    # place that shows it -- install.cmd's too: it lists the options it forwards, and a Windows user double-clicks it.
+    shown = {"install.sh": (re.findall(r"--skill-ref\s+(v[0-9.]+)", sh), re.findall(r"--tcc-ref\s+(v[0-9.]+)", sh)),
+             "install.ps1": (re.findall(r"-SkillRef\s+(v[0-9.]+)", ps1), re.findall(r"-TccRef\s+(v[0-9.]+)", ps1)),
+             "install.cmd": (re.findall(r"-SkillRef\s+(v[0-9.]+)\s+-TccRef\s+v[0-9.]+", cmd),
+                             re.findall(r"-SkillRef\s+v[0-9.]+\s+-TccRef\s+(v[0-9.]+)", cmd))}
+    off = []
+    for where, (skill, app) in shown.items():
+        if len(skill) != EXAMPLE_PLACES[where] or len(app) != EXAMPLE_PLACES[where]:
+            off.append(f"{where} shows the method's version {len(skill)} time(s) and the app's {len(app)}, want "
+                       f"{EXAMPLE_PLACES[where]} each{' on one line' if where == 'install.cmd' else ''}")
+        off += [f"{where} names {got} for the {what}" for what, got_all, want in
+                (("method", skill, EXAMPLE_PAIR[0]), ("app", app, EXAMPLE_PAIR[1])) for got in got_all if got != want]
+    if off:
+        problems.append(f"the version-pin example is not one pair in all nine places -- want the method's "
+                        f"{EXAMPLE_PAIR[0]} with the app's {EXAMPLE_PAIR[1]}, the minor pair the hub's tag ledger "
+                        f"records (hub #239): " + "; ".join(off))
+    else:
+        checked.append(f"the version-pin example is one pair in all nine places: the method's {EXAMPLE_PAIR[0]} "
+                       f"with the app's {EXAMPLE_PAIR[1]} (install.sh and install.ps1 twice each, install.cmd once)")
+
+    # 4c. how long an install takes, said one way (E-time): the installers' plan screen, and README.md and FAQ.md.
+    times = {"install.sh": re.findall(r"Downloads \$_size; ([^.]+)\.", sh),
+             "install.ps1": re.findall(r"Downloads \$size; ([^.]+)\.", ps1)}
+    off = [f"{where}'s plan screen says {got}, want {INSTALL_TIMES[where]}" for where, got in times.items()
+           if got != INSTALL_TIMES[where]]
+    off += [f"{name} does not say {INSTALL_TIME_DOCS!r}" for name in ("README.md", "FAQ.md")
+            if INSTALL_TIME_DOCS not in read(ROOT / name)]
+    if off:
+        problems.append("the install time is not said one way -- " + "; ".join(off) + " (E-time, #142)")
+    else:
+        checked.append("the install time is said one way: 10 to 20 minutes only on a Mac without Apple's tools, a "
+                       "few minutes everywhere else -- both installers' plan screen, README.md and FAQ.md")
 
     # 4b. install.ps1 stops without closing a one-liner user's window (see ps1_stop_problems).
     stops = ps1_stop_problems(ps1)
@@ -1267,6 +1318,12 @@ def main():
                        "that is not a checkout alone; an update it cannot fetch, or whose local changes it cannot "
                        "keep, answers 1 with the copy where it was (run); install.ps1 the same, and both update paths "
                        "stop on it (read) (T-45, R32)")
+    relinked = relink_problems(sh, ps1)
+    if relinked:
+        problems.extend(relinked)
+    else:
+        checked.append("both installers' update branch makes a missing ~/.claude/skills/autosound-tuning link again, "
+                       "after its stops -- a re-run repairs the link (read) (T-38)")
     # The exit contract (#142): what the run ended as, in its exit code and its receipt.
     contract = exit_contract_problems(sh, ps1)
     if contract:
@@ -1349,14 +1406,30 @@ def main():
         if "fetch-binary --tag" not in text:
             engine.append(f"{where}: no `fetch-binary --tag` — the archive's name and its digest are "
                           "the method's to compute, not an installer's")
-    if not re.search(r'^\s*4\)', sh, re.M) or "$engineRc -eq 4" not in ps1:
-        engine.append("the meaning of exit 4 is not carried by both — a release with no archive for "
-                      "this platform must be said out loud, not read as a failure")
+    # T-44 (#142): each of fetch-binary's answers read by both installers and written into the receipt's engine in the
+    # same words -- 4 (a release with no archive for this platform) is an answer said out loud, not a failure, and 5
+    # (no answer at all) is not 4: a re-run later is what helps.
+    for code, words in ENGINE_ANSWERS.items():
+        if not re.search(rf"^\s*{code}\)", sh, re.M) or f"$engineRc -eq {code}" not in ps1:
+            engine.append(f"fetch-binary's exit {code} is not read by both installers (`{code})` in install.sh, "
+                          f"`$engineRc -eq {code}` in install.ps1)")
+        said = re.escape(words).replace(re.escape("<tag>"), r"\$\w+")
+        engine += [f"{where}: the receipt's engine for fetch-binary's exit {code} does not say {words!r}"
+                   for where, text in (("install.sh", sh), ("install.ps1", ps1)) if not re.search(said, text)]
+    # T-40 (#142): the wrapper is built from the method's own checkout -- `git submodule update` fetches the fork -- and
+    # a plugin copy is none: there `auto` fetches the prebuilt engine, as where there is no SDK. Both build branches
+    # (now, and on first use) ask it.
+    for where, text, gate in (("install.sh", sh, r'"\$WANT_ENGINE" = "auto" \] && \[ "\$METHOD_IS_CHECKOUT" = 1 \]'),
+                              ("install.ps1", ps1, r'\$WantEngine -eq "auto" -and \$MethodIsCheckout\b')):
+        if len(re.findall(gate, text)) != 2:
+            engine.append(f"{where}: `auto` builds the engine in a plugin copy, which no `git submodule update` can "
+                          f"build from -- both build branches must ask that the method is a checkout (T-40)")
     if engine:
         problems.extend(engine)
     else:
-        checked.append("all three agree on the desk engine: fetched only where there is no .NET SDK, "
-                       "by the method's own fetch-binary, exit 4 = this release carries none")
+        checked.append("all three agree on the desk engine: fetched only where nothing can build it -- no .NET SDK, "
+                       "or a plugin copy, which is no checkout (T-40) -- by the method's own fetch-binary, whose "
+                       "0, 3, 4 and 5 both installers write into the receipt in the same words (T-44)")
 
     # 6. the TAG the world is told to paste. HUB-030 moved the one-liners off `main`, and a pinned
     # URL is only worth pinning while it is current: a stale one keeps handing new users a build

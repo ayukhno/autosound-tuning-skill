@@ -91,7 +91,7 @@ Du benötigst einen Laptop, ein Messmikrofon, einen DSP-Prozessor im Auto und ei
    ```bash
    curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.1.2/install.sh | bash
    ```
-- Je nach System fragen andere Installer möglicherweise nach Berechtigungen; das ist normal. Warte 10–20 Minuten.
+- Je nach System fragen andere Installer möglicherweise nach Berechtigungen; das ist normal. Warte beim ersten Mal auf einem Mac ohne die Entwicklertools 10–20 Minuten, ansonsten wenige Minuten.
 
 </details>
 
@@ -106,6 +106,8 @@ Du benötigst einen Laptop, ein Messmikrofon, einen DSP-Prozessor im Auto und ei
 - Je nach System fragen andere Installer möglicherweise nach Berechtigungen; das ist normal. Das Skript erstellt eine Verknüpfung namens **REW (API on)** auf deinem Desktop.
 
 </details>
+
+Wie der Durchlauf endete, steht in seinem Exit-Code: `0` bereit · `1` gestoppt — die Methode wurde nicht installiert oder geändert · `2` eine falsche Option für `install.sh` oder ein ungültiges `-Channel` oder `-Plugin` für `install.ps1` (PowerShell selbst lehnt eine Option, die sie nicht kennt, mit `1` ab) · `3` installiert, aber nicht bereit, die letzten Zeilen nennen, was fehlt und was zu tun ist.
 
 ### Von der Installation ins Auto
 

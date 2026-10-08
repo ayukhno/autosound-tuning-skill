@@ -45,7 +45,7 @@ Aplikację instaluje się jednym poleceniem. Ze sprzętu i subskrypcji będziesz
 
 ## Jak zainstalować i uruchomić
 
-**Domyślnie instalator konfiguruje:** Claude Code, metodę strojenia wraz z bibliotekami Pythona wymaganymi przez jej narzędzia, aplikację desktopową **Autosound TCC** oraz recenzenta Gemini (`agy`). Trwa to 10–20 minut. W zależności od Twojego systemu inne instalatory mogą po drodze poprosić o uprawnienia — to normalne (szczegóły w FAQ).
+**Domyślnie instalator konfiguruje:** Claude Code, metodę strojenia wraz z bibliotekami Pythona wymaganymi przez jej narzędzia, aplikację desktopową **Autosound TCC** oraz recenzenta Gemini (`agy`). Trwa to 10–20 minut za pierwszym razem na Macu bez narzędzi programistycznych, w przeciwnym razie kilka minut. W zależności od Twojego systemu inne instalatory mogą po drodze poprosić o uprawnienia — to normalne (szczegóły w FAQ).
 
 **macOS** — otwórz Terminal (⌘-Spacja, wpisz „terminal”, Enter) i wklej:
 ```sh
@@ -76,6 +76,7 @@ a na Windows, w dwóch wierszach:
 $i = irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.1.2/install.ps1
 & ([scriptblock]::Create($i)) -WithOmp -GitHub
 ```
+**Jak się zakończyło**, widać w kodzie wyjścia instalatora: `0` gotowe · `1` zatrzymano — metoda nie została zainstalowana ani zmieniona · `2` błędna opcja dla `install.sh` albo nieprawidłowy `-Channel` lub `-Plugin` dla `install.ps1` (sam PowerShell odrzuca opcję, której nie zna, z `1`) · `3` zainstalowane, ale niegotowe, jego ostatnie linie wskazują, czego brakuje i co zrobić.
 
 **Korzystasz już z Claude Code?** Metodę można zainstalować także jako wtyczkę:
 ```sh

@@ -38,12 +38,12 @@
 #                                    it is checked against its signed release and not cloned; everything else as
 #                                    usual (W-6 #120) -- what /autosound-tuning:setup runs
 #   ./install.sh --yes               yes to every question; sign-ins are printed, not run
-#   ./install.sh --skill-ref v3.0.33 a specific skill version (default: the newest 3.x tag)
+#   ./install.sh --skill-ref v3.1.0  a specific skill version (default: the newest 3.x tag)
 #   ./install.sh --channel beta      also release candidates: for the app, and in a SECOND copy of the
 #                                    method that only an app asking for beta runs -- the terminal's
 #                                    copy stays on releases (default: stable, releases only;
 #                                    --skill-ref sets the terminal's copy, --tcc-ref the app)
-#   ./install.sh --tcc-ref v0.1.22   the app version released WITH that one — quote the two
+#   ./install.sh --tcc-ref v1.1.0    the app version released WITH that one — quote the two
 #                                    together or not at all; a mixed pair is untested
 #   ./install.sh --uninstall         remove what this script installed — NEVER your projects
 #   ./install.sh --uninstall --all   also uv, Claude Code and ~/.claude, agy/gh/omp when this
@@ -176,11 +176,11 @@ Autosound tuning — installer for macOS (and Linux)
                                  .NET SDK could build it (default: fetched only when there is no SDK)
   install.sh --dry-run           say what it would do, change nothing
   install.sh --yes               yes to every question; sign-ins are printed, not run
-  install.sh --skill-ref v3.0.33 a specific skill version (default: the newest 3.x tag)
+  install.sh --skill-ref v3.1.0  a specific skill version (default: the newest 3.x tag)
   install.sh --channel beta      also release candidates: for the app, and in a SECOND copy of
                                  the method that only an app asking for beta runs -- the
                                  terminal's copy stays on releases (default: stable)
-  install.sh --tcc-ref v0.1.22   the app version released WITH that one — quote the two
+  install.sh --tcc-ref v1.1.0    the app version released WITH that one — quote the two
                                  together or not at all; a mixed pair is untested
   install.sh --uninstall         remove what this script installed — NEVER your projects
   install.sh --uninstall --all   also uv, Claude Code and ~/.claude, agy/gh/omp when this script
@@ -1249,6 +1249,18 @@ elif [ -d "$SKILL_SRC/.git" ]; then
   # R32: not fetched, or local changes not kept -- the copy is where it was, and that is a stop, as a failed new copy.
   if [ "$_co_rc" = 1 ]; then stop 1 "update failed -- see above"; fi
   if [ "$_co_rc" != 0 ]; then stop 1 "stopped: the method could not be put on $SKILL_REF -- see above; it is back where it was"; fi
+  # T-38 (#142): a re-run repairs the link. Removed -- by hand, by a tidy-up -- it left the method installed and
+  # invisible to Claude Code, while every re-run said "updating". Only a missing one: a link that is not ours, or a
+  # real folder, was left and warned about above, as for a new copy.
+  if [ ! -L "$SKILL_HOME" ]; then
+    if [ "$DRY_RUN" = 1 ]; then
+      say "  would make the missing link ~/.claude/skills/autosound-tuning again"
+    else
+      say "  the link ~/.claude/skills/autosound-tuning was missing — made again"
+      rm -f "$SKILL_HOME"
+      ln -s "$SKILL_SRC/skills/autosound-tuning" "$SKILL_HOME"
+    fi
+  fi
 else
   say "  into ~/.claude/skills/autosound-tuning"
   if [ "$DRY_RUN" = 0 ]; then mkdir -p "$(dirname "$SKILL_HOME")"; fi
@@ -1347,12 +1359,17 @@ fi
 step "Phase 1's desk engine"
 ENGINE_PY="${SKILL_REAL:-$SKILL_HOME}/rew_tool/resonalyze_engine.py"
 have_dotnet() { find_bin dotnet >/dev/null 2>&1 || [ -x "$HOME/.dotnet/dotnet" ]; }
+# T-40 (#142): the SDK builds the wrapper from the method's own checkout -- `git submodule update` fetches the fork --
+# and a plugin copy is none (no .git above it): there `auto` fetches the prebuilt engine, as where there is no SDK.
+METHOD_IS_CHECKOUT=1
+if [ -n "$PLUGIN_ROOT" ] && [ ! -e "$PLUGIN_ROOT/.git" ]; then METHOD_IS_CHECKOUT=0; fi
 ENGINE_DID=""
 if [ "$WANT_ENGINE" = 0 ]; then
   ENGINE_DID="not fetched: --no-engine"
   say "  --no-engine: not fetched. It builds from the .NET SDK on first use, or later with"
   say "    python3 $(pretty "$ENGINE_PY") fetch-binary --tag $SKILL_REF"
-elif [ "$WANT_ENGINE" = "auto" ] && have_dotnet && [ "$DRY_RUN" = 0 ] && usable python3 && [ -f "$ENGINE_PY" ]; then
+elif [ "$WANT_ENGINE" = "auto" ] && [ "$METHOD_IS_CHECKOUT" = 1 ] && have_dotnet && [ "$DRY_RUN" = 0 ] && usable python3 \
+     && [ -f "$ENGINE_PY" ]; then
   # The Arbiter, 2026-09-23: the engine is installed WITH the skill and checked -- built now, not on first use.
   say "  the .NET SDK is here — building the engine from the method's own checkout now, then running it once"
   say "  (--engine fetches the prebuilt one instead: no build, no SDK needed)"
@@ -1364,7 +1381,7 @@ elif [ "$WANT_ENGINE" = "auto" ] && have_dotnet && [ "$DRY_RUN" = 0 ] && usable 
     warn "the engine did not build or run — the method is installed and works; Phase 1's desk step waits for it:"
     warn "$(printf '%s' "$ENGINE_SAID" | tail -3)"
   fi
-elif [ "$WANT_ENGINE" = "auto" ] && have_dotnet; then
+elif [ "$WANT_ENGINE" = "auto" ] && [ "$METHOD_IS_CHECKOUT" = 1 ] && have_dotnet; then
   ENGINE_DID="not built: the .NET SDK is here and builds it on first use"
   say "  the .NET SDK is here — the engine builds from the method's own checkout on first use"
 elif ! usable python3; then
@@ -1377,11 +1394,15 @@ elif [ ! -f "$ENGINE_PY" ]; then
   warn "no $(pretty "$ENGINE_PY") — the method's checkout is not where this script expects it;"
   warn "the engine was not fetched, and Phase 1's desk step will ask for one when it is reached"
 else
+  [ "$METHOD_IS_CHECKOUT" = 1 ] || ! have_dotnet \
+    || say "  the .NET SDK is here, but a plugin copy is no checkout to build the engine from — fetching it"
   say "  ~30 MB for $SKILL_REF, checked against the release's SHA256SUMS"
   ENGINE_RC=0
   python3 "$ENGINE_PY" fetch-binary --tag "$SKILL_REF" || ENGINE_RC=$?
+  # fetch-binary's answers (T-44, #142), written into the receipt in install.ps1's words: 0 installed -- fetched now, or
+  # already here from this tag, with nothing downloaded -- · 3 refused · 4 none for this machine · 5 no answer.
   case "$ENGINE_RC" in
-    0) ENGINE_DID="fetched for $SKILL_REF and checked against SHA256SUMS"
+    0) ENGINE_DID="installed for $SKILL_REF and checked against SHA256SUMS"
        # ...and run once: a file that matches its checksum can still fail to start on this machine.
        if ENGINE_SAID="$(python3 "$ENGINE_PY" check 2>&1)"; then
          ENGINE_DID="$ENGINE_DID; it runs"
@@ -1391,8 +1412,14 @@ else
          warn "the engine was fetched but does not run here — Phase 1's desk step waits for it:"
          warn "$(printf '%s' "$ENGINE_SAID" | tail -3)"
        fi ;;
+    3) ENGINE_DID="refused: the archive for $SKILL_REF does not match its SHA256SUMS -- nothing installed"
+       warn "the engine's archive for $SKILL_REF does not match its SHA256SUMS — refused, nothing installed;"
+       warn "the method is installed and works; Phase 1's desk step is the part that waits for an engine" ;;
     4) ENGINE_DID="not fetched: $SKILL_REF carries no engine for this machine"
        say "  so the engine builds from the .NET SDK when there is one; nothing else is affected" ;;
+    5) ENGINE_DID="not fetched: the release could not be reached -- run the installer again later"
+       warn "the release could not be reached -- run the installer again later; the method is installed and works,"
+       warn "and Phase 1's desk step is the part that waits for an engine" ;;
     *) ENGINE_DID="not fetched: fetch-binary failed (code $ENGINE_RC)"
        warn "the engine was not fetched (code $ENGINE_RC) — the method is installed and works;"
        warn "Phase 1's desk step is the part that waits for an engine" ;;

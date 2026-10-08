@@ -91,7 +91,7 @@ You will need a laptop, a measurement microphone, a DSP processor in the car, an
    ```bash
    curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.1.2/install.sh | bash
    ```
-- Depending on the system, other installers may ask for permission; this is normal. Wait 10–20 minutes.
+- Depending on the system, other installers may ask for permission; this is normal. Wait 10–20 minutes the first time on a Mac without the developer tools, a few minutes otherwise.
 
 </details>
 
