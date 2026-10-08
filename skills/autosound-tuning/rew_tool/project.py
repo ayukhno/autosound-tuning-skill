@@ -940,8 +940,8 @@ class Project:
         channel with nothing `validate` would refuse; a glossary block carries a `schema_version` of its own (1), and is
         a block all the same. A refusal raised in `fn` writes nothing and comes out as it is. Returns what was saved, or,
         when unchanged, the facts as they stand. `fn` runs with the lock held, so nothing slow goes in it -- REW, git, a
-        subprocess -- and it changes only the facts it is given: another writer of this project called from it would
-        land first and be written over by this save."""
+        subprocess -- and it changes only the facts it is given: another writer of this `project.json` called from it
+        would land first and be written over by this save (a journal or a ledger written from it stays)."""
         with _hold(self.dir):
             data = self.load()
             got = fn(data)

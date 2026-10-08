@@ -396,8 +396,10 @@ usage on stdout, exit 0.
   the lock, with a `note:` line on stderr once per process for each folder; a hold on a project folder that is not
   there makes nothing; one where the lock cannot be made (a project folder this user may not write, a read-only disk)
   is refused, exit 1, in one line: `error: <path> cannot be made for the project's writer lock (<why>), so nothing was
-  written -- <repair>`. A writer's own refusals of its input (`done` on prose alone, `skip` with no reason) come under
-  the hold too, so behind a held lock they answer 75 first.
+  written -- <repair>`, and so is a new project folder `enter-phase -1` cannot make (under a parent this user may not
+  write), nothing made: `error: <folder> cannot be made (<why>), so nothing was written -- <repair>`. A writer's own
+  refusals of its input (`done` on prose alone, `skip` with no reason) come under the hold too, so behind a held lock
+  they answer 75 first.
 - **A process folder that does not exist starts nothing** (#141, W-8's R46; `Process._require_home`). A mistyped path,
   `<project>/process-typo`, got a state and a journal of its own from the first verb that wrote there. Now every verb
   that writes is refused on a folder that does not exist, exit 1, before anything is made -- no folder, no
@@ -410,11 +412,10 @@ usage on stdout, exit 0.
 
   A `process` folder beside a `project.json` is the project's first process write, and goes through: a project TCC's
   new-project dialog seeds holds `project.json` before any verb. TCC's project gate also takes an empty folder, and at
-  a session's start runs `session-start`, then `enter-phase -1`, in one `try`: both go through there, where
-  `session-start` was refused and the second never ran. A mistyped `process-typo`, and `session-start` on a project
-  folder that is not there, stay refused. `project.py record-change` refuses the same way, exit 1, in one line (it
-  appends to the journal outside `_locked`), and so does `capture-import`, before it asks REW for a series' titles.
-  The verbs that only read make nothing either.
+  a session's start runs `session-start`, then `enter-phase -1`, in one `try`: both go through there. A mistyped
+  `process-typo`, and `session-start` on a project folder that is not there, stay refused. `project.py record-change`
+  refuses the same way, exit 1, in one line (it appends to the journal outside `_locked`), and so does
+  `capture-import`, before it asks REW for a series' titles. The verbs that only read make nothing either.
 - **`capture-close` closes the round it read** (#141, R7, R9). It reads the open round once, before REW -- no round
   open is refused there, before a line is printed -- and takes the lock for each of its stages: the reconcile against
   REW (when REW's list was read), the checks (when the round holds taken captures), the close; each is held to the
@@ -499,12 +500,13 @@ usage on stdout, exit 0.
 `enter-phase` reads by the same rule. A gate that cannot check refuses the phase; it used to let it in ("a checker
 that raises must not become a wall"), on the damaged projects most of all.
 
-- **The intake gate** (leaving −1): a `contract.py` that cannot be loaded refuses with `phase N is not entered: the
-  intake check could not be loaded (<type>: <message>) -- the install is broken, not the project`; a check that raises
-  refuses with `phase N is not entered: the intake check raised <type>: <message>`; a file the check found unreadable
-  raises as itself, with its own repair, and a `project.json` that is there and cannot be read refuses as itself too,
-  `phase N is not entered: <file> exists and cannot be read: ...` (#134, F M-5: it said the glossary inside it was not
-  produced). So does a standalone `glossary.json`, `phase N is not entered: <file> <reason> -- <repair>` (batch 4's
+- **The intake gate** (leaving −1): a `contract.py` that cannot be loaded refuses with `error: phase N is not entered:
+  the intake check could not be loaded (<type>: <message>) -- the install is broken, not the project`; a check that
+  raises refuses with `error: phase N is not entered: the intake check raised <type>: <message>`; a file the check found
+  unreadable raises as itself, with its own repair, and a `project.json` that is there and cannot be read refuses as
+  itself too, `error: phase N is not entered: <file> exists and cannot be read: ...` (#134, F M-5: it said the glossary
+  inside it was not produced). So does a standalone `glossary.json`, `error: phase N is not entered: <file> <reason> --
+  <repair>` (batch 4's
   re-review N4): read as no glossary, it let the phase in beside `project.json`'s own glossary, or was "not produced".
   Otherwise it still gates on `missing`; gating on `complete`, with a parity test against `contract.py check --gate`, is
   J3b (W-11). The check runs on every move forward, not on leaving −1 alone: a `glossary.json` cut after phase 0 was
