@@ -107,6 +107,8 @@ You will need a laptop, a measurement microphone, a DSP processor in the car, an
 
 </details>
 
+How the run ended is in its exit code: `0` ready · `1` stopped — the method was not installed or changed · `2` a wrong option · `3` installed but not ready, the last lines naming what is missing and what to do.
+
 ### From installation to the car
 
 1. **Sign in.** The installer's last step opens your browser twice: Claude, then Google for the reviewer (and GitHub if you asked for it). Skipped one? Run the installer again — it offers the sign-ins again.

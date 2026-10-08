@@ -1746,13 +1746,45 @@ def _check_private_writer_goes_through_the_move():
     assert not failures, "\n  ".join(["a writer item 8 lists does not go through the move:"] + failures)
 
 
+def _check_receipt_says_how_the_install_ended():
+    """#142: the receipt's line says how the installer's last run ended -- `status` (ready, not ready, stopped) and
+    the parts `missing` -- with the installer's version and the python3 it judged the libraries with. A receipt written
+    before those fields (up to v3.1.2) reads as it did, and says nothing of an end it does not carry."""
+    d = tempfile.mkdtemp(prefix="autosound_receipt_end_")
+    try:
+        path = os.path.join(d, "install-receipt.json")
+        old = {"installer": "install.sh", "installer_sha256": "ab" * 32, "method_ref": "v3.0.60",
+               "at": "2026-09-23T00:00:00Z", "platform": "Darwin-arm64", "engine": "not fetched: --no-engine"}
+        ends = (
+            (dict(old, installer_version="3.1.3", status="not ready", missing=["numpy", "scipy"],
+                  python="/usr/bin/python3 3.12.3"),
+             ("стан: not ready", "бракує: numpy, scipy", "install.sh 3.1.3", "/usr/bin/python3 3.12.3"), ()),
+            (dict(old, installer_version="3.1.3", status="ready", missing=[], python="/usr/bin/python3 3.9.6"),
+             ("стан: ready",), ("бракує",)),
+            (dict(old, installer_version="3.1.3", status="stopped", missing=[], python="no python3"),
+             ("стан: stopped", "no python3"), ("бракує",)),
+            (old, ("install.sh", "v3.0.60", "not fetched: --no-engine"), ("стан", "бракує", "python3:")),
+        )
+        failures = []
+        for receipt, words, never in ends:
+            with open(path, "w", encoding="utf-8") as fh:
+                json.dump(receipt, fh)
+            said = receipt_line(path)
+            lost = [w for w in words if w not in said] + [f"not {w!r}" for w in never if w in said]
+            if lost:
+                failures.append(f"{receipt.get('status', 'an older receipt')}: {lost} -- said {said!r}")
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+    assert not failures, "\n  ".join(["the receipt's line, over how the install ended:"] + failures)
+
+
 def _selftest():
     """Offline: a retired model becomes a CHOICE carrying the key's list (never a fall-through),
     the list is parsed from the API's shape, and a run with a key and no model stops on the list."""
     failures = []
     for check in (_check_review_names_unique, _check_step_aside_refused_remove,
                   _check_step_aside_names_the_answers_name, _check_engine_line_optional,
-                  _check_private_writer_goes_through_the_move):
+                  _check_private_writer_goes_through_the_move, _check_receipt_says_how_the_install_ended):
         try:
             check()
         except AssertionError as exc:
@@ -3179,7 +3211,9 @@ def receipt_path():
 
 
 def receipt_line(path=None):
-    """What the last installer run said it did, in one line, or that none left a receipt (S-049)."""
+    """What the last installer run said it did, in one line, or that none left a receipt (S-049). From v3.1.3 the
+    receipt also carries the installer's version, the python3 it judged the libraries with, and how the run ended
+    (#142): `status` -- ready, not ready, stopped -- and the parts `missing`. A receipt without them reads as before."""
     path = path or receipt_path()
     try:
         with open(path, encoding="utf-8-sig") as fh:
@@ -3189,9 +3223,20 @@ def receipt_line(path=None):
                 "зробив із рушієм, машина не каже")
     except (OSError, ValueError) as exc:
         return f"· Квитанція інсталятора не читається ({path}): {exc}"
+    if not isinstance(r, dict):
+        return f"· Квитанція інсталятора не читається ({path}): not a JSON object"
     sha = (r.get("installer_sha256") or "")[:12]
-    return (f"· Інсталятор: {r.get('installer')}{f' (sha256 {sha}…)' if sha else ''} для {r.get('method_ref')}, "
-            f"{r.get('at')}, {r.get('platform')}; рушій: {r.get('engine')}")
+    version = r.get("installer_version")
+    line = (f"· Інсталятор: {r.get('installer')}{f' {version}' if version else ''}"
+            f"{f' (sha256 {sha}…)' if sha else ''} для {r.get('method_ref')}, {r.get('at')}, {r.get('platform')}; "
+            f"рушій: {r.get('engine')}")
+    if r.get("python"):
+        line += f"; python3: {r['python']}"
+    if r.get("status"):
+        missing = r.get("missing") or []
+        missing = [missing] if isinstance(missing, str) else [str(m) for m in missing]
+        line += f"; стан: {r['status']}" + (f" — бракує: {', '.join(missing)}" if missing else "")
+    return line
 
 
 def _engine_lines():

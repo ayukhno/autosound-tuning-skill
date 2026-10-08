@@ -82,6 +82,10 @@ TCC_TAG_GLOB="v*"
 TCC_BETA_GLOB="beta-v*"
 #: The uv release this installer pins. See the note beside the download for how to raise it.
 UV_VERSION="0.12.10"
+#: This installer's own version, written into its receipt (#142): the sha256 there is empty under `curl | bash`, where
+#: no file stands behind $0. Held equal to install.ps1's $InstallerVersion and to .claude-plugin/plugin.json's version
+#: by installer-consistency.py; the release's bookkeeping moves all three.
+INSTALLER_VERSION="3.1.2"
 TCC_REPO="https://github.com/ayukhno/autosound-tcc"
 SKILL_HOME="${HOME}/.claude/skills/autosound-tuning"
 # The repo lives beside the skill and the skill POINTS at it. Cloning and then moving the
@@ -145,6 +149,9 @@ CHANNEL="stable"
 # Same idea for the app: empty means "the newest release", not "whatever is on main".
 # Resolved beside the install itself, where the app is actually asked for.
 TCC_REF=""
+#: The parts this run leaves not ready, by their short names, ", "-joined (#142): each check that finds one says why
+#: and adds it with `missing`; `finish` reads this and nothing else -- empty is exit 0, anything else exit 3.
+MISSING=""
 # Saved before anything is installed: the uv step exports ~/.local/bin into THIS script's PATH so
 # the rest of the run can call what it just installed. That made the summary print "✓
 # autosound-tcc installed" to somebody whose own shell could not find it, because the check was
@@ -368,6 +375,128 @@ broken_tool() {  # broken_tool <tool>: present, the tools installed, and it does
   on_mac && have "$1" && xcode-select -p >/dev/null 2>&1 && ! runs_ok "$1"
 }
 clt_present() { if on_mac; then xcode-select -p >/dev/null 2>&1; else return 0; fi; }
+
+# ── how the run ends (#142) ───────────────────────────────────────────────────
+# The exit code a script reads: 0 ready · 1 stopped -- the method was not installed or not changed (the steps before
+# it, Apple's tools and Claude Code, may have run) · 2 a usage error, before anything ran · 3 installed, NOT ready, the
+# missing parts named. A stop and the end each write the receipt; a usage error writes none.
+
+# <text> as a JSON string: `\` and `"` escaped, control characters dropped. sed, byte by byte, and not ${var//}: bash
+# 5.2's patsub_replacement gives `&` and `\` in a replacement meanings of their own.
+json_str() {  # json_str <text>
+  printf '"%s"' "$(printf '%s' "$1" | LC_ALL=C tr -d '\001-\037' | LC_ALL=C sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')"
+}
+
+# The installer's RECEIPT (S-049, #142): which install.sh ran -- its version, and its sha256 when it ran as a file --
+# for which method tag, what it did about the engine, the python3 the method runs on, and how the run ended: `ready`,
+# `not ready` (`missing` names the parts) or `stopped`. Answering "why is there no engine on this MacBook" took four
+# exchanges, because nothing on the machine said which installer had run -- an old bookmarked URL installs old logic
+# while the method itself updates to the newest tag. `doctor` reads it back. Its fields, in their order, are
+# install.ps1's; JSON from python3 when one runs, and built here when none does -- the engine's line is a tool's own
+# words. Written by `stop` and `finish`, never in a dry run; a receipt that cannot be written stops nothing.
+write_receipt() {  # write_receipt ready|"not ready"|stopped
+  [ "${DRY_RUN:-0}" = 1 ] && return 0
+  _wr_status="$1"; _wr_ver=""; _wr_json=""
+  _wr_dir="${XDG_DATA_HOME:-$HOME/.local/share}/autosound"
+  mkdir -p "$_wr_dir" 2>/dev/null || return 0
+  _wr_sha="$( (shasum -a 256 "$0" 2>/dev/null || sha256sum "$0" 2>/dev/null) | awk '{print $1}')" || _wr_sha=""
+  if usable python3; then
+    _wr_ver="$(python3 -c 'import sys; print("%d.%d.%d" % sys.version_info[:3])' 2>/dev/null)" || _wr_ver=""
+    _wr_python="$(command -v python3) ${_wr_ver:-does not run}"
+  elif have python3; then
+    _wr_python="$(command -v python3) does not run"
+  else
+    _wr_python="no python3"
+  fi
+  set -- install.sh "$_wr_sha" "${SKILL_REF:-}" "${MODE:-}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+         "$(uname -s)-$(uname -m)" "${ENGINE_DID:-not reached}" "${INSTALLER_VERSION:-}" "$_wr_status" \
+         "${MISSING:-}" "$_wr_python"
+  if [ -n "$_wr_ver" ]; then
+    _wr_json="$(python3 -c 'import json, sys
+keys = ("installer", "installer_sha256", "method_ref", "mode", "at", "platform", "engine", "installer_version",
+        "status", "missing", "python")
+receipt = dict(zip(keys, sys.argv[1:]))
+receipt["missing"] = [part for part in receipt["missing"].split(", ") if part]
+print(json.dumps(receipt))' "$@" 2>/dev/null)" || _wr_json=""
+  fi
+  if [ -z "$_wr_json" ]; then
+    _wr_list=""; _wr_rest="${MISSING:-}"
+    while [ -n "$_wr_rest" ]; do
+      _wr_one="${_wr_rest%%, *}"
+      if [ "$_wr_one" = "$_wr_rest" ]; then _wr_rest=""; else _wr_rest="${_wr_rest#*, }"; fi
+      _wr_list="${_wr_list:+$_wr_list, }$(json_str "$_wr_one")"
+    done
+    _wr_fmt='{"installer": %s, "installer_sha256": %s, "method_ref": %s, "mode": %s, "at": %s, "platform": %s, '
+    _wr_fmt="$_wr_fmt"'"engine": %s, "installer_version": %s, "status": %s, "missing": [%s], "python": %s}'
+    # shellcheck disable=SC2059  # the format is the two lines above, never a value
+    _wr_json="$(printf "$_wr_fmt" "$(json_str "$1")" "$(json_str "$2")" "$(json_str "$3")" "$(json_str "$4")" \
+      "$(json_str "$5")" "$(json_str "$6")" "$(json_str "$7")" "$(json_str "$8")" "$(json_str "$9")" "$_wr_list" \
+      "$(json_str "${11}")")"
+  fi
+  printf '%s\n' "$_wr_json" 2>/dev/null >"$_wr_dir/install-receipt.json" || true
+  return 0
+}
+
+# A stop: each line said, the receipt written as `stopped`, and the run ends with <code> -- 1, the method not installed
+# or not changed. Inside $(...) (pick_method_ref's) the receipt is written from the subshell; the caller carries the
+# code out.
+stop() {  # stop <code> <line> [<line>...]
+  _st_code="$1"; shift
+  for _st_line in "$@"; do warn "$_st_line"; done
+  write_receipt stopped
+  exit "$_st_code"
+}
+
+# A part this run leaves not ready, by its short name: numpy, scipy, the method, the method (2.x line), the beta copy,
+# TCC, Claude Code -- the names install.ps1's Add-Missing records. The check that calls it has said why.
+missing() { MISSING="${MISSING:+$MISSING, }$1"; }
+
+# The run's last statement: the verdict, last on screen, then the receipt, the plugin's note and the exit code -- 0
+# `Installed.`, or 3 `Installed, NOT ready: <names>` with a line for each saying what to do. A dry run did nothing: it
+# says so and ends 0, with no receipt.
+finish() {
+  say ""
+  if [ "${DRY_RUN:-0}" = 1 ]; then say "Nothing was installed — this was a dry run."; exit 0; fi
+  if [ -z "${MISSING:-}" ]; then
+    say "Installed."
+    write_receipt ready
+    # --plugin: this version is verified and set up -- the plugin's SessionStart hook stops offering the setup (#120).
+    # Only here: an install that is not ready keeps the note coming back.
+    if [ -n "${PLUGIN_ROOT:-}" ]; then
+      python3 "$SKILL_HOME/scripts/upkeep.py" plugin-ready --root "$PLUGIN_ROOT" \
+        || warn "could not write down that v$PLUGIN_VERSION is set up -- the next session will offer the setup again"
+    fi
+    exit 0
+  fi
+  say "Installed, NOT ready: $MISSING"
+  _fi_rest="$MISSING"
+  while [ -n "$_fi_rest" ]; do
+    _fi_one="${_fi_rest%%, *}"
+    if [ "$_fi_one" = "$_fi_rest" ]; then _fi_rest=""; else _fi_rest="${_fi_rest#*, }"; fi
+    case "$_fi_one" in
+      numpy|scipy)
+        warn "$_fi_one is not importable by $(command -v python3 2>/dev/null || echo python3) -- the libraries' step" \
+             "above says why; install it for that python3, then run this again" ;;
+      "the method")
+        warn "no tuning method at $(pretty "$SKILL_HOME") -- the method's step above says why; run this again" ;;
+      "the method (2.x line)")
+        warn "$(pretty "$SKILL_HOME") is the 2.x line, which TCC cannot drive -- move it aside, then run this again" ;;
+      "the beta copy")
+        warn "no beta channel copy at $(pretty "$SKILL_BETA_SRC") -- an app asking for beta has nothing to run;" \
+             "run this again" ;;
+      TCC)
+        warn "the app was not installed${TCC_REFUSED:+: $TCC_REFUSED} -- the app's block above says why; the method" \
+             "is installed and works without it" ;;
+      "Claude Code")
+        warn "Claude Code is not installed; nothing can run a session without it -- when the network is back:" \
+             " curl -fsSL https://claude.ai/install.sh | sh" ;;
+      *) warn "$_fi_one" ;;
+    esac
+  done
+  [ -z "${PLUGIN_ROOT:-}" ] || warn "the plugin's set-up note comes back at the next session until an install is ready"
+  write_receipt "not ready"
+  exit 3
+}
 
 # THIS SCRIPT NEVER ASKS FOR YOUR PASSWORD. It used to: `sudo -v` read the password straight out
 # of a `curl … | bash` pipe, and a background loop re-stamped the ticket every 50 seconds to keep
@@ -674,15 +803,13 @@ say "  What is here, and what will be installed:"
 if on_mac; then
   if [ "$HAVE_CLT" = 1 ] && broken_tool git; then
     step "Apple's Command Line Tools are installed, but git does not run"
-    say "  it said: $RUNS_OK_SAID"
-    say "  A macOS update can leave the tools like this. A working git:  brew install git"
-    say "  (this installer and the app pick /opt/homebrew/bin first), then run this again."
-    exit 1
+    stop 1 "it said: $RUNS_OK_SAID" \
+           "A macOS update can leave the tools like this. A working git:  brew install git" \
+           "(this installer and the app pick /opt/homebrew/bin first), then run this again."
   elif [ "$HAVE_CLT" = 1 ]; then say "    ✓ Apple's Command Line Tools (git)"; else say "    – Apple's Command Line Tools (git)   will install"; fi
 elif ! usable git; then
   step "git is required and is not installed"
-  say "  Install git with your package manager, then run this again."
-  exit 1
+  stop 1 "Install git with your package manager, then run this again."
 fi
 if [ "$HAVE_CLAUDE" = 1 ]; then say "    ✓ Claude Code"; else say "    – Claude Code                        will install"; fi
 if [ "$MODE" = "tcc" ]; then
@@ -825,9 +952,8 @@ if on_mac && [ "$HAVE_CLT" = 0 ]; then
         sleep 10; _waited=$((_waited + 10))
         [ $((_waited % 120)) -eq 0 ] && say "  still waiting for the Command Line Tools… ($((_waited / 60)) min)"
         if [ "$_waited" -ge 2400 ]; then
-          warn "40 minutes and no Command Line Tools. When that window has finished, run the same"
-          warn "install line again — everything already downloaded stays."
-          exit 1
+          stop 1 "40 minutes and no Command Line Tools. When that window has finished, run the same" \
+                 "install line again — everything already downloaded stays."
         fi
       done
     fi
@@ -969,9 +1095,11 @@ head_is() {  # head_is <dir> <rev>
 # copy was named by a bare sha ("the terminal stays on bc6423e", Windows VM, 2026-09-14). Any other name -- a branch
 # or a sha, only ever one named with --skill-ref, and installed UNSIGNED -- is fetched by name and checked out from
 # FETCH_HEAD. Against the COMMIT (`^{commit}`): an annotated tag, every release, is a tag object that HEAD never equals.
-#   0 = done -- or, on an update, the fetch failed and the copy is where it was, said; 1 = no new copy was made (the
-# fetch failed, or something that is not a checkout is at <dir>); 2 = <ref>'s signature did not check out, nothing
-# of it checked out; 3 = HEAD was not <ref> after the checkout: a new copy is removed, an update put back.
+#   0 = done; 1 = nothing was fetched or kept -- no new copy was made (the fetch failed, or something that is not a
+# checkout is at <dir>), or an update was not made and the copy is where it was (its fetch failed, or its local changes
+# could not be kept: a warning once, and the run ended "Installed." on the old version -- R32, #142); 2 = <ref>'s
+# signature did not check out, nothing of it checked out; 3 = HEAD was not <ref> after the checkout: a new copy is
+# removed, an update put back.
 checkout_method() {
   _co_dir="$1"; _co_ref="$2"; _co_what="$3"
   _co_spec="$_co_ref"; _co_want="FETCH_HEAD^{commit}"
@@ -986,13 +1114,13 @@ checkout_method() {
       warn "could not fetch $_co_ref for $_co_what -- it is STILL at" \
            "$(git -C "$_co_dir" describe --tags --always 2>/dev/null || echo unknown)."
       warn "check the network, then re-run this script; nothing was changed."
-      return 0
+      return 1
     fi
     # What was fetched is checked before anything of it runs or is checked out (skill #99), and a clone with
     # local changes is kept as a patch rather than refused with the wrong reason (skill #91).
     verify_tag "$_co_dir" "$_co_ref" || return 2
     if [ -n "$(git -C "$_co_dir" status --porcelain --untracked-files=all 2>/dev/null)" ]; then
-      keep_local "$_co_dir" "$_co_what" || return 0
+      keep_local "$_co_dir" "$_co_what" || return 1
     fi
     _co_was="$(git -C "$_co_dir" rev-parse --verify --quiet HEAD 2>/dev/null)" || _co_was=""
     run git -c advice.detachedHead=false -C "$_co_dir" checkout --quiet "$_co_want" || true
@@ -1041,9 +1169,8 @@ pick_method_ref() {  # pick_method_ref <the --skill-ref name, or "">
   _pm_ref="$(git ls-remote --tags --refs "$SKILL_REPO" "$SKILL_TAG_GLOB" 2>/dev/null \
       | awk -F/ '{print $NF}' | newest_on_channel)" || _pm_ref=""
   if [ -z "$_pm_ref" ]; then
-    warn "could not read the method's release tags (no network?) -- nothing was installed or changed for the" \
-         "method; run again when GitHub answers, or name a tag with --skill-ref"
-    exit 1
+    _pm_why="could not read the method's release tags (no network?) -- nothing was installed or changed for the method;"
+    stop 1 "$_pm_why run again when GitHub answers, or name a tag with --skill-ref"
   fi
   printf '%s\n' "$_pm_ref"
 }
@@ -1057,20 +1184,18 @@ if [ -n "$PLUGIN_ROOT" ]; then
   if [ "$DRY_RUN" = 1 ]; then
     say "  would check it against its signed release: python3 upkeep.py verify-copy --root $(pretty "$PLUGIN_ROOT")"
   elif ! usable python3; then
-    echo "stopped: python3 is needed to check this plugin copy against its signed release, and it does not run here" >&2
-    exit 1
+    stop 1 "stopped: python3 is needed to check this plugin copy against its signed release, and it does not run here"
   elif python3 "$SKILL_HOME/scripts/upkeep.py" verify-copy --root "$PLUGIN_ROOT"; then
     :
   else
-    echo "stopped: this plugin copy is not $SKILL_REF as its author signed it -- see above; nothing was installed" >&2
-    exit 1
+    stop 1 "stopped: this plugin copy is not $SKILL_REF as its author signed it -- see above; nothing was installed"
   fi
 else
   # The newest 3.x tag unless one is named. Asked for by name rather than "main": main is where
   # development lands, and an installer should put you on a release unless you say otherwise. On
   # EITHER channel: this is the copy Claude Code in a terminal loads, and the terminal runs releases
   # (autosound-hub #145). A candidate goes into its own copy, below.
-  # $(...) is a subshell: the stop inside it has said why, and this carries its exit code out.
+  # $(...) is a subshell: the stop inside it has said why and written the receipt, and this carries its exit code out.
   SKILL_REF="$(pick_method_ref "$SKILL_REF")" || exit $?
 fi
 if [ -z "$PLUGIN_ROOT" ]; then
@@ -1091,14 +1216,16 @@ elif [ -d "$SKILL_HOME" ] && [ ! -L "$SKILL_HOME" ]; then
 elif [ -d "$SKILL_SRC/.git" ]; then
   say "  already installed — updating to $SKILL_REF"
   _co_rc=0; checkout_method "$SKILL_SRC" "$SKILL_REF" "the method" || _co_rc=$?
-  if [ "$_co_rc" = 2 ]; then echo "stopped: $SKILL_REF is not a signed release of the method -- see above; the installed one is untouched" >&2; exit 1; fi
-  if [ "$_co_rc" != 0 ]; then warn "stopped: the method could not be put on $SKILL_REF -- see above; it is back where it was"; exit 1; fi
+  if [ "$_co_rc" = 2 ]; then stop 1 "stopped: $SKILL_REF is not a signed release of the method -- see above; the installed one is untouched"; fi
+  # R32: not fetched, or local changes not kept -- the copy is where it was, and that is a stop, as a failed new copy.
+  if [ "$_co_rc" = 1 ]; then stop 1 "update failed -- see above"; fi
+  if [ "$_co_rc" != 0 ]; then stop 1 "stopped: the method could not be put on $SKILL_REF -- see above; it is back where it was"; fi
 else
   say "  into ~/.claude/skills/autosound-tuning"
   if [ "$DRY_RUN" = 0 ]; then mkdir -p "$(dirname "$SKILL_HOME")"; fi
   _co_rc=0; checkout_method "$SKILL_SRC" "$SKILL_REF" "the method" || _co_rc=$?
-  if [ "$_co_rc" = 2 ]; then echo "stopped: $SKILL_REF is not a signed release of the method -- see above" >&2; exit 1; fi
-  if [ "$_co_rc" != 0 ]; then echo "clone failed — see above" >&2; exit 1; fi
+  if [ "$_co_rc" = 2 ]; then stop 1 "stopped: $SKILL_REF is not a signed release of the method -- see above"; fi
+  if [ "$_co_rc" != 0 ]; then stop 1 "clone failed — see above"; fi
   if [ "$DRY_RUN" = 0 ]; then
     rm -f "$SKILL_HOME"
     ln -s "$SKILL_SRC/skills/autosound-tuning" "$SKILL_HOME"
@@ -1158,12 +1285,23 @@ else
   # tests the newest -- every updated machine ran on a set nobody had tested.
   PY_BIN="$(command -v python3)"
   say "  into $PY_BIN ($("$PY_BIN" -V 2>&1))"
+  _pip_ok=1
   if "$PY_BIN" -c 'import sys; sys.exit(0 if sys.prefix != sys.base_prefix else 1)' 2>/dev/null; then
     run "$PY_BIN" -m pip install --quiet --upgrade --no-warn-script-location --disable-pip-version-check -r "$REQS" \
-      || warn "install failed — see above"
+      || _pip_ok=0
   else
     run "$PY_BIN" -m pip install --quiet --upgrade --user --no-warn-script-location --disable-pip-version-check -r "$REQS" \
-      || warn "install failed — see above"
+      || _pip_ok=0
+  fi
+  # Judged by what it was to produce (#142), as install.ps1 judges it: pip's own code is not the answer -- it fails
+  # over libraries that are already there, and Ubuntu's own python3 refuses `--user` outright (externally managed).
+  # What is missing counts in the checks below.
+  if [ "$DRY_RUN" != 1 ]; then
+    if ! "$PY_BIN" -c "import numpy, scipy" 2>/dev/null; then
+      warn "numpy/scipy did not install -- the method's tools will fail on import."
+    elif [ "$_pip_ok" = 0 ]; then
+      say "  (pip reported an error, but numpy and scipy import fine -- already installed)"
+    fi
   fi
 fi
 
@@ -1285,7 +1423,8 @@ if [ "$MODE" = "tcc" ]; then
     else
       warn "uv did not install; without it there is no app. Carrying on with the method alone,"
       warn "which is fully usable — the app can be added by re-running this later."
-      MODE="terminal"
+      # The app was asked for: not ready without it (#142), though the checks below no longer look for it.
+      MODE="terminal"; missing TCC
     fi
   fi
 fi
@@ -1536,30 +1675,45 @@ if ! user_shell_sees "$LOCAL_BIN"; then add_to_path "$LOCAL_BIN"; fi
 # BLOCK 2 — check, sign in, start. The rest of what a person does, in one place.
 # ═════════════════════════════════════════════════════════════════════════════
 step "Checking"
-ok=1
+# Each part that is not ready is said here and named with `missing`; `finish`, last, gives the verdict (#142).
 [ "$DRY_RUN" = 1 ] && say "  (the machine as it stands — nothing above was actually done)"
 if [ -f "$SKILL_HOME/rew_tool/contract.py" ]; then
-  if python3 -c "import numpy" 2>/dev/null; then
+  # The libraries, judged by importing them with the python3 the method runs on (#142): numpy and scipy are what its
+  # tools run on, matplotlib only draws their plots.
+  _py_seen="$(command -v python3 || echo python3)"
+  _numpy=0; usable python3 && python3 -c "import numpy" 2>/dev/null && _numpy=1
+  _scipy=0; usable python3 && python3 -c "import scipy" 2>/dev/null && _scipy=1
+  if [ "$_numpy$_scipy" = 11 ]; then
     say "  ✓ the tuning method (3.x), and its tools load"
   else
     say "  ✓ the tuning method (3.x)"
-    warn "numpy is NOT importable by $(command -v python3 || echo python3): crossover selection,"
+  fi
+  if [ "$_numpy" = 0 ]; then
+    warn "numpy is NOT importable by $_py_seen: crossover selection,"
     warn "the EQ gate, the DSP maths and plot rendering will fail when the method reaches them."
-    ok=0
+    missing numpy
+  fi
+  if [ "$_scipy" = 0 ]; then
+    warn "scipy is NOT importable by $_py_seen: crossover design, the EQ gate"
+    warn "and the EQ proposals will fail when the method reaches them."
+    missing scipy
+  fi
+  if ! { usable python3 && python3 -c "import matplotlib" 2>/dev/null; }; then
+    warn "matplotlib is NOT importable by $_py_seen: the method's plots will not be drawn; the rest runs."
   fi
 elif [ -f "$SKILL_HOME/rew_tool/rew_api.py" ]; then
   warn "the skill at $SKILL_HOME is the 2.x line — TCC cannot drive it"
-  ok=0
+  missing "the method (2.x line)"
 elif [ "$DRY_RUN" = 0 ]; then
   warn "no tuning method at $SKILL_HOME"
-  ok=0
+  missing "the method"
 fi
 if [ "$CHANNEL" = "beta" ] && [ "$DRY_RUN" = 0 ]; then
   if [ -f "$SKILL_BETA_SRC/skills/autosound-tuning/rew_tool/contract.py" ]; then
     say "  ✓ the beta channel's copy, $(git -C "$SKILL_BETA_SRC" describe --tags --always 2>/dev/null || echo '?') — for the app; the terminal stays on $(git -C "$SKILL_SRC" describe --tags --always 2>/dev/null || echo '?')"
   else
     warn "no beta channel copy at $(pretty "$SKILL_BETA_SRC") — an app asking for beta has nothing to run"
-    ok=0
+    missing "the beta copy"
   fi
 fi
 if [ "$MODE" = "tcc" ] && [ "$DRY_RUN" = 0 ]; then
@@ -1567,7 +1721,7 @@ if [ "$MODE" = "tcc" ] && [ "$DRY_RUN" = 0 ]; then
     # Before the ✓ lines: an app from an earlier run would read as this run's.
     _kept=""; { [ -d "$APP" ] || find_bin autosound-tcc >/dev/null; } && _kept=" -- the one already here is left as it was"
     warn "Autosound TCC was not installed: $TCC_REFUSED$_kept"
-    ok=0
+    missing TCC
   elif on_mac && [ -d "$APP" ]; then
     _where="in ~/Applications"; [ -L "$DESKTOP_LINK" ] && _where="$_where, and on your Desktop"
     say "  ✓ Autosound TCC — \"Autosound TCC.app\" $_where"
@@ -1575,7 +1729,7 @@ if [ "$MODE" = "tcc" ] && [ "$DRY_RUN" = 0 ]; then
     say "  ✓ Autosound TCC — the command:  autosound-tcc"
   else
     warn "Autosound TCC is not installed"
-    ok=0
+    missing TCC
   fi
 fi
 CLAUDE_BIN="$(find_bin claude || true)"
@@ -1583,7 +1737,7 @@ if [ -n "$CLAUDE_BIN" ]; then
   say "  ✓ Claude Code"
 elif [ "$DRY_RUN" = 0 ]; then
   warn "Claude Code is not installed; nothing can run a session without it"
-  ok=0
+  missing "Claude Code"
 fi
 if [ "$WANT_REVIEWER" = 1 ] && [ "$DRY_RUN" = 0 ]; then
   AGY_BIN="$(find_bin agy || true)"
@@ -1600,14 +1754,6 @@ fi
 if [ "$REW_API" = 1 ]; then say "  ✓ REW's API is on"
 elif [ "$REW_APP" = 1 ]; then say "  – REW's API is off — switching it on is the first Start step"
 elif on_mac; then say "  – REW not found — installing it is the first Start step"
-fi
-say ""
-if [ "$DRY_RUN" = 1 ]; then
-  say "Nothing was installed — this was a dry run."
-elif [ "$ok" = 1 ]; then
-  say "Installed."
-else
-  say "Installed, with the warnings above."
 fi
 
 # ── sign in ───────────────────────────────────────────────────────────────────
@@ -1807,37 +1953,15 @@ elif [ "$WANT_GITHUB" = 0 ]; then
 fi
 say "  • Update everything: run this same install line again."
 
-# Last thing on screen: where this came from and where to say something about it. Somebody who
-# has just installed two programs from a URL they were told to trust should not have to search for
-# the projects they now have on their disk (user, after a clean install, 2026-08-13).
-# The installer's RECEIPT (S-049): which install.sh ran, for which method tag, and what it did about the
-# engine. Answering "why is there no engine on this MacBook" took four exchanges, because nothing on the
-# machine said which installer had run -- an old bookmarked URL installs old logic while the method
-# itself updates to the newest tag. `doctor` reads this file back.
-if [ "$DRY_RUN" != 1 ]; then
-  _rd="${XDG_DATA_HOME:-$HOME/.local/share}/autosound"
-  if mkdir -p "$_rd" 2>/dev/null; then
-    printf '{"installer": "install.sh", "installer_sha256": "%s", "method_ref": "%s", "mode": "%s", "at": "%s", "platform": "%s", "engine": "%s"}\n' \
-      "$( (shasum -a 256 "$0" 2>/dev/null || sha256sum "$0" 2>/dev/null) | awk '{print $1}')" \
-      "$SKILL_REF" "$MODE" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(uname -s)-$(uname -m)" "${ENGINE_DID:-not reached}" \
-      > "$_rd/install-receipt.json" 2>/dev/null || true
-  fi
-fi
-
-# --plugin: this version is verified and set up -- the plugin's SessionStart hook stops offering the setup (#120).
-if [ -n "$PLUGIN_ROOT" ] && [ "$DRY_RUN" != 1 ]; then
-  python3 "$SKILL_HOME/scripts/upkeep.py" plugin-ready --root "$PLUGIN_ROOT" \
-    || warn "could not write down that v$PLUGIN_VERSION is set up -- the next session will offer the setup again"
-fi
-
+# Where this came from and where to say something about it. Somebody who has just installed two programs from a URL
+# they were told to trust should not have to search for the projects they now have on their disk (user, after a clean
+# install, 2026-08-13).
 step "Where this lives"
 say "  the tuning method   $SKILL_REPO_URL"
 say "  the desktop app     $TCC_REPO"
 say "  something wrong, or an idea — open an issue in whichever of the two it belongs to."
-say ""
-# The method's refusal stops the run; the app's does not (skill #101), so the reason is the last thing on screen
-# rather than left in a block that has scrolled away.
-if [ -n "$TCC_REFUSED" ]; then
-  warn "the app was not installed: $TCC_REFUSED -- the app's block above says why."
-  warn "The method is installed and works without it."
-fi
+
+# Last on screen, the verdict and what each missing part needs -- the app's refusal among them, which does not stop
+# the run (skill #101) -- rather than left in a block that has scrolled away; then the receipt, the plugin's note and
+# the exit code (#142).
+finish

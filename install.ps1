@@ -93,12 +93,53 @@ if ($Log) { try { Start-Transcript -Path $Log -Force | Out-Null; $AutosoundTrans
 # a bare `exit` anywhere else, and on a Stop-Installer call without its `; return`.
 $AutosoundRunAsFile = [bool]$PSCommandPath
 if (-not $AutosoundRunAsFile) { $global:AutosoundInstallExit = 0 }
+# The codes (#142), install.sh's: 0 ready -- 1 stopped, the method not installed or not changed (the steps before it,
+# Git, Claude Code, uv and Python, may have run) -- 2 a usage error -- 3 installed, NOT ready, the missing parts named.
+# A stop (1) writes the receipt as `stopped`; the end writes its own before its 3; 0 and 2 here write none.
 function Stop-Installer {
     param([int]$Code)
+    if ($Code -eq 1) { Write-Receipt "stopped" }
     if ($AutosoundTranscriptOn) { try { Stop-Transcript | Out-Null } catch { $null = $_ } }
     if ($AutosoundRunAsFile) { exit $Code }
     $global:AutosoundInstallExit = $Code
     $global:LASTEXITCODE = $Code
+}
+# The installer's RECEIPT (S-049, #142) -- install.sh's write_receipt, the same fields in the same order: which
+# install.ps1 ran (its version; its sha256 when it ran as a file), for which method tag, what it did about the engine,
+# the python3 the method runs on, and how the run ended -- ready, not ready (`missing` names the parts) or stopped.
+# `doctor` reads it back. Never in a dry run; a receipt that cannot be written stops nothing.
+function Write-Receipt {
+    param([string]$Status)
+    if ($DryRun) { return }
+    try {
+        $rd = Join-Path $env:LOCALAPPDATA "autosound"
+        New-Item -ItemType Directory -Force -Path $rd | Out-Null
+        $sha = ""
+        if ($PSCommandPath) { $sha = (Get-FileHash -Algorithm SHA256 $PSCommandPath).Hash.ToLower() }
+        $py = Join-Path $LocalBin "python3.exe"
+        $python = "no python3"
+        if (Test-Path $py) {
+            $prev = $ErrorActionPreference; $ErrorActionPreference = "SilentlyContinue"
+            $ver = "$(& $py -c "import platform; print(platform.python_version())" 2>$null)".Trim()
+            $ErrorActionPreference = $prev
+            $python = if ($ver) { "$py $ver" } else { "$py does not run" }
+        }
+        $engine = if ($EngineDid) { $EngineDid } else { "not reached" }
+        $receipt = [ordered]@{ installer = "install.ps1"; installer_sha256 = $sha; method_ref = "$SkillRef";
+                               mode = "$Mode"; at = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ");
+                               platform = "Windows-$env:PROCESSOR_ARCHITECTURE"; engine = $engine;
+                               installer_version = $InstallerVersion; status = $Status;
+                               missing = [string[]]@($script:Missing); python = $python }
+        $receipt | ConvertTo-Json -Compress | Set-Content -Encoding UTF8 (Join-Path $rd "install-receipt.json")
+    } catch { $null = $_ }
+}
+# What the run leaves not ready, by short names (#142) -- install.sh's MISSING. Each check that finds a part not ready
+# says why and adds it with Add-Missing; the end reads this list and nothing else. $script: wherever it is read or
+# written, as $script:SignatureRefused is.
+$script:Missing = @()
+function Add-Missing {
+    param([string]$Name)
+    $script:Missing += $Name
 }
 
 # Native commands (git, winget, uv, claude...) write ordinary progress to stderr, and under
@@ -156,6 +197,9 @@ $TccTagGlob   = "v*"
 $TccBetaGlob   = "beta-v*"
 #: The uv release this installer pins. Must equal UV_VERSION in install.sh.
 $UvVersion    = "0.12.10"
+#: This installer's own version, for its receipt (#142): the sha256 there is empty under `irm | iex`. Must equal
+#: install.sh's INSTALLER_VERSION and .claude-plugin/plugin.json's version; the release's bookkeeping moves all three.
+$InstallerVersion = "3.1.2"
 $TccRepo      = "https://github.com/ayukhno/autosound-tcc"
 $SkillHome    = Join-Path $HOME ".claude\skills\autosound-tuning"
 # The checkout lives beside the skill and the skill points at it (a junction) -- see install.sh
@@ -909,8 +953,8 @@ if (Test-Path $Py3) {
 # Put a checkout of the method at $Dir on $Ref (Sync-MethodCheckout, below): move it when it is already a checkout,
 # make one when there is none. ONE function for both copies -- the terminal's and the beta channel's
 # (autosound-hub #145) -- the mirror of checkout_method in install.sh. $true unless the copy is not on $Ref: a new
-# copy not made, or refused, or removed; an update refused for its signature, or put back. An update whose fetch
-# failed is warned about and leaves the copy where it was.
+# copy not made, or refused, or removed; an update refused for its signature, or put back; an update not made -- its
+# fetch failed, or its local changes could not be kept -- which leaves the copy where it was (R32, #142).
 # What can be said of $Ref by its name alone, each said on a line (skill #99, #101): $true -- settled, nothing to
 # check (a dry run, AUTOSOUND_SKIP_TAG_VERIFY=1, a name that is not a release -- only ever one named with -SkillRef or
 # -TccRef: installed, and said UNSIGNED -- a tag before $SignedFrom); $false -- its signature has to be checked. The
@@ -1042,7 +1086,8 @@ function Save-LocalChanges {
     $send = @()
     if (Offer "Enter = send it / s = keep it only here") { $send = @("--send") }
     $global:LASTEXITCODE = 0
-    & $Py3 $tool --clone $Dir keep-local @send
+    # To the screen, not into this function's answer: its lines would make any answer read as "kept" (R32, #142).
+    & $Py3 $tool --clone $Dir keep-local @send | Out-Host
     $kept = ($LASTEXITCODE -eq 0)
     Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
     if (-not $kept) { Warn "the changes were not kept, so nothing was reset or updated -- see above." }
@@ -1079,13 +1124,13 @@ function Sync-MethodCheckout {
         if (-not $fetched) {
             Warn "could not fetch $Ref for $What -- it is STILL at $(& git -C $Dir describe --tags --always 2>$null)."
             Warn "check the network, then run this script again; nothing was changed."
-            return $true
+            return $false
         }
         # What was fetched is checked before anything of it runs or is checked out (skill #99), and local
         # changes are kept as a patch rather than refused with the wrong reason (skill #91).
         if (-not (Test-TagSignature $Dir $Ref)) { $script:SignatureRefused = $true; return $false }
         if (@(& git -C $Dir status --porcelain --untracked-files=all 2>$null).Count -gt 0) {
-            if (-not (Save-LocalChanges $Dir $What)) { return $true }
+            if (-not (Save-LocalChanges $Dir $What)) { return $false }
         }
         $was = "$(& git -C $Dir rev-parse --verify --quiet HEAD 2>$null)".Trim()
         Run { & git -c advice.detachedHead=false -C $Dir checkout --quiet $want } "git checkout $want" | Out-Null
@@ -1200,13 +1245,19 @@ if ($linkExists) {
 if ((-not $linkExists) -or $isOurs) {
     if (Test-Path (Join-Path $SkillSrc ".git")) {
         Say "already installed -- updating to $SkillRef"
-        Sync-MethodCheckout $SkillSrc $SkillRef "the method" | Out-Null
+        $updated = Sync-MethodCheckout $SkillSrc $SkillRef "the method"
         if ($script:SignatureRefused) {
             Warn "stopped: $SkillRef is not a signed release of the method -- see above; the installed one is untouched"
             Stop-Installer 1; return
         }
         if ($script:NotTheTag) {
             Warn "stopped: the method could not be put on $SkillRef -- see above; it is back where it was"
+            Stop-Installer 1; return
+        }
+        if (-not $updated) {
+            # R32: not fetched, or local changes not kept -- the copy is where it was, and that is a stop, as a failed
+            # new copy.
+            Warn "update failed -- see above"
             Stop-Installer 1; return
         }
     } else {
@@ -1369,7 +1420,8 @@ if ($Mode -eq "tcc") {
     Step "Autosound TCC -- the desktop app"
     if (-not $Uv) {
         Warn "no uv, so no app. The method alone still works; re-run this later to add the app."
-        $Mode = "terminal"
+        # The app was asked for: not ready without it (#142), though the checks below no longer look for it.
+        $Mode = "terminal"; Add-Missing "TCC"
     } elseif ((@(Get-Process -Name "autosound-tcc*" -ErrorAction SilentlyContinue).Count -gt 0) -and -not $DryRun) {
         # A RUNNING app holds its files on Windows (skill #62), so it is left as it is, with the reason -- and this is
         # asked FIRST (skill #64): the size line and the version used to print before it, and read as a download
@@ -1631,18 +1683,30 @@ if ($hadTools.Count -gt 0) {
 # BLOCK 2 -- check, sign in, start. The rest of what a person does, in one place.
 # =============================================================================================
 Step "Checking"
-$ok = $true
+# Each part that is not ready is said here and named with Add-Missing; the end, last, gives the verdict (#142).
 if ($DryRun) { Say "(the machine as it stands -- nothing above was actually done)" }
 if (Test-Path (Join-Path $SkillHome "rew_tool\contract.py")) {
-    $numpyOk = $false
-    if (Test-Path $Py3) { $numpyOk = Test-Quiet { & $Py3 -c "import numpy" } }
-    if ($numpyOk) { Say "OK   the tuning method (3.x), and its tools load" }
-    else {
-        Say "OK   the tuning method (3.x)"
+    # The libraries, judged by importing them with the python3 the method runs on (#142): numpy and scipy are what its
+    # tools run on, matplotlib only draws their plots.
+    $numpyOk = $false; $scipyOk = $false; $mplOk = $false
+    if (Test-Path $Py3) {
+        $numpyOk = Test-Quiet { & $Py3 -c "import numpy" }
+        $scipyOk = Test-Quiet { & $Py3 -c "import scipy" }
+        $mplOk = Test-Quiet { & $Py3 -c "import matplotlib" }
+    }
+    if ($numpyOk -and $scipyOk) { Say "OK   the tuning method (3.x), and its tools load" }
+    else { Say "OK   the tuning method (3.x)" }
+    if (-not $numpyOk) {
         Warn "numpy is NOT importable by python3: crossover selection, the EQ gate, the DSP maths and"
         Warn "plot rendering will fail when the method reaches them."
-        $ok = $false
+        Add-Missing "numpy"
     }
+    if (-not $scipyOk) {
+        Warn "scipy is NOT importable by python3: crossover design, the EQ gate and the EQ proposals"
+        Warn "will fail when the method reaches them."
+        Add-Missing "scipy"
+    }
+    if (-not $mplOk) { Warn "matplotlib is NOT importable by python3: the method's plots will not be drawn; the rest runs." }
     if (Test-Path $Py3) {
         $NewPy = Get-NewWindowCommand "python3"
         if ($NewPy -and ($NewPy -ieq $Py3)) { Say "OK   python3 in a new window is $(Pretty $Py3)" }
@@ -1650,13 +1714,13 @@ if (Test-Path (Join-Path $SkillHome "rew_tool\contract.py")) {
             $was = if ($NewPy) { $NewPy } else { "not found" }
             Warn "python3 in a NEW window is $was, not $(Pretty $Py3) -- the method's tools will not run there."
             Warn "Run this installer again, or switch python3 off in Settings > Apps > Advanced app settings > App execution aliases."
-            $ok = $false
+            Add-Missing "python3 in a new window"
         }
     }
 } elseif (Test-Path (Join-Path $SkillHome "rew_tool\rew_api.py")) {
-    Warn "the skill at $SkillHome is the 2.x line -- TCC cannot drive it"; $ok = $false
+    Warn "the skill at $SkillHome is the 2.x line -- TCC cannot drive it"; Add-Missing "the method (2.x line)"
 } elseif (-not $DryRun) {
-    Warn "no tuning method at $SkillHome"; $ok = $false
+    Warn "no tuning method at $SkillHome"; Add-Missing "the method"
 }
 if ($Channel -eq "beta" -and -not $DryRun) {
     if (Test-Path (Join-Path $SkillBetaSrc "skills\autosound-tuning\rew_tool\contract.py")) {
@@ -1664,22 +1728,22 @@ if ($Channel -eq "beta" -and -not $DryRun) {
         $termAt = if (Test-Path (Join-Path $SkillSrc ".git")) { (& git -C $SkillSrc describe --tags --always 2>$null) } else { "?" }
         Say "OK   the beta channel's copy, $betaAt -- for the app; the terminal stays on $termAt"
     } else {
-        Warn "no beta channel copy at $(Pretty $SkillBetaSrc) -- an app asking for beta has nothing to run"; $ok = $false
+        Warn "no beta channel copy at $(Pretty $SkillBetaSrc) -- an app asking for beta has nothing to run"; Add-Missing "the beta copy"
     }
 }
 if ($Mode -eq "tcc" -and -not $DryRun) {
     if ($TccRefused) {
         $kept = if ($HaveTcc) { " -- the one already here is left as it was" } else { "" }
-        Warn "Autosound TCC was not installed: $TccRefused$kept"; $ok = $false
+        Warn "Autosound TCC was not installed: $TccRefused$kept"; Add-Missing "TCC"
     }
     elseif ($TccExe -and (Test-Path $DesktopLnk)) { Say "OK   Autosound TCC -- on your Desktop and in the Start Menu" }
     elseif ($TccExe) { Say "OK   Autosound TCC -- the command:  autosound-tcc" }
-    elseif ($HaveTcc) { Warn "Autosound TCC was here before and was not upgraded this time (above) -- it is left as it was"; $ok = $false }
-    else { Warn "Autosound TCC is not installed"; $ok = $false }
+    elseif ($HaveTcc) { Warn "Autosound TCC was here before and was not upgraded this time (above) -- it is left as it was"; Add-Missing "TCC" }
+    else { Warn "Autosound TCC is not installed"; Add-Missing "TCC" }
 }
 $ClaudeBin = Find-Bin claude
 if ($ClaudeBin) { Say "OK   Claude Code" }
-elseif (-not $DryRun) { Warn "Claude Code is not installed; nothing can run a session without it"; $ok = $false }
+elseif (-not $DryRun) { Warn "Claude Code is not installed; nothing can run a session without it"; Add-Missing "Claude Code" }
 if ($WantReviewer -and -not $DryRun) {
     $AgyBin = Find-Bin agy
     if ($AgyBin) { Say "OK   Gemini reviewer (agy) -- installed; sign in below" }
@@ -1692,10 +1756,6 @@ if ($WantGitHub -eq "1" -and -not $DryRun) {
 if ($RewApi)     { Say "OK   REW's API is on" }
 elseif ($RewApp) { Say "--   REW's API is off -- switching it on is the first Start step" }
 else             { Say "--   REW not found -- installing it is the first Start step" }
-Write-Host ""
-if ($DryRun) { Write-Host "Nothing was installed -- this was a dry run." }
-elseif ($ok) { Write-Host "Installed." }
-else         { Write-Host "Installed, with the warnings above." }
 
 # -- sign in -----------------------------------------------------------------------------------
 $AgySkipped = $false
@@ -1867,36 +1927,59 @@ if ($RewApi -and $RewExe -and $RewExe -ne "found") {
 }
 Say "* Update everything: run this same install line again."
 
-# The installer's RECEIPT (S-049): which install.ps1 ran, for which method tag, and what it did about the
-# engine -- `doctor` reads it back. Same file and shape as install.sh's, under %LOCALAPPDATA%.
-if (-not $DryRun) {
-    try {
-        $rd = Join-Path $env:LOCALAPPDATA "autosound"
-        New-Item -ItemType Directory -Force -Path $rd | Out-Null
-        $sha = ""
-        if ($PSCommandPath) { $sha = (Get-FileHash -Algorithm SHA256 $PSCommandPath).Hash.ToLower() }
-        $receipt = [ordered]@{ installer = "install.ps1"; installer_sha256 = $sha; method_ref = "$SkillRef";
-                               mode = "$Mode"; at = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ");
-                               platform = "Windows-$env:PROCESSOR_ARCHITECTURE"; engine = $EngineDid }
-        $receipt | ConvertTo-Json -Compress | Set-Content -Encoding UTF8 (Join-Path $rd "install-receipt.json")
-    } catch { }
-}
-
-# -Plugin: this version is verified and set up -- the plugin's SessionStart hook stops offering the setup (#120).
-if ($PluginRoot -and -not $DryRun -and (Test-Path $Py3)) {
-    & $Py3 (Join-Path $SkillHome "scripts\upkeep.py") plugin-ready --root $PluginRoot
-    if ($LASTEXITCODE -ne 0) { Warn "could not write down that v$PluginVersion is set up -- the next session will offer the setup again" }
-}
-
 Step "Where this lives"
 Say "the tuning method   $SkillRepoUrl"
 Say "the desktop app     $TccRepo"
 Say "something wrong, or an idea -- open an issue in whichever of the two it belongs to."
+
+# -- the end (#142): install.sh's finish, in this file's terms ----------------------------------
+# Last on screen, the verdict and what each missing part needs -- the app's refusal among them, which does not stop
+# the run (skill #101) -- rather than left in a block that has scrolled away; then the receipt, the plugin's note and
+# the code: 0 "Installed.", or 3 "Installed, NOT ready: <names>". A dry run did nothing: it says so, and ends 0.
+$ok = $script:Missing.Count -eq 0
 Write-Host ""
-# The method's refusal stops the run; the app's does not (skill #101), so the reason is the last thing on screen.
-if ($TccRefused) {
-    Warn "the app was not installed: $TccRefused -- the app's block above says why."
-    Warn "The method is installed and works without it."
+if ($DryRun) { Write-Host "Nothing was installed -- this was a dry run." }
+elseif ($ok) { Write-Host "Installed." }
+else {
+    Write-Host "Installed, NOT ready: $($script:Missing -join ', ')"
+    foreach ($part in $script:Missing) {
+        switch ($part) {
+            { $_ -in @("numpy", "scipy") } {
+                Warn "$part is not importable by $(Pretty $Py3) -- the libraries' step above says why; install it for that python3, then run this again"
+            }
+            "python3 in a new window" {
+                Warn "python3 in a new window is not $(Pretty $Py3) -- run this again, or switch python3 off in Settings > Apps > Advanced app settings > App execution aliases"
+            }
+            "the method" { Warn "no tuning method at $(Pretty $SkillHome) -- the method's step above says why; run this again" }
+            "the method (2.x line)" {
+                Warn "$(Pretty $SkillHome) is the 2.x line, which TCC cannot drive -- move it aside, then run this again"
+            }
+            "the beta copy" {
+                Warn "no beta channel copy at $(Pretty $SkillBetaSrc) -- an app asking for beta has nothing to run; run this again"
+            }
+            "TCC" {
+                Warn "the app was not installed$(if ($TccRefused) { ": $TccRefused" }) -- the app's block above says why; the method is installed and works without it"
+            }
+            "Claude Code" {
+                Warn "Claude Code is not installed; nothing can run a session without it -- when the network is back:  irm https://claude.ai/install.ps1 | iex"
+            }
+            default { Warn $part }
+        }
+    }
+    if ($PluginRoot) { Warn "the plugin's set-up note comes back at the next session until an install is ready" }
+}
+if (-not $DryRun) {
+    $status = if ($ok) { "ready" } else { "not ready" }
+    Write-Receipt $status
+}
+# -Plugin: this version is verified and set up -- the plugin's SessionStart hook stops offering the setup (#120). Only
+# on a ready install: on any other the note keeps coming back, and the setup is offered again.
+if ($ok -and $PluginRoot -and -not $DryRun -and (Test-Path $Py3)) {
+    & $Py3 (Join-Path $SkillHome "scripts\upkeep.py") plugin-ready --root $PluginRoot
+    if ($LASTEXITCODE -ne 0) { Warn "could not write down that v$PluginVersion is set up -- the next session will offer the setup again" }
+}
+if (-not $ok -and -not $DryRun) {
+    Stop-Installer 3; return
 }
 # The normal end. Run as a file the process ending closes a -Log transcript; run as the one-liner
 # the session goes on, so the transcript is stopped here rather than left recording it.

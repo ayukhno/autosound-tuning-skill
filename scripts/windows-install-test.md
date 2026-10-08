@@ -131,6 +131,16 @@ line that tests it.
 A deliberate failure is worth one run: point `$sumUrl` at a wrong file name, and the install must
 **not** put `gh` on PATH and must say why.
 
+### 2b. How the run ends — the exit code and the receipt (#142)
+
+Every real run, `install.cmd` included. Written for v3.1.3; none of it has run on Windows yet.
+
+| look for | pass | fail means |
+| :--- | :--- | :--- |
+| the last line of the run | `Installed.` — or `Installed, NOT ready: <names>`, then one `!` line for each name saying what to do | the end did not run, or a check did not name its part with `Add-Missing` |
+| `install.cmd`, double-clicked | `Finished with exit code 0` when ready, `3` when NOT ready, `1` after a stop | the code did not reach cmd: as a file through `exit`, fetched through `$global:AutosoundInstallExit` |
+| `%LOCALAPPDATA%\autosound\install-receipt.json` | `"status"` `ready`, `not ready` (with `missing` naming the same parts) or `stopped`; `installer_version` the release; `python` `…\.local\bin\python3.exe 3.12.x` | `Write-Receipt` failed, and its `try`/`catch` kept that quiet |
+
 ## 3. An older app ref — the deliberate gap
 
 ```powershell

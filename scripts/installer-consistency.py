@@ -124,6 +124,24 @@ NO_CHECKOUT_GIT = (b"#!/bin/sh\n"
                    b"for a in \"$@\"; do [ \"$a\" = checkout ] && exit 0; done\n"
                    b"exec \"$REAL_GIT\" \"$@\"\n")
 
+#: The installers' exit table (#142, audit T-44, J6a item 4): 0 ready · 1 stopped -- the method not installed or not
+#: changed (steps before it, Claude Code's, may have run) · 2 usage · 3 installed, NOT ready, the missing parts named.
+#: The receipt's fields in the order both installers write them: today's seven, then how the run ended.
+RECEIPT_FIELDS = ("installer", "installer_sha256", "method_ref", "mode", "at", "platform", "engine",
+                  "installer_version", "status", "missing", "python")
+#: The short names a part that is not ready goes by, in both installers. install.ps1 adds the python3 a new window
+#: runs, which only Windows gets wrong (`python3 in a new window`).
+MISSING_NAMES = ("numpy", "scipy", "the method", "the method (2.x line)", "the beta copy", "TCC", "Claude Code")
+#: What ENGINE_DID can carry -- the engine's own last line: a quote, a backslash, a tab. The receipt is JSON whatever it
+#: holds: python's builder keeps the tab, escaped; the shell's drops control characters.
+HOSTILE_ENGINE = 'built or run failed: "C:\\dotnet\\sdk" said\tno'
+#: The `python3` a run of `finish` sees: a `plugin-ready` call is written down in $PLUGIN_MARK, anything else goes to
+#: the interpreter running this check -- so the receipt's JSON is built the same way on every platform.
+FAKE_PYTHON3 = ('python3() {\n'
+                '  case " $* " in *" plugin-ready "*) printf "%s\\n" "$*" >> "$PLUGIN_MARK"; return 0 ;; esac\n'
+                '  "$PYTHON_FOR_TEST" "$@"\n'
+                '}\n')
+
 
 def cut_functions(sh, names):
     """`(text, missing)`: the named functions of install.sh, cut out as they stand -- one line (`say() { ...; }`), or
@@ -487,8 +505,12 @@ def selection_problems(sh, ps1):
     remote offers. The ref is all that reaches stdout, since the caller takes it with $(...). The call sites in both
     installers, and install.ps1's mirror, are READ: no `main` to fall back on, no app spec without a tag.
     """
+    import json
     import tempfile
-    functions, missing = cut_functions(sh, ("say", "warn", "is_release_tag", "newest_on_channel", "pick_method_ref"))
+    # The stop is `stop` (#142): it writes the receipt, here into a temp XDG_DATA_HOME, under the call's own `set -u`.
+    functions, missing = cut_functions(sh, ("say", "warn", "have", "on_mac", "runs_ok", "usable", "json_str",
+                                            "write_receipt", "stop", "is_release_tag", "newest_on_channel",
+                                            "pick_method_ref"))
     if missing:
         return [f"install.sh: no `{name}() {{ ... }}` -- the method's tag pick cannot be run" for name in missing]
     bash, why = find_bash()
@@ -507,22 +529,32 @@ def selection_problems(sh, ps1):
                  ("main", None, 0, 0, "main", ("UNSIGNED",), ()),
                  ("v3.0.33", None, 128, 0, "v3.0.33", (), ("UNSIGNED",)),
                  ("", tags, 0, 0, "v3.1.10", (), ("UNSIGNED",)))
-        for given, offered, stub_rc, want_rc, want_ref, words, not_words in cases:
+        for i, (given, offered, stub_rc, want_rc, want_ref, words, not_words) in enumerate(cases):
             script = (f'set -euo pipefail\nexport PATH="$(cd "{stub_dir.as_posix()}" && pwd)":"/usr/bin:$PATH"\n'
                       'SKILL_REPO="https://github.com/ayukhno/autosound-tuning-skill.git"\nSKILL_TAG_GLOB="v3.*"\n'
                       + functions + f'ref="$(pick_method_ref "{given}")" || exit $?\nprintf "REF=[%s]\\n" "$ref"\n')
-            env = dict(os.environ, STUB_RC=str(stub_rc), STUB_TAGS=offered.as_posix() if offered else "")
+            data = Path(tmp, f"data-{i}")
+            env = dict(os.environ, STUB_RC=str(stub_rc), STUB_TAGS=offered.as_posix() if offered else "",
+                       HOME=tmp, XDG_DATA_HOME=str(data))
             r = subprocess.run([bash, "-s"], input=script.encode("utf-8"), capture_output=True, env=env)
             got_out = r.stdout.decode("utf-8", "replace")
             got_err = r.stderr.decode("utf-8", "replace")
             want_out = f"REF=[{want_ref}]\n" if want_ref is not None else ""
+            receipt = data / "autosound" / "install-receipt.json"
+            try:
+                status = json.loads(receipt.read_text(encoding="utf-8-sig")).get("status") if receipt.exists() else None
+            except ValueError as exc:
+                status = f"unreadable ({exc})"
+            want_status = "stopped" if want_rc == 1 else None
             if (r.returncode != want_rc or got_out != want_out or any(w not in got_err for w in words)
-                    or any(w in got_err for w in not_words)):
+                    or any(w in got_err for w in not_words) or status != want_status):
                 out.append(f"install.sh pick_method_ref {given or '(no --skill-ref)'}"
                            f"{' with ' + ' '.join(SELECTION_TAGS) if offered else ''}, ls-remote exit {stub_rc}: "
-                           f"exit {r.returncode}, stdout {got_out.strip()!r}, want {want_rc} and {want_out.strip()!r}"
+                           f"exit {r.returncode}, stdout {got_out.strip()!r}, receipt {status!r}, want {want_rc} and "
+                           f"{want_out.strip()!r}"
                            + (f" saying {' + '.join(map(repr, words))}" if words else "")
                            + (f" and never {' + '.join(map(repr, not_words))}" if not_words else "")
+                           + (f", a receipt saying {want_status!r} (#142)" if want_status else ", no receipt")
                            + f" -- stderr {got_err.strip()[-200:]!r} (T-37)")
     except OSError as exc:
         out.append(f"the tag pick's fixtures could not be made ({exc}) -- unrun is not agreed")
@@ -563,11 +595,13 @@ def checkout_problems(sh, ps1):
     commit, and `main`. A new copy is the tag's commit, detached, with `origin` set; an update lands on its tag; a tag
     that does not check out leaves nothing; a named branch is checked out, said UNSIGNED. A checkout that did not land
     (a `git` whose checkout does nothing) removes a new copy and puts an update back where it was, exit 3 either way.
-    A folder already at the path that is not a checkout is left exactly as it is. install.ps1's mirror is READ.
+    A folder already at the path that is not a checkout is left exactly as it is. An update that cannot be made -- its
+    tag cannot be fetched, or the copy's local changes cannot be kept -- leaves the copy where it was and answers 1,
+    which both installers' update paths stop on, as on a failed new copy (#142, R32). install.ps1's mirror is READ.
     """
     import tempfile
     functions, missing = cut_functions(sh, ("say", "warn", "pretty", "run", "is_release_tag", "settled_by_name",
-                                            "verify_tag", "head_is", "checkout_method"))
+                                            "verify_tag", "keep_local", "head_is", "checkout_method"))
     if missing:
         return [f"install.sh: no `{name}() {{ ... }}` -- the method's checkout cannot be run" for name in missing]
     bash, why = find_bash()
@@ -663,8 +697,18 @@ def checkout_problems(sh, ps1):
          ("removed",), lambda: not os.path.exists(os.path.join(tmp, "stuck"))),
         ("a new copy into a folder that is there and is not a checkout", str(occupied), "v3.0.64", False, 1, (),
          lambda: sorted(os.listdir(occupied)) == ["mine.txt"]),
+        # R32 (#142): an update that cannot be made is a stop, the copy where it was -- it was a warning, and the run
+        # ended "Installed." on the old version.
+        ("that copy updated to v3.0.99, a tag its remote does not have", copy, "v3.0.99", False, 1,
+         ("could not fetch v3.0.99", "nothing was changed"), lambda: head(copy) == later),
+        ("that copy, changed by hand, updated to v3.0.64 when the change cannot be kept", copy, "v3.0.64", False, 1,
+         ("cannot be kept automatically",),
+         lambda: head(copy) == later and Path(copy, "a").read_text() == "a\nb\nmine\n",
+         lambda: Path(copy, "a").write_text("a\nb\nmine\n")),
     )
-    for what, where, ref, stub, want_rc, words, state_ok in steps:
+    for what, where, ref, stub, want_rc, words, state_ok, *prepare in steps:
+        for made in prepare:
+            made()
         rc, said = run(where, ref, stub)
         if rc != want_rc or any(w not in said for w in words) or not state_ok():
             out.append(f"install.sh checkout_method, {what}: exit {rc}, {where_is(where)} -- want exit {want_rc}"
@@ -678,12 +722,188 @@ def checkout_problems(sh, ps1):
                            "Test-HeadIs $Dir $want", "$script:NotTheTag = $true") if n not in body]
     lacking += [f"a stop after {what}" for what, pattern in (
         ("a failed new copy", r"elseif \(-not \$cloned\) \{[^{}]*Stop-Installer 1; return"),
-        ("an update that did not land", r"if \(\$script:NotTheTag\) \{[^{}]*Stop-Installer 1; return"))
+        ("an update that did not land", r"if \(\$script:NotTheTag\) \{[^{}]*Stop-Installer 1; return"),
+        ("an update that could not be made (R32)", r"if \(-not \$updated\) \{[^{}]*Stop-Installer 1; return"))
         if not re.search(pattern, ps1)]
+    if 'if [ "$_co_rc" = 1 ]; then stop 1 "update failed -- see above"; fi' not in sh:
+        lacking.append("install.sh: no stop after an update that could not be made (R32)")
     lacking += [f"{name} still clones by --branch" for name, text in (("install.sh", sh), ("install.ps1", ps1))
                 if re.search(r"clone --quiet --branch", text)]
     if lacking:
         out.append("install.ps1's checkout is not the tag it checked -- " + "; ".join(lacking) + " (T-45)")
+    return out
+
+
+def exit_contract_problems(sh, ps1):
+    """#142 (T-44, J6a item 4): the exit table and the receipt; [] when both installers keep them.
+
+    install.sh's `finish` and `stop` are cut out and RUN, each into a temp XDG_DATA_HOME: nothing missing ends 0 with
+    `Installed.`, a missing part 3 with `Installed, NOT ready: <names>`, a stop 1 -- and every one of them writes a
+    receipt that parses as JSON with RECEIPT_FIELDS in that order, `status` and `missing` as the run ended, even with a
+    quote, a backslash and a tab in the engine's line: once with a python3 to build it, once with the shell's own
+    builder. `plugin-ready` is asked for only on a ready install; a dry run writes nothing and ends 0. install.ps1 is
+    READ: Stop-Installer writes `stopped`, the end writes its receipt and then stops with 3 under `-not $ok`,
+    `plugin-ready` sits under `$ok`, Write-Receipt's fields are RECEIPT_FIELDS in order. Every part that is not ready
+    goes through `missing` / `Add-Missing`, every stop through `stop` -- no `exit 1` and no `ok=0` left in install.sh --
+    and the installers' version is plugin.json's.
+    """
+    import hashlib
+    import json
+    import tempfile
+    out = []
+    version, err = one(r'^INSTALLER_VERSION="([^"]+)"', sh, "INSTALLER_VERSION", "install.sh")
+    ps_version, err_ps = one(r'^\$InstallerVersion\s*=\s*"([^"]+)"', ps1, "$InstallerVersion", "install.ps1")
+    out.extend(e for e in (err, err_ps) if e)
+    try:
+        manifest = json.loads((ROOT / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))["version"]
+    except (OSError, ValueError, KeyError) as exc:
+        manifest = None
+        out.append(f".claude-plugin/plugin.json: no version to hold the installers to ({exc})")
+    if version and ps_version and manifest and len({version, ps_version, manifest}) != 1:
+        out.append(f"the installers' version differs -- install.sh INSTALLER_VERSION {version!r}, install.ps1 "
+                   f"$InstallerVersion {ps_version!r}, plugin.json {manifest!r}; the release's bookkeeping moves all "
+                   f"three (#142)")
+
+    # install.sh, READ: a stop is `stop`, a part not ready is `missing`, and `finish` is the last statement.
+    lines = sh.splitlines()
+    code = [(n, line) for n, line in enumerate(lines, 1) if line.strip() and not line.lstrip().startswith("#")]
+    out.extend(f"install.sh:{n}: `exit 1` -- a stop goes through `stop 1 \"...\"`, which writes the receipt (#142)"
+               for n, line in code if re.search(r"(?:^|[;&|{]|\bthen|\belse|\bdo)\s*exit 1\b", line))
+    out.extend(f"install.sh:{n}: `{m.group(0)}` -- a part that is not ready goes through `missing <name>`, the one "
+               f"record `finish` reads (#142)" for n, line in code for m in [re.search(r"\bok=[01]\b", line)] if m)
+    if not code or code[-1][1].strip() != "finish":
+        out.append(f"install.sh: the last statement is {code[-1][1].strip()[:60] if code else 'nothing'!r}, not "
+                   f"`finish` -- the verdict, the receipt and the exit code are the run's last word (#142)")
+    names_sh = [n for n in MISSING_NAMES if not re.search(r'\bmissing (?:"' + re.escape(n) + r'"|' + re.escape(n)
+                                                           + r')\s*(?:;|$)', sh, re.M)]
+    names_ps = [n for n in MISSING_NAMES if f'Add-Missing "{n}"' not in ps1]
+    if names_sh or names_ps:
+        out.append("a part that is not ready is not named the same in both installers -- "
+                   + "; ".join([f"install.sh has no `missing {n}`" for n in names_sh]
+                               + [f"install.ps1 has no `Add-Missing \"{n}\"`" for n in names_ps]) + " (#142)")
+
+    # install.ps1, READ.
+    stop_fn = re.search(r"^function Stop-Installer \{\n.*?^\}$", ps1, re.M | re.S)
+    write_fn = re.search(r"^function Write-Receipt \{\n.*?^\}$", ps1, re.M | re.S)
+    block = re.search(r"\[ordered\]@\{(.*?)\}", write_fn.group(0), re.S) if write_fn else None
+    keys = tuple(re.findall(r"(\w+)\s*=", block.group(1))) if block else ()
+    stops = list(re.finditer(r"^\s*Stop-Installer (\d+); return\s*$", ps1, re.M))
+    last = stops[-1] if stops else None
+    after = [ln.strip() for ln in ps1[last.end():].splitlines() if ln.strip() and not ln.strip().startswith("#")] \
+        if last else []
+    receipts = [m.start() for m in re.finditer(r"^\s*Write-Receipt\b", ps1, re.M)]
+    ps_wrong = []
+    if not stop_fn or not re.search(r'if \(\$Code -eq 1\) \{ Write-Receipt "stopped" \}', stop_fn.group(0)):
+        ps_wrong.append('Stop-Installer does not write `Write-Receipt "stopped"` for a stop (code 1)')
+    if keys != RECEIPT_FIELDS:
+        ps_wrong.append(f"Write-Receipt's [ordered] fields are {list(keys)}, not {list(RECEIPT_FIELDS)}")
+    if not last or last.group(1) != "3" or not re.search(
+            r"if \(-not \$ok\b[^\n{]*\)\s*\{\s*\n\s*Stop-Installer 3; return\s*\n\s*\}", ps1):
+        ps_wrong.append("its end does not stop with `Stop-Installer 3; return` under `if (-not $ok ...)`")
+    elif any(ln not in ("}", "if ($AutosoundTranscriptOn) { try { Stop-Transcript | Out-Null } catch { $null = $_ } }")
+             for ln in after):
+        ps_wrong.append(f"something runs after its `Stop-Installer 3`: {after[:3]}")
+    if not last or not receipts or receipts[-1] > last.start():
+        ps_wrong.append("its end does not write the receipt before its `Stop-Installer 3`")
+    if not re.search(r"if \(\$ok\b[^\n{]*\)\s*\{[^}]*plugin-ready --root", ps1):
+        ps_wrong.append("`plugin-ready` is not under `if ($ok ...)`")
+    if re.search(r"\$ok\s*=\s*\$false", ps1):
+        ps_wrong.append("`$ok = $false` is still set beside the list -- a part not ready goes through Add-Missing")
+    if ps_wrong:
+        out.append("install.ps1's end is not the exit contract: " + "; ".join(ps_wrong) + " (#142)")
+
+    # install.sh, RUN.
+    functions, missing = cut_functions(sh, ("say", "warn", "have", "on_mac", "runs_ok", "usable", "pretty",
+                                            "json_str", "write_receipt", "missing", "stop", "finish"))
+    if missing:
+        return out + [f"install.sh: no `{name}() {{ ... }}` -- the exit contract cannot be run (#142)"
+                      for name in missing]
+    bash, why = find_bash()
+    if not bash:
+        return out + [f"{why} -- install.sh's exit contract cannot be run, and unrun is not agreed"]
+    tmp = tempfile.mkdtemp(prefix="autosound_exit_")
+
+    def run(case, body, builder, dry, plugin):
+        home = Path(tmp, case)
+        home.mkdir()
+        data, mark = home / "data", home / "plugin-ready-calls"
+        # A file, so $0 is one: the receipt's sha256 is this script's, as it is install.sh's when it runs as a file.
+        text = ('export PATH="/usr/bin:$PATH"\n' + functions + FAKE_PYTHON3
+                + ("usable() { return 1; }\n" if builder == "shell" else "")
+                + f'DRY_RUN={dry}\nMODE=terminal\nSKILL_REF=v3.1.2\nINSTALLER_VERSION="{version}"\n'
+                + f"ENGINE_DID={bash_literal(HOSTILE_ENGINE)}\nMISSING=\"\"\nTCC_REFUSED=\"\"\n"
+                + f'SKILL_HOME="{home.as_posix()}/skill"\nSKILL_BETA_SRC="{home.as_posix()}/beta"\n'
+                + (f'PLUGIN_ROOT="{home.as_posix()}/plugin"\nPLUGIN_VERSION=3.1.2\n' if plugin else 'PLUGIN_ROOT=""\n')
+                + body).encode("utf-8")
+        script = home / "install.sh"
+        script.write_bytes(text)
+        env = dict(os.environ, HOME=str(home), XDG_DATA_HOME=str(data), PLUGIN_MARK=mark.as_posix(),
+                   PYTHON_FOR_TEST=Path(sys.executable).as_posix(), MSYS2_ARG_CONV_EXCL="*", MSYS_NO_PATHCONV="1")
+        r = subprocess.run([bash, script.as_posix()], capture_output=True, env=env)
+        said = r.stdout.decode("utf-8", "replace") + r.stderr.decode("utf-8", "replace")
+        path = data / "autosound" / "install-receipt.json"
+        receipt, unreadable = None, ""
+        if path.exists():
+            try:
+                receipt = json.loads(path.read_text(encoding="utf-8-sig"))
+            except ValueError as exc:
+                unreadable = f"not JSON ({exc}): {path.read_bytes()[:160]!r}"
+        calls = mark.read_text(encoding="utf-8").count("plugin-ready") if mark.exists() else 0
+        return r.returncode, said, receipt, unreadable, calls, hashlib.sha256(text).hexdigest()
+
+    flat = "".join(ch for ch in HOSTILE_ENGINE if ord(ch) >= 32)
+    # (case, body, builder, dry run, --plugin, exit, words, never, status (None: no receipt), missing, plugin-ready)
+    cases = (("ready", "finish\n", "python3", "0", True, 0, ("Installed.",), ("NOT ready",), "ready", [], 1),
+             ("not-ready", "MISSING=numpy\nfinish\n", "python3", "0", True, 3, ("Installed, NOT ready: numpy",
+              "set-up note comes back"), (), "not ready", ["numpy"], 0),
+             ("two-parts", 'missing numpy\nmissing "Claude Code"\nfinish\n', "python3", "0", False, 3,
+              ("Installed, NOT ready: numpy, Claude Code",), (), "not ready", ["numpy", "Claude Code"], 0),
+             ("a-stop", 'stop 1 "could not read the tags -- nothing was installed"\nsay "past the stop"\n', "python3",
+              "0", False, 1, ("could not read the tags -- nothing was installed",), ("past the stop", "Installed"),
+              "stopped", [], 0),
+             ("ready-no-python3", "finish\n", "shell", "0", True, 0, ("Installed.",), ("NOT ready",), "ready", [], 1),
+             ("not-ready-no-python3", 'missing numpy\nmissing TCC\nfinish\n', "shell", "0", True, 3,
+              ("Installed, NOT ready: numpy, TCC",), (), "not ready", ["numpy", "TCC"], 0),
+             ("a-stop-no-python3", 'stop 1 "stopped: no tag"\n', "shell", "0", False, 1, ("stopped: no tag",), (),
+              "stopped", [], 0),
+             ("a-dry-run", "MISSING=numpy\nfinish\n", "python3", "1", True, 0, ("Nothing was installed",),
+              ("NOT ready",), None, None, 0),
+             ("a-stop-in-a-dry-run", 'stop 1 "stopped: no tag"\n', "python3", "1", False, 1, ("stopped: no tag",), (),
+              None, None, 0))
+    try:
+        for case, body, builder, dry, plugin, want_rc, words, never, status, missing_want, want_calls in cases:
+            rc, said, receipt, unreadable, calls, sha = run(case, body, builder, dry, plugin)
+            wrong = []
+            if rc != want_rc:
+                wrong.append(f"exit {rc}, want {want_rc}")
+            wrong += [f"never says {w!r}" for w in words if w not in said]
+            wrong += [f"says {w!r}" for w in never if w in said]
+            if calls != want_calls:
+                wrong.append(f"plugin-ready asked for {calls} time(s), want {want_calls}")
+            if unreadable:
+                wrong.append(f"the receipt is {unreadable}")
+            elif status is None and receipt is not None:
+                wrong.append("a receipt was written")
+            elif status is not None and receipt is None:
+                wrong.append("no receipt was written")
+            elif status is not None:
+                want = {"installer": "install.sh", "installer_sha256": sha, "method_ref": "v3.1.2", "mode": "terminal",
+                        "engine": HOSTILE_ENGINE if builder == "python3" else flat, "installer_version": version,
+                        "status": status, "missing": missing_want}
+                if tuple(receipt) != RECEIPT_FIELDS:
+                    wrong.append(f"the receipt's fields are {list(receipt)}, not {list(RECEIPT_FIELDS)}")
+                wrong += [f"the receipt's {k} is {receipt.get(k)!r}, want {v!r}" for k, v in want.items()
+                          if receipt.get(k) != v]
+                if not receipt.get("python") or not isinstance(receipt.get("python"), str):
+                    wrong.append(f"the receipt's python is {receipt.get('python')!r}, want '<path> <version>'")
+            if wrong:
+                out.append(f"install.sh's exit contract, {case} ({builder} builds the receipt"
+                           f"{', a dry run' if dry == '1' else ''}): " + "; ".join(wrong)
+                           + f" -- said {said.strip()[-240:]!r} (#142)")
+    except OSError as exc:
+        out.append(f"the exit contract's fixtures could not be made ({exc}) -- unrun is not agreed")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
     return out
 
 
@@ -976,7 +1196,24 @@ def main():
         checked.append("install.sh's checkout_method makes a copy that is the tag it checked -- a branch of the same "
                        "name ignored, detached, origin set -- updates onto the tag, leaves nothing of a refused tag, "
                        "removes a new copy or puts back an update whose checkout did not land, and leaves a folder "
-                       "that is not a checkout alone (run); install.ps1 the same (read) (T-45)")
+                       "that is not a checkout alone; an update it cannot fetch, or whose local changes it cannot "
+                       "keep, answers 1 with the copy where it was (run); install.ps1 the same, and both update paths "
+                       "stop on it (read) (T-45, R32)")
+    # The exit contract (#142): what the run ended as, in its exit code and its receipt.
+    contract = exit_contract_problems(sh, ps1)
+    if contract:
+        problems.extend(contract)
+    else:
+        checked.append("the exit contract: install.sh's finish ends 0 `Installed.` or 3 `Installed, NOT ready: "
+                       "<names>`, and stop ends 1, each writing a receipt that parses with its eleven fields in "
+                       "install.ps1's order -- with a quote, a backslash and a tab in the engine's line, built by "
+                       "python3 and by the shell -- plugin-ready only when ready, and a dry run writes nothing (run); "
+                       "install.ps1's Stop-Installer writes `stopped`, its end the receipt and then `Stop-Installer 3` "
+                       "under -not $ok, plugin-ready under $ok (read); no `exit 1` or `ok=0` left in install.sh, and "
+                       "the parts not ready named alike in both (#142)")
+        installer_version, _ = one(r'^INSTALLER_VERSION="([^"]+)"', sh, "INSTALLER_VERSION", "install.sh")
+        checked.append(f"install.sh's INSTALLER_VERSION, install.ps1's $InstallerVersion and plugin.json's version "
+                       f"agree ({installer_version})")
     if "Test-TagSignature" not in ps1 or "gpg.ssh.allowedSignersFile" not in ps1:
         problems.append("install.ps1: no Test-TagSignature with gpg.ssh.allowedSignersFile -- the Windows half of #99")
     else:

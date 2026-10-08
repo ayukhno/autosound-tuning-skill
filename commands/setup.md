@@ -42,8 +42,9 @@ The installer is in this plugin: `${CLAUDE_PLUGIN_ROOT}`. Pick the line for the 
    On Windows use the Python the installer put in: `& "$HOME\.local\bin\python3.exe" …` — a bare `python3` there
    can be the Microsoft Store shortcut, which does nothing.
 
-When it finishes, the plugin's start-of-session note stops asking for this setup until the plugin updates to a new
-version; a new version is checked and set up the same way.
+When it finishes ready (`Installed.`, exit 0), the plugin's start-of-session note stops asking for this setup until
+the plugin updates to a new version; a new version is checked and set up the same way. When it ends `Installed, NOT
+ready: …` (exit 3), the note keeps coming back: relay the parts it names, each with what its line says to do.
 
 ## Things worth saying, and not guessing about
 

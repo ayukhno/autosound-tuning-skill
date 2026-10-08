@@ -71,7 +71,8 @@ for f in [*root.glob("README*.md"), *root.glob("FAQ*.md"), root / "ADVANCED.md",
 PYEOF
   G init -q && G add -A && G commit -qm base || { echo "selftest: cannot build the throwaway repo" >&2; return 1; }
   base="$(G rev-parse HEAD)"
-  # The last candidate of $next: the heading, the manifest, install.cmd's PS1URL -- and the front page left alone.
+  # The last candidate of $next: the heading, the manifest and the installers' own version with it (#142),
+  # install.cmd's PS1URL -- and the front page left alone.
   "$PY" - "$repo" "$newest" "$next" <<'PYEOF' || return 1
 import json, pathlib, re, sys
 root, old, new = pathlib.Path(sys.argv[1]), sys.argv[2], sys.argv[3]
@@ -90,6 +91,11 @@ ch.write_text(s, encoding="utf-8")
 pj = root / ".claude-plugin" / "plugin.json"
 d = json.loads(pj.read_text(encoding="utf-8")); d["version"] = new[1:]
 pj.write_text(json.dumps(d, indent=2) + "\n", encoding="utf-8")
+# installer-consistency.py holds INSTALLER_VERSION and $InstallerVersion to plugin.json's version (#142).
+for name, pat, line in (("install.sh", rb'(?m)^INSTALLER_VERSION="[^"]*"', b'INSTALLER_VERSION="%s"'),
+                        ("install.ps1", rb'(?m)^\$InstallerVersion = "[^"]*"', b'$InstallerVersion = "%s"')):
+    f = root / name
+    f.write_bytes(re.sub(pat, lambda m: line % new[1:].encode(), f.read_bytes(), count=1))
 cmd = root / "install.cmd"
 cmd.write_bytes(cmd.read_bytes().replace(f"/{old}/".encode(), f"/{new}/".encode()))
 PYEOF

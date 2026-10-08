@@ -130,6 +130,45 @@ jobs:
       - name: a synthetic set through both engines
         run: python skills/autosound-tuning/rew_tool/resonalyze_engine.py smoke
 
+  # The installers' exit contract on a machine as a person has it (#142, PLAN-AUDIT §3 J6a item 5): ubuntu-24.04's own
+  # /usr/bin/python3 -- no setup-python here -- is externally managed, so pip refuses the method's libraries there. A
+  # real `install.sh`, the method only, unattended: it must end 3, installed and NOT ready, with numpy named in its
+  # receipt -- not 0 and "Installed." over a python3 that cannot run the method. Real downloads (the method's signed
+  # tag, Claude Code, the reviewer), hence the time limit. An install found READY fails too, naming why: the runner
+  # image changed, and this job no longer shows what it was written to show.
+  installers-ubuntu:
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1     # v7
+      - name: install.sh on the runner's own python3 ends 3, numpy named in the receipt
+        run: |
+          rc=0
+          bash install.sh --terminal --no-engine --yes || rc=$?
+          receipt="${XDG_DATA_HOME:-$HOME/.local/share}/autosound/install-receipt.json"
+          echo "install.sh ended with exit $rc; its receipt, $receipt:"
+          cat "$receipt" || true
+          if [ "$rc" = 0 ]; then
+            echo "::error::install.sh ended READY (exit 0) on ubuntu-24.04's /usr/bin/python3 -- the runner image changed (numpy imports there now?), and this job expects 3: installed, NOT ready"
+            exit 1
+          fi
+          if [ "$rc" != 3 ]; then
+            echo "::error::install.sh ended with exit $rc, not 3 (installed, NOT ready)"
+            exit 1
+          fi
+          /usr/bin/python3 - "$receipt" <<'PYEOF'
+          import json, sys
+          with open(sys.argv[1], encoding="utf-8-sig") as fh:
+              receipt = json.load(fh)
+          status, missing = receipt.get("status"), receipt.get("missing")
+          if status != "not ready" or not isinstance(missing, list) or "numpy" not in missing:
+              print(f"::error::the receipt says status {status!r}, missing {missing!r} -- want 'not ready' with numpy")
+              sys.exit(1)
+          print(f"exit 3, and the receipt says {status!r}, missing {missing}: the exit contract holds")
+          PYEOF
+
   # The installer triplet on Windows (hub TCC-010). v3.0.50's beta-channel order check ran `bash`, and
   # on windows-latest that is WSL's launcher: six false divergences, seen first in TCC's Windows CI.
   # This job runs installer-consistency.py on the runner that consumer uses, so a Windows break is red
