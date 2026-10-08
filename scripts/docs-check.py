@@ -73,8 +73,9 @@ Rules:
 
 14. **`no-capture-start-literal`** (#138, I-7). A capture round is opened by one recipe, `capture-session-sheet.md`'s
     Block 0 (`enter-phase 0` → `naming.py next-series` → `capture-start <N> --plan`), and the phase files point to
-    it: none of `references/phases/*.md` opens a round at series 1 (`capture-start 1`). The series is the project's
-    own; a runbook that said 1, followed on a project at `_49` or on a second capture day, opened series 1 again.
+    it: none of `references/phases/*.md` opens a round at a series written into it (`capture-start 1`, or any other
+    number). The series is the project's own; a runbook that said 1, followed on a project at `_49` or on a second
+    capture day, opened series 1 again.
 
 Rules 9-12 read a phrase as a reader does (`_phrase`): across a wrapped line and inline markup, its first letter in
 either case (a sentence's head, a clause's middle) and the rest in the case it is given, as whole words. Their cases, and rules 13's and 14's, are `_check_*` functions, run through one
@@ -834,14 +835,15 @@ def rule_step_ids(root: str) -> list[str]:
     return bad
 
 
-#: A capture round opened at series 1 in a runbook, the number wrapped onto the next line too.
-CAPTURE_START_LITERAL = re.compile(r"capture-start\s+1\b")
+#: A capture round opened in a runbook at a series number written into it -- 1, or any other -- the number wrapped onto
+#: the next line too. `capture-start\s+1\b` passed `capture-start 2`, the #56 sheet's `_2` (the S1 review, Minor 2).
+CAPTURE_START_LITERAL = re.compile(r"capture-start\s+\d+")
 #: The one home of the recipe that opens a round, which every phase file points to.
 CAPTURE_RECIPE = os.path.join(SKILL, "references", "phases", "capture-session-sheet.md")
 
 
 def rule_no_capture_start_literal(root: str) -> list[str]:
-    """No runbook opens a capture round at series 1 (#138, I-7).
+    """No runbook opens a capture round at a series number written into it (#138, I-7).
 
     A round was opened three ways: `SKILL.md` with `--plan`, the phase-0 runbook and `virtual-first.md` with
     `capture-start 1` and titles typed by hand, `phase_-1_intake.md` with `capture-start 1 …`. The series is the
@@ -849,7 +851,8 @@ def rule_no_capture_start_literal(root: str) -> list[str]:
     runbooks opened series 1 again -- the failure the capture sheet records (a sheet that said `_2`, on a project at
     `_49`, brought 47 measurements back under the wrong number). The recipe has one home, `capture-session-sheet.md`'s
     Block 0 (`enter-phase 0` → `naming.py next-series` → `capture-start <N> --plan`), and the phase files point to
-    it, so none of `references/phases/*.md` may carry the literal.
+    it, so none of `references/phases/*.md` may carry a literal series: 1, or any other number (the S1 review, Minor
+    2 -- `capture-start\\s+1\\b` passed the `_2` the sheet said). `capture-start final`, Phase 3's round, is no number.
     """
     bad = []
     phases = os.path.join(root, SKILL, "references", "phases")
@@ -862,7 +865,7 @@ def rule_no_capture_start_literal(root: str) -> list[str]:
         text = open(path, encoding="utf-8").read()
         for m in CAPTURE_START_LITERAL.finditer(text):
             n = text.count("\n", 0, m.start()) + 1
-            bad.append(f"{os.path.relpath(path, root)}:{n}: opens a capture round at series 1 "
+            bad.append(f"{os.path.relpath(path, root)}:{n}: opens a capture round at a series written into it "
                        f"(`{' '.join(m.group().split())}`) — the series is the project's own (`naming.py <project> "
                        f"next-series`), never an example's; point to the one recipe, {CAPTURE_RECIPE}'s Block 0")
     return bad
@@ -1293,9 +1296,11 @@ def _check_step_ids_translation_keeps_every_row():
 
 
 def _check_no_capture_start_literal():
-    """Rule 14 (#138, I-7): a phase file that opens a round at series 1 is named -- the three forms the runbooks
-    carried (a code line, a step bullet, a pointer in parentheses) and the number wrapped onto the next line -- while
-    the series the project gives, another number and a file outside the phases folder are not."""
+    """Rule 14 (#138, I-7): a phase file that opens a round at a series number written into it is named -- the three
+    forms the runbooks carried at series 1 (a code line, a step bullet, a pointer in parentheses), the number wrapped
+    onto the next line, and any other number (the #56 sheet said `_2`; an example's 12 is the next project's wrong
+    series: the S1 review, Minor 2) -- while the series the project gives, a round at `final`, and a file outside the
+    phases folder are not."""
     phases = os.path.join(SKILL, "references", "phases")
     with _scratch() as tmp:
         literal = rule_no_capture_start_literal(_fixture(tmp, {
@@ -1305,21 +1310,26 @@ def _check_no_capture_start_literal():
                 "# V\n\n- **0.0** **open the capture round** — `python3 rew_tool/state/process.py <project>/process\n"
                 "  capture-start 1 \"<title>\" ...`.\n- **0.1** and again: `capture-start\n  1`.\n",
             os.path.join(phases, "phase_-1_intake.md"):
-                "# I\n\nA Phase-0 baseline opens at its series number (`capture-start 1 …`) and needs no ledger.\n"}))
+                "# I\n\nA Phase-0 baseline opens at its series number (`capture-start 1 …`) and needs no ledger.\n",
+            os.path.join(phases, "phase_2_eq.md"):
+                "# E\n\nThe iterative pass opens `capture-start 2 --plan`; on a project at 11, `capture-start 12 --plan`.\n"}))
         assert sorted(c.split(": ")[0] for c in literal) == [
             os.path.join(phases, "phase_-1_intake.md:3"), os.path.join(phases, "phase_0_baseline.md:4"),
+            os.path.join(phases, "phase_2_eq.md:3"), os.path.join(phases, "phase_2_eq.md:3"),
             os.path.join(phases, "virtual-first.md:4"), os.path.join(phases, "virtual-first.md:5")], literal
         assert all("never an example's" in c and "capture-session-sheet.md's Block 0" in c for c in literal), literal
         assert any("(`capture-start 1`)" in c and "virtual-first.md:5" in c for c in literal), "the wrap is read through"
-        # the recipe and its pointers, a series the project gives, another number, and a file the rule does not read
+        assert any("(`capture-start 12`)" in c for c in literal), "another series, two digits"
+        # the recipe and its pointers, a series the project gives, the `_final` round, and a file the rule does not read
         pointed = _fixture(tmp, {
             os.path.join(phases, "capture-session-sheet.md"):
                 "```\n  naming.py <project> next-series       → N\n"
                 "  process.py <project>/process capture-start <N> --plan [--level \"<dB rel. max>\"]\n"
                 "  process.py <project>/process capture-start <M> --under v_007 \"<title>\" ...\n```\n",
             os.path.join(phases, "phase_0_baseline.md"):
-                "**Open the capture round FIRST:** `capture-start` by the one recipe; on a project at 11, "
-                "`capture-start 12 --plan`.\n",
+                "**Open the capture round FIRST:** `capture-start` by the one recipe, `capture-start <N> --plan`.\n",
+            os.path.join(phases, "phase_3_control.md"):
+                "`process.py <project>/process capture-start final \"<title>\" …` opens it.\n",
             os.path.join(SKILL, "rew_tool", "state", "process-schema.md"):
                 "`capture-start 1 -h` opened a round expecting a capture titled `-h`.\n"})
         assert rule_no_capture_start_literal(pointed) == [], rule_no_capture_start_literal(pointed)
@@ -1532,10 +1542,10 @@ def _selftest() -> int:
           "told whose name its word starts --, a name table parted from the steps, a route by a bare number (one "
           "ending its sentence too or a version) and a translation routing a row elsewhere, or dropping, adding or "
           "reordering one, are each named, while a value, a unit, a version, a section, a range, a word no step is "
-          "named by and a heading's number are not pointers; a phase file opening a capture round at series 1 "
-          "is named, on a code line, in a bullet, in a pointer and wrapped, while the series the project gives, "
-          "another number and a file outside the phases folder are not; the rules' checks report every failure in "
-          "one run")
+          "named by and a heading's number are not pointers; a phase file opening a capture round at a series "
+          "written into it (1, 2, 12) is named, on a code line, in a bullet, in a pointer and wrapped, while the "
+          "series the project gives, Phase 3's `final` round and a file outside the phases folder are not; the rules' "
+          "checks report every failure in one run")
     return 0
 
 
