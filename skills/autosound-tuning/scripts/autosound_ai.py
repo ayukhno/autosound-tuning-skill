@@ -1967,12 +1967,20 @@ def _check_the_machine_files_win_once():
     """#143, I-2: the reviewer is told that the machine files win -- once, in the AUTOSOUND CONTEXT's header -- and
     never that the prose is "the single source of truth", which `reviewer-tuning.txt:1` and that header told it while
     the method's truth is the ledger (`data-contract-template.md` §1, SKILL.md's pre-session step 2). Assembled over the
-    contract the door sends, an empty context and an empty package, so only the door's own text can say either; `ask`,
-    no tuning task, carries neither."""
+    contract the door sends, an empty context and an empty package, so only the door's own text can say either -- and
+    with the LEDGER HEAD block every real tuning run carries, read from a banked ledger; `ask`, no tuning task,
+    carries neither."""
     failures = []
     contract = _read(CONTRACT) if CONTRACT else ""
+    state_mod = _siblings().load("state/state.py")
+    top = tempfile.mkdtemp(prefix="autosound_ai_said_once_")
+    try:
+        state_mod.PresetHistory(os.path.join(top, "state"), "SQ").snapshot(state_mod._sample_state(), note="agreed")
+        ledger = ledger_head_block(top)
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
     for task in TUNING_TASKS:
-        prompt = compile_prompt(contract, "", "", task=task)
+        prompt = compile_prompt(contract, "", "", task=task, ledger=ledger)
         said = prompt.lower().count("the machine files win")
         if said != 1:
             failures.append(f"{task}: 'the machine files win' said {said} time(s), not once")
@@ -1980,8 +1988,11 @@ def _check_the_machine_files_win_once():
             failures.append(f"{task}: still told 'single source of truth'")
         if "====== AUTOSOUND CONTEXT (prose view — the machine files win) ======" not in prompt:
             failures.append(f"{task}: the CONTEXT's header is not 'prose view — the machine files win'")
-    ask = compile_prompt(contract, "", "", task="ask").lower()
-    for phrase in ("the machine files win", "single source of truth"):
+        if prompt.count("====== LEDGER HEAD (the machine files: what is banked) ======") != 1 \
+                or "HEAD v_001" not in prompt:
+            failures.append(f"{task}: the prompt does not carry the ledger block once")
+    ask = compile_prompt(contract, "", "", task="ask", ledger=ledger).lower()
+    for phrase in ("the machine files win", "single source of truth", "ledger head"):
         if phrase in ask:
             failures.append(f"ask: carries {phrase!r}")
     assert not failures, "\n  ".join(["what the reviewer is told about the prose:"] + failures)
@@ -2257,6 +2268,44 @@ def _check_the_door_records_the_review():
     assert not failures, "\n  ".join(["the door's record of its review:"] + failures)
 
 
+def _check_the_clipboard_line_runs():
+    """#143, R46 (the review's item 6): the clipboard rung's line, which records the answer once it comes back, is
+    runnable as printed -- this copy's `process.py`, the project the package went into, the reviewer this run would
+    have asked, the answer's name and `--mode clipboard` -- where it printed `process.py <project>/process reviewer
+    <vendor> <model>`. With no model named the reviewer stays `<vendor> <model>`: the answer comes from whichever chat
+    it was pasted into."""
+    top = tempfile.mkdtemp(prefix="autosound_ai_clipboard_line_")
+    process_py = os.path.join(SKILL_DIR, "rew_tool", "state", "process.py")
+    failures = []
+    try:
+        project = os.path.join(top, "car")
+        os.makedirs(os.path.join(project, "rew_analitic"))
+        with open(os.path.join(project, "project.json"), "w", encoding="utf-8") as fh:
+            fh.write("{}")
+        context = os.path.join(project, "rew_analitic", "autosound_context.md")
+        with open(context, "w", encoding="utf-8") as fh:
+            fh.write("# The car, in prose\n")
+        pkg = os.path.join(project, "proposal.md")
+        with open(pkg, "w", encoding="utf-8") as fh:
+            fh.write("Check the proposal.")
+        with _DoorScene(CONTEXT=context) as scene:
+            os.environ["AUTOSOUND_PROJECT_DIR"] = project
+            for named, who in (("gemini-3.1-pro", ["google", "gemini-3.1-pro"]), (None, ["<vendor>", "<model>"])):
+                code, out, err = scene.run("critic", pkg, "--via", "clipboard", *(("--model", named) if named else ()))
+                lines = err.splitlines()
+                at = next((i for i, ln in enumerate(lines) if "і запиши:" in ln), None)
+                answer = re.search(r"збережи її як (\S+) у проекті", lines[at]).group(1) if at is not None else None
+                line = lines[at + 1].strip() if at is not None and at + 1 < len(lines) else ""
+                parts = shlex.split(line) if os.name != "nt" else line.split()
+                want = ["python3", process_py, os.path.join(project, "process"), "reviewer", *who, "--review",
+                        str(answer), "--mode", "clipboard"]
+                if code or parts != want:
+                    failures.append(f"model {named!r}: exit {code}, said {line!r}")
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["the clipboard rung's line to record the answer:"] + failures)
+
+
 def _check_a_fault_in_the_record_is_not_a_refusal():
     """#143, R47: while the door records a review it was asked to (`--record`), only a refusal of the project's is taken
     for one -- an error with `is_busy`, `is_unreadable` or `exit_code`, an `OSError`, or a `ProcessError` of the
@@ -2458,8 +2507,8 @@ def _selftest():
                   _check_private_writer_goes_through_the_move, _check_receipt_says_how_the_install_ended,
                   _check_the_machine_files_win_once, _check_the_ledger_head_rides_in_the_prompt,
                   _check_the_template_teaches_titles_that_resolve, _check_the_door_records_the_review,
-                  _check_a_fault_in_the_record_is_not_a_refusal, _check_an_omp_review_names_its_vendor,
-                  _check_the_contract_is_the_skills_own):
+                  _check_the_clipboard_line_runs, _check_a_fault_in_the_record_is_not_a_refusal,
+                  _check_an_omp_review_names_its_vendor, _check_the_contract_is_the_skills_own):
         try:
             check()
         except AssertionError as exc:
@@ -3308,7 +3357,8 @@ def _selftest():
           "beats every pin and names each one with its file and line, the provider follows the run's model unless "
           "--provider says, an unknown --provider is refused; a tuning prompt says once that the machine files win "
           "and carries the LEDGER HEAD, the contract is the skill's own and a differing project copy is named, the "
-          "contract's Trace IDs resolve, and the door records its review once, saying a refusal (#143)")
+          "contract's Trace IDs resolve; the door records its review only with --record, once, says a refusal and "
+          "exits 70 on a fault of its own, and every line to record a review by hand runs as printed (#143)")
     return 0
 
 
