@@ -3,7 +3,7 @@
 What a front end (TCC) can rely on in this copy of the method (skill #137). Contract 1 is the v3.1.x surface TCC
 listed (its `docs/PLAN-AUDIT-2026-10.md` §9), written down. The number is `CONTRACT_VERSION` in `contract.py`.
 `scripts/contract-guard.py` holds this file's title, the constant, the `IMPORTABLE` table (and contract 1's table,
-frozen) and the probe of item 9; `scripts/run-selftests.sh` runs it.
+frozen and pinned by its digest) and the probe of item 9; `scripts/run-selftests.sh` runs it.
 
 Each item says where it stands:
 
@@ -308,10 +308,12 @@ without parentheses stays a value (an assignment, a class, an attribute `__init_
 one listed with them stays a plain function (not async, not a property) or a class.
 
 The table of contract 1 is frozen in the guard: `FROZEN[1]` in `scripts/contract-guard.py`, generated once from
-`IMPORTABLE` as committed in dd4312d. While `CONTRACT_VERSION` is 1, every module of that table stays in `IMPORTABLE`,
-and every name in it holds against the code by the rules above, whatever `IMPORTABLE` says now. `IMPORTABLE` may grow
-(a name, a module, a trailing parameter with a default); a rename or a removal fails the guard even when `IMPORTABLE`
-is edited with it.
+`IMPORTABLE` as committed in dd4312d, and pinned beside it by its digest (`FROZEN_SHA256[1]`, the sha256 of its
+canonical JSON). While `CONTRACT_VERSION` is 1, every module of that table stays in `IMPORTABLE`, and every name in it
+holds against the code by the rules above, whatever `IMPORTABLE` says now. `IMPORTABLE` may grow (a name, a module, a
+trailing parameter with a default); a rename or a removal in the code fails the guard even when `IMPORTABLE` is edited
+with it, and an edit of the frozen table fails it until the digest is edited too. That is where the guard stops: the
+table and its digest edited in one commit pass it (item 12).
 
 The guard's probe loads every module below by path, in a fresh python started in an empty folder with `PYTHONPATH`
 unset. For two of them it also calls the function that reaches their lazy sibling loads
@@ -437,6 +439,11 @@ path and the method's own raise different classes.
   another value. It happens only in a minor (a `### Breaking` entry, which the release preflight refuses on a
   patch), and only after a TCC release that accepts the new number is out (§8 M5).
 - A bump to N+1 moves `CONTRACT_VERSION` and this file's title, and adds the table of contract N+1 to the guard's
-  `FROZEN`, generated from the bump's `IMPORTABLE` in the same commit; the table of contract N stays as it was. The
-  guard holds the frozen table of the number the literal names, and fails while that number has none.
+  `FROZEN`, generated from the bump's `IMPORTABLE` in the same commit, with its digest in `FROZEN_SHA256`; the table
+  of contract N stays as it was, and so does its digest. The guard holds the frozen table of the number the literal
+  names, and fails while that number has none, or while a frozen table is not the one its digest pins.
+- What the guard holds is the code against the frozen table, whatever `IMPORTABLE` says: a name of it renamed or
+  removed in the code fails it, and so does a module of it dropped from `IMPORTABLE`. An edit of a frozen table
+  together with its digest, in one commit, passes it: that is caught by review, and held by a test on TCC's side
+  that keeps contract 1's table as TCC reads it.
 - Every change to an item is named in the CHANGELOG's `### Upgrading` note, with a line for TCC.

@@ -23,13 +23,15 @@
      "guaranteed" for exactly the CLEAN ones.
   6. While CONTRACT_VERSION is N, FROZEN has contract N's table (a bump freezes it in the same commit), and that
      table holds: every module it lists is in IMPORTABLE, and every entry it lists passes rule 2 against the code,
-     whatever IMPORTABLE says now.
+     whatever IMPORTABLE says now. Each frozen table is the one its digest in FROZEN_SHA256 pins (a bump pins its
+     own): an edit of it fails until the digest is edited too. The two edited in one commit pass -- review's to catch.
   7. No function of a CLEAN module imports a sibling by its bare name -- loaded by path, rew_tool/ is not on
      sys.path -- but the command lines CLI_IMPORTS names; and no module of the method calls `_siblings()` at import,
      where a load under the import lock can deadlock against siblings' own lock. The body of a top-level
      `if __name__ == "__main__":` is not import: it runs as a script, outside any import lock.
 """
 import ast
+import hashlib
 import json
 import os
 import re
@@ -57,9 +59,9 @@ CALLS = {"dsp_profile.py": ("annotate_modellable",
 #: IMPORTABLE, and every entry here holds against the code by rule 2: a name renamed or removed in the code AND in
 #: IMPORTABLE still fails, and so does a module dropped from IMPORTABLE and CONTRACT.md together. IMPORTABLE may grow
 #: (a name, a trailing parameter with a default); this table does not move. Contract 1's was generated once from
-#: contract.py's IMPORTABLE as committed in dd4312d (unchanged through d8e8cae), and it is not edited by hand. A bump
-#: to N+1 adds FROZEN[N+1], generated the same way from the bump's IMPORTABLE, and leaves FROZEN[N] as it is
-#: (CONTRACT.md item 12); until it does, the guard fails.
+#: contract.py's IMPORTABLE as committed in dd4312d (unchanged through d8e8cae), and it is not edited by hand:
+#: FROZEN_SHA256 below pins it. A bump to N+1 adds FROZEN[N+1], generated the same way from the bump's IMPORTABLE, with
+#: its digest, and leaves FROZEN[N] as it is (CONTRACT.md item 12); until it does, the guard fails.
 FROZEN = {
     1: {
         "rew_api.py": (
@@ -133,6 +135,24 @@ FROZEN = {
         "verify.py": ("verdict(name, measurements=None, f_low=20, f_high=20000)",),
     },
 }
+
+#: The sha256 of each frozen table's canonical JSON (`_frozen_digest`), pinned beside it (the final review's errors I1,
+#: tests m-6): `FROZEN` was held by nothing outside its own literal, so a name renamed in the code, in IMPORTABLE and in
+#: `FROZEN[1]` at once passed as "contract 1 holds". Now such an edit fails until this line is edited with it, in the
+#: same commit, as a changed digest a review sees. A speed bump, not a lock: the table and its digest edited together
+#: pass, and CONTRACT.md item 12 says so -- what holds contract 1's table then is review, and TCC's own test of it. A
+#: bump to N+1 pins `FROZEN_SHA256[N+1]` with its table, and this line for N stays as it is.
+FROZEN_SHA256 = {
+    1: "888c072264e8ff679310902432cfcac02e1866bbac69788dbf4b481a81ec6ed0",
+}
+
+
+def _frozen_digest(table):
+    """The sha256 of a frozen table's canonical JSON: its modules in sorted order, each one's entries as listed."""
+    canon = json.dumps({rel: list(entries) for rel, entries in table.items()}, sort_keys=True, ensure_ascii=False,
+                       separators=(",", ":"))
+    return hashlib.sha256(canon.encode("utf-8")).hexdigest()
+
 
 #: The bare sibling imports a CLEAN module still makes inside a function (rule 7), by (file, function): command-line
 #: entry points only, which a front end runs as a process and never calls in-process. Each with what it imports.
@@ -458,7 +478,7 @@ class _Scopes(ast.NodeVisitor):
         self.generic_visit(node)
 
 
-def check(tool, scripts, clean=CLEAN, calls=CALLS, frozen=FROZEN, cli_imports=CLI_IMPORTS):
+def check(tool, scripts, clean=CLEAN, calls=CALLS, frozen=FROZEN, cli_imports=CLI_IMPORTS, digests=FROZEN_SHA256):
     problems = []
     contract_path = os.path.join(tool, "contract.py")
     tree = _module_ast(contract_path)
@@ -511,6 +531,18 @@ def check(tool, scripts, clean=CLEAN, calls=CALLS, frozen=FROZEN, cli_imports=CL
             if not ok:
                 problems.append(f"contract {version} froze {rel}'s {entry}: {why} -- a break moves CONTRACT_VERSION "
                                 f"(CONTRACT.md item 12)")
+    # Each frozen table is the one its digest pins (the final review's errors I1): edited -- a name renamed in the code,
+    # in IMPORTABLE and in the table at once passed as "contract N holds" -- it fails until FROZEN_SHA256 is edited with
+    # it, where a review sees a released contract's digest change.
+    for number, table in sorted(frozen.items()):
+        pinned = digests.get(number)
+        if pinned is None:
+            problems.append(f"contract {number}'s frozen table has no digest in FROZEN_SHA256 -- a bump pins its "
+                            f"table's digest beside it, in the same commit (CONTRACT.md item 12)")
+        elif _frozen_digest(table) != pinned:
+            problems.append(f"contract {number}'s frozen table is not the one FROZEN_SHA256[{number}] pins "
+                            f"({_frozen_digest(table)[:12]}, pinned {pinned[:12]}) -- a frozen table is not edited: a "
+                            f"name of contract {number} renamed or removed moves CONTRACT_VERSION (CONTRACT.md item 12)")
     # What the probe holds and what CONTRACT.md promises name the same modules as IMPORTABLE: a module renamed
     # there and left here would leave a promise that nothing checks.
     for table, rels in (("CLEAN", clean), ("CALLS", calls)):
@@ -597,6 +629,51 @@ def _boot(here):
     return "\n\n" + BOOTSTRAP.replace(blank, f"\n{BOOTSTRAP_HERE}{here}\n") + "\n"
 
 
+def _check_frozen_table_held_by_its_digest():
+    """Rule 6's table is held to its pinned digest (the final review's errors I1, tests m-6). Their probe renamed
+    `get_fr` in the code, in IMPORTABLE and in the frozen table at once, and the guard said "contract 1 holds": nothing
+    outside the table pinned it. Now that edit fails until the digest is edited with it, and so does a frozen table
+    with no digest. What the digest cannot see is held too, as CONTRACT.md item 12 says it: the table and its digest
+    edited in one commit pass -- that is review's to catch, and TCC's own test of contract 1's table."""
+    with tempfile.TemporaryDirectory(prefix="contract_guard_digest_") as root:
+        tool, scripts = os.path.join(root, "rew_tool"), os.path.join(root, "scripts")
+        os.makedirs(tool)
+        os.makedirs(scripts)
+
+        def put(rel, text):
+            with open(os.path.join(root, *rel.split("/")), "w", encoding="utf-8") as f:
+                f.write(text)
+
+        def tree(name):
+            put("rew_tool/contract.py", f'CONTRACT_VERSION = 1\nIMPORTABLE = {{"m.py": ("{name}(mid)",)}}\n')
+            put("rew_tool/m.py", f"def {name}(mid):\n    return mid\n")
+
+        put("rew_tool/CONTRACT.md", "# Contract 1\n\n## 9. The modules TCC imports\n\n"
+                                    "| module | loads by path without touching `sys.path` |\n|---|---|\n"
+                                    "| `m.py` | W-10 (J1b) |\n")
+
+        def guard(frozen, digests):
+            return check(tool, scripts, clean=(), calls={}, frozen=frozen, cli_imports={}, digests=digests)
+
+        tree("get_fr")
+        frozen = {1: {"m.py": ("get_fr(mid)",)}}
+        pinned = {1: _frozen_digest(frozen[1])}
+        assert guard(frozen, pinned) == [], guard(frozen, pinned)
+        # the probe: one name renamed in the code, in IMPORTABLE and in the frozen table, its digest left alone
+        tree("get_frequency_response")
+        renamed = {1: {"m.py": ("get_frequency_response(mid)",)}}
+        said = guard(renamed, pinned)
+        assert len(said) == 1 and "contract 1's frozen table is not the one FROZEN_SHA256[1] pins" in said[0], said
+        # a bump that froze its table and pinned no digest for it
+        tree("get_fr")
+        said = guard({**frozen, 2: frozen[1]}, pinned)
+        assert len(said) == 1 and "contract 2's frozen table has no digest" in said[0], said
+        # the limit: the table and its digest edited in one commit pass the guard (CONTRACT.md item 12)
+        tree("get_frequency_response")
+        said = guard(renamed, {1: _frozen_digest(renamed[1])})
+        assert said == [], said
+
+
 def _selftest():
     """Every rule broken on purpose in a throwaway tree, each break named by the rule that holds it."""
     import shutil
@@ -652,10 +729,11 @@ def _selftest():
         clean, calls = ("m.py",), {"m.py": ("lazy", "()")}
         # The tree's contract 1, frozen, and its command line.
         frozen = {1: {"m.py": ("X", "f(a, b=1)", "C.attr", "lazy()"), "sub/n.py": ("Y", "h()")}}
+        digests = {n: _frozen_digest(table) for n, table in frozen.items()}      # pinned, as FROZEN_SHA256 pins
         cli = {("m.py", "_main"): "the throwaway tree's command line"}
 
         def run():
-            return check(tool, scripts, clean=clean, calls=calls, frozen=frozen, cli_imports=cli)
+            return check(tool, scripts, clean=clean, calls=calls, frozen=frozen, cli_imports=cli, digests=digests)
 
         good = run()
         assert good == [], f"the good tree: {good}"
@@ -690,7 +768,7 @@ def _selftest():
                 failures.append(f"{label}: breaks no caller, and the guard refused it -- {got}")
 
         def named(label, phrase, clean_=clean, calls_=calls, cli_=cli):
-            got = check(tool, scripts, clean=clean_, calls=calls_, frozen=frozen, cli_imports=cli_)
+            got = check(tool, scripts, clean=clean_, calls=calls_, frozen=frozen, cli_imports=cli_, digests=digests)
             if not any(phrase in p for p in got):
                 failures.append(f"{label}: no problem says {phrase!r} -- {got}")
 
@@ -821,7 +899,8 @@ def _selftest():
         def verdict(frozen_=frozen):
             out = io.StringIO()
             with contextlib.redirect_stdout(out):
-                rc = main(["contract-guard.py"], tool, scripts, clean, calls, frozen_, cli)
+                rc = main(["contract-guard.py"], tool, scripts, clean, calls, frozen_, cli,
+                          {n: _frozen_digest(table) for n, table in frozen_.items()})
             return rc, out.getvalue().strip().splitlines()[-1]
 
         said = verdict()
@@ -829,7 +908,7 @@ def _selftest():
             failures.append(f"the verdict on the good tree: {said}")
         put("rew_tool/contract.py", files["rew_tool/contract.py"].replace("CONTRACT_VERSION = 1\n",
                                                                           "CONTRACT_VERSION = 2\n"))
-        bumped = {**frozen, 2: frozen[1]}                    # the bump froze its table, as it must
+        bumped = {**frozen, 2: frozen[1]}                    # the bump froze its table, and pinned it, as it must
         try:
             said = verdict(bumped)                           # 2 in the literal, 1 in the title: one problem
             if said != (1, "contract-guard: 1 problem(s)"):
@@ -916,6 +995,12 @@ def _selftest():
                     os.environ.pop(k, None)
                 else:
                     os.environ[k] = v
+        # The rules held by a `_check_*` of their own, into the same list: one failing never hides another.
+        for fn in (_check_frozen_table_held_by_its_digest,):
+            try:
+                fn()
+            except AssertionError as exc:
+                failures.append(f"{fn.__name__}: {exc}")
         assert not failures, "\n".join(failures)
     print("contract-guard selftest OK -- named: a CONTRACT_VERSION that is no literal, a string or a bool, a "
           "CONTRACT.md title that is not it, an IMPORTABLE that is no literal, an absent name, a renamed or a new "
@@ -924,7 +1009,8 @@ def _selftest():
           "with no __init__ of its own, a constant listed as a function, a value made a function, a function made "
           "async or a property, an entry that does not parse, a module not there, a frozen name renamed or removed "
           "with its entry and a frozen module dropped (a frozen entry may grow), a bump without its frozen table, "
-          "CLEAN or CALLS naming a module "
+          "a frozen table edited without its pinned digest and one frozen with no digest (the two edited together "
+          "pass: review's), CLEAN or CALLS naming a module "
           "IMPORTABLE does not, CONTRACT.md item 9 out of step with IMPORTABLE or CLEAN, a _siblings copy that is "
           "not the guard's text (one copy or all of them), a module with _siblings and no top-level os or sys, a "
           "bare sibling import inside a function of a CLEAN module (its named command line passes), _siblings() "
@@ -934,11 +1020,12 @@ def _selftest():
           "the caller's PYTHONPATH and REW_API_URL; the verdict names the contract the tree holds")
 
 
-def main(argv, tool=TOOL, scripts=SCRIPTS, clean=CLEAN, calls=CALLS, frozen=FROZEN, cli_imports=CLI_IMPORTS):
+def main(argv, tool=TOOL, scripts=SCRIPTS, clean=CLEAN, calls=CALLS, frozen=FROZEN, cli_imports=CLI_IMPORTS,
+         digests=FROZEN_SHA256):
     if argv[1:] == ["--selftest"]:
         _selftest()
         return 0
-    problems = check(tool, scripts, clean=clean, calls=calls, frozen=frozen, cli_imports=cli_imports)
+    problems = check(tool, scripts, clean=clean, calls=calls, frozen=frozen, cli_imports=cli_imports, digests=digests)
     for p in problems:
         print(f"[contract] {p}")
     if problems:
