@@ -251,22 +251,21 @@ CONTRACT_NAME = "data-contract-template.md"
 
 # Пошук файлів контракту та контексту
 def find_file(filename, fallback_dir=None):
-    """Where the door reads `filename` from: `rew_analitic/` (`PROJECT_MIRROR`), the working folder, `fallback_dir`
-    ($AUTOSOUND_DIR), the skill's `assets/`, in that order -- but the tuning contract from the skill alone (#143, I-5).
-    The intake used to copy the contract into `rew_analitic/`, and that copy was read first: a project kept the
-    protocol it was started with while the method moved on. `doctor` and `contract.py check` name a copy that differs
-    (`contract_copies_that_differ`)."""
+    """Where the door reads `filename` from: the project root (`review_project_dir`), the working folder,
+    `rew_analitic/` (`PROJECT_MIRROR`, then the project's own), `fallback_dir` ($AUTOSOUND_DIR), the skill's `assets/`,
+    in that order -- but the tuning contract from the skill alone (#143, I-5). The intake used to copy the contract into
+    `rew_analitic/`, and that copy was read first: a project kept the protocol it was started with while the method
+    moved on. `doctor` and `contract.py check` name a copy that differs (`contract_copies_that_differ`). The context's
+    home is the project root (#143, I-21): it was read from `rew_analitic/` first; an older project's copy there is read
+    only when the root has none, and said (`context_move_line`)."""
     if filename == CONTRACT_NAME:
         skill_path = os.path.join(SKILL_DIR, "assets", filename)
         return skill_path if os.path.isfile(skill_path) else None
-    # Спочатку шукаємо локально в rew_analitic
-    local_path = os.path.join(PROJECT_MIRROR, filename)
-    if os.path.isfile(local_path):
-        return local_path
-    # Потім в CWD
-    cwd_path = os.path.join(CWD, filename)
-    if os.path.isfile(cwd_path):
-        return cwd_path
+    root = review_project_dir()
+    for folder in (root, CWD, PROJECT_MIRROR, os.path.join(root, "rew_analitic")):
+        path = os.path.join(folder, filename)
+        if os.path.isfile(path):
+            return path
     # Потім у fallback ($AUTOSOUND_DIR, якщо заданий)
     if fallback_dir:
         fallback_path = os.path.join(fallback_dir, filename)
@@ -280,10 +279,6 @@ def find_file(filename, fallback_dir=None):
         return skill_path
     return None
 
-CONTRACT = find_file(CONTRACT_NAME, AUTOSOUND_DIR or None)
-CONTEXT = find_file("autosound_context.md", AUTOSOUND_DIR or None)
-
-
 def review_project_dir():
     """The project a tuning review is about, whose ledger it is given (#143, I-2): `$AUTOSOUND_PROJECT_DIR`, else the
     parent of `PROJECT_MIRROR` when that is `<dir>/rew_analitic` (TCC sets it so, and it is the default when the door
@@ -295,6 +290,35 @@ def review_project_dir():
     if os.path.basename(mirror) == "rew_analitic":
         return os.path.dirname(mirror)
     return CWD
+
+
+CONTRACT = find_file(CONTRACT_NAME, AUTOSOUND_DIR or None)
+#: The project's context, the prose view of its ledger. Its home is the project root (#143, I-21).
+CONTEXT_NAME = "autosound_context.md"
+CONTEXT = find_file(CONTEXT_NAME, AUTOSOUND_DIR or None)
+
+
+def context_move_line():
+    """The line a reader of the context says when `CONTEXT` is an older project's copy in `rew_analitic/`
+    (`PROJECT_MIRROR`, or the project's own), read because the project root has none: the file, and its home to move it
+    to (#143, I-21). None when the context is read from anywhere else."""
+    if not CONTEXT:
+        return None
+    root = review_project_dir()
+    old = {os.path.abspath(PROJECT_MIRROR), os.path.abspath(os.path.join(root, "rew_analitic"))}
+    home = os.path.join(root, CONTEXT_NAME)
+    if os.path.dirname(os.path.abspath(CONTEXT)) not in old or os.path.abspath(home) == os.path.abspath(CONTEXT):
+        return None
+    return f"! the context is read from {CONTEXT}: its home is the project root — move it to {home}"
+
+
+def context_lines():
+    """What a reader of the context says of where it lives (#143, I-21): `context_move_line`, or one line per
+    `rew_analitic/` copy that differs from the context read (`context_copies_that_differ`). Warnings, never a refusal."""
+    moved = context_move_line()
+    return [moved] if moved else [
+        f"! a copy {copy} differs from the context the reviewer gets, {CONTEXT} — merge what it adds there and "
+        "delete the copy" for copy in context_copies_that_differ()]
 
 
 def _same_text(path, reference):
@@ -329,10 +353,34 @@ def contract_copies_that_differ():
             found.append(path)
     return found
 
-if AUTOSOUND_DIR and os.path.isdir(AUTOSOUND_DIR):
-    AUDIT_TRAIL = os.path.join(AUTOSOUND_DIR, "audit-trail.md")
-else:
-    AUDIT_TRAIL = os.path.join(PROJECT_MIRROR, "audit-trail.md")
+
+def context_copies_that_differ():
+    """Every older project's copy of the context in `rew_analitic/` -- `PROJECT_MIRROR`'s and the project root's own --
+    whose text is not that of `CONTEXT`, the one the door reads (#143, I-21). Not read while the context comes from
+    elsewhere; one that differs is what a person opening `rew_analitic/` takes for the context. A copy that cannot be
+    read is counted with them. [] when `CONTEXT` is itself such a copy: `context_move_line` says that one."""
+    if not CONTEXT or not os.path.isfile(CONTEXT) or context_move_line():
+        return []
+    seen = {os.path.normcase(os.path.realpath(CONTEXT))}
+    found = []
+    for folder in (PROJECT_MIRROR, os.path.join(review_project_dir(), "rew_analitic")):
+        path = os.path.abspath(os.path.join(folder, CONTEXT_NAME))
+        key = os.path.normcase(os.path.realpath(path))
+        if key in seen or not os.path.isfile(path):
+            continue
+        seen.add(key)
+        try:
+            same = _same_text(path, CONTEXT)
+        except OSError:
+            same = False
+        if not same:
+            found.append(path)
+    return found
+
+
+#: Where `_log_audit` appends when set (a check sets it); None, as it ships: `_audit_trail()` resolves the project's
+#: when a review is logged (#143, I-21).
+AUDIT_TRAIL = None
 
 # Функція кросплатформного копіювання в буфер обміну
 def copy_to_clipboard(text):
@@ -2460,9 +2508,9 @@ def _check_an_omp_review_names_its_vendor():
 def _check_the_contract_is_the_skills_own():
     """#143, I-5: the reviewer gets the skill's contract, `assets/data-contract-template.md`, wherever the door runs.
     The intake copied it into `rew_analitic/`, and that copy was read first: a project kept a contract the method had
-    moved past. The CONTEXT keeps its order (`rew_analitic/` first). `doctor` names a project copy that differs --
-    `! a project copy <path> differs from the skill's contract ...` -- as a warning that leaves its verdict; a copy
-    that is the skill's is not named."""
+    moved past. `doctor` names a project copy that differs -- `! a project copy <path> differs from the skill's
+    contract ...` -- as a warning that leaves its verdict; a copy that is the skill's is not named. (Where the CONTEXT
+    is read from: `_check_the_context_is_the_roots`.)"""
     skill = os.path.join(SKILL_DIR, "assets", "data-contract-template.md")
     top = tempfile.mkdtemp(prefix="autosound_ai_one_contract_")
     failures = []
@@ -2478,14 +2526,11 @@ def _check_the_contract_is_the_skills_own():
         for folder in (mirror, project):
             with open(os.path.join(folder, "autosound_context.md"), "w", encoding="utf-8") as fh:
                 fh.write(f"# the context in {folder}\n")
-        context = os.path.join(mirror, "autosound_context.md")
+        context = os.path.join(project, "autosound_context.md")
         with _DoorScene(PROJECT_MIRROR=mirror, CWD=project, CONTEXT=context) as scene:
             got = find_file("data-contract-template.md", top)
             if got != skill:
                 failures.append(f"the contract read from {got}, not the skill's")
-            got = find_file("autosound_context.md", None)
-            if got != context:
-                failures.append(f"the context read from {got}, not rew_analitic/ first")
             out = scene.doctor()
             line = (f"! a project copy {stale} differs from the skill's contract — the reviewer gets the skill's; "
                     "delete the copy")
@@ -2499,6 +2544,133 @@ def _check_the_contract_is_the_skills_own():
     assert not failures, "\n  ".join(["one contract, the skill's:"] + failures)
 
 
+def _check_the_context_is_the_roots():
+    """#143, I-21: the project root is `autosound_context.md`'s home. The root's is read over a copy in `rew_analitic/`
+    (`PROJECT_MIRROR`), and a copy there that differs from it is named -- by `doctor`, as a warning that leaves its
+    verdict, and in a review's run; a copy with the root's text is not named. One only in `rew_analitic/` (an older
+    project's: `PROJECT_MIRROR`, or the project's own) is read, with one line naming the move -- in `doctor` and in a
+    review's run. The door read `rew_analitic/` first."""
+    top = tempfile.mkdtemp(prefix="autosound_ai_context_home_")
+    failures = []
+    try:
+        project = os.path.join(top, "car")
+        mirror = os.path.join(project, "rew_analitic")
+        os.makedirs(mirror)
+        with open(os.path.join(project, "project.json"), "w", encoding="utf-8") as fh:
+            fh.write("{}")
+        home, copy = os.path.join(project, "autosound_context.md"), os.path.join(mirror, "autosound_context.md")
+        for path in (home, copy):
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write(f"# the context in {os.path.dirname(path)}\n")
+        moved = f"! the context is read from {copy}: its home is the project root — move it to {home}"
+        differs = (f"! a copy {copy} differs from the context the reviewer gets, {home} — merge what it adds there and "
+                   "delete the copy")
+        with _DoorScene(PROJECT_MIRROR=mirror, CWD=top, CONTEXT=home) as scene:
+            os.environ["AUTOSOUND_PROJECT_DIR"] = project
+            got = find_file("autosound_context.md", None)
+            if got != home:
+                failures.append(f"the context read from {got}, not the root's")
+            out = scene.doctor()
+            said = [ln for ln in out.splitlines() if ln.startswith("! ") and "autosound_context.md" in ln]
+            if said != [differs]:
+                failures.append(f"a copy that differs: the doctor said {said!r}")
+            if "УСПІШНО ✓" not in out.strip().splitlines()[-1]:
+                failures.append(f"the warning turned the doctor's verdict: {out.strip().splitlines()[-1]!r}")
+            pkg = os.path.join(project, "proposal.md")
+            with open(pkg, "w", encoding="utf-8") as fh:
+                fh.write("Check the proposal.")
+            code, _out, err = scene.run("critic", pkg, "--via", "clipboard")
+            if code or err.splitlines().count(differs) != 1:
+                failures.append(f"a copy that differs, a review's run: exit {code}, said {err.strip()[-400:]!r}")
+            shutil.copyfile(home, copy)
+            said = [ln for ln in scene.doctor().splitlines() if ln.startswith("! ") and "autosound_context.md" in ln]
+            if said:
+                failures.append(f"a copy with the root's text: the doctor said {said!r}")
+        os.remove(home)
+        # The project's own `rew_analitic/`, `PROJECT_MIRROR` set elsewhere: read, and said the same.
+        with _DoorScene(PROJECT_MIRROR=os.path.join(top, "elsewhere"), CWD=top, CONTEXT=None):
+            os.environ["AUTOSOUND_PROJECT_DIR"] = project
+            got = find_file("autosound_context.md", None)
+            globals()["CONTEXT"] = got
+            if got != copy or context_move_line() != moved:
+                failures.append(f"the project's own rew_analitic/: read {got}, said {context_move_line()!r}")
+        with _DoorScene(PROJECT_MIRROR=mirror, CWD=top, CONTEXT=copy) as scene:
+            os.environ["AUTOSOUND_PROJECT_DIR"] = project
+            got = find_file("autosound_context.md", None)
+            if got != copy:
+                failures.append(f"only in rew_analitic/: the context read from {got}")
+            out = scene.doctor()
+            said = [ln for ln in out.splitlines() if ln.startswith("! ") and "autosound_context.md" in ln]
+            if said != [moved]:
+                failures.append(f"only in rew_analitic/: the doctor said {said!r}")
+            code, _out, err = scene.run("critic", pkg, "--via", "clipboard")
+            if code or err.splitlines().count(moved) != 1:
+                failures.append(f"only in rew_analitic/, a review's run: exit {code}, said {err.strip()[-400:]!r}")
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["the context's home, the project root:"] + failures)
+
+
+def _check_the_audit_trail_is_the_projects():
+    """#143, I-21: a review's line in the audit trail lands at `<project>/audit-trail.md` -- the project the review is
+    about, `review_project_dir`'s -- where it landed in `rew_analitic/`. A folder that is no project gets none, as it
+    got none before (the old path's folder was not there): the trail is not written into wherever the door was started.
+    An older project's `rew_analitic/audit-trail.md` is left as it is, and named in one line saying to move it. The API
+    is a stand-in that answers."""
+    top = tempfile.mkdtemp(prefix="autosound_ai_audit_home_")
+    failures = []
+
+    def lines(path):
+        if not os.path.isfile(path):
+            return 0
+        with open(path, encoding="utf-8") as fh:
+            return len(fh.read().splitlines())
+    try:
+        project = os.path.join(top, "car")
+        mirror = os.path.join(project, "rew_analitic")
+        os.makedirs(mirror)
+        with open(os.path.join(project, "project.json"), "w", encoding="utf-8") as fh:
+            fh.write("{}")
+        context = os.path.join(project, "autosound_context.md")
+        with open(context, "w", encoding="utf-8") as fh:
+            fh.write("# The car, in prose\n")
+        pkg = os.path.join(top, "proposal.md")
+        with open(pkg, "w", encoding="utf-8") as fh:
+            fh.write("Check the proposal.")
+        stranger = os.path.join(top, "not-a-project")
+        os.makedirs(stranger)
+        home, old = os.path.join(project, "audit-trail.md"), os.path.join(mirror, "audit-trail.md")
+        api = lambda key, model, prompt, var=None: ("THE REVIEW", model)  # noqa: E731
+        for label, values, stated, where in (
+                ("AUTOSOUND_PROJECT_DIR", {"CWD": stranger}, project, home),
+                ("PROJECT_MIRROR", {"CWD": stranger, "PROJECT_MIRROR": mirror}, None, home),
+                ("no project", {"CWD": stranger, "PROJECT_MIRROR": os.path.join(stranger, "rew_analitic")}, None,
+                 None)):
+            before = {path: lines(path) for path in (home, old, os.path.join(stranger, "audit-trail.md"))}
+            with _DoorScene(CONTEXT=context, AUDIT_TRAIL=None, AUTOSOUND_DIR="", call_gemini_api=api,
+                            **values) as scene:
+                os.environ["GEMINI_API_KEY"] = "AQ." + "x" * 50
+                if stated:
+                    os.environ["AUTOSOUND_PROJECT_DIR"] = stated
+                code, out, err = scene.run("critic", pkg, "--via", "api", "--model", "gemini-3.1-pro")
+            grew = {path: lines(path) - n for path, n in before.items() if lines(path) != n}
+            if code or "THE REVIEW" not in out or grew != ({where: 1} if where else {}):
+                failures.append(f"{label}: exit {code}, lines added {grew!r}, said {err.strip()[-300:]!r}")
+        with open(old, "w", encoding="utf-8") as fh:
+            fh.write("2026-10-01 10:00 | critic=m | package=old.md\n")
+        with _DoorScene(CONTEXT=context, AUDIT_TRAIL=None, AUTOSOUND_DIR="", call_gemini_api=api) as scene:
+            os.environ.update(GEMINI_API_KEY="AQ." + "x" * 50, AUTOSOUND_PROJECT_DIR=project)
+            before = lines(home)
+            code, out, err = scene.run("critic", pkg, "--via", "api", "--model", "gemini-3.1-pro")
+        said = [ln for ln in err.splitlines() if old in ln]
+        if code or lines(home) != before + 1 or lines(old) != 1 or len(said) != 1 or home not in said[0]:
+            failures.append(f"beside an old trail: exit {code}, {lines(home) - before} line(s) at the root, "
+                            f"the old one {lines(old)} line(s), said {said!r}")
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["the audit trail's home, the project root:"] + failures)
+
+
 def _selftest():
     """Offline: a retired model becomes a CHOICE carrying the key's list (never a fall-through),
     the list is parsed from the API's shape, and a run with a key and no model stops on the list."""
@@ -2509,7 +2681,8 @@ def _selftest():
                   _check_the_machine_files_win_once, _check_the_ledger_head_rides_in_the_prompt,
                   _check_the_template_teaches_titles_that_resolve, _check_the_door_records_the_review,
                   _check_the_clipboard_line_runs, _check_a_fault_in_the_record_is_not_a_refusal,
-                  _check_an_omp_review_names_its_vendor, _check_the_contract_is_the_skills_own):
+                  _check_an_omp_review_names_its_vendor, _check_the_contract_is_the_skills_own,
+                  _check_the_context_is_the_roots, _check_the_audit_trail_is_the_projects):
         try:
             check()
         except AssertionError as exc:
@@ -3711,6 +3884,8 @@ def run_doctor(smoke=True, via=None):
     else:
         print("✗ Контекст autosound_context.md НЕ ЗНАЙДЕНО!")
         ok = False
+    for line in context_lines():
+        print(line)     # #143, I-21: a warning, not a failure -- the context's home is the project root
         
     # 3. Перевірка ключів API — усі показуємо, але вирішує ключ ОБРАНОГО рецензента
     for line in retired_advisor_notice():
@@ -3998,6 +4173,30 @@ def _engine_lines():
 #: the script was launched — and the skill folder is the likeliest place to launch it from by hand,
 #: because that is where the script lives.
 _OWN_REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+#: What makes a folder a project to the door: any one of these in it.
+_PROJECT_MARKS = ("project.json", "rew_analitic", "process", ".tcc")
+
+
+def _looks_like_project(folder):
+    """Does `folder` hold any of a project's marks (`_PROJECT_MARKS`)?"""
+    return any(os.path.exists(os.path.join(folder, name)) for name in _PROJECT_MARKS)
+
+
+def _audit_trail():
+    """Where a review's line is logged: `AUDIT_TRAIL` when set, else `$AUTOSOUND_DIR/audit-trail.md` when that canon is
+    set, else `<project>/audit-trail.md` -- the project root, `review_project_dir`'s, where it was `rew_analitic/`
+    (#143, I-21). None when that folder was not stated and is no project -- this repository, or a folder with none of a
+    project's marks: the trail is not written into wherever the door was started, as it was not when its old folder,
+    `rew_analitic/`, was not there."""
+    if AUDIT_TRAIL:
+        return AUDIT_TRAIL
+    if AUTOSOUND_DIR and os.path.isdir(AUTOSOUND_DIR):
+        return os.path.join(AUTOSOUND_DIR, "audit-trail.md")
+    project = os.path.abspath(review_project_dir())
+    if not os.environ.get("AUTOSOUND_PROJECT_DIR") and (
+            project == _OWN_REPO or project.startswith(_OWN_REPO + os.sep) or not _looks_like_project(project)):
+        return None
+    return os.path.join(project, "audit-trail.md")
 
 
 def _review_target(what="Рецензію"):
@@ -4031,9 +4230,7 @@ def _review_target(what="Рецензію"):
               "належить ПРОЕКТУ. Задайте AUTOSOUND_PROJECT_DIR=<тека проекту> і повторіть — "
               "текст вище не втрачено.", file=sys.stderr)
         return None
-    looks_like_project = any(os.path.exists(os.path.join(here, name))
-                             for name in ("project.json", "rew_analitic", "process", ".tcc"))
-    if not looks_like_project:
+    if not _looks_like_project(here):
         print(f">> {what} НЕ збережено: {here} не схожа на теку проекту (нема project.json, "
               f"rew_analitic/, process/ чи .tcc/), а писати запис проекту в довільну теку — це те, "
               f"як він потім знаходиться в чужому git. Задайте AUTOSOUND_PROJECT_DIR.",
@@ -4336,12 +4533,20 @@ def compile_prompt(contract, context, package, memory="", trace="", task="critic
 
 
 def _log_audit(role, model, pkg_file):
-    """One line in the audit trail per answered review; a trail that cannot be written costs the review nothing."""
+    """One line in the audit trail per answered review (`_audit_trail`); a trail that cannot be written costs the review
+    nothing. An older project's trail in `rew_analitic/` is left as it is, and named with its home (#143, I-21)."""
+    path = _audit_trail()
+    if not path:
+        return
     try:
-        with open(AUDIT_TRAIL, "a", encoding="utf-8") as f:
+        with open(path, "a", encoding="utf-8") as f:
             f.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M')} | {role}={model} | package={os.path.basename(pkg_file)}\n")
     except Exception:
-        pass
+        return
+    old = os.path.join(os.path.dirname(path), "rew_analitic", "audit-trail.md")
+    if os.path.isfile(old):
+        print(f"! {old} is the audit trail's old place: its home is the project root — this review is logged in "
+              f"{path}; move the old lines there", file=sys.stderr)
 
 
 def review_through_omp(role, binary, model, prompt, pkg_file, role_var, record=False):
@@ -4498,7 +4703,8 @@ def main():
               file=sys.stderr)
         sys.exit(1)
     if tuning and (not CONTEXT or not os.path.isfile(CONTEXT)):
-        print(f"Помилка: Не знайдено контекст проекту autosound_context.md у '{PROJECT_MIRROR}' чи в AUTOSOUND_DIR.", file=sys.stderr)
+        print(f"Помилка: Не знайдено контекст проекту autosound_context.md у '{review_project_dir()}' (ні в "
+              f"'{PROJECT_MIRROR}', ні в AUTOSOUND_DIR).", file=sys.stderr)
         # `critic` and `advisor` are tuning and need the project; a plain question or a translation does not
         # (skill #85: a session used `advisor` for a translation and borrowed a context file to get past this).
         print("  Просте питання чи переклад -- `ask`: йому проект не потрібен.", file=sys.stderr)
@@ -4515,6 +4721,8 @@ def main():
     if CONTEXT and os.path.isfile(CONTEXT):
         with open(CONTEXT, "r", encoding="utf-8") as f:
             context_content = f.read()
+        for line in context_lines():
+            print(line, file=sys.stderr)
     with open(pkg_file, "r", encoding="utf-8") as f:
         pkg_content = f.read()
         

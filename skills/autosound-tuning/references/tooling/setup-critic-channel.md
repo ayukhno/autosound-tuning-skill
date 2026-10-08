@@ -356,13 +356,16 @@ and stderr says `REVIEW_ROUTE: omp`.
 ```
 the Contract (protocol)   <skill>/assets/data-contract-template.md — the skill's own, always; a project copy is never read
 the LEDGER HEAD           <project>/state — read through state.py: the HEAD's id, slot, date, note and rows
-autosound_context.md      $PWD/rew_analitic/ first, then $PWD
+autosound_context.md      <project>/ (its home, the root), then $PWD, then PROJECT_MIRROR and <project>/rew_analitic/
    (fallback only: $AUTOSOUND_DIR — an OPTIONAL cross-project canon dir you set yourself; unset by default)
 ```
 `<project>` is `$AUTOSOUND_PROJECT_DIR`, else the folder above `PROJECT_MIRROR` when that is `<dir>/rew_analitic`, else
 `$PWD`. The context is the prose view of the ledger, and the reviewer is told that where they disagree the machine
 files win. A copy of the contract in the project (the intake made one until v3.1.3) is named by `doctor` and
-`contract.py check` when it differs from the skill's — delete it. So **launch Claude from the project directory**
+`contract.py check` when it differs from the skill's — delete it. A context read from `rew_analitic/` (an older
+project's, the root has none) is said with a line to move it to the root, and a `rew_analitic/` copy that differs from
+the root's is named, by `doctor` and in each review's run. Each answered review adds a line to
+`<project>/audit-trail.md`. So **launch Claude from the project directory**
 (CWD = the car you're tuning). `PROJECT_MIRROR` defaults to `$PWD/rew_analitic`.
 
 > ⚠️ If the Critic ever cites a vehicle/history you don't recognise, it loaded a *different* project's context — fix the path here (or `PROJECT_MIRROR`), don't argue with the output.

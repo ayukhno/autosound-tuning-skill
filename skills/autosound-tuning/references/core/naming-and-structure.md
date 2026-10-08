@@ -125,7 +125,9 @@ A tune is worth months of work; its artifacts must survive a disk loss. Standard
 ├── project.json          car/equipment/glossary/hardware facts — machine, this file's §1/§3/§5
 ├── dsp_profile.json       DSP capability profile (tiers, fields, EQ band vocabulary)
 ├── glossary.json          optional standalone form of project.json's `glossary` key
-├── autosound_context.md, preference-profile.md, tuning-changelog, audit-trail.md   — prose
+├── autosound_context.md, preference-profile.md, tuning-changelog, audit-trail.md, skill-inbox.md
+│                          — prose, here and nowhere else (an older project's copy in rew_analitic/
+│                            is read only while this folder has none, and named to be moved here)
 ├── process/
 │   ├── process-state.json    current phase + plan slice
 │   └── journal.jsonl          append-only process history
@@ -134,7 +136,7 @@ A tune is worth months of work; its artifacts must survive a disk loss. Standard
 │   ├── slots.json             what each slot (preset) holds, and which one is active
 │   └── legacy/ + legacy-map.json   a moved per-preset ledger, as it was (older projects keep
 │                                  `<preset>/v_NNN.json + HEAD` and `registry.json` until moved)
-└── rew_analitic/          measurements, exports, target curves — detailed below
+└── rew_analitic/          measurements, exports, target curves, the reviewer's memory — detailed below
 ```
 
 ```
@@ -148,7 +150,8 @@ rew_analitic/
 │                  #2–9 components); README.md maps which is ACTIVE + curve↔preset; several coexist
 ├── *.mdat         LARGE (16–112 MB) → .gitignore, NOT backed up (re-measure if ever needed —
 │                  user's call; GitHub's 100 MB/file limit rules them out anyway w/o LFS)
-└── eq-set-*.md, dsp-state, changelog, target-*  analysis records → git ✓ (already)
+├── depth-advisor-memory.md  the reviewer's own memory (CONFIRMED / OPEN), read on every tuning task
+└── eq-set-*.md, dsp-state, target-*  analysis records → git ✓ (already)
 ```
 
 Rule of thumb: **what's small + irreplaceable (config binary, analysis md, light exports) → git/GitHub; what's large + reproducible (.mdat) → local only.** Back up milestones (a locked/named state), not every save. Save the config binary **and** keep `dsp-state` readable — the binary restores, the md explains.

@@ -686,22 +686,33 @@ def version_kind(version):
     return None
 
 
+def _changelog_path(project_dir):
+    """`(path, moved)` of the `tuning-changelog` a reader reads (#143, I-21): the project root's, its home -- the one
+    tree `naming-and-structure.md` §4a draws -- else the one an older project keeps in `rew_analitic/` (`moved` True:
+    read all the same, and `handoff` says to move it); `(None, False)` when there is neither."""
+    for folder, moved in ((project_dir, False), (os.path.join(project_dir, "rew_analitic"), True)):
+        for name in ("tuning-changelog.md", "tuning-changelog"):
+            path = os.path.join(folder, name)
+            if os.path.isfile(path):
+                return path, moved
+    return None, False
+
+
 def _changelog_read(project_dir):
-    """`(path, text, why, mend)` for `tuning-changelog`: its text, or why it cannot be read -- `cannot be opened (...)`,
-    `is not UTF-8` -- and what mends that, with the text None; `(None, None, None, None)` when there is no such file.
-    The mend for a file that cannot be opened is its cause's (m2, `project_io.repair_for`): "close what holds it" where
-    something can hold it, Windows -- closing an editor cannot mend a permission."""
-    for name in ("tuning-changelog.md", "tuning-changelog"):
-        path = os.path.join(project_dir, name)
-        if os.path.isfile(path):
-            try:
-                with open(path, encoding="utf-8") as fh:
-                    return path, fh.read(), None, None
-            except UnicodeDecodeError:
-                return path, None, "is not UTF-8", "save it as UTF-8 and run this again"
-            except OSError as exc:
-                return path, None, f"cannot be opened ({exc})", _project_io().repair_for(exc)
-    return None, None, None, None
+    """`(path, text, why, mend)` for `tuning-changelog` (`_changelog_path`'s): its text, or why it cannot be read --
+    `cannot be opened (...)`, `is not UTF-8` -- and what mends that, with the text None; `(None, None, None, None)` when
+    there is no such file. The mend for a file that cannot be opened is its cause's (m2, `project_io.repair_for`):
+    "close what holds it" where something can hold it, Windows -- closing an editor cannot mend a permission."""
+    path, _moved = _changelog_path(project_dir)
+    if path is None:
+        return None, None, None, None
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return path, fh.read(), None, None
+    except UnicodeDecodeError:
+        return path, None, "is not UTF-8", "save it as UTF-8 and run this again"
+    except OSError as exc:
+        return path, None, f"cannot be opened ({exc})", _project_io().repair_for(exc)
 
 
 def _changelog_text(project_dir):
@@ -2944,7 +2955,8 @@ class Process:
         `{"ok", "missing": [...], "phase", "resume", "warnings": [...]}`. It checks and writes nothing:
         which evidence closes a step is a decision, the same split `session-close` already has.
         `warnings` never moves `ok`: a ▶️ CONTINUE block that names a HEAD the ledger is not at (S-084)
-        is prose to bring up to date, not state the next session lacks.
+        is prose to bring up to date, not state the next session lacks -- and so is a `tuning-changelog` read from
+        `rew_analitic/` rather than the project root, its home, or none at all (#143, I-21).
         """
         state = self.load(strict=True)  # a verdict never stands on a read that failed (#136)
         missing = []
@@ -2995,6 +3007,13 @@ class Process:
                 "the next session reads beside the machine files, and the one a person opens first")
         drift = continue_head_drift(self.project_dir) if changelog else None
         warnings = [drift["warning"]] if drift else []
+        # Its home is the project root (#143, I-21): one in `rew_analitic/` is read, and the move is named; none at all
+        # is said -- not missing: a project that keeps no prose changelog fails no check it never opted into.
+        if _changelog_path(self.project_dir)[1]:
+            warnings.insert(0, f"`tuning-changelog` is read from {log_path}: its home is the project root — move it to "
+                               f"{os.path.join(self.project_dir, os.path.basename(log_path))}")
+        elif log_path is None:
+            warnings.append(f"no tuning-changelog at {self.project_dir}: the ▶️ CONTINUE block lives there")
         resume = None
         if not missing:
             keep = ""
@@ -6167,6 +6186,64 @@ def _check_handoff_says_an_unreadable_changelog():
         shutil.rmtree(top, ignore_errors=True)
 
 
+def _check_handoff_reads_the_changelog_at_the_root():
+    """#143, I-21: `tuning-changelog`'s home is the project root. One only in `rew_analitic/` (an older project's) is
+    read -- its ▶️ CONTINUE block checked, its HEAD compared with the ledger's -- and `handoff --json` has one warning
+    naming the move; with none anywhere, one warning, "no tuning-changelog at <root>: the ▶️ CONTINUE block lives
+    there", and `ok` stays what it was. `handoff` read the root only and said nothing when the file was not there: a
+    block in `rew_analitic/` was never seen, and a project with none heard nothing. A root changelog wins over a copy."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_process_changelog_home_")
+    failures = []
+    try:
+        root = tempfile.mkdtemp(dir=top)
+        _seed_intake(root)
+        p = Process(os.path.join(root, "process"))
+        p.enter_phase("-1")
+        p.enter_phase("0")
+        home = os.path.join(p.project_dir, "tuning-changelog.md")
+        old = os.path.join(p.project_dir, "rew_analitic", "tuning-changelog.md")
+
+        def answer():
+            rc, out, err = _run_main(["process.py", p.dir, "handoff", "--json"])
+            try:
+                return rc, json.loads(out)
+            except ValueError:
+                return rc, {"ok": None, "missing": [], "warnings": [f"(not JSON: {out!r} {err!r})"]}
+        rc, got = answer()
+        none = f"no tuning-changelog at {p.project_dir}: the ▶️ CONTINUE block lives there"
+        if rc != 0 or got["ok"] is not True or got["warnings"] != [none]:
+            failures.append(f"none anywhere: exit {rc}, ok {got['ok']}, warnings {got['warnings']!r}")
+        os.makedirs(os.path.dirname(old))
+        with open(old, "w", encoding="utf-8") as fh:
+            fh.write("# Tuning changelog\n\n## ▶️ CONTINUE\n- HEAD: v_001 (FULL)\n- next: the A/B\n")
+        rc, got = answer()
+        if rc != 0 or got["ok"] is not True or len(got["warnings"]) != 1 \
+                or old not in got["warnings"][0] or home not in got["warnings"][0]:
+            failures.append(f"only in rew_analitic/: exit {rc}, ok {got['ok']}, warnings {got['warnings']!r}")
+        # Read, not only found: a block it lacks is missing, a HEAD behind the ledger is the drift warning.
+        with open(old, "w", encoding="utf-8") as fh:
+            fh.write("# Tuning changelog\n\n- banked v_001\n")
+        got = p.handoff()
+        if got["ok"] is not False or not any("CONTINUE" in m for m in got["missing"]):
+            failures.append(f"a copy with no block, unread: ok {got['ok']}, missing {got['missing']!r}")
+        with open(old, "w", encoding="utf-8") as fh:
+            fh.write("## ▶️ CONTINUE\n- HEAD: v_009 (FULL)\n")
+        got = p.handoff()
+        if len(got["warnings"]) != 2 or not any("HEAD v_009" in w for w in got["warnings"]):
+            failures.append(f"a copy's stale HEAD, unread: {got['warnings']!r}")
+        # The root's wins: its block is the one read, and nothing is said of the copy.
+        with open(home, "w", encoding="utf-8") as fh:
+            fh.write("## ▶️ CONTINUE\n- HEAD: v_001 (FULL)\n")
+        got = p.handoff()
+        if got["ok"] is not True or got["warnings"] != []:
+            failures.append(f"the root's beside a stale copy: ok {got['ok']}, warnings {got['warnings']!r}")
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["tuning-changelog's home, the project root:"] + failures)
+
+
 def _check_superseded_not_taken():
     """N17 (#134): a superseded row is a typo's trace, not a measurement -- in every reader of `taken`. One checked
     and passed under the wrong title counted as taken and usable: in the step gate's list, in the closing event, in
@@ -7916,7 +7993,8 @@ def _selftest():
                   _check_flags_tcc_sends,
                   _check_flag_values_as_they_stand, _check_autocorrected_dashes, _check_too_few_arguments,
                   _check_value_flag_last, _check_help_writes_nothing, _check_usage_before_the_read,
-                  _check_handoff_says_an_unreadable_changelog, _check_superseded_not_taken,
+                  _check_handoff_says_an_unreadable_changelog, _check_handoff_reads_the_changelog_at_the_root,
+                  _check_superseded_not_taken,
                   _check_check_never_invents_taken, _check_close_says_what_rew_did,
                   _check_listing_never_read_as_rew, _check_ambiguous_capture, _check_close_swallows_only_rew,
                   _check_intake_gate_names_an_unreadable_project_json, _check_close_checks_stage_refusals,
@@ -8519,7 +8597,8 @@ def _selftest():
                         encoding="utf-8", env={**os.environ, "PYTHONIOENCODING": "utf-8"})
     got_j = json.loads(hj.stdout)
     assert hj.returncode == 0 and got_j["ok"] and got_j["next_message"] == "продовжуй" and got_j["resume"], hj.stdout
-    assert got_j["warnings"] == [], got_j
+    # No changelog yet: said, never a refusal (#143, I-21) -- the ▶️ CONTINUE block's home is the project root.
+    assert got_j["warnings"] == [f"no tuning-changelog at {ty.project_dir}: the ▶️ CONTINUE block lives there"], got_j
 
     # ── S-084 (hub #227): a ▶️ CONTINUE block behind the ledger is WARNED of, never refused ──────
     # Fails on the old code at the first warning: the block was only checked to exist, and on the
