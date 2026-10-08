@@ -44,6 +44,9 @@ _TIMEOUT = 3.0
 #: sha of `""` is an answer. A stamp that changed halfway through a run would put two writers in one file.
 _CACHE = None
 
+#: `(case, why)` for each case the selftest could not check on this machine, said one line above its OK line.
+_NOT_CHECKED_HERE = []
+
 
 def repo_root():
     """The checkout this file lives in, or None when it lives in none.
@@ -53,8 +56,9 @@ def repo_root():
     the installer's clone, and two levels up from the LINK is `~/.claude`, which is no checkout at
     all. The companion app bought this: every installed machine reported "not a git checkout" while
     a developer's own tree worked and hid it (`vendor_loader.skill_repo_root`, 2026-08-19). The
-    same walk and the same markers here, so the two answers agree by construction rather than by
-    coincidence.
+    same walk and the same markers here, so the two find the same root by construction rather than
+    by coincidence. Their answers part at one root: a copy with no checkout of its own, inside
+    another repository, where this says "" (`_answer_at`) and the app asks git without that test.
 
     Four candidates and no further: this module sits three levels under the repository root
     (`rew_tool/` → `skills/autosound-tuning/` → `skills/` → root), and a walk that kept going would
@@ -80,8 +84,14 @@ def _is_root(path):
 
 
 def _same_folder(a, b):
-    """True when `a` and `b` name one folder: real paths, in the platform's case (git prints `C:/...` on Windows)."""
-    return os.path.normcase(os.path.realpath(a)) == os.path.normcase(os.path.realpath(b))
+    """True when `a` and `b` name one folder on disk (`os.path.samefile`): a path typed in another letter case where the
+    filesystem ignores case (macOS's APFS, NTFS), through a link, an 8.3 name, git's `C:/...` on Windows. Comparing
+    the strings named one folder as two on macOS, where `normcase` changes nothing and `realpath` keeps the case as
+    typed (part A's re-review, N-2). A path that cannot be read is not the same folder."""
+    try:
+        return os.path.samefile(a, b)
+    except OSError:
+        return False
 
 
 def _answer_at(root):
@@ -200,6 +210,35 @@ def _check_a_copy_inside_another_repository():
                               or "is no checkout of its own" in why), (sha, why)
 
 
+def _check_a_checkout_named_in_another_letter_case():
+    """A checkout of its own, run by a path typed in another letter case, is that checkout (part A's re-review, N-2):
+    macOS's APFS and NTFS ignore case, `realpath` keeps the case the path was typed in and git prints the folder's
+    own, so the two strings named one folder as two -- `sha unknown (... is no checkout of its own: git answers for
+    ..., a repository around it)`, and the journal stamped "". Where this filesystem tells cases apart, the other
+    spelling is no folder: that is said as not checked here."""
+    import tempfile
+
+    def git(cwd, *args):
+        subprocess.run(["git", "-C", cwd, *args], capture_output=True, text=True, check=True,
+                       env={**os.environ, "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_SYSTEM": os.devnull},
+                       encoding="utf-8", errors="replace")
+    with tempfile.TemporaryDirectory() as tmp:
+        repo = os.path.join(tmp, "Method-Copy")
+        os.makedirs(repo)
+        git(repo, "init", "--quiet")
+        git(repo, "config", "user.email", "selftest@example.invalid")
+        git(repo, "config", "user.name", "selftest")
+        git(repo, "commit", "--quiet", "--allow-empty", "-m", "a checkout of its own")
+        other = os.path.join(tmp, "Method-Copy".swapcase())
+        if not os.path.isdir(other):
+            _NOT_CHECKED_HERE.append(("a checkout named in another letter case",
+                                      "this filesystem tells letter cases apart"))
+            return
+        head = subprocess.run(["git", "-C", repo, "rev-parse", "HEAD"], capture_output=True, text=True, check=True,
+                              encoding="utf-8", errors="replace").stdout.strip()
+        assert _answer_at(other) == (head, ""), _answer_at(other)
+
+
 def _selftest():
     """Both directions on real repositories, because both have been wrong in the neighbouring tree.
 
@@ -209,7 +248,7 @@ def _selftest():
     """
     import tempfile
     failures = []
-    for check in (_check_a_copy_inside_another_repository,):
+    for check in (_check_a_copy_inside_another_repository, _check_a_checkout_named_in_another_letter_case):
         try:
             check()
         except AssertionError as exc:
@@ -260,6 +299,8 @@ def _selftest():
     assert mine == "" or _SHA.match(mine), f"own checkout answered {mine!r}"
     assert skill_sha() is mine, "cached: a second call must not ask git again"
     root = repo_root()
+    for case, why in _NOT_CHECKED_HERE:                  # one line above the OK line, as siblings.py says its own
+        print(f"provenance: {case} was not checked here -- {why}")
     print(f"selftest OK — checkout and non-repository both answered; here: "
           f"{mine or 'no repository'} ({root or 'not in one'})")
     return 0
