@@ -154,8 +154,9 @@ IMPORTABLE = {
     "project.py": (
         "Project(root)", "Project.load()", "Project.save(data)", "Project.parse_impact(impact)", "PROJECT_TYPES",
         "project_type(data)",
-        # #141: TCC's plan writes project.json through it (load, change, save as one step under the writer lock).
-        "Project.update(fn)",
+        # #141: TCC's plan writes project.json through it (load, change, save as one step under the writer lock), and
+        # UNCHANGED is what its change returns for "nothing to write" (R17).
+        "Project.update(fn)", "UNCHANGED",
     ),
     "dsp_math.py": ("apf1_response(freqs_hz, f0)", "apf2_response(freqs_hz, f0, q)"),
     "resonalyze_vc.py": (

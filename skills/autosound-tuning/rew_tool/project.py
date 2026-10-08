@@ -925,10 +925,19 @@ class Project:
         writer -- TCC, a second command line, another thread -- can neither land between this one's read and its
         write, to be written over, nor write over it. Every load-and-save of this file goes this way.
 
-        `fn(data)` gets the facts as they stand on disk and changes them in place (returning None), or returns the
-        facts to write instead; it returns `UNCHANGED` when there is nothing to write -- no write, and no
-        `project_rev`. A refusal raised in `fn` writes nothing and comes out as it is. Returns what was saved, or, when
-        unchanged, the facts as they stand. `fn` runs with the lock held, so nothing slow goes in it -- REW, git, a
+        `fn(data)` gets the facts as they stand on disk and returns one of four things (#141, R17):
+
+        * None -- it changed `data` in place, and `data` is written;
+        * `data` itself -- written, the same;
+        * a new whole document -- a dict carrying the facts' own `schema_version`, as `dict(data, ...)` gives one --
+          written instead of them;
+        * `UNCHANGED` -- nothing to write: no write, and no `project_rev`.
+
+        Anything else raises `TypeError` and writes nothing. A dict without the facts' `schema_version` is a block of
+        them, not the whole -- `d.setdefault("car", {})` returns the car block, and written as the file it replaced every
+        channel with nothing `validate` would refuse; a glossary block carries a `schema_version` of its own (1), and is
+        a block all the same. A refusal raised in `fn` writes nothing and comes out as it is. Returns what was saved, or,
+        when unchanged, the facts as they stand. `fn` runs with the lock held, so nothing slow goes in it -- REW, git, a
         subprocess -- and it changes only the facts it is given: another writer of this project called from it would
         land first and be written over by this save."""
         with _hold(self.dir):
@@ -936,7 +945,17 @@ class Project:
             got = fn(data)
             if getattr(type(got), "unchanged", False):
                 return data
-            return self.save(data if got is None else got)
+            if got is None or got is data:
+                return self.save(data)
+            if not (isinstance(got, dict) and "schema_version" in got
+                    and got["schema_version"] == data.get("schema_version")):
+                what = (f"a dict without the facts' schema_version {data.get('schema_version')!r} -- a block of "
+                        "project.json, not the whole of it (`setdefault` returns the block it set)"
+                        if isinstance(got, dict) else f"a {type(got).__name__}, not the facts")
+                raise TypeError(f"Project.update: the change returned {what}. It returns None (the facts changed in "
+                                "place), the facts it was given, a whole document as dict(data, ...) gives one, or "
+                                "UNCHANGED -- nothing was written")
+            return self.save(got)
 
     def _change(self, fn, write):
         """`update(fn)` -- or, for a dry run (`write` false), `fn` on the facts as they stand, with nothing saved: a dry
@@ -2369,6 +2388,61 @@ def _check_update_changes_under_the_lock():
         shutil.rmtree(top, ignore_errors=True)
 
 
+def _check_update_writes_only_whole_facts():
+    """`Project.update` writes what `fn` returns only when it is the facts (#141, R17): None (changed in place), `data`
+    itself, or a new whole document -- a dict carrying the facts' own `schema_version`, as `dict(data, ...)` gives one;
+    `UNCHANGED` writes nothing. Anything else raises `TypeError` and writes nothing. It wrote any dict: `lambda d:
+    d.setdefault("car", {})` returns the car block, and the file became `{"make": ..., "model": ..., "project_rev": 2,
+    "schema_version": 3}` -- every channel gone, and `validate` found nothing wrong. A glossary block carries a
+    `schema_version` of its own (1): a block still, refused. The lock is let go after a refusal."""
+    import shutil
+    import tempfile
+    lock = _write_lock()
+    top = tempfile.mkdtemp(prefix="autosound_project_update_whole_")
+    failures = []
+    try:
+        proj = Project(top)
+        proj.save({"schema_version": SCHEMA_VERSION, "car": {"make": "VW", "model": "Passat"},
+                   "channels": [{"code": "w-L"}], "glossary": {"schema_version": 1, "channels": [{"code": "w-L"}]}})
+
+        def on_disk():
+            with open(proj.path, "rb") as fh:
+                return fh.read()
+        for label, fn in (("the car block (setdefault)", lambda d: d.setdefault("car", {})),
+                          ("the glossary block, schema_version 1", lambda d: d["glossary"]),
+                          ("a list", lambda d: [d]), ("True", lambda d: True)):
+            before = on_disk()
+            try:
+                proj.update(fn)
+            except TypeError as exc:
+                if "nothing was written" not in str(exc):
+                    failures.append(f"{label}: refused as {str(exc)[:160]!r}")
+            else:
+                failures.append(f"{label}: written as the whole project.json")
+            if on_disk() != before:
+                failures.append(f"{label}: project.json changed (rev {proj.load()['project_rev']})")
+            if lock.held_here(top):
+                failures.append(f"{label}: the lock was kept after the refusal")
+        rev = proj.load()["project_rev"]
+        cases = (("dict(data, x=1)", lambda d: dict(d, x=1), lambda got: got.get("x") == 1),
+                 ("None after an in-place change", lambda d: d.update(y=2), lambda got: got.get("y") == 2),
+                 ("data itself", lambda d: d.update(z=3) or d, lambda got: got.get("z") == 3))
+        for label, fn, landed in cases:
+            got = proj.update(fn)
+            rev += 1
+            if not landed(proj.load()) or proj.load()["project_rev"] != rev or got["project_rev"] != rev:
+                failures.append(f"{label}: not written as the facts (rev {proj.load()['project_rev']}, want {rev})")
+            if [c.get("code") for c in proj.load().get("channels") or []] != ["w-L"]:
+                failures.append(f"{label}: the channels were lost")
+        before = on_disk()
+        proj.update(lambda d: UNCHANGED)
+        if on_disk() != before or proj.load()["project_rev"] != rev:
+            failures.append("UNCHANGED wrote")
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["what update writes:"] + failures)
+
+
 def _check_a_held_lock_answers_75():
     """Another writer holding the project's lock makes each writing verb of `project.py` wait AUTOSOUND_LOCK_TIMEOUT_S
     and exit 75 (#141, J2b): one last line `busy: <the lock file> ...`, no traceback, and nothing written --
@@ -2545,7 +2619,8 @@ def _selftest():
     failures = []
     for check in (_check_record_change_refuses_unreadable, _check_save_refuses_newer, _check_load_reads_a_bom,
                   _check_two_writers_lose_nothing, _check_save_counts_from_the_disk,
-                  _check_update_changes_under_the_lock, _check_a_held_lock_answers_75,
+                  _check_update_changes_under_the_lock, _check_update_writes_only_whole_facts,
+                  _check_a_held_lock_answers_75,
                   _check_a_bad_timeout_is_a_usage_error, _check_record_change_into_a_mistyped_folder,
                   _check_record_change_asks_git_with_the_lock_free, _check_no_load_and_save_outside_update):
         try:
