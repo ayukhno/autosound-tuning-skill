@@ -770,7 +770,9 @@ def _check_import_reads_before_it_writes():
         new = os.path.join(top, "whole")
         with contextlib.redirect_stdout(io.StringIO()):
             rc = _main([old, "--into", new])
-        if rc != 0 or sorted(os.listdir(new)) != ["dsp_profile.json", "project.json", "state"]:
+        # The writers' lock folder (#141, `.autosound/`, git-ignored) is the writes' own, not something imported.
+        made = sorted(n for n in os.listdir(new) if n != ".autosound")
+        if rc != 0 or made != ["dsp_profile.json", "project.json", "state"]:
             failures.append(f"a profile that reads: rc {rc!r}, new folder {sorted(os.listdir(new))}")
         assert not failures, "\n  ".join(["an import refused after it wrote:"] + failures)
     finally:

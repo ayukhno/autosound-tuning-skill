@@ -30,6 +30,7 @@ channel-name delta is never misread. A tier a project's ledger doesn't have YET 
 this way — intake seeds every profile-declared tier, even empty, at the first snapshot.
 """
 
+import contextlib
 import copy
 import datetime
 import json
@@ -37,6 +38,21 @@ import os
 import sys
 
 import state as _state
+
+
+def _write_lock():
+    """`rew_tool/write_lock.py`, through the ledger's own loader: one module object, so a hold taken here is the one
+    `PresetHistory.snapshot` re-enters (#141)."""
+    return _state._siblings().load("write_lock.py")
+
+
+def _held(history):
+    """The project's writer lock over one bank -- the snapshot, its delta and its sheet (#141, J2b) -- held on the
+    history's own project, `history.project_dir`: the folder its snapshot holds, spelled the same, so that hold
+    re-enters this one instead of waiting for it on its own thread. A history that names no project holds nothing
+    here, and its snapshot holds its own."""
+    project_dir = getattr(history, "project_dir", None)
+    return _write_lock().hold(project_dir) if project_dir else contextlib.nullcontext()
 
 # ── evidence-gated banking (#57 P2, #58 P7/P11) ─────────────────────────────────────────────────
 # `finish_step` refused prose-only evidence while `propose` accepted anything: it banked a polarity flip
@@ -452,7 +468,16 @@ def propose(history, delta, note=None, provenance=None, registry=None, allow_non
 
     Multi-slot integrity (issue #5): if `registry` is given and an active slot is set, REFUSE a
     proposal aimed at a different preset (the cross-slot anchoring trap — tuning Slot 3 off Slot 2's
-    baseline), unless `allow_nonactive=True`. The settings sheet is stamped with the slot status."""
+    baseline), unless `allow_nonactive=True`. The settings sheet is stamped with the slot status.
+
+    One writer's step under the project's writer lock (#141, J2b): what it reads -- the active slot, HEAD, the
+    channels, the profile -- and what it writes -- the version, its delta, its sheet -- are one hold (`_held`)."""
+    with _held(history):
+        return _propose(history, delta, note, provenance, registry, allow_nonactive, evidence, reviewed)
+
+
+def _propose(history, delta, note, provenance, registry, allow_nonactive, evidence, reviewed):
+    """`propose`'s work, with the project's lock held."""
     slot_note = None
     if registry is not None:
         active = registry.get_active()
@@ -538,17 +563,19 @@ def attest(history, version=None, note=None):
     across EVERY tier (schema v2 — a virtual-tier row left 🟡 forever was the bug before this).
 
     Banks a new snapshot (immutable audit trail: proposed at v_N, applied at v_N+1). Attested =
-    INTENT, not a device mirror — device-truth remains the latest measurement.
+    INTENT, not a device mirror — device-truth remains the latest measurement. HEAD is read and the snapshot banked
+    under one hold of the project's writer lock (#141).
     """
-    version = version or history.head()
-    s = history.load(version)
-    flipped = []
-    for tier in _state.tier_names(s):
-        for ch, c in (s.get(tier) or {}).items():
-            if c.get("status") == "proposed":
-                c["status"] = "applied"
-                flipped.append(ch if tier == "channels" else f"{tier}:{ch}")
-    v = history.snapshot(s, note=note or f"attested applied ({', '.join(flipped) or 'no proposed rows'})")
+    with _held(history):
+        version = version or history.head()
+        s = history.load(version)
+        flipped = []
+        for tier in _state.tier_names(s):
+            for ch, c in (s.get(tier) or {}).items():
+                if c.get("status") == "proposed":
+                    c["status"] = "applied"
+                    flipped.append(ch if tier == "channels" else f"{tier}:{ch}")
+        v = history.snapshot(s, note=note or f"attested applied ({', '.join(flipped) or 'no proposed rows'})")
     return {"version": v, "applied_channels": flipped}
 
 
@@ -615,11 +642,109 @@ def _check_gain_grid_says_an_unreadable_profile():
         shutil.rmtree(d, ignore_errors=True)
 
 
+def _check_a_held_lock_answers_75():
+    """Another writer holding the project's lock makes `propose` and `attest` wait AUTOSOUND_LOCK_TIMEOUT_S and exit 75
+    (#141, J2b): one `busy:` line, no traceback, and no version claimed, no delta, no sheet -- the ledger,
+    `proposals/` and `docs/sheets/` as they were. Let go, the same `propose` lands."""
+    import shutil
+    import tempfile
+    pj = _state._siblings().load("project.py")
+    top = tempfile.mkdtemp(prefix="autosound_apply_busy_")
+    failures = []
+    try:
+        proj = os.path.join(top, "car")
+        root = os.path.join(proj, "state")
+        _state.PresetHistory(root, "SQ", project_dir=proj).snapshot(_state._sample_state(), note="baseline")
+        _state.Registry(root).set_active("SQ")
+        with open(os.path.join(proj, "eq-delta.json"), "w", encoding="utf-8") as fh:
+            json.dump({"w-L": {"gain_db": -7.5}}, fh)
+        before = pj._files_in(proj)
+        with pj._held_elsewhere(proj):
+            for argv in (["apply.py", proj, "propose", "eq-delta.json", "--evidence", "w-L_2 (sw)"],
+                         ["apply.py", proj, "attest"]):
+                rc, out, err = pj._run_cli(_main, argv, AUTOSOUND_LOCK_TIMEOUT_S="0.2")
+                why = pj._said_busy(rc, err, proj)
+                if why:
+                    failures.append(f"{argv[2]}: {why}")
+                if pj._files_in(proj) != before:
+                    failures.append(f"{argv[2]}: wrote under another writer's lock: "
+                                    f"{sorted(set(pj._files_in(proj)) ^ set(before))}")
+                    before = pj._files_in(proj)
+        rc, out, err = pj._run_cli(_main, ["apply.py", proj, "propose", "eq-delta.json", "--evidence", "w-L_2 (sw)"],
+                                   AUTOSOUND_LOCK_TIMEOUT_S="0.2")
+        if rc != 0 or _state.project_versions(root) != ["v_001", "v_002"]:
+            failures.append(f"let go, propose did not land: rc {rc}, versions {_state.project_versions(root)}, "
+                            f"said {err.strip()[-200:]!r}")
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, f"{len(failures)} run(s) under a held lock:\n  " + "\n  ".join(failures)
+
+
+def _check_one_hold_over_the_bank():
+    """`propose` and `attest` hold the project's lock once over the snapshot, its delta and its sheet (#141, J2b): the
+    snapshot's own hold re-enters it, because both name the history's project -- also with the ledger outside the
+    project, where `AUTOSOUND_STATE_ROOT` can put it, and a hold on the root's parent would be another folder's. So the
+    history is read and the delta and the sheet are written with the project's lock held, the lock is
+    `<project>/.autosound/write.lock` -- none is made beside the ledger -- and a wait of 0.3 s is never met: a hold
+    waiting on its own thread would have answered busy."""
+    import shutil
+    import tempfile
+    pj = _state._siblings().load("project.py")
+    lock = _state._siblings().load("write_lock.py")
+    top = tempfile.mkdtemp(prefix="autosound_apply_one_hold_")
+    real = {"write_delta": write_delta, "write_sheet": write_sheet}
+    seen, loads = [], []
+
+    def watched(name):
+        def call(*args, **kwargs):
+            seen.append((name, lock.held_here(proj)))
+            return real[name](*args, **kwargs)
+        return call
+    try:
+        proj = os.path.join(top, "car")
+        ledger = os.path.join(top, "elsewhere", "state")
+        os.makedirs(proj)
+        h = _state.PresetHistory(ledger, "SQ", project_dir=proj)
+        h.snapshot(_state._sample_state(), note="baseline")
+        read = h.load
+
+        def load(*args, **kwargs):
+            loads.append(lock.held_here(proj))
+            return read(*args, **kwargs)
+        h.load = load
+        globals().update(write_delta=watched("write_delta"), write_sheet=watched("write_sheet"))
+        with pj._env(AUTOSOUND_LOCK_TIMEOUT_S="0.3"):
+            r = propose(h, {"w-L": {"gain_db": -7.5}}, note="a trim")
+            proposed = list(loads)
+            a = attest(h, r["version"])
+        assert seen == [("write_delta", True), ("write_sheet", True)], f"written with the lock held: {seen}"
+        assert proposed and all(proposed), f"propose read the history with the lock free: {proposed}"
+        assert len(loads) > len(proposed) and all(loads), f"attest read the history with the lock free: {loads}"
+        assert (r["version"], a["version"]) == ("v_002", "v_003"), (r["version"], a["version"])
+        assert r["sheet_path"] and os.path.isfile(r["sheet_path"]), r["sheet_path"]
+        assert os.path.isfile(lock.lock_path(proj)), "no lock in the project"
+        assert not os.path.exists(os.path.join(top, "elsewhere", ".autosound")), "a lock made beside the ledger"
+        assert not lock.held_here(proj), "the lock was kept"
+    finally:
+        globals().update(real)
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_no_load_and_save_outside_update():
+    """No function here loads `project.json` and saves it itself (#141, J2b): a writer of the project's facts goes
+    through `Project.update`, which holds the lock across the read and the write (`project._load_and_save_paths`)."""
+    with open(os.path.realpath(__file__), encoding="utf-8") as fh:
+        found = _state._siblings().load("project.py")._load_and_save_paths(fh.read())
+    assert not found, f"load-and-save outside Project.update: {found}"
+
+
 def _selftest():
     import shutil
     import tempfile
     failures = []
-    for check in (_check_cli_refuses_unreadable, _check_gain_grid_says_an_unreadable_profile):
+    for check in (_check_cli_refuses_unreadable, _check_gain_grid_says_an_unreadable_profile,
+                  _check_a_held_lock_answers_75, _check_one_hold_over_the_bank,
+                  _check_no_load_and_save_outside_update):
         try:
             check()
         except AssertionError as exc:
@@ -850,7 +975,9 @@ def _selftest():
           f"allowed; a renamed channel's delta landed on its id row rather than forking it "
           f"(SCR-039); slot-guard refused a non-active-slot propose (banked nothing) + stamped "
           f"ACTIVE/NON-ACTIVE; propose beside a seals.json that cannot be read exits 1 naming it, banking "
-          f"nothing (#136). root={root}")
+          f"nothing (#136); under another writer's lock propose and attest exit 75 with one busy line, no "
+          f"version, delta or sheet, and one hold covers the snapshot, its delta and its sheet, the snapshot "
+          f"re-entering it with the ledger outside the project (#141). root={root}")
     return 0
 
 
@@ -913,7 +1040,16 @@ def _main(argv):
         print(f"error: {exc}", file=sys.stderr)
         return 1
     except Exception as exc:  # noqa: BLE001 -- matched by its attribute; anything else still raises
-        # The snapshot refuses a `seals.json` or a `project.json` that is there and cannot be read (#136).
+        # The project's writer lock first (#141, `write_lock.py`): another writer held it past the wait -- 75, its one
+        # `busy:` line, nothing written, safe to retry -- or the wait, AUTOSOUND_LOCK_TIMEOUT_S, is no number of
+        # seconds: a usage error, said before anything was taken.
+        if getattr(type(exc), "is_busy", False):
+            return _write_lock().busy_exit(exc)
+        if getattr(type(exc), "exit_code", None) == 2:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        # The snapshot refuses a `seals.json` or a `project.json` that is there and cannot be read (#136), and the lock
+        # a project folder it cannot be made in (#141, `write_lock.Unwritable`).
         if not getattr(exc, "is_unreadable", False):
             raise
         print(f"error: {exc}", file=sys.stderr)

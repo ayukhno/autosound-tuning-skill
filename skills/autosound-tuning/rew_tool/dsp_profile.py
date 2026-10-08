@@ -79,6 +79,27 @@ def _project_io():
     return _siblings().load("project_io.py")
 
 
+def _write_lock():
+    """`rew_tool/write_lock.py`: one writer at a time in a project (skill #141)."""
+    return _siblings().load("write_lock.py")
+
+
+def _hold(project_dir):
+    """The project's writer lock for a `with` (#141) -- the project being the folder that holds `dsp_profile.json` --
+    `write_lock.hold`, waiting `AUTOSOUND_LOCK_TIMEOUT_S` for it."""
+    return _write_lock().hold(project_dir)
+
+
+def _ready_to_hold():
+    """What a writer that stamps a profile does with the project's lock still free (#141): reads the wait -- an
+    AUTOSOUND_LOCK_TIMEOUT_S that is no number of seconds is a usage error before git is asked -- and asks git for the
+    sha `save_profile` stamps, which `provenance` keeps for the process, so that git never runs under the lock."""
+    _write_lock().timeout_s()
+    prov = _provenance()
+    if prov is not None:
+        prov.skill_sha()
+
+
 # ── schema ──────────────────────────────────────────────────────────────────
 # One number across every machine file (see `project.py`'s own note). This file carried no version
 # at all before 3.0 -- which meant a consumer could not tell a profile written by this skill from
@@ -550,6 +571,9 @@ def save_profile(path, data):
 
     A profile a newer method wrote is refused before anything is stamped or written (`ValueError`, #136, audit T-21):
     stamping this copy's version over it wrote it down to v3.
+
+    The write holds the project's writer lock (#141) -- the project being the folder the file is in. The stamp's git
+    is asked before it is taken (`_ready_to_hold`), and the refusals above come first: a refused write makes nothing.
     """
     io_ = _project_io()
     newer = io_.newer_schema(data, SCHEMA_VERSION)
@@ -564,15 +588,17 @@ def save_profile(path, data):
         # honest outcome: absent means "ask the decider", which is what a reader did before this
         # field existed. A guessed marker would be read as an answer.
         pass
+    _ready_to_hold()
     if isinstance(data, dict):
         data = dict(data)
         data["schema_version"] = SCHEMA_VERSION
         prov = _provenance()
         data["skill_sha"] = prov.skill_sha() if prov is not None else ""
     parent = os.path.dirname(path)
-    if parent:
-        os.makedirs(parent, exist_ok=True)
-    io_.atomic_write_json(path, data, indent=2, sort_keys=True, ensure_ascii=False)
+    with _hold(os.path.dirname(os.path.abspath(path))):
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        io_.atomic_write_json(path, data, indent=2, sort_keys=True, ensure_ascii=False)
     return path
 
 
@@ -681,30 +707,41 @@ def refresh_project(project_dir, dir_=None, write=False):
     It never invents: with no library entry it reports `no-match` and changes nothing, because an
     approximate profile is worse than an incomplete one — a wrong limit is enforced by code, while
     a missing one is reported as unchecked.
+
+    With `write`, the profile is read, compared and written with the project's writer lock held (#141); git, for the
+    stamp, is asked before. A project with no profile is answered before the lock is taken: nothing is made for it.
     """
     path = profile_path(project_dir)
     if not os.path.exists(path):
         return "no-project", path
-    current = load_profile(path)
-    inner = _unwrap(current)
-    vendor = str(inner.get("vendor") or "").strip()
-    model = str(inner.get("name") or "").strip()
-    if not (vendor and model):
-        return "no-dsp", None
-    skipped = []
-    library = find_bundled(vendor, model, dir_, skipped)
-    if library is None:
-        return ("unreadable", (vendor, model, skipped)) if skipped else ("no-match", (vendor, model))
-    delta = diff_profile(current, library)
-    # `diff_profile` always returns {"top": {...}, "groups": {...}}, so the dict is truthy even
-    # when nothing differs. Testing it directly made refresh report every up-to-date project as
-    # stale and rewrite it on every run -- churn that looks like drift, in the one command whose
-    # job is to end drift.
-    if not (delta.get("top") or delta.get("groups")):
-        return "current", {}
-    if write:
-        save_profile(path, library)
-    return "stale", delta
+
+    def refresh():
+        current = load_profile(path)
+        inner = _unwrap(current)
+        vendor = str(inner.get("vendor") or "").strip()
+        model = str(inner.get("name") or "").strip()
+        if not (vendor and model):
+            return "no-dsp", None
+        skipped = []
+        library = find_bundled(vendor, model, dir_, skipped)
+        if library is None:
+            return ("unreadable", (vendor, model, skipped)) if skipped else ("no-match", (vendor, model))
+        delta = diff_profile(current, library)
+        # `diff_profile` always returns {"top": {...}, "groups": {...}}, so the dict is truthy even
+        # when nothing differs. Testing it directly made refresh report every up-to-date project as
+        # stale and rewrite it on every run -- churn that looks like drift, in the one command whose
+        # job is to end drift.
+        if not (delta.get("top") or delta.get("groups")):
+            return "current", {}
+        if write:
+            save_profile(path, library)
+        return "stale", delta
+
+    if not write:
+        return refresh()
+    _ready_to_hold()
+    with _hold(project_dir):
+        return refresh()
 
 
 # ── the interview's own vocabulary (SCR-010) ──────────────────────────────────
@@ -816,23 +853,28 @@ def start_draft(project_dir, vendor, model):
     Separate from `load_draft` because it WRITES. Calling `set_field` first would work but would
     leave `name`/`vendor` null until the end, and `finalize` would then refuse with a message about
     the name rather than about the missing step — so the interview starts here.
+
+    Read and written under the project's writer lock (#141), as every writer of the draft is.
     """
-    data = load_draft(project_dir, vendor, model)
-    profile = _unwrap(data)
-    if not profile.get("name"):
-        profile["name"] = model
-    if not profile.get("vendor"):
-        profile["vendor"] = vendor
-    save_draft(project_dir, data)
+    with _hold(project_dir):
+        data = load_draft(project_dir, vendor, model)
+        profile = _unwrap(data)
+        if not profile.get("name"):
+            profile["name"] = model
+        if not profile.get("vendor"):
+            profile["vendor"] = vendor
+        save_draft(project_dir, data)
     return data
 
 
 def save_draft(project_dir, data):
     """Write the draft WITHOUT validating: a half-finished interview is invalid by definition (no
-    groups yet, a name still null), and refusing to save it would defeat the point of having one."""
-    os.makedirs(project_dir, exist_ok=True)
-    path = draft_path(project_dir)
-    _project_io().atomic_write_json(path, data, indent=2, sort_keys=True, ensure_ascii=False)
+    groups yet, a name still null), and refusing to save it would defeat the point of having one.
+    Under the project's writer lock (#141); a writer that read the draft first holds it already."""
+    with _hold(project_dir):
+        os.makedirs(project_dir, exist_ok=True)
+        path = draft_path(project_dir)
+        _project_io().atomic_write_json(path, data, indent=2, sort_keys=True, ensure_ascii=False)
     return path
 
 
@@ -882,32 +924,38 @@ def set_setting(project_dir, path, value):
     `set_field` writes the draft, which is the interview of what a device CAN do. A resolution switch on the
     settings panel is not that: it is the machine's state, true for this project, and it is set after the profile
     is final. Only the paths in `MACHINE_SETTINGS` are taken, and a value must be one the profile lists as an
-    option, so a guess cannot be written as a setting."""
+    option, so a guess cannot be written as a setting.
+
+    Read and written under the project's writer lock (#141). A project with no profile is refused before it is
+    taken, as `load_profile` refuses it: nothing is made for a folder with nothing to set."""
     if path not in MACHINE_SETTINGS:
         raise ValueError(f"{path}: not a machine setting ({', '.join(MACHINE_SETTINGS)})")
     target = os.path.join(project_dir, "dsp_profile.json")
-    # Through `load_profile` (#136): a profile that cannot be read, or that a newer method wrote, is refused with its
-    # repair before anything is set in it.
-    data = load_profile(target)
-    inner = data.setdefault("dsp_profile", {}) if "dsp_profile" in data else data
-    options_path, allowed = MACHINE_SETTINGS[path]
-    value = maybe_decode_json(value)
-    if options_path:
-        node = inner
-        for part in options_path.split("."):
-            node = (node or {}).get(part) if isinstance(node, dict) else None
-        allowed = tuple(node or ())
-        if isinstance(value, str):
-            try:
-                value = float(value)
-            except ValueError:
-                raise ValueError(f"{path}: {value!r} is not a number of dB") from None
-    if allowed and value not in allowed:
-        raise ValueError(f"{path}: {value!r} is not one of this processor's options {list(allowed)}")
-    section, key = path.split(".")
-    inner.setdefault(section, {})[key] = value
-    validate_profile(data)
-    _project_io().atomic_write_json(target, data, indent=2, ensure_ascii=False)     # no sort_keys, as before
+    if not os.path.exists(target):
+        raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), target)
+    with _hold(project_dir):
+        # Through `load_profile` (#136): a profile that cannot be read, or that a newer method wrote, is refused with
+        # its repair before anything is set in it.
+        data = load_profile(target)
+        inner = data.setdefault("dsp_profile", {}) if "dsp_profile" in data else data
+        options_path, allowed = MACHINE_SETTINGS[path]
+        value = maybe_decode_json(value)
+        if options_path:
+            node = inner
+            for part in options_path.split("."):
+                node = (node or {}).get(part) if isinstance(node, dict) else None
+            allowed = tuple(node or ())
+            if isinstance(value, str):
+                try:
+                    value = float(value)
+                except ValueError:
+                    raise ValueError(f"{path}: {value!r} is not a number of dB") from None
+        if allowed and value not in allowed:
+            raise ValueError(f"{path}: {value!r} is not one of this processor's options {list(allowed)}")
+        section, key = path.split(".")
+        inner.setdefault(section, {})[key] = value
+        validate_profile(data)
+        _project_io().atomic_write_json(target, data, indent=2, ensure_ascii=False)     # no sort_keys, as before
     return value
 
 
@@ -915,55 +963,59 @@ def set_field(project_dir, path, value):
     """Set one confirmed field in the draft by dotted path (`groups.0.fields`), and save.
 
     One field per call, saved immediately — the same discipline the ledger uses, for the same
-    reason: what is not on disk did not happen.
+    reason: what is not on disk did not happen. The draft is read and written under the project's writer lock (#141):
+    another writer's answer, landed between the two, would be written over.
     """
     path = _strip_stray_prefix(path)
     if not path:
         raise ValueError("path must not be empty")
-    data = load_draft(project_dir)
-    root = data.setdefault("dsp_profile", {})
     value = maybe_decode_json(value)
-    parts = path.split(".")
-    node = root
-    for i, part in enumerate(parts[:-1]):
-        key = int(part) if part.isdigit() else part
-        next_is_index = parts[i + 1].isdigit()
+    with _hold(project_dir):
+        data = load_draft(project_dir)
+        root = data.setdefault("dsp_profile", {})
+        parts = path.split(".")
+        node = root
+        for i, part in enumerate(parts[:-1]):
+            key = int(part) if part.isdigit() else part
+            next_is_index = parts[i + 1].isdigit()
+            if isinstance(node, list):
+                while len(node) <= key:
+                    node.append([] if next_is_index else {})
+            elif key not in node:
+                node[key] = [] if next_is_index else {}
+            node = node[key]
+        last = int(parts[-1]) if parts[-1].isdigit() else parts[-1]
         if isinstance(node, list):
-            while len(node) <= key:
-                node.append([] if next_is_index else {})
-        elif key not in node:
-            node[key] = [] if next_is_index else {}
-        node = node[key]
-    last = int(parts[-1]) if parts[-1].isdigit() else parts[-1]
-    if isinstance(node, list):
-        while len(node) <= last:
-            node.append(None)
-    node[last] = value
-    save_draft(project_dir, data)
+            while len(node) <= last:
+                node.append(None)
+        node[last] = value
+        save_draft(project_dir, data)
     return value
 
 
 def reset_field(project_dir, path):
     """Delete a field from the draft so it can be re-answered — recovery from a wrong shape (a list
-    written as a string), not part of the normal flow. Returns True if something was removed."""
+    written as a string), not part of the normal flow. Returns True if something was removed. Read and written under
+    the project's writer lock (#141)."""
     path = _strip_stray_prefix(path)
-    data = load_draft(project_dir)
-    node = data.get("dsp_profile", {})
-    parts = path.split(".")
-    for part in parts[:-1]:
-        key = int(part) if part.isdigit() else part
-        try:
-            node = node[key]
-        except (KeyError, IndexError, TypeError):
+    with _hold(project_dir):
+        data = load_draft(project_dir)
+        node = data.get("dsp_profile", {})
+        parts = path.split(".")
+        for part in parts[:-1]:
+            key = int(part) if part.isdigit() else part
+            try:
+                node = node[key]
+            except (KeyError, IndexError, TypeError):
+                return False
+        last = int(parts[-1]) if parts[-1].isdigit() else parts[-1]
+        if isinstance(node, dict) and last in node:
+            del node[last]
+        elif isinstance(node, list) and isinstance(last, int) and 0 <= last < len(node):
+            node[last] = None
+        else:
             return False
-    last = int(parts[-1]) if parts[-1].isdigit() else parts[-1]
-    if isinstance(node, dict) and last in node:
-        del node[last]
-    elif isinstance(node, list) and isinstance(last, int) and 0 <= last < len(node):
-        node[last] = None
-    else:
-        return False
-    save_draft(project_dir, data)
+        save_draft(project_dir, data)
     return True
 
 
@@ -1010,15 +1062,24 @@ def finalize(project_dir):
     A draft that cannot be removed once the profile is written raises `DraftLeft` (#134, F M-9): it was passed over,
     and `load_draft`, which reads the draft first, resumed the interview from it. On Windows the remove is retried
     first (`_remove_draft`). No draft at all -- finalizing an edited profile directly -- is no error.
+
+    The draft is read, the profile written and the draft removed under the project's writer lock, as one writer's
+    step (#141); git, for the profile's stamp, is asked before it is taken. A folder with neither a draft nor a
+    profile -- nothing begun, or a mistyped path -- is refused before it, as the empty draft is refused: nothing is
+    made for it.
     """
-    data = load_draft(project_dir)
-    validate_profile(data)
-    path = save_profile(profile_path(project_dir), data)
-    draft = draft_path(project_dir)
-    try:
-        _remove_draft(draft)
-    except OSError as exc:
-        raise DraftLeft(path, draft, exc) from exc
+    if not (os.path.exists(draft_path(project_dir)) or os.path.exists(profile_path(project_dir))):
+        validate_profile(load_draft(project_dir))       # the empty draft: refused here, with the lock not taken
+    _ready_to_hold()
+    with _hold(project_dir):
+        data = load_draft(project_dir)
+        validate_profile(data)
+        path = save_profile(profile_path(project_dir), data)
+        draft = draft_path(project_dir)
+        try:
+            _remove_draft(draft)
+        except OSError as exc:
+            raise DraftLeft(path, draft, exc) from exc
     return path
 
 
@@ -1304,8 +1365,16 @@ def _main(argv=None):
     try:
         return _run(args)
     except Exception as exc:  # noqa: BLE001 -- matched by its attribute; anything else still raises
+        # The project's writer lock first (#141, `write_lock.py`): another writer held it past the wait -- 75, its one
+        # `busy:` line, nothing written, safe to retry -- or the wait, AUTOSOUND_LOCK_TIMEOUT_S, is no number of
+        # seconds: a usage error, said before anything was taken.
+        if getattr(type(exc), "is_busy", False):
+            return _write_lock().busy_exit(exc)
+        if getattr(type(exc), "exit_code", None) == 2:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
         # A profile or a draft that is there and cannot be read, or that a newer method wrote (#136): a refusal naming
-        # it and its repair, exit 1, not a traceback.
+        # it and its repair, exit 1, not a traceback. So is a project folder the lock cannot be made in (#141).
         if not getattr(exc, "is_unreadable", False):
             raise
         print(f"error: {exc}", file=sys.stderr)
@@ -1945,6 +2014,139 @@ def _check_writers_go_through_the_move():
     assert not failures, "\n  ".join(["a writer item 8 lists does not go through the move:"] + failures)
 
 
+def _check_a_held_lock_answers_75():
+    """Another writer holding the project's lock makes each writing verb here -- the interview's `start`, `set-field`,
+    `reset-field` and `finalize` (TCC's `profile_writer`), and `set-setting`, `refresh --write` -- wait
+    AUTOSOUND_LOCK_TIMEOUT_S and exit 75 (#141, J2b): one `busy:` line, no traceback, the profile and its draft as
+    they were. The lock is the project's: the folder holding `dsp_profile.json`. `draft`, a read, waits for nobody.
+    Let go, `set-field` lands."""
+    import shutil
+    import tempfile
+    pj = _siblings().load("project.py")
+    top = tempfile.mkdtemp(prefix="autosound_profile_busy_")
+    failures = []
+    try:
+        proj = os.path.join(top, "car")
+        os.makedirs(proj)
+        save_profile(profile_path(proj), {"dsp_profile": {"name": "M6V4", "vendor": "Musway", "groups": [
+            {"id": "physical_outputs", "label": "Outputs", "fields": ["hp", "lp", "gain_db"]}]}})
+        start_draft(proj, "Musway", "M6V4")
+        before = pj._files_in(proj)
+        with pj._held_elsewhere(proj):
+            for argv in (["set-field", proj, "delay.max_ms", "20"], ["start", proj, "Musway", "M6V4"],
+                         ["reset-field", proj, "groups"], ["finalize", proj],
+                         ["set-setting", proj, "channel_gain.step_db", "0.5"], ["refresh", proj, "--write"]):
+                rc, out, err = pj._run_cli(_main, argv, AUTOSOUND_LOCK_TIMEOUT_S="0.2")
+                why = pj._said_busy(rc, err, proj)
+                if why:
+                    failures.append(f"{argv[0]}: {why}")
+                if pj._files_in(proj) != before:
+                    failures.append(f"{argv[0]}: wrote under another writer's lock")
+                    before = pj._files_in(proj)
+            rc, out, err = pj._run_cli(_main, ["draft", proj], AUTOSOUND_LOCK_TIMEOUT_S="0.2")
+            if rc != 0:
+                failures.append(f"draft waited for the lock: rc {rc}, said {err.strip()[-200:]!r}")
+        rc, out, err = pj._run_cli(_main, ["set-field", proj, "delay.max_ms", "20"], AUTOSOUND_LOCK_TIMEOUT_S="0.2")
+        if rc != 0 or (load_draft(proj)["dsp_profile"].get("delay") or {}).get("max_ms") != 20:
+            failures.append(f"let go, set-field did not land: rc {rc}, said {err.strip()[-200:]!r}")
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, f"{len(failures)} run(s) under a held lock:\n  " + "\n  ".join(failures)
+
+
+def _check_a_bad_timeout_is_a_usage_error():
+    """An AUTOSOUND_LOCK_TIMEOUT_S that is no number of seconds makes `set-field` a usage error (#141): exit 2, one line
+    naming the variable, no traceback, and nothing written or made -- no draft, and not the lock's `.autosound/`."""
+    import shutil
+    import tempfile
+    pj = _siblings().load("project.py")
+    top = tempfile.mkdtemp(prefix="autosound_profile_bad_wait_")
+    try:
+        proj = os.path.join(top, "car")
+        os.makedirs(proj)
+        rc, out, err = pj._run_cli(_main, ["set-field", proj, "delay.max_ms", "20"], AUTOSOUND_LOCK_TIMEOUT_S="soon")
+        lines = err.strip().splitlines()
+        assert rc == 2 and len(lines) == 1 and "AUTOSOUND_LOCK_TIMEOUT_S=soon" in lines[0], (rc, err.strip()[-300:])
+        assert os.listdir(proj) == [], f"made {sorted(os.listdir(proj))}"
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_no_load_and_save_outside_update():
+    """No function here loads `project.json` and saves it itself (#141, J2b): a writer of the project's facts goes
+    through `Project.update`, which holds the lock across the read and the write (`project._load_and_save_paths`)."""
+    with open(os.path.realpath(__file__), encoding="utf-8") as fh:
+        found = _siblings().load("project.py")._load_and_save_paths(fh.read())
+    assert not found, f"load-and-save outside Project.update: {found}"
+
+
+def _check_writers_read_with_the_lock_held():
+    """Every writer of the profile and its draft reads what it changes with the project's lock held (#141, J2b): the
+    draft or the profile it starts from is read inside the hold its write takes, so an answer another writer saved
+    between the two is not written over. Watched through `load_profile`, each read noting whether this thread holds
+    the project's lock: every writer below reads at least once, and every read is held."""
+    import shutil
+    import tempfile
+    lock = _write_lock()
+    top = tempfile.mkdtemp(prefix="autosound_profile_reads_held_")
+    proj, library = os.path.join(top, "car"), os.path.join(top, "library")
+    real = load_profile
+    seen, failures = [], []
+
+    def watched(path):
+        seen.append(lock.held_here(proj))
+        return real(path)
+    try:
+        os.makedirs(proj)
+        os.makedirs(library)
+        with open(profile_path(proj), "w", encoding="utf-8") as fh:
+            json.dump({"schema_version": SCHEMA_VERSION, "dsp_profile": {
+                "name": "x", "vendor": "v", "groups": [{"id": "physical_outputs", "label": "out", "fields": None}],
+                "channel_gain": {"range_db": [-30.0, 5.0], "step_options_db": [1.0, 0.5, 0.25, 0.1]}}}, fh)
+        globals()["load_profile"] = watched
+        for label, call in (("start_draft", lambda: start_draft(proj, "v", "x")),
+                            ("set_field", lambda: set_field(proj, "delay.max_ms", "20")),
+                            ("reset_field", lambda: reset_field(proj, "delay")),
+                            ("set_setting", lambda: set_setting(proj, "channel_gain.step_db", "0.5")),
+                            ("finalize", lambda: finalize(proj)),
+                            ("refresh --write", lambda: refresh_project(proj, library, write=True))):
+            del seen[:]
+            call()
+            if not seen or not all(seen):
+                failures.append(f"{label}: read {len(seen)} time(s), {seen.count(False)} with the lock free")
+    finally:
+        globals()["load_profile"] = real
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "the profile read with the project's lock free:\n  " + "\n  ".join(failures)
+
+
+def _check_no_profile_makes_nothing():
+    """`set-setting` where there is no `dsp_profile.json`, and `finalize` where there is neither a draft nor a profile --
+    a project not interviewed yet, a mistyped path -- are refused before the project's lock is taken (#141), as they
+    were refused before it existed: `set-setting` exit 2, `refused:` naming the missing file; `finalize` exit 1, the
+    empty draft's refusal. Nothing is made: not the folder, and no `.autosound/` in one that is there."""
+    import shutil
+    import tempfile
+    pj = _siblings().load("project.py")
+    top = tempfile.mkdtemp(prefix="autosound_profile_no_profile_")
+    failures = []
+    try:
+        empty, typo = os.path.join(top, "car"), os.path.join(top, "car-typo")
+        os.makedirs(empty)
+        for folder in (empty, typo):
+            rc, out, err = pj._run_cli(_main, ["set-setting", folder, "channel_gain.step_db", "0.5"])
+            if rc != 2 or not err.startswith("refused: ") or profile_path(folder) not in err:
+                failures.append(f"set-setting {folder}: rc {rc}, said {err.strip()[-200:]!r}")
+            rc, out, err = pj._run_cli(_main, ["finalize", folder])
+            if rc != 1 or not err.startswith("draft is not a valid profile yet, kept as-is: "):
+                failures.append(f"finalize {folder}: rc {rc}, said {err.strip()[-200:]!r}")
+        if os.listdir(empty) or os.path.exists(typo):
+            failures.append(f"made something: {sorted(os.listdir(empty))}, typo folder {os.path.exists(typo)}")
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["refused with no profile:"] + failures)
+
+
 def _selftest():
     failures = []
     for check in (_check_loads_by_path, _check_bind_model_rate_binds_the_callers_dsp_math,
@@ -1952,7 +2154,10 @@ def _selftest():
                   _check_bind_model_rate_refuses_unreadable, _check_bind_model_rate_reads_the_sheets_rule,
                   _check_writers_refuse_unreadable_profile, _check_library_skips_unreadable,
                   _check_finalize_says_a_draft_left, _check_draft_left_repair_by_cause,
-                  _check_writers_go_through_the_move, _check_refresh_names_an_unreadable_entry):
+                  _check_writers_go_through_the_move, _check_refresh_names_an_unreadable_entry,
+                  _check_a_held_lock_answers_75, _check_a_bad_timeout_is_a_usage_error,
+                  _check_no_load_and_save_outside_update, _check_writers_read_with_the_lock_held,
+                  _check_no_profile_makes_nothing):
         try:
             check()
         except AssertionError as exc:
@@ -2439,6 +2644,9 @@ def _selftest():
           f"a refusal owes a reason and the Helix's Chebyshev names both of its own). "
           f"#136: a draft that cannot be read refuses set-field, load_draft and finalize, its bytes kept, and a "
           f"profile a newer method wrote is refused on read and never written down. "
+          f"#141: under another writer's lock start, set-field, reset-field, finalize, set-setting and refresh "
+          f"--write answer 75 with one busy line, writing nothing, while draft waits for nobody; a bad "
+          f"AUTOSOUND_LOCK_TIMEOUT_S is exit 2 making nothing. "
           f"tmp={tmp}")
     return 0
 

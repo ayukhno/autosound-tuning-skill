@@ -154,6 +154,8 @@ IMPORTABLE = {
     "project.py": (
         "Project(root)", "Project.load()", "Project.save(data)", "Project.parse_impact(impact)", "PROJECT_TYPES",
         "project_type(data)",
+        # #141: TCC's plan writes project.json through it (load, change, save as one step under the writer lock).
+        "Project.update(fn)",
     ),
     "dsp_math.py": ("apf1_response(freqs_hz, f0)", "apf2_response(freqs_hz, f0, q)"),
     "resonalyze_vc.py": (
@@ -1635,6 +1637,22 @@ _USAGE = """usage: contract.py check <project-dir> [--json] [--no-rew] [--gate] 
 """
 
 
+def _said_lock_refusal(exc):
+    """`repair-encoding`'s exit for a refusal of the project's writer lock (#141, `write_lock.py`), said in one line on
+    stderr: 75 when another writer held it past the wait (its `busy:` line; nothing written, safe to retry), 2 for an
+    AUTOSOUND_LOCK_TIMEOUT_S that is no number of seconds, 1 for a project folder the lock cannot be made in. None for
+    any other exception. Matched by attribute: the lock is loaded by path, as the classes of another copy are."""
+    if getattr(type(exc), "is_busy", False):
+        return project._write_lock().busy_exit(exc)
+    if getattr(type(exc), "exit_code", None) == 2:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    if getattr(type(exc), "is_unreadable", False):
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    return None
+
+
 def _main(argv):
     if len(argv) < 2:
         print(_USAGE, file=sys.stderr)
@@ -1686,10 +1704,14 @@ def _main(argv):
                       "the rest with --from <page>", file=sys.stderr)
                 return 2
             # The journal lines no code page makes JSON of (#134, R56): moved, on the person's word, bytes kept. A
-            # write the disk refuses is one line, exit 1, with what landed (n1): it was a traceback.
+            # write the disk refuses is one line, exit 1, with what landed (n1): it was a traceback. Read and moved
+            # under the project's writer lock (#141), its refusals said in one line too.
             try:
-                moved = state_mod.set_aside(paths, unread)
+                moved = state_mod.set_aside(paths, unread, project_dir=project_dir)
             except Exception as exc:  # noqa: BLE001 -- matched by its attribute; anything else still raises
+                said = _said_lock_refusal(exc)
+                if said is not None:
+                    return said
                 if not getattr(type(exc), "repair_refused", False):
                     raise
                 print(f"error: {exc}", file=sys.stderr)
@@ -1713,11 +1735,14 @@ def _main(argv):
                 lambda c: f"python3 {here} repair-encoding {project_dir} --from {c}", set_aside_command, unread, cut))
             return state_mod.said_unread(unread)
         try:
-            done = state_mod.repair_encoding(paths, codec, unread)
+            done = state_mod.repair_encoding(paths, codec, unread, project_dir=project_dir)
         except state_mod.SnapshotError as exc:
             print(str(exc), file=sys.stderr)
             return 3
         except Exception as exc:  # noqa: BLE001 -- matched by its attribute; anything else still raises
+            said = _said_lock_refusal(exc)                               # the writer lock's own (#141)
+            if said is not None:
+                return said
             if not getattr(type(exc), "repair_refused", False):         # a write the disk refused (n1)
                 raise
             print(f"error: {exc}", file=sys.stderr)
@@ -2132,6 +2157,45 @@ def _check_repair_encoding_refusals():
     finally:
         shutil.rmtree(d, ignore_errors=True)
     assert not failures, "\n  ".join(["repair-encoding's refusals:"] + failures)
+
+
+def _check_repair_encoding_waits_for_the_lock():
+    """`repair-encoding --from` and `--set-aside` rewrite files other writers write too -- the journal, `project.json`,
+    the ledger -- so they hold the project's writer lock over the read and the rewrite (#141): under another writer's
+    lock each waits AUTOSOUND_LOCK_TIMEOUT_S and exits 75 with one `busy:` line, every file as it was. The survey only
+    reads, and waits for nobody. Let go, `--from` lands."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_contract_repair_busy_")
+    failures = []
+    try:
+        d = os.path.join(top, "car")
+        os.makedirs(os.path.join(d, "process"))
+        pj = os.path.join(d, "project.json")
+        with open(pj, "wb") as fh:
+            fh.write(json.dumps({"note": "лишаємо"}, ensure_ascii=False).encode("cp1251"))
+        before = project._files_in(d)
+        with project._held_elsewhere(d):
+            for argv in (["--from", "cp1251"], ["--set-aside"]):
+                rc, out, err = project._run_cli(_main, ["contract.py", "repair-encoding", d, *argv],
+                                                AUTOSOUND_LOCK_TIMEOUT_S="0.2")
+                why = project._said_busy(rc, err, d)
+                if why:
+                    failures.append(f"{argv[0]}: {why}")
+                if project._files_in(d) != before:
+                    failures.append(f"{argv[0]}: wrote under another writer's lock")
+                    before = project._files_in(d)
+            rc, out, err = project._run_cli(_main, ["contract.py", "repair-encoding", d],
+                                            AUTOSOUND_LOCK_TIMEOUT_S="0.2")
+            if rc != 0 or "busy" in err:
+                failures.append(f"the survey waited for the lock: rc {rc}, said {err.strip()[-200:]!r}")
+        rc, out, err = project._run_cli(_main, ["contract.py", "repair-encoding", d, "--from", "cp1251"],
+                                        AUTOSOUND_LOCK_TIMEOUT_S="0.2")
+        if rc != 0 or not os.path.isfile(pj + ".cp1251.orig"):
+            failures.append(f"let go, --from did not land: rc {rc}, said {err.strip()[-200:]!r}")
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, f"{len(failures)} run(s) under a held lock:\n  " + "\n  ".join(failures)
 
 
 def _check_never_sealed_after_the_first_seal():
@@ -2900,7 +2964,8 @@ def _selftest():
                   _check_glossary_read_strictly,
                   _check_cut_file_named_in_check, _check_phase0_gate_exit_over_an_unreadable_glossary,
                   _check_intake_line_over_an_unreadable_project_json, _check_bom_glossary_is_a_glossary,
-                  _check_bom_project_json_one_verdict, _check_dangling_glossary_link_refused):
+                  _check_bom_project_json_one_verdict, _check_dangling_glossary_link_refused,
+                  _check_repair_encoding_waits_for_the_lock):
         try:
             check()
         except AssertionError as exc:

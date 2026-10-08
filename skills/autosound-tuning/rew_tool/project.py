@@ -29,6 +29,7 @@ stdlib only, py3.9+.
 """
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import re
@@ -66,6 +67,16 @@ def _project_io():
     return _siblings().load("project_io.py")
 
 
+def _write_lock():
+    """`rew_tool/write_lock.py`: one writer at a time in a project (skill #141)."""
+    return _siblings().load("write_lock.py")
+
+
+def _hold(project_dir):
+    """The project's writer lock for a `with` (#141): `write_lock.hold`, waiting `AUTOSOUND_LOCK_TIMEOUT_S` for it."""
+    return _write_lock().hold(project_dir)
+
+
 # One number across every machine file this skill writes (project.json, the ledger,
 # process-state.json, dsp_profile.json), moving together with the skill's own major version.
 # "Which format is this project in?" is then one question with one answer, and `contract.py` can
@@ -94,6 +105,20 @@ IMPACT_REBASELINE = "full_rebaseline"
 
 class ProjectError(ValueError):
     """A `project.json` shape a reader can't trust."""
+
+
+class _Unchanged:
+    """`UNCHANGED`'s kind. Matched by its attribute, never by identity: a copy of this module loaded under another name
+    has its own (as `write_lock.Busy` is matched by `is_busy`)."""
+    unchanged = True
+
+    def __repr__(self):
+        return "UNCHANGED"
+
+
+#: What a change handed to `Project.update` returns when there is nothing to write (#141): the file is left as it is --
+#: no write, no `project_rev` -- and `update` gives back the facts as they stand.
+UNCHANGED = _Unchanged()
 
 
 def _now():
@@ -232,24 +257,31 @@ def fix_ids(project_dir, apply=False):
     session: the list first, then this with `apply=True` on his OK. One id is NOT changed: an id
     the ledger keys rows by while the code keys none, because those rows would be orphaned. That
     one is named with the reason and left for a person.
+
+    The plan only reads. `apply` reads and writes as one step, through `Project.update` (#141): the ids it changes
+    are the ones on disk while the project's lock is held.
     """
-    handle = Project(project_dir)
-    data = handle.load()
-    keys = _ledger_row_keys(project_dir)
-    plan, held = [], []
-    for miss in id_mismatches(data):
-        if miss["id"] in keys and miss["to"] not in keys:
-            held.append(dict(miss, why=f"the ledger keys this channel's rows by {miss['id']!r} and "
-                                       f"none by {miss['to']!r}; changing the id would orphan them"))
-        else:
-            plan.append(miss)
-    if apply and plan:
+    result = {}
+
+    def fix(data):
+        keys = _ledger_row_keys(project_dir)
+        plan, held = [], []
+        for miss in id_mismatches(data):
+            if miss["id"] in keys and miss["to"] not in keys:
+                held.append(dict(miss, why=f"the ledger keys this channel's rows by {miss['id']!r} and "
+                                           f"none by {miss['to']!r}; changing the id would orphan them"))
+            else:
+                plan.append(miss)
+        result.update({"changed" if apply else "would_change": plan, "held": held})
+        if not (apply and plan):
+            return UNCHANGED
         for row in data.get("channels") or []:
             for miss in plan:
                 if row.get("code") == miss["code"] and str(row.get("id") or "") == miss["id"]:
                     row["id"] = miss["to"]
-        handle.save(data)
-    return {"changed" if apply else "would_change": plan, "held": held}
+
+    Project(project_dir)._change(fix, write=apply)
+    return result
 
 
 def previous_names(row):
@@ -854,17 +886,24 @@ class Project:
         return base
 
     def save(self, data):
-        """Bump `project_rev`, validate, then write atomically (`project_io`: a temp of this writer's
-        own, then one move -- same discipline as `process.py`'s `_write`: a crash mid-write must not
-        read back as an empty project, skill #135).
+        """Validate, stamp `project_rev`, then write atomically under the project's writer lock (#141, J2b;
+        `project_io`: a temp of this writer's own, then one move -- same discipline as `process.py`'s
+        `_write`: a crash mid-write must not read back as an empty project, skill #135).
 
         The revision counts WRITES, not semantic changes (SCR-024). A consumer only ever needs two
         things from it — ordering and equality — and deciding "did these facts really change?"
-        would put this module in the business of diffing, with no reader asking for it.
+        would put this module in the business of diffing, with no reader asking for it. It is the revision ON DISK
+        plus one, read under the lock, whatever the facts handed in say (#141): facts loaded at rev 3 and saved while
+        the file says 7 are written as 8, where they were written as 4 -- a revision the file had passed, so two
+        different files carried one number. No file counts as 0. A file that is there and cannot be read is refused,
+        as `load` refuses it: counted from 0, it would be written over.
+
+        The lock orders the writes and no more: facts loaded, held across a wait and saved still write over a change
+        made meanwhile. A load-and-save goes through `update`, which holds the lock across both.
 
         Facts a newer method wrote are refused before anything is stamped or written (#136, audit T-21):
         stamping this copy's version over them wrote a newer `project.json` down to v3, and `validate`
-        then found nothing wrong.
+        then found nothing wrong. Both refusals come before the lock is taken: a refused write makes nothing.
         """
         io_ = _project_io()
         newer = io_.newer_schema(data, SCHEMA_VERSION)
@@ -873,19 +912,50 @@ class Project:
                                f"v{SCHEMA_VERSION} -- writing them would write them down, so nothing was written; "
                                f"{io_.UPDATE_THE_METHOD}")
         data["schema_version"] = SCHEMA_VERSION
-        rev = data.get("project_rev")
-        data["project_rev"] = (rev if isinstance(rev, int) and not isinstance(rev, bool) else 0) + 1
-        validate(data)
-        os.makedirs(self.dir, exist_ok=True)
-        io_.atomic_write_json(self.path, data, indent=2, sort_keys=True, ensure_ascii=False)
+        validate(dict(data, project_rev=0))        # the shape; the revision is the disk's, counted under the lock
+        with _hold(self.dir):
+            rev = self.load().get("project_rev")
+            data["project_rev"] = (rev if isinstance(rev, int) and not isinstance(rev, bool) and rev >= 0 else 0) + 1
+            os.makedirs(self.dir, exist_ok=True)
+            io_.atomic_write_json(self.path, data, indent=2, sort_keys=True, ensure_ascii=False)
+        return data
+
+    def update(self, fn):
+        """Load `project.json`, change it and save it as ONE step, under the project's writer lock (#141, J2b): another
+        writer -- TCC, a second command line, another thread -- can neither land between this one's read and its
+        write, to be written over, nor write over it. Every load-and-save of this file goes this way.
+
+        `fn(data)` gets the facts as they stand on disk and changes them in place (returning None), or returns the
+        facts to write instead; it returns `UNCHANGED` when there is nothing to write -- no write, and no
+        `project_rev`. A refusal raised in `fn` writes nothing and comes out as it is. Returns what was saved, or, when
+        unchanged, the facts as they stand. `fn` runs with the lock held, so nothing slow goes in it -- REW, git, a
+        subprocess -- and it changes only the facts it is given: another writer of this project called from it would
+        land first and be written over by this save."""
+        with _hold(self.dir):
+            data = self.load()
+            got = fn(data)
+            if getattr(type(got), "unchanged", False):
+                return data
+            return self.save(data if got is None else got)
+
+    def _change(self, fn, write):
+        """`update(fn)` -- or, for a dry run (`write` false), `fn` on the facts as they stand, with nothing saved: a dry
+        run only reads, so it takes no lock and makes nothing."""
+        if write:
+            return self.update(fn)
+        data = self.load()
+        fn(data)
         return data
 
     def migrate_fields(self, write=True):
         """Rename legacy field names in `project.json` (`rename_legacy_fields`); a dry run writes nothing."""
-        data = self.load()
-        renames = rename_legacy_fields(data)
-        if renames and write:
-            self.save(data)
+        renames = []
+
+        def rename(data):
+            renames[:] = rename_legacy_fields(data)
+            return None if renames else UNCHANGED
+
+        self._change(rename, write)
         return renames
 
     def backfill_tiers(self, state_root=None, write=True):
@@ -913,50 +983,54 @@ class Project:
         Returns `{code: tier}` for what was filled (or would be, when `write` is false). Snapshots
         that could not be read are left in `self.unreadable_snapshots` as `(path, reason)` -- the
         fill is then knowingly partial, and the caller can say so rather than reporting a clean run.
+        The ledger is read with the project's lock held, beside the facts it fills (#141).
         """
         import glob as _glob
 
-        data = self.load()
-        rows = [r for r in (data.get("channels") or []) if isinstance(r, dict)]
-        by_key = {}
-        root = state_root or os.path.join(self.dir, "state")
-        # A snapshot this cannot read is RECORDED, not merely skipped (TCC-007). Skipping is still
-        # the right move -- one damaged file must not stop the other twenty channels from being
-        # placed -- but the silent version was indistinguishable from "that channel has no ledger
-        # row", and the two want opposite repairs: one is honest emptiness, the other is a file
-        # that needs its encoding fixed before the tier can be read off it at all.
-        self.unreadable_snapshots = []
-        for path in sorted(_glob.glob(os.path.join(root, "*", "v_*.json"))):
-            try:
-                with open(path, encoding="utf-8") as f:
-                    snap = json.load(f)
-            except (OSError, ValueError) as exc:
-                self.unreadable_snapshots.append((path, str(exc)))
-                continue
-            for tier, tier_rows in snap.items():
-                if tier in _LEDGER_NON_TIERS or not isinstance(tier_rows, dict):
-                    continue
-                if not all(isinstance(v, dict) for v in tier_rows.values()):
-                    continue
-                for key in tier_rows:
-                    by_key[key] = tier
-
         filled = {}
-        for row in rows:
-            if row.get("tier"):
-                continue
-            # The ledger keys on the channel's ID, which defaults to its code (SCR-039), so both
-            # are tried — and a renamed channel resolves through neither, which is why
-            # `previous_names` is consulted too rather than leaving it unplaced.
-            for name in [row.get("code"), channel_id(row), *previous_names(row)]:
-                if name and name in by_key:
-                    filled[row["code"]] = by_key[name]
-                    break
-        if write and filled:
+
+        def fill(data):
+            rows = [r for r in (data.get("channels") or []) if isinstance(r, dict)]
+            by_key = {}
+            root = state_root or os.path.join(self.dir, "state")
+            # A snapshot this cannot read is RECORDED, not merely skipped (TCC-007). Skipping is still
+            # the right move -- one damaged file must not stop the other twenty channels from being
+            # placed -- but the silent version was indistinguishable from "that channel has no ledger
+            # row", and the two want opposite repairs: one is honest emptiness, the other is a file
+            # that needs its encoding fixed before the tier can be read off it at all.
+            self.unreadable_snapshots = []
+            for path in sorted(_glob.glob(os.path.join(root, "*", "v_*.json"))):
+                try:
+                    with open(path, encoding="utf-8") as f:
+                        snap = json.load(f)
+                except (OSError, ValueError) as exc:
+                    self.unreadable_snapshots.append((path, str(exc)))
+                    continue
+                for tier, tier_rows in snap.items():
+                    if tier in _LEDGER_NON_TIERS or not isinstance(tier_rows, dict):
+                        continue
+                    if not all(isinstance(v, dict) for v in tier_rows.values()):
+                        continue
+                    for key in tier_rows:
+                        by_key[key] = tier
+
+            for row in rows:
+                if row.get("tier"):
+                    continue
+                # The ledger keys on the channel's ID, which defaults to its code (SCR-039), so both
+                # are tried — and a renamed channel resolves through neither, which is why
+                # `previous_names` is consulted too rather than leaving it unplaced.
+                for name in [row.get("code"), channel_id(row), *previous_names(row)]:
+                    if name and name in by_key:
+                        filled[row["code"]] = by_key[name]
+                        break
+            if not filled:
+                return UNCHANGED
             for row in rows:
                 if row["code"] in filled:
                     row["tier"] = filled[row["code"]]
-            self.save(data)
+
+        self._change(fill, write)
         return filled
 
     def catch_up(self, write=True):
@@ -983,25 +1057,26 @@ class Project:
         phase 0 (the Arbiter's ruling, 2026-09-08): `contract.py check --phase0-gate` stands on
         evidence.
 
-        Returns what changed (or would, when `write` is false).
+        Returns what changed (or would, when `write` is false). Each of the three fills reads and writes under
+        the project's lock as one step of its own (#141): none decides on what another one read.
         """
         done = {"renamed": self.migrate_fields(write=write),
                 "tiers": self.backfill_tiers(write=write)}
-        data = self.load()
-        flaws = (data.get("acoustics") or {}).get("flaws") or []
         drafted = []
-        for entry in flaws:
-            if entry.get("action") not in OWNER_FACING_ACTIONS or entry.get("symptom"):
-                continue
-            draft = symptom_draft(entry.get("kind"), entry.get("f_hz"), entry.get("channels"))
-            if not draft:
-                continue
-            drafted.append({"f_hz": entry.get("f_hz"), "kind": entry.get("kind"),
-                            "channels": list(entry.get("channels") or []), "symptom": draft})
-            if write:
+
+        def add_drafts(data):
+            for entry in (data.get("acoustics") or {}).get("flaws") or []:
+                if entry.get("action") not in OWNER_FACING_ACTIONS or entry.get("symptom"):
+                    continue
+                draft = symptom_draft(entry.get("kind"), entry.get("f_hz"), entry.get("channels"))
+                if not draft:
+                    continue
+                drafted.append({"f_hz": entry.get("f_hz"), "kind": entry.get("kind"),
+                                "channels": list(entry.get("channels") or []), "symptom": draft})
                 entry["symptom"] = draft
-        if write and drafted:
-            self.save(data)
+            return None if drafted else UNCHANGED
+
+        self._change(add_drafts, write)
         done["symptom_drafts"] = drafted
         return done
 
@@ -1027,22 +1102,24 @@ class Project:
         if value not in PROJECT_TYPES:
             raise ProjectError(
                 f"project type {value!r} is not one of {', '.join(PROJECT_TYPES)}")
-        data = self.load()
-        current = project_type(data)
-        if current and current != value:
-            raise ProjectError(
-                f"this project is tuned for {current!r} and cannot become {value!r}. The seat is "
-                "not a field that can be corrected: every raw curve, every delay and every level "
-                "in here was measured and set for that listening point, so changing it would not "
-                "fix a value — it would invalidate the whole base underneath. The other seat is "
-                "ANOTHER PROJECT: start it from this one's DESCRIPTION (car, channel map, DSP, "
-                "mic, amps) and none of its measurements. Presets are a different thing and stay "
-                "as they are — SQ and FULL live in one project on one measurement base, and FULL "
-                "is the rears and surround, not a seat.")
-        if current == value:
-            return value
-        data["project_type"] = value
-        self.save(data)
+
+        def put(data):
+            current = project_type(data)
+            if current and current != value:
+                raise ProjectError(
+                    f"this project is tuned for {current!r} and cannot become {value!r}. The seat is "
+                    "not a field that can be corrected: every raw curve, every delay and every level "
+                    "in here was measured and set for that listening point, so changing it would not "
+                    "fix a value — it would invalidate the whole base underneath. The other seat is "
+                    "ANOTHER PROJECT: start it from this one's DESCRIPTION (car, channel map, DSP, "
+                    "mic, amps) and none of its measurements. Presets are a different thing and stay "
+                    "as they are — SQ and FULL live in one project on one measurement base, and FULL "
+                    "is the rears and surround, not a seat.")
+            if current == value:
+                return UNCHANGED
+            data["project_type"] = value
+
+        self.update(put)
         return value
 
     def mark_imported(self, path, from_project):
@@ -1063,35 +1140,39 @@ class Project:
 
         `path` is dotted, as `facts()` prints it: `channels.tw-L.fs_hz`, `amps.0.gain_db`.
         """
-        data = self.load()
-        known = dict(facts(data))
-        if path not in known:
-            raise ProjectError(
-                f"{path!r} is not a provenanced fact in this project. The ones that are: "
-                + (", ".join(sorted(known)) or "none")
-                + ". Only a `fact()` wrapper carries an origin — a bare value is, by construction, "
-                  "something this project wrote.")
-        from_project = str(from_project or "").strip()
-        if not from_project:
-            raise ProjectError(
-                f"{path}: an imported fact needs the project it came FROM. 'Imported' with no "
-                "source is the same unanswered question as an unmarked fact, and the report that "
-                "names the origin would have nothing to name")
-        node, key = data, None
-        parts = path.split(".")
-        for part in parts[:-1]:
-            if isinstance(node, list):
-                match = next((r for r in node if isinstance(r, dict) and r.get("code") == part), None)
-                node = match if match is not None else node[int(part)]
-            else:
-                node = node[part]
-        key = parts[-1]
-        wrapper = dict(node[key])
-        wrapper["origin"] = "inherited"
-        wrapper["inherited_from"] = from_project
-        node[key] = wrapper
-        self.save(data)
-        return wrapper
+        marked = []
+
+        def mark(data):
+            known = dict(facts(data))
+            if path not in known:
+                raise ProjectError(
+                    f"{path!r} is not a provenanced fact in this project. The ones that are: "
+                    + (", ".join(sorted(known)) or "none")
+                    + ". Only a `fact()` wrapper carries an origin — a bare value is, by construction, "
+                      "something this project wrote.")
+            source = str(from_project or "").strip()
+            if not source:
+                raise ProjectError(
+                    f"{path}: an imported fact needs the project it came FROM. 'Imported' with no "
+                    "source is the same unanswered question as an unmarked fact, and the report that "
+                    "names the origin would have nothing to name")
+            node = data
+            parts = path.split(".")
+            for part in parts[:-1]:
+                if isinstance(node, list):
+                    match = next((r for r in node if isinstance(r, dict) and r.get("code") == part), None)
+                    node = match if match is not None else node[int(part)]
+                else:
+                    node = node[part]
+            key = parts[-1]
+            wrapper = dict(node[key])
+            wrapper["origin"] = "inherited"
+            wrapper["inherited_from"] = source
+            node[key] = wrapper
+            marked.append(wrapper)
+
+        self.update(mark)
+        return marked[0]
 
     def set_channel(self, code, **fields):
         """Add or update one `channels[]` row by `code` (SCR-001) — `slot`/`descr`/`role`/`order`/
@@ -1113,14 +1194,15 @@ class Project:
         second one: the caller is as often a language model working from a stale context as it is
         intake, and "record this driver against m-L" after m-L became w-L means the woofer, not a
         new channel."""
-        data = self.load()
-        rows = data.setdefault("channels", [])
-        row = self.resolve_channel(code, data)
-        if row is None:
-            row = {"code": code}
-            rows.append(row)
-        row.update(fields)
-        return self.save(data)
+        def put(data):
+            rows = data.setdefault("channels", [])
+            row = self.resolve_channel(code, data)
+            if row is None:
+                row = {"code": code}
+                rows.append(row)
+            row.update(fields)
+
+        return self.update(put)
 
     def resolve_channel(self, name, data=None):
         """The `channels[]` row a name or id refers to — including a name it used to have (SCR-039).
@@ -1175,43 +1257,53 @@ class Project:
         Returns the updated row. The caller decides whether this deserves a `config_change` event
         (`record_change`) — a rename corrects a label, so its `impact` is normally `none`: no
         measurement is invalidated, they simply carry the old name.
+
+        Without `data`, the read and the write are one step under the project's lock (`update`, #141). Given `data`,
+        the rename is made in it and it is saved as handed in -- the caller's own load.
         """
-        data = data or self.load()
-        row = self.resolve_channel(old, data)
-        if row is None:
-            raise ProjectError(f"no channel {old!r} to rename")
-        if not str(new or "").strip():
-            raise ProjectError("a channel needs a name to be renamed to")
-        new = str(new).strip()
-        if new == row.get("code"):
-            return row
-        clash = self.resolve_channel(new, data)
-        if clash is not None and clash is not row:
-            raise ProjectError(
-                f"cannot rename {row['code']!r} to {new!r}: that name is already "
-                f"{'in use' if clash.get('code') == new else 'the history of another channel'} "
-                f"(channel {clash.get('code')!r})"
-            )
-        was = str(row.get("code"))
-        row.setdefault("id", channel_id(row))
-        row["code"] = new
-        history = [n for n in previous_names(row) if n != new]
-        if was not in history:
-            history.append(was)
-        row["previous_names"] = history
-        for entry in (data.get("glossary") or {}).get("channels") or []:
-            if isinstance(entry, dict) and entry.get("code") == was:
-                entry["code"] = new
-                # The glossary carries its own copy of the history because it is also read
-                # standalone (`glossary.json`, `naming.Glossary.for_project`), where `channels[]`
-                # is not there to consult — and it is the glossary that has to recognise the old
-                # name in an existing REW title.
-                seen = [n for n in (entry.get("previous_names") or []) if n != new]
-                if was not in seen:
-                    seen.append(was)
-                entry["previous_names"] = seen
-        self.save(data)
-        return row
+        renamed = []
+
+        def rename(d):
+            row = self.resolve_channel(old, d)
+            if row is None:
+                raise ProjectError(f"no channel {old!r} to rename")
+            if not str(new or "").strip():
+                raise ProjectError("a channel needs a name to be renamed to")
+            name = str(new).strip()
+            renamed.append(row)
+            if name == row.get("code"):
+                return UNCHANGED
+            clash = self.resolve_channel(name, d)
+            if clash is not None and clash is not row:
+                raise ProjectError(
+                    f"cannot rename {row['code']!r} to {name!r}: that name is already "
+                    f"{'in use' if clash.get('code') == name else 'the history of another channel'} "
+                    f"(channel {clash.get('code')!r})"
+                )
+            was = str(row.get("code"))
+            row.setdefault("id", channel_id(row))
+            row["code"] = name
+            history = [n for n in previous_names(row) if n != name]
+            if was not in history:
+                history.append(was)
+            row["previous_names"] = history
+            for entry in (d.get("glossary") or {}).get("channels") or []:
+                if isinstance(entry, dict) and entry.get("code") == was:
+                    entry["code"] = name
+                    # The glossary carries its own copy of the history because it is also read
+                    # standalone (`glossary.json`, `naming.Glossary.for_project`), where `channels[]`
+                    # is not there to consult — and it is the glossary that has to recognise the old
+                    # name in an existing REW title.
+                    seen = [n for n in (entry.get("previous_names") or []) if n != name]
+                    if was not in seen:
+                        seen.append(was)
+                    entry["previous_names"] = seen
+
+        if not data:
+            self.update(rename)
+        elif rename(data) is not UNCHANGED:
+            self.save(data)
+        return renamed[0]
 
     def add_flaw(self, **fields):
         """Add (or replace, by frequency + channels) one acoustic-flaw entry — SCR-015.
@@ -1225,8 +1317,7 @@ class Project:
         entry.setdefault("channels", [])
         validate_flaw(entry)
         entry["at"] = _now()
-        data = self.load()
-        flaws = data.setdefault("acoustics", {}).setdefault("flaws", [])
+
         # Identity of a row: its position plus who it is about. For a frequency feature that is
         # the frequency; a time-domain row may have no frequency at all, so it is keyed by its
         # KIND instead -- one energy_lag per channel set, which is what such a property is.
@@ -1240,16 +1331,19 @@ class Project:
             f_hz = e.get("f_hz")
             return ("f", round(float(f_hz), 1) if f_hz is not None else None, who)
 
-        key = _key(entry)
-        for i, existing in enumerate(list(flaws)):
-            same = _key(existing)
-            if same == key:
-                flaws[i] = entry
-                break
-        else:
-            flaws.append(entry)
-        flaws.sort(key=lambda e: float(e.get("f_hz", 0)))
-        self.save(data)
+        def put(data):
+            flaws = data.setdefault("acoustics", {}).setdefault("flaws", [])
+            key = _key(entry)
+            for i, existing in enumerate(list(flaws)):
+                same = _key(existing)
+                if same == key:
+                    flaws[i] = entry
+                    break
+            else:
+                flaws.append(entry)
+            flaws.sort(key=lambda e: float(e.get("f_hz", 0)))
+
+        self.update(put)
         return entry
 
     def flaws(self, data=None):
@@ -1274,18 +1368,22 @@ class Project:
         name = str(name or "").strip()
         if not name:
             raise ProjectError("a control needs its name")
-        data = self.load()
-        controls = data.setdefault("hardware", {}).setdefault("controls", {})
-        known = {k.lower(): k for k in controls}
-        if name.lower() in known:
-            name = known[name.lower()]
-        elif source != "user":
-            raise ProjectError(
-                f"{name}: not on the user's list of controls ({', '.join(controls) or 'none yet'}). "
-                f"The list is his: ask whether he wants «{name}» tracked, and on yes record it with "
-                f"--source user")
-        controls[name] = fact(value, source=source)
-        return self.save(data)
+
+        def put(data):
+            controls = data.setdefault("hardware", {}).setdefault("controls", {})
+            known = {k.lower(): k for k in controls}
+            if name.lower() in known:
+                key = known[name.lower()]
+            elif source != "user":
+                raise ProjectError(
+                    f"{name}: not on the user's list of controls ({', '.join(controls) or 'none yet'}). "
+                    f"The list is his: ask whether he wants «{name}» tracked, and on yes record it with "
+                    f"--source user")
+            else:
+                key = name
+            controls[key] = fact(value, source=source)
+
+        return self.update(put)
 
     def set_path(self, key, value):
         """`paths.<key>` = `value`: where this project's files live (`rew_project`, the REW `.mdat` it measures into;
@@ -1297,9 +1395,11 @@ class Project:
         value = str(value or "").strip()
         if not value:
             raise ProjectError(f"paths.{key} needs a path")
-        data = self.load()
-        data.setdefault("paths", {})[key] = value
-        return self.save(data)
+
+        def put(data):
+            data.setdefault("paths", {})[key] = value
+
+        return self.update(put)
 
     def set_virtual_route(self, name, outputs, source=None):
         """Which physical outputs one VIRTUAL channel feeds -- the DSP's routing matrix, as a fact.
@@ -1319,16 +1419,18 @@ class Project:
         if not codes:
             raise ProjectError(f"{name}: a route needs the outputs it feeds -- an empty route is "
                                f"not 'feeds nothing', it is nobody having said")
-        data = self.load()
-        known = {r.get("code") for r in data.get("channels") or []}
-        unknown = [c for c in codes if known and c not in known]
-        if unknown:
-            raise ProjectError(f"{name}: {', '.join(unknown)} — not a channel of this project "
-                               f"(`channels[].code`); a route into a name nothing answers to would "
-                               f"apply the tier to nothing and look like it worked")
-        data.setdefault("hardware", {}).setdefault("virtual_routing", {})[str(name).strip()] = \
-            fact(codes, source=source)
-        return self.save(data)
+
+        def put(data):
+            known = {r.get("code") for r in data.get("channels") or []}
+            unknown = [c for c in codes if known and c not in known]
+            if unknown:
+                raise ProjectError(f"{name}: {', '.join(unknown)} — not a channel of this project "
+                                   f"(`channels[].code`); a route into a name nothing answers to would "
+                                   f"apply the tier to nothing and look like it worked")
+            data.setdefault("hardware", {}).setdefault("virtual_routing", {})[str(name).strip()] = \
+                fact(codes, source=source)
+
+        return self.update(put)
 
     def virtual_routing(self, data=None):
         """`{virtual code: [outputs]}` as recorded, or `{}`. The provenance stays in the file."""
@@ -1351,11 +1453,13 @@ class Project:
             raise ProjectError(f"{name}: a mapping needs the channels it moves")
         if not isinstance(step_db, (int, float)):
             raise ProjectError(f"{name}: step_db must be a number of dB per step, got {step_db!r}")
-        data = self.load()
-        data.setdefault("hardware", {}).setdefault("control_mapping", {})[str(name).strip()] = {
-            "step_db": fact(float(step_db), source=source), "affects": codes,
-            **({"zero_at": zero_at} if zero_at is not None else {})}
-        return self.save(data)
+
+        def put(data):
+            data.setdefault("hardware", {}).setdefault("control_mapping", {})[str(name).strip()] = {
+                "step_db": fact(float(step_db), source=source), "affects": codes,
+                **({"zero_at": zero_at} if zero_at is not None else {})}
+
+        return self.update(put)
 
     def control_mapping(self, data=None):
         """`{knob: {step_db, affects, zero_at}}` as recorded, or `{}`."""
@@ -1412,9 +1516,18 @@ class Project:
         `impact` is the machine form of `naming-and-structure.md §2`'s "what raw data survives"
         table: `IMPACT_NONE`, `"remeasure: [<codes>]"`, or `IMPACT_REBASELINE`. A consumer UI uses
         it to flag exactly the affected measurements/plan steps as stale, never silently.
+
+        The append runs under the process's project lock (#141, R2, R13), as process.py's own writers' do: it goes
+        through `proc._append`, which no `_locked` wraps, so what `_locked` does is done here. The folder is checked to
+        be a project's first (`_require_home`: the append would make a mistyped one a journal of its own), the wait is
+        read and git asked with the lock still free (`_ready_to_hold`), and the append holds `proc.project_dir` -- the
+        project whose journal it writes.
         """
-        return proc._append(_EV_CONFIG_CHANGE, file=file, what=what, why=why,
-                             source=source, impact=impact)
+        proc._require_home("record-change")
+        proc._ready_to_hold()
+        with _hold(proc.project_dir):
+            return proc._append(_EV_CONFIG_CHANGE, file=file, what=what, why=why,
+                                 source=source, impact=impact)
 
 
 
@@ -1831,7 +1944,16 @@ def _main(argv):
         print(f"error: {exc}", file=sys.stderr)
         return 1
     except Exception as exc:  # noqa: BLE001 -- matched by its attribute; anything else still raises
-        # `record-change` writes the process journal, whose writer refuses beside a state that cannot be read (#136).
+        # The project's writer lock first (#141, `write_lock.py`), neither of its two a `ProjectError`: another writer
+        # held it past the wait -- 75, its one `busy:` line, nothing written, safe to retry -- or the wait,
+        # AUTOSOUND_LOCK_TIMEOUT_S, is no number of seconds: a usage error, said before anything was taken.
+        if getattr(type(exc), "is_busy", False):
+            return _write_lock().busy_exit(exc)
+        if getattr(type(exc), "exit_code", None) == 2:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        # `record-change` writes the process journal, whose writer refuses beside a state that cannot be read (#136);
+        # a project folder the lock cannot be made in is refused the same way (#141, `write_lock.Unwritable`).
         if getattr(exc, "is_unreadable", False):
             print(f"error: {exc}", file=sys.stderr)
             return 1
@@ -1947,11 +2069,485 @@ def _check_load_reads_a_bom():
         shutil.rmtree(top, ignore_errors=True)
 
 
+# ── the project's writer lock (#141): what the checks of every module that writes a project meet ────────────────────
+#: Another writer, in a python of its own: it holds `write_lock.hold(<project>)`, says so (`<signals>/held`), and lets
+#: go when the parent says `go` -- or after a minute, so a check that broke cannot leave it holding. A program run with
+#: `-c`, not a function handed to `multiprocessing`: a module loaded by path (`siblings`) cannot be found by name in a
+#: spawned child, and the checks of every module that writes a project use this one.
+_LOCK_HOLDER = r"""
+import importlib.util, os, sys, time
+spec = importlib.util.spec_from_file_location("autosound_lock_holder", sys.argv[1])
+lock = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(lock)
+with lock.hold(sys.argv[2], timeout_s=30):
+    open(os.path.join(sys.argv[3], "held"), "w").close()
+    deadline = time.monotonic() + 60
+    while not os.path.exists(os.path.join(sys.argv[3], "go")) and time.monotonic() < deadline:
+        time.sleep(0.002)
+"""
+
+
+@contextlib.contextmanager
+def _held_elsewhere(project_dir):
+    """The project's writer lock, held by another process for the block (#141, J2b): what a second writer meets."""
+    import shutil
+    import subprocess
+    import tempfile
+    import time
+    signals = tempfile.mkdtemp(prefix="autosound_lock_signals_")
+    lock_py = os.path.join(os.path.dirname(os.path.realpath(__file__)), "write_lock.py")
+    child = subprocess.Popen([sys.executable, "-c", _LOCK_HOLDER, lock_py, project_dir, signals],
+                             stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    try:
+        deadline = time.monotonic() + 60
+        while not os.path.exists(os.path.join(signals, "held")):
+            if child.poll() is not None or time.monotonic() > deadline:
+                child.kill()
+                said = child.communicate()[1].decode("utf-8", "replace").strip()
+                raise AssertionError(f"the other writer never held {project_dir} (exit {child.returncode}): "
+                                     f"{said[-300:]}")
+            time.sleep(0.002)
+        yield
+    finally:
+        with open(os.path.join(signals, "go"), "w", encoding="utf-8"):
+            pass
+        try:
+            child.wait(60)
+        except subprocess.TimeoutExpired:
+            child.kill()
+            child.wait(10)
+        if not child.stderr.closed:
+            child.stderr.close()
+        shutil.rmtree(signals, ignore_errors=True)
+
+
+def _files_in(folder):
+    """`{relative path: bytes}` of every file under `folder` but the lock's own `.autosound/` (#141): what a write
+    refused under another writer's lock leaves as it was."""
+    out = {}
+    for base, dirs, files in os.walk(folder):
+        dirs[:] = [d for d in dirs if d != ".autosound"]
+        for name in files:
+            path = os.path.join(base, name)
+            with open(path, "rb") as fh:
+                out[os.path.relpath(path, folder)] = fh.read()
+    return out
+
+
+def _said_busy(rc, err, project_dir):
+    """None when a run answered as a writer refused under another writer's lock answers (#141): exit 75, its last line
+    `busy: <the project's lock file> ...`, no traceback. Else what it did instead."""
+    lock_file = _siblings().load("write_lock.py").lock_path(project_dir)
+    last = (err.strip().splitlines() or [""])[-1]
+    if rc == 75 and last.startswith("busy: ") and lock_file in last and "Traceback" not in err:
+        return None
+    return f"rc {rc}, said {err.strip()[-240:]!r}"
+
+
+def _load_and_save_paths(source):
+    """Every function in `source` (a module's text) that loads `project.json` and saves it itself (#141, J2b), by its
+    qualified name: a read and a write that `Project.update` does not hold as one step, so another writer can land
+    between them and be written over. Read off the AST: a `.load()` and a `.save(...)` on a `Project` -- `self` in the
+    class's own methods, a `Project(...)` call, or a name bound to one -- anywhere in one function, the functions
+    nested in it counted with it. `Project.update` is the one place where both stand; the checks (`_check_*`,
+    `_selftest`) build their fixtures that way, and are not writers."""
+    import ast
+
+    def a_project(node):
+        func = node.func if isinstance(node, ast.Call) else None
+        return ((isinstance(func, ast.Name) and func.id == "Project")
+                or (isinstance(func, ast.Attribute) and func.attr == "Project"))
+
+    found = []
+
+    def visit(body, prefix, in_project):
+        for node in body:
+            if isinstance(node, ast.ClassDef):
+                visit(node.body, f"{prefix}{node.name}.", node.name == "Project")
+                continue
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            name = f"{prefix}{node.name}"
+            if node.name.startswith(("_check", "_selftest")) or name == "Project.update":
+                continue
+            handles = {"self"} if in_project else set()
+            for sub in ast.walk(node):
+                if isinstance(sub, ast.Assign) and a_project(sub.value):
+                    handles.update(t.id for t in sub.targets if isinstance(t, ast.Name))
+            calls = set()
+            for sub in ast.walk(node):
+                if isinstance(sub, ast.Call) and isinstance(sub.func, ast.Attribute) \
+                        and sub.func.attr in ("load", "save"):
+                    who = sub.func.value
+                    if a_project(who) or (isinstance(who, ast.Name) and who.id in handles):
+                        calls.add(sub.func.attr)
+            if calls == {"load", "save"}:
+                found.append(name)
+
+    visit(ast.parse(source).body, "", False)
+    return found
+
+
+@contextlib.contextmanager
+def _env(**env):
+    """`env` set in `os.environ` for the block, and put back as it was after."""
+    saved = {k: os.environ.get(k) for k in env}
+    os.environ.update(env)
+    try:
+        yield
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+
+def _run_cli(main, argv, **env):
+    """A module's command line, `main(argv)`, run in this process with `env` set for the run: (exit code, stdout,
+    stderr). An exception it lets out comes back as the code "raised", its traceback on stderr -- what the module's
+    `__main__` would print."""
+    import io
+    import traceback
+    out, err = io.StringIO(), io.StringIO()
+    try:
+        with _env(**env), contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            rc = main(argv)
+    except Exception:  # noqa: BLE001 -- returned to the check, which names it
+        return "raised", out.getvalue(), err.getvalue() + traceback.format_exc()
+    return rc, out.getvalue(), err.getvalue()
+
+
+#: One of the two writers of `_check_two_writers_lose_nothing`, in a python of its own: this file loaded by path, its
+#: own channels added one write each once the parent says `go` -- a barrier, so that the two write at once.
+_CHANNEL_WRITER = r"""
+import importlib.util, os, sys, time
+spec = importlib.util.spec_from_file_location("autosound_project_writer", sys.argv[1])
+project = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(project)
+folder, prefix, count, signals = sys.argv[2], sys.argv[3], int(sys.argv[4]), sys.argv[5]
+open(os.path.join(signals, "ready-" + prefix), "w").close()
+deadline = time.monotonic() + 60
+while not os.path.exists(os.path.join(signals, "go")):
+    if time.monotonic() > deadline:
+        sys.exit("the parent never said go")
+    time.sleep(0.001)
+for i in range(count):
+    project.Project(folder).set_channel(prefix + str(i), order=i)
+"""
+
+
+def _check_two_writers_lose_nothing():
+    """Two writers of one `project.json` at once lose nothing (#141, J2b): two processes add 40 channels each, one
+    write per channel, and every channel of both is in the file, `project_rev` 80 -- one per write. Each loaded,
+    changed and saved on its own, so a write that landed between another's load and its save was written over:
+    channels gone, and the revision short of the writes."""
+    import shutil
+    import subprocess
+    import tempfile
+    import time
+    top = tempfile.mkdtemp(prefix="autosound_project_two_writers_")
+    signals, folder = os.path.join(top, "signals"), os.path.join(top, "car")
+    os.makedirs(signals)
+    os.makedirs(folder)
+    children = []
+    try:
+        for prefix in ("a", "b"):
+            children.append(subprocess.Popen(
+                [sys.executable, "-c", _CHANNEL_WRITER, os.path.realpath(__file__), folder, prefix, "40", signals],
+                stdout=subprocess.DEVNULL, stderr=subprocess.PIPE))
+        deadline = time.monotonic() + 60
+        while not all(os.path.exists(os.path.join(signals, f"ready-{p}")) for p in ("a", "b")):
+            assert time.monotonic() < deadline and all(c.poll() is None for c in children), \
+                f"the two writers never got ready: exits {[c.poll() for c in children]}"
+            time.sleep(0.002)
+        with open(os.path.join(signals, "go"), "w", encoding="utf-8"):
+            pass
+        for c in children:
+            err = c.communicate(timeout=120)[1].decode("utf-8", "replace")
+            assert c.returncode == 0, f"a writer failed, exit {c.returncode}: {err.strip()[-300:]}"
+        data = Project(folder).load()
+        want = {f"{p}{i}" for p in ("a", "b") for i in range(40)}
+        got = {row.get("code") for row in data["channels"]}
+        assert got == want, f"{len(want - got)} of 80 channels lost: {sorted(want - got)[:10]}"
+        assert data["project_rev"] == 80, f"project_rev {data['project_rev']} after 80 writes"
+    finally:
+        for c in children:
+            if c.poll() is None:
+                c.kill()
+                c.wait(10)
+            if not c.stderr.closed:
+                c.stderr.close()
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_save_counts_from_the_disk():
+    """`Project.save` stamps the revision on disk plus one, whatever the caller loaded (#141, J2b): facts loaded at rev
+    3 and saved while the file says 7 are written as 8. They were written as 4 -- a revision the file had passed -- so
+    two different files carried one number. With no file the first write is 1, whatever the facts say. A file that is
+    there and cannot be read is not counted from 0: the save refuses, and its bytes stay."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_project_rev_")
+    try:
+        proj = Project(top)
+        first = proj.save({"schema_version": SCHEMA_VERSION, "project_rev": 41, "channels": []})
+        assert first["project_rev"] == 1, f"the first write is rev {first['project_rev']}, not 1"
+        for _ in range(2):
+            proj.save(proj.load())
+        stale = proj.load()
+        assert stale["project_rev"] == 3, stale["project_rev"]
+        for _ in range(4):
+            proj.save(proj.load())
+        assert proj.load()["project_rev"] == 7, proj.load()["project_rev"]
+        stale["paths"] = {"rew_project": "/x/car.mdat"}
+        saved = proj.save(stale)
+        on_disk = proj.load()
+        assert saved["project_rev"] == 8 and on_disk["project_rev"] == 8, \
+            f"saved as {saved['project_rev']}, the file says {on_disk['project_rev']}: not the 7 on disk + 1"
+        assert on_disk["paths"] == {"rew_project": "/x/car.mdat"}, on_disk["paths"]
+        damaged = b'{"schema_version": 3, "project_rev": 9, "chan'
+        with open(proj.path, "wb") as fh:
+            fh.write(damaged)
+        try:
+            proj.save({"schema_version": SCHEMA_VERSION, "channels": []})
+        except ProjectError as exc:
+            assert "cannot be read" in str(exc), str(exc)
+        else:
+            raise AssertionError("a save counted a project.json that cannot be read from 0, and wrote over it")
+        with open(proj.path, "rb") as fh:
+            assert fh.read() == damaged, "the project.json that cannot be read changed"
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_update_changes_under_the_lock():
+    """`Project.update(fn)` (#141, J2b): `fn` gets the facts as they stand on disk, with the project's lock held, and
+    changes them in place -- or returns new ones -- and they are saved, one revision on. `UNCHANGED` writes nothing,
+    not the revision either, and gives the facts as they stand; a refusal raised in `fn` writes nothing. The lock is
+    let go after, however `fn` ended."""
+    import shutil
+    import tempfile
+    assert "update" in vars(Project) and "UNCHANGED" in globals(), "there is no Project.update to call"
+    lock = _siblings().load("write_lock.py")
+    top = tempfile.mkdtemp(prefix="autosound_project_update_")
+    try:
+        proj = Project(top)
+        proj.save({"schema_version": SCHEMA_VERSION, "channels": [{"code": "w-L"}]})
+        held = []
+
+        def in_place(data):
+            held.append(lock.held_here(top))
+            data["car"] = {"make": "VW"}
+        got = proj.update(in_place)
+        assert held == [True], f"fn ran without the lock: {held}"
+        assert not lock.held_here(top), "the lock was kept after update"
+        assert got["car"] == {"make": "VW"} and got["project_rev"] == 2, got
+        assert proj.load()["car"] == {"make": "VW"}, proj.load()["car"]
+        got = proj.update(lambda data: dict(data, paths={"rew_project": "/x.mdat"}))
+        assert got["project_rev"] == 3 and proj.load()["paths"] == {"rew_project": "/x.mdat"}, got
+        with open(proj.path, "rb") as fh:
+            before = fh.read()
+        got = proj.update(lambda data: UNCHANGED)
+        with open(proj.path, "rb") as fh:
+            assert fh.read() == before, "UNCHANGED wrote"
+        assert got["project_rev"] == 3 and got["paths"] == {"rew_project": "/x.mdat"}, got
+
+        def refuse(data):
+            data["car"] = {"make": "Audi"}
+            raise ProjectError("refused inside fn")
+        try:
+            proj.update(refuse)
+        except ProjectError:
+            pass
+        else:
+            raise AssertionError("a refusal raised in fn did not come out of update")
+        with open(proj.path, "rb") as fh:
+            assert fh.read() == before, "a refusal raised in fn wrote"
+        assert not lock.held_here(top), "a refusal raised in fn kept the lock"
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_a_held_lock_answers_75():
+    """Another writer holding the project's lock makes each writing verb of `project.py` wait AUTOSOUND_LOCK_TIMEOUT_S
+    and exit 75 (#141, J2b): one last line `busy: <the lock file> ...`, no traceback, and nothing written --
+    `project.json` and the process journal as they were -- safe to retry. `record-change` is one of them: it appends
+    to the journal (R2). A verb that only reads -- `show`, a dry run, a plan -- waits for nobody. Let go, the same
+    write lands."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_project_busy_")
+    failures = []
+    try:
+        folder = os.path.join(top, "car")
+        process_dir = os.path.join(folder, "process")
+        os.makedirs(process_dir)
+        Project(folder).save({"schema_version": SCHEMA_VERSION, "dsp": {"sample_rate_hz": 96000},
+                              "channels": [{"code": "w-L", "id": "w_L", "previous_names": ["w_L"],
+                                            "fs_hz": fact(62, source="datasheet")}]})
+        writes = (["set-channel", "m-L", "slot=C"], ["set-path", "rew_project", "/x/car.mdat"],
+                  ["project-type", "driver"], ["catch-up"], ["migrate-fields"], ["backfill-tiers"],
+                  ["fix-ids", "--apply"], ["rename-channel", "w-L", "wf-L"],
+                  ["set-hardware", "SubRC", "4/4", "--source", "user"], ["set-route", "VFL", "w-L"],
+                  ["set-control-mapping", "SubRC", "2", "w-L", "--source", "user"],
+                  ["mark-imported", "channels.w-L.fs_hz", "--from", "/old/car"],
+                  ["flaw", "56", "-4", "cabin_null", "leave", "--why", "x", "--evidence", "w-L_1 (sw)"],
+                  ["record-change", process_dir, "project.json", "swapped the woofer"])
+        reads = (["show"], ["open-questions"], ["flaws"], ["catch-up", "--dry-run"], ["migrate-fields", "--dry-run"],
+                 ["backfill-tiers", "--dry-run"], ["fix-ids"])
+        before = _files_in(folder)
+        with _held_elsewhere(folder):
+            for argv in writes:
+                rc, out, err = _run_cli(_main, ["project.py", folder, *argv], AUTOSOUND_LOCK_TIMEOUT_S="0.2")
+                why = _said_busy(rc, err, folder)
+                if why:
+                    failures.append(f"{argv[0]}: {why}")
+                if _files_in(folder) != before:
+                    failures.append(f"{argv[0]}: wrote under another writer's lock")
+                    before = _files_in(folder)
+            # TCC writes in process through `Project.save` (contract 1): it waits for the lock as the verbs do.
+            try:
+                with _env(AUTOSOUND_LOCK_TIMEOUT_S="0.2"):
+                    Project(folder).save(Project(folder).load())
+            except Exception as exc:  # noqa: BLE001 -- the kind is what is under test
+                if not getattr(type(exc), "is_busy", False):
+                    failures.append(f"Project.save: {type(exc).__name__}: {exc}")
+            else:
+                failures.append("Project.save: went through under another writer's lock")
+            if _files_in(folder) != before:
+                failures.append("Project.save: wrote under another writer's lock")
+                before = _files_in(folder)
+            for argv in reads:
+                rc, out, err = _run_cli(_main, ["project.py", folder, *argv], AUTOSOUND_LOCK_TIMEOUT_S="0.2")
+                if rc != 0 or "busy" in err:
+                    failures.append(f"{' '.join(argv)} waited for the lock: rc {rc}, said {err.strip()[-200:]!r}")
+            if _files_in(folder) != before:
+                failures.append("a read wrote")
+        rc, out, err = _run_cli(_main, ["project.py", folder, "set-channel", "m-L", "slot=C"],
+                                AUTOSOUND_LOCK_TIMEOUT_S="0.2")
+        if rc != 0 or Project(folder).resolve_channel("m-L") is None:
+            failures.append(f"let go, set-channel did not land: rc {rc}, said {err.strip()[-200:]!r}")
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, f"{len(failures)} run(s) under a held lock:\n  " + "\n  ".join(failures)
+
+
+def _check_a_bad_timeout_is_a_usage_error():
+    """An AUTOSOUND_LOCK_TIMEOUT_S that is no number of seconds is a usage error (#141): exit 2, one line naming it, no
+    traceback, and nothing written or made -- not the lock's `.autosound/` either: the wait is read before anything is
+    touched. `record-change` reads it before git is asked (`Process._ready_to_hold`)."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_project_bad_wait_")
+    failures = []
+    try:
+        folder = os.path.join(top, "car")
+        os.makedirs(os.path.join(folder, "process"))
+        with open(os.path.join(folder, "project.json"), "w", encoding="utf-8") as fh:
+            json.dump({"schema_version": SCHEMA_VERSION, "project_rev": 1, "channels": [{"code": "w-L"}]}, fh)
+        before = _files_in(folder)
+        for argv in (["set-channel", "m-L", "slot=C"], ["catch-up"],
+                     ["record-change", os.path.join(folder, "process"), "project.json", "swapped the woofer"]):
+            rc, out, err = _run_cli(_main, ["project.py", folder, *argv], AUTOSOUND_LOCK_TIMEOUT_S="soon")
+            lines = err.strip().splitlines()
+            if rc != 2 or len(lines) != 1 or "AUTOSOUND_LOCK_TIMEOUT_S=soon" not in lines[0]:
+                failures.append(f"{argv[0]}: rc {rc}, said {err.strip()[-200:]!r}")
+            if _files_in(folder) != before or os.path.exists(os.path.join(folder, ".autosound")):
+                failures.append(f"{argv[0]}: wrote or made something: {sorted(os.listdir(folder))}")
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["a bad AUTOSOUND_LOCK_TIMEOUT_S:"] + failures)
+
+
+def _check_record_change_into_a_mistyped_folder():
+    """`record-change` into a process folder that is no project's -- `<project>/process-typo` -- is refused before
+    anything is made (#141, R13; W-8's R46): exit 1, the home check's one line, and no folder, no journal, no
+    `.autosound/`. It appends through `Process._append`, never through `_locked`, so the check never ran for it, and
+    the append made the mistyped folder a journal of its own."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_project_typo_")
+    try:
+        folder = os.path.join(top, "car")
+        os.makedirs(folder)
+        with open(os.path.join(folder, "project.json"), "w", encoding="utf-8") as fh:
+            json.dump({"schema_version": SCHEMA_VERSION, "project_rev": 1, "channels": []}, fh)
+        typo = os.path.join(folder, "process-typo")
+        rc, out, err = _run_cli(_main, ["project.py", folder, "record-change", typo, "project.json",
+                                        "swapped the woofer"])
+        said = (f"error: {os.path.abspath(typo)} does not exist, and the method's process folder is called process -- "
+                "a mistyped path? nothing was written")
+        assert rc == 1 and err.strip().splitlines() == [said] and not out, (rc, out, err.strip()[-300:])
+        assert sorted(os.listdir(folder)) == ["project.json"], f"made {sorted(os.listdir(folder))}"
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_record_change_asks_git_with_the_lock_free():
+    """`record-change` asks git for the sha the journal stamps with the project's lock still free (#141, R2): git is a
+    subprocess, and nothing slow runs under the lock. Watched through the process module's own `_writer_sha`: asked
+    exactly once, the lock not held -- by `_ready_to_hold` before the hold, where the append's `_stamp` would have
+    asked it under the hold."""
+    import shutil
+    import tempfile
+    lock = _write_lock()
+    top = tempfile.mkdtemp(prefix="autosound_project_git_free_")
+    try:
+        folder = os.path.join(top, "car")
+        process_dir = os.path.join(folder, "process")
+        os.makedirs(process_dir)
+        Project(folder).save({"schema_version": SCHEMA_VERSION, "channels": []})
+        proc = _load_process(process_dir)
+        module = sys.modules[type(proc).__module__]
+        real, asked = module._writer_sha, []
+
+        def watched():
+            asked.append(lock.held_here(folder))
+            return real()
+        module._writer_sha = watched
+        try:
+            Project(folder).record_change(proc, "project.json", "swapped the woofer")
+        finally:
+            module._writer_sha = real
+        assert asked == [False], f"git was asked {len(asked)} time(s), {asked.count(True)} with the lock held"
+        assert [e.get("what") for e in proc.events(kinds=["config_change"])] == ["swapped the woofer"], \
+            "the change was not recorded"
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_no_load_and_save_outside_update():
+    """No function here loads `project.json` and saves it itself (#141, J2b): the two are one step only inside
+    `Project.update`, which holds the project's lock across both. Read off the source (`_load_and_save_paths`), which
+    is shown each shape it looks for first -- a guard that has never matched says nothing by its silence."""
+    seen = {"a handle": "def f(d):\n    h = Project(d)\n    x = h.load()\n    h.save(x)\n",
+            "a module's handle": "def f(d):\n    h = project.Project(d)\n    x = h.load()\n    h.save(x)\n",
+            "Project(...) itself": "def f(d):\n    x = Project(d).load()\n    Project(d).save(x)\n",
+            "Project's own method": "class Project:\n    def m(self):\n        x = self.load()\n        self.save(x)\n",
+            "a nested function": "def f(d):\n    h = Project(d)\n\n    def g():\n        h.save(h.load())\n    g()\n"}
+    for label, src in seen.items():
+        assert _load_and_save_paths(src), f"the guard does not see {label}"
+    passed = {"update itself": "class Project:\n    def update(self, fn):\n        return self.save(self.load())\n",
+              "a check's fixture": "def _check_x(d):\n    h = Project(d)\n    h.save(h.load())\n",
+              "a load alone": "def f(d):\n    return Project(d).load()\n",
+              "another class's self": "class Other:\n    def m(self):\n        self.save(self.load())\n"}
+    for label, src in passed.items():
+        assert not _load_and_save_paths(src), f"the guard flags {label}"
+    with open(os.path.realpath(__file__), encoding="utf-8") as fh:
+        found = _load_and_save_paths(fh.read())
+    assert not found, f"load-and-save outside Project.update: {found}"
+
+
 def _selftest():
     import tempfile
 
     failures = []
-    for check in (_check_record_change_refuses_unreadable, _check_save_refuses_newer, _check_load_reads_a_bom):
+    for check in (_check_record_change_refuses_unreadable, _check_save_refuses_newer, _check_load_reads_a_bom,
+                  _check_two_writers_lose_nothing, _check_save_counts_from_the_disk,
+                  _check_update_changes_under_the_lock, _check_a_held_lock_answers_75,
+                  _check_a_bad_timeout_is_a_usage_error, _check_record_change_into_a_mistyped_folder,
+                  _check_record_change_asks_git_with_the_lock_free, _check_no_load_and_save_outside_update):
         try:
             check()
         except AssertionError as exc:
@@ -2668,7 +3264,12 @@ def _selftest():
           f"refused, a rename kept the channel's id and resolved its old captures (SCR-039), "
           f"hardware.controls recorded ONCE not per-preset (SCR-017), open_questions "
           f"found a bare null + an unfilled fact() wrapper, record_change landed in the project's "
-          f"own process journal. root={root}")
+          f"own process journal; under the project's writer lock (#141) two writers at once lost none of their 80 "
+          f"channels (project_rev 80), save counts the revision from the disk (stale 3 over 7 -> 8; an unreadable "
+          f"file refused), update loads-changes-saves as one step (UNCHANGED writes nothing), every writing verb "
+          f"answers 75 with one busy line under another's lock while the reads wait for nobody, a bad "
+          f"AUTOSOUND_LOCK_TIMEOUT_S is exit 2 making nothing, record-change into a mistyped folder makes nothing, "
+          f"and no function loads and saves outside update. root={root}")
     return 0
 
 

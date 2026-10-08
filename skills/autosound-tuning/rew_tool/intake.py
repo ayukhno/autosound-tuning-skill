@@ -357,68 +357,74 @@ def change_dsp(project_dir, vendor, model, replace_map=False):
 
     Returns `{"vendor", "model", "replaced": <slots moved to the record>, "set_aside": [paths]}`, and
     `"said": [lines]` when a profile that could not be read was set aside.
+
+    One writer's from its read to its last move (#141): the project's lock is held over the change of `project.json`
+    (`Project.update`) and the profiles it sets aside after, so what it read is what it changes.
     """
     vendor, model = str(vendor or "").strip(), str(model or "").strip()
     if not (vendor and model):
         raise IntakeError("the DSP is a vendor AND a model — nothing was written")
-    handle = project.Project(project_dir)
-    data = handle.load()
-    dsp = dict(data.get("dsp") or {})
-    old_v, old_m = dsp.get("vendor") or "", dsp.get("model") or ""
-    same = old_v.lower() == vendor.lower() and old_m.lower() == model.lower()
-    rows = [c for c in data.get("channels") or [] if isinstance(c, dict)]
-    slotted = [c for c in rows if c.get("slot") and c.get("tier")]
     out = {"vendor": vendor, "model": model, "replaced": 0, "set_aside": []}
-    if same:
-        return out
-    if slotted and (old_v or old_m) and not replace_map:
-        raise IntakeError(
-            f"the processor changes from {old_v} {old_m} to {vendor} {model}, and the old one's "
-            f"channel map has {len(slotted)} slot(s). Slots are a processor's: the map is REPLACED "
-            "(the old one kept as a record in dsp.previous_maps). Confirm to go on — nothing was written")
-    if slotted:
-        dsp.setdefault("previous_maps", []).append({
-            "vendor": old_v, "model": old_m,
-            "slots": [{k: c.get(k) for k in ("code", "tier", "slot", "hidden") if k in c}
-                      for c in slotted]})
-        kept = []
-        for c in rows:
-            spare = (c.get("role") == "unused" and str(c.get("code", "")).startswith("off-")
-                     and not c.get("id") and not c.get("previous_names"))
-            if spare:
+    old, others, unread = {}, [], {}
+
+    def change(data):
+        dsp = dict(data.get("dsp") or {})
+        old_v, old_m = dsp.get("vendor") or "", dsp.get("model") or ""
+        old.update(vendor=old_v, model=old_m)
+        same = old_v.lower() == vendor.lower() and old_m.lower() == model.lower()
+        rows = [c for c in data.get("channels") or [] if isinstance(c, dict)]
+        slotted = [c for c in rows if c.get("slot") and c.get("tier")]
+        if same:
+            return project.UNCHANGED
+        if slotted and (old_v or old_m) and not replace_map:
+            raise IntakeError(
+                f"the processor changes from {old_v} {old_m} to {vendor} {model}, and the old one's "
+                f"channel map has {len(slotted)} slot(s). Slots are a processor's: the map is REPLACED "
+                "(the old one kept as a record in dsp.previous_maps). Confirm to go on — nothing was written")
+        if slotted:
+            dsp.setdefault("previous_maps", []).append({
+                "vendor": old_v, "model": old_m,
+                "slots": [{k: c.get(k) for k in ("code", "tier", "slot", "hidden") if k in c}
+                          for c in slotted]})
+            kept = []
+            for c in rows:
+                spare = (c.get("role") == "unused" and str(c.get("code", "")).startswith("off-")
+                         and not c.get("id") and not c.get("previous_names"))
+                if spare:
+                    continue
+                if c in slotted:
+                    c = {k: v for k, v in c.items() if k not in ("slot", "tier", "hidden")}
+                kept.append(c)
+            data["channels"] = kept
+            out["replaced"] = len(slotted)
+        dsp.pop("tiers_used", None)
+        dsp.update(vendor=vendor, model=model)
+        data["dsp"] = dsp
+        # Which profiles on disk to set aside is settled BEFORE anything is written. One that cannot be read (#136:
+        # `load_profile` raises for it now) is not taken as this processor's: it is set aside with the rest, never read
+        # for anything (ruling R26). Raised after the save, it left the change half made.
+        for path in (dsp_profile.profile_path(project_dir), dsp_profile.draft_path(project_dir)):
+            if not os.path.isfile(path):
                 continue
-            if c in slotted:
-                c = {k: v for k, v in c.items() if k not in ("slot", "tier", "hidden")}
-            kept.append(c)
-        data["channels"] = kept
-        out["replaced"] = len(slotted)
-    dsp.pop("tiers_used", None)
-    dsp.update(vendor=vendor, model=model)
-    data["dsp"] = dsp
-    # Which profiles on disk to set aside is settled BEFORE anything is written. One that cannot be read (#136:
-    # `load_profile` raises for it now) is not taken as this processor's: it is set aside with the rest, never read
-    # for anything (ruling R26). Raised after the save, it left the change half made.
-    others, unread = [], {}
-    for path in (dsp_profile.profile_path(project_dir), dsp_profile.draft_path(project_dir)):
-        if not os.path.isfile(path):
-            continue
-        try:
-            mine = _same_dsp(dsp_profile.load_profile(path), vendor, model)
-        except Exception as exc:  # noqa: BLE001 -- matched below; anything else still raises
-            if not getattr(exc, "is_unreadable", False):
-                raise
-            mine, unread[path] = False, exc.reason
-        if not mine:
-            others.append(path)
-    handle.save(data)
-    for path in others:
-        target = _set_aside(path, old_v, old_m)
-        out["set_aside"].append(target)
-        if path in unread:
-            line = (f"{path} {unread[path]} -- set aside as {target}, unread and byte for byte; "
-                    "nothing in it was carried over")
-            out.setdefault("said", []).append(line)
-            print(line, file=sys.stderr)
+            try:
+                mine = _same_dsp(dsp_profile.load_profile(path), vendor, model)
+            except Exception as exc:  # noqa: BLE001 -- matched below; anything else still raises
+                if not getattr(exc, "is_unreadable", False):
+                    raise
+                mine, unread[path] = False, exc.reason
+            if not mine:
+                others.append(path)
+
+    with project._hold(project_dir):
+        project.Project(project_dir).update(change)
+        for path in others:
+            target = _set_aside(path, old["vendor"], old["model"])
+            out["set_aside"].append(target)
+            if path in unread:
+                line = (f"{path} {unread[path]} -- set aside as {target}, unread and byte for byte; "
+                        "nothing in it was carried over")
+                out.setdefault("said", []).append(line)
+                print(line, file=sys.stderr)
     return out
 
 
@@ -622,44 +628,58 @@ def save_slot(project_dir, tier, slot, code=None, on=True):
     becomes a channel keeps one identity), then given `tier`/`slot` and un-hidden. Off: the row is
     renamed to `off-<tier>-<slot>`, hidden, `role: unused` -- the row stays, because it is the only
     record that the slot exists (SCR-042). A code already used by ANOTHER slot is refused.
+
+    One writer's from its first read to its last write (#141): the project's lock is held over the whole switch -- the
+    read that decides it and each write after, each one `Project.update` or a `Project` writer -- so the slot it read
+    is the slot it writes.
     """
     tier, slot = str(tier or "").strip(), str(slot or "").strip()
     if not tier or not slot:
         raise IntakeError("a slot needs its tier and its label — nothing was written")
-    handle = project.Project(project_dir)
-    data = handle.load()
-    here = next((c for c in data.get("channels") or []
-                 if isinstance(c, dict) and c.get("tier") == tier and str(c.get("slot")) == slot), None)
     target = str(code or "").strip() if on else off_code(tier, slot)
     if on and (not target or target.startswith("off-")):
         raise IntakeError(f"slot {slot}: pick or type the channel's code to switch it on "
                           "— nothing was written")
-    other = handle.resolve_channel(target, data)
-    if other is not None and other is not here:
-        raise IntakeError(f"the code {target!r} is already slot {other.get('slot')} of "
-                          f"{other.get('tier')} — one code, one channel. Nothing was written")
-    if here is not None and here.get("code") != target:
-        spare = (here.get("role") == "unused" and str(here.get("code", "")).startswith("off-")
-                 and not here.get("id") and not here.get("previous_names"))
-        if on and spare:
-            # A spare slot has no history -- no ledger row, no capture under its name -- so it is
-            # REPLACED rather than renamed: a rename would make `off-virt-F` the new channel's
-            # permanent id (SCR-039), and the first snapshot would key VRL under it.
-            data["channels"] = [c for c in data["channels"] if c is not here]
-            handle.save(data)
-        else:
-            handle.rename_channel(here["code"], target)
-    fields = {"slot": slot, "tier": tier, "hidden": not on}
-    if not on:
-        fields["role"] = "unused"
-    handle.set_channel(target, **fields)
-    if on:
-        data = handle.load()
+    handle = project.Project(project_dir)
+
+    def slot_row(data):
+        return next((c for c in data.get("channels") or []
+                     if isinstance(c, dict) and c.get("tier") == tier and str(c.get("slot")) == slot), None)
+
+    def drop_spare(data):
+        gone = slot_row(data)
+        data["channels"] = [c for c in data["channels"] if c is not gone]
+
+    def back_on(data):                           # a spare switched back on is no longer unused
         row = handle.resolve_channel(target, data)
-        if row.get("role") == "unused":          # a spare switched back on is no longer unused
-            del row["role"]
-            handle.save(data)
-    return handle.resolve_channel(target)
+        if row.get("role") != "unused":
+            return project.UNCHANGED
+        del row["role"]
+
+    with project._hold(project_dir):
+        data = handle.load()
+        here = slot_row(data)
+        other = handle.resolve_channel(target, data)
+        if other is not None and other is not here:
+            raise IntakeError(f"the code {target!r} is already slot {other.get('slot')} of "
+                              f"{other.get('tier')} — one code, one channel. Nothing was written")
+        if here is not None and here.get("code") != target:
+            spare = (here.get("role") == "unused" and str(here.get("code", "")).startswith("off-")
+                     and not here.get("id") and not here.get("previous_names"))
+            if on and spare:
+                # A spare slot has no history -- no ledger row, no capture under its name -- so it is
+                # REPLACED rather than renamed: a rename would make `off-virt-F` the new channel's
+                # permanent id (SCR-039), and the first snapshot would key VRL under it.
+                handle.update(drop_spare)
+            else:
+                handle.rename_channel(here["code"], target)
+        fields = {"slot": slot, "tier": tier, "hidden": not on}
+        if not on:
+            fields["role"] = "unused"
+        handle.set_channel(target, **fields)
+        if on:
+            handle.update(back_on)
+        return handle.resolve_channel(target)
 
 
 def move_slot(project_dir, tier, code, to_slot):
@@ -671,34 +691,42 @@ def move_slot(project_dir, tier, code, to_slot):
     code, id and history and gets the new slot; the slot it left gets a spare row (the record that
     the slot exists, SCR-042). The target slot's own row, if any, must be a spare without history --
     a switched-off channel with history there is a channel of its own and is not overwritten.
+
+    One writer's from its read to the spare row it leaves (#141): the project's lock is held over the move
+    (`Project.update`) and that row's write.
     """
     tier, to_slot, code = (str(x or "").strip() for x in (tier, to_slot, code))
     if not tier or not to_slot or not code:
         raise IntakeError("a move needs the tier, the code and the new slot — nothing was written")
     handle = project.Project(project_dir)
-    data = handle.load()
-    row = next((c for c in data.get("channels") or []
-                if isinstance(c, dict) and c.get("code") == code and c.get("tier") == tier), None)
-    if row is None:
-        raise IntakeError(f"no channel {code!r} in {tier} to move — nothing was written")
-    from_slot = str(row.get("slot") or "")
-    if from_slot == to_slot:
-        return row
-    there = next((c for c in data["channels"] if isinstance(c, dict) and c is not row
-                  and c.get("tier") == tier and str(c.get("slot")) == to_slot), None)
-    if there is not None:
-        spare = (there.get("role") == "unused" and str(there.get("code", "")).startswith("off-")
-                 and not there.get("id") and not there.get("previous_names"))
-        if not spare:
-            raise IntakeError(f"slot {to_slot} of {tier} holds {there.get('code')!r}, a channel with "
-                              "its own history — switch it off or rename it first. Nothing was written")
-        data["channels"] = [c for c in data["channels"] if c is not there]
-    row["slot"] = to_slot
-    handle.save(data)
-    if from_slot:
-        handle.set_channel(off_code(tier, from_slot), slot=from_slot, tier=tier, hidden=True,
-                           role="unused")
-    return handle.resolve_channel(code)
+    left = []
+
+    def move(data):
+        row = next((c for c in data.get("channels") or []
+                    if isinstance(c, dict) and c.get("code") == code and c.get("tier") == tier), None)
+        if row is None:
+            raise IntakeError(f"no channel {code!r} in {tier} to move — nothing was written")
+        from_slot = str(row.get("slot") or "")
+        if from_slot == to_slot:
+            return project.UNCHANGED
+        there = next((c for c in data["channels"] if isinstance(c, dict) and c is not row
+                      and c.get("tier") == tier and str(c.get("slot")) == to_slot), None)
+        if there is not None:
+            spare = (there.get("role") == "unused" and str(there.get("code", "")).startswith("off-")
+                     and not there.get("id") and not there.get("previous_names"))
+            if not spare:
+                raise IntakeError(f"slot {to_slot} of {tier} holds {there.get('code')!r}, a channel with "
+                                  "its own history — switch it off or rename it first. Nothing was written")
+            data["channels"] = [c for c in data["channels"] if c is not there]
+        row["slot"] = to_slot
+        left.append(from_slot)
+
+    with project._hold(project_dir):
+        handle.update(move)
+        if left and left[0]:
+            handle.set_channel(off_code(tier, left[0]), slot=left[0], tier=tier, hidden=True,
+                               role="unused")
+        return handle.resolve_channel(code)
 
 
 def known_cars(project_dir=None):
@@ -1504,8 +1532,9 @@ def _set_path(data, dotted, value):
 def save(project_dir, field_id, value):
     """Write one confirmed answer into `project.json`, through the method's own writer.
 
-    Load-modify-save with `Project`, never a JSON dump: that writer validates, writes atomically,
-    bumps `project_rev`, and refuses to treat an unreadable file as an empty project.
+    Load-modify-save with `Project.update`, never a JSON dump: one step under the project's writer lock (#141), and
+    that writer validates, writes atomically, bumps `project_rev`, and refuses to treat an unreadable file as an empty
+    project.
 
     Refuses, rather than guessing: a value outside the field's enumeration (naming the choices), a
     field that belongs to a repeated collection (naming the function that takes it), and a field
@@ -1538,9 +1567,7 @@ def save(project_dir, field_id, value):
         # Through its own writer, not `_set_path`: it is written ONCE, and a generic path write
         # would walk straight past the refusal that makes it mean anything (S-032).
         return handle.set_project_type(value)
-    data = handle.load()
-    _set_path(data, writes.split(":", 1)[1], value)
-    handle.save(data)
+    handle.update(lambda data: _set_path(data, writes.split(":", 1)[1], value))
     return value
 
 
@@ -1560,15 +1587,15 @@ def save_car(project_dir, make, model, generation, body, year=None):
             + " blank — a make+model with no generation and no body matches no cabin and no earlier "
               "build on this car (SCR-043). Nothing was written")
     check_value("car.body", body)
-    handle = project.Project(project_dir)
-    data = handle.load()
-    car = dict(data.get("car") or {})
-    car.update(parts)
-    if year is not None:
-        car["year"] = year
-    data["car"] = {k: v for k, v in car.items() if v not in ("", None)}
-    handle.save(data)
-    return data["car"]
+
+    def put(data):
+        car = dict(data.get("car") or {})
+        car.update(parts)
+        if year is not None:
+            car["year"] = year
+        data["car"] = {k: v for k, v in car.items() if v not in ("", None)}
+
+    return project.Project(project_dir).update(put)["car"]
 
 
 def save_channel(project_dir, code, source=None, **row):
@@ -1578,30 +1605,33 @@ def save_channel(project_dir, code, source=None, **row):
     outputs B–K), so `F` is a legal address in both and a guess files a spare output among the
     virtual channels (SCR-042). Enumerated fields are checked against the table, and `fs_hz` keeps
     its provenance through `--source`.
+
+    The tier a slot leans on is read with the project's writer lock held, over the write it decides (#141).
     """
     known = {f["id"].split(".", 1)[1]: f for f in FIELDS if f["per"] == "channel"}
     for key, value in row.items():
         f = known.get(key)
         if f is not None and f["enum"]:
             check_value(f["id"], value)
-    if "slot" in row and not row.get("tier"):
-        existing = next((c for c in (_read_project(project_dir) or {}).get("channels", [])
-                         if c.get("code") == code), {})
-        if not existing.get("tier"):
-            raise IntakeError(
-                f"channel {code!r}: a slot needs its tier in the same breath — slot letters repeat "
-                "across tiers, so this one is a legal address in more than one of them. Pass "
-                "tier=channels for a physical output (`dsp_profile.ledger_tier`). Nothing was written")
-    row = {k: (True if v == "yes" else False if v == "no" else v)
-           if k == "hidden" else v for k, v in row.items()}
+    fields = {k: (True if v == "yes" else False if v == "no" else v)
+              if k == "hidden" else v for k, v in row.items()}
     # Provenance goes on the fields the schema keeps as facts (`fs_hz` today), wrapped here the
     # way `project.py`'s own CLI wraps them -- `set_channel` takes the value it is handed.
     for key in project.CHANNEL_FACT_FIELDS:
-        if source and key in row and not project.is_fact(row[key]):
-            row[key] = project.fact(row[key], source=source)
+        if source and key in fields and not project.is_fact(fields[key]):
+            fields[key] = project.fact(fields[key], source=source)
     handle = project.Project(project_dir)
-    handle.set_channel(code, **row)
-    return handle.resolve_channel(code)
+    with project._hold(project_dir):
+        if "slot" in fields and not fields.get("tier"):
+            existing = next((c for c in (_read_project(project_dir) or {}).get("channels", [])
+                             if c.get("code") == code), {})
+            if not existing.get("tier"):
+                raise IntakeError(
+                    f"channel {code!r}: a slot needs its tier in the same breath — slot letters repeat "
+                    "across tiers, so this one is a legal address in more than one of them. Pass "
+                    "tier=channels for a physical output (`dsp_profile.ledger_tier`). Nothing was written")
+        handle.set_channel(code, **fields)
+        return handle.resolve_channel(code)
 
 
 def save_amp(project_dir, index=None, **row):
@@ -1610,19 +1640,23 @@ def save_amp(project_dir, index=None, **row):
     unknown = [k for k in row if k not in known]
     if unknown:
         raise IntakeError(f"amps take {', '.join(sorted(known))}; got {', '.join(unknown)}")
-    handle = project.Project(project_dir)
-    data = handle.load()
-    amps = list(data.get("amps") or [])
-    if index is None:
-        amps.append(dict(row))
-        index = len(amps) - 1
-    else:
-        if not 0 <= index < len(amps):
-            raise IntakeError(f"no amps[{index}] — this project has {len(amps)}")
-        amps[index] = dict(amps[index], **row)
-    data["amps"] = amps
-    handle.save(data)
-    return amps[index]
+    written = []
+
+    def put(data):
+        amps = list(data.get("amps") or [])
+        if index is None:
+            amps.append(dict(row))
+            at = len(amps) - 1
+        else:
+            if not 0 <= index < len(amps):
+                raise IntakeError(f"no amps[{index}] — this project has {len(amps)}")
+            at = index
+            amps[at] = dict(amps[at], **row)
+        data["amps"] = amps
+        written.append(amps[at])
+
+    project.Project(project_dir).update(put)
+    return written[0]
 
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
@@ -1661,6 +1695,23 @@ def _print_fields(rows):
 
 
 def _main(argv):
+    """The command line. Of what its verbs let out, the project's writer lock alone is said here (#141,
+    `write_lock.py`): another writer held it past the wait -- 75, its one `busy:` line, nothing written, safe to retry
+    -- or the wait, AUTOSOUND_LOCK_TIMEOUT_S, is no number of seconds: a usage error, 2, said before anything was
+    taken. Everything else keeps its traceback, as before: TCC reads a refusal's sentence off its last line
+    (`car_library._sentence`)."""
+    try:
+        return _dispatch(argv)
+    except Exception as exc:  # noqa: BLE001 -- matched by its attribute; anything else still raises
+        if getattr(type(exc), "is_busy", False):
+            return project._write_lock().busy_exit(exc)
+        if getattr(type(exc), "exit_code", None) == 2:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        raise
+
+
+def _dispatch(argv):
     if not argv or argv[0] in ("-h", "--help"):
         print(_USAGE)
         return 0
@@ -1869,11 +1920,140 @@ def _check_gate_shut_over_an_unreadable_file():
         shutil.rmtree(top, ignore_errors=True)
 
 
+def _check_set_car_waits_for_the_lock():
+    """`set-car` -- the writer TCC spawns from here (`car_library.record`) -- waits AUTOSOUND_LOCK_TIMEOUT_S for another
+    writer's lock and exits 75 with one `busy:` line (#141, J2b): no traceback, `project.json` as it was, safe to
+    retry. So do the other writing verbs, and the writers the form calls -- a processor changed, a slot switched or
+    moved, the knobs. Let go, `set-car` lands. Its other refusals keep their traceback: TCC reads an `IntakeError`'s
+    sentence off its last line (`car_library._sentence`)."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_intake_busy_")
+    failures = []
+    try:
+        proj = os.path.join(top, "car")
+        project.Project(proj).save({"schema_version": project.SCHEMA_VERSION,
+                                    "dsp": {"vendor": "Audiotec-Fischer", "model": "Helix DSP Ultra S"},
+                                    "channels": [{"code": "w-L", "tier": "channels", "slot": "C"}]})
+        before = project._files_in(proj)
+        with project._held_elsewhere(proj):
+            for argv in (["set-car", proj, "VW", "Passat", "B8", "sedan"], ["set", proj, "project.language", "uk"],
+                         ["set-channel", proj, "m-L", "tier=channels", "slot=D"], ["set-amp", proj, "model=GZPA 4SQ"]):
+                rc, out, err = project._run_cli(_main, argv, AUTOSOUND_LOCK_TIMEOUT_S="0.2")
+                why = project._said_busy(rc, err, proj)
+                if why:
+                    failures.append(f"{argv[0]}: {why}")
+            for label, call in (("change_dsp", lambda: change_dsp(proj, "Musway", "M6V4", replace_map=True)),
+                                ("save_slot", lambda: save_slot(proj, "channels", "D", "m-L")),
+                                ("move_slot", lambda: move_slot(proj, "channels", "w-L", "E")),
+                                ("save_controls", lambda: save_controls(proj, {"SubRC": "4/4"}))):
+                try:
+                    with project._env(AUTOSOUND_LOCK_TIMEOUT_S="0.2"):
+                        call()
+                except Exception as exc:  # noqa: BLE001 -- the kind is what is under test
+                    if not getattr(type(exc), "is_busy", False):
+                        failures.append(f"{label}: {type(exc).__name__}: {exc}")
+                else:
+                    failures.append(f"{label}: went through under another writer's lock")
+            if project._files_in(proj) != before:
+                failures.append("something was written under another writer's lock")
+        rc, out, err = project._run_cli(_main, ["set-car", proj, "VW", "Passat", "B8", "sedan"],
+                                        AUTOSOUND_LOCK_TIMEOUT_S="0.2")
+        if rc != 0 or (project.Project(proj).load().get("car") or {}).get("make") != "VW":
+            failures.append(f"let go, set-car did not land: rc {rc}, said {err.strip()[-200:]!r}")
+        rc, out, err = project._run_cli(_main, ["set-car", proj, "VW", "", "B8", "sedan"])
+        if rc != "raised" or "IntakeError: the car is four parts" not in (err.strip().splitlines() or [""])[-1]:
+            failures.append(f"a blank part no longer ends in its IntakeError's traceback: rc {rc}, "
+                            f"said {err.strip()[-200:]!r}")
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, f"{len(failures)} run(s) under a held lock:\n  " + "\n  ".join(failures)
+
+
+def _check_a_bad_timeout_is_a_usage_error():
+    """An AUTOSOUND_LOCK_TIMEOUT_S that is no number of seconds makes `set-car` a usage error (#141): exit 2, one line
+    naming the variable, no traceback, and nothing written or made -- not the lock's `.autosound/` either."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_intake_bad_wait_")
+    try:
+        proj = os.path.join(top, "car")
+        os.makedirs(proj)
+        with open(os.path.join(proj, "project.json"), "w", encoding="utf-8") as fh:
+            json.dump({"schema_version": project.SCHEMA_VERSION, "project_rev": 1, "channels": []}, fh)
+        before = project._files_in(proj)
+        rc, out, err = project._run_cli(_main, ["set-car", proj, "VW", "Passat", "B8", "sedan"],
+                                        AUTOSOUND_LOCK_TIMEOUT_S="soon")
+        lines = err.strip().splitlines()
+        assert rc == 2 and len(lines) == 1 and "AUTOSOUND_LOCK_TIMEOUT_S=soon" in lines[0], (rc, err.strip()[-300:])
+        assert project._files_in(proj) == before and sorted(os.listdir(proj)) == ["project.json"], \
+            f"wrote or made something: {sorted(os.listdir(proj))}"
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_composite_writers_hold_once():
+    """A writer here that reads `project.json` and then writes more than once -- a processor changed and its old
+    profile set aside, a slot switched on or moved, a channel whose slot leans on the tier it has -- holds the project's
+    lock from its first read to its last write (#141, J2b): what it decided on is what it writes. Watched at the
+    `Project` writers it calls and at the set-aside: each is reached with the lock held already."""
+    import shutil
+    import tempfile
+    lock = project._write_lock()
+    top = tempfile.mkdtemp(prefix="autosound_intake_held_")
+    proj = os.path.join(top, "car")
+    real = {"set_channel": project.Project.set_channel, "rename_channel": project.Project.rename_channel}
+    real_set_aside = _set_aside
+    seen, failures = [], []
+
+    def watched(name, fn):
+        def call(*args, **kwargs):
+            seen.append((name, lock.held_here(proj)))
+            return fn(*args, **kwargs)
+        return call
+    try:
+        project.Project(proj).save({"schema_version": project.SCHEMA_VERSION,
+                                    "dsp": {"vendor": "Audiotec-Fischer", "model": "Helix DSP Ultra S"},
+                                    "channels": [{"code": "w-L", "tier": "channels", "slot": "C"}]})
+        dsp_profile.save_profile(dsp_profile.profile_path(proj), {"dsp_profile": {
+            "name": "Helix DSP Ultra S", "vendor": "Audiotec-Fischer",
+            "groups": [{"id": "physical_outputs", "label": "Outputs", "fields": ["hp", "lp", "gain_db"]}]}})
+        for name, fn in real.items():
+            setattr(project.Project, name, watched(name, fn))
+        globals()["_set_aside"] = watched("_set_aside", real_set_aside)
+        for label, call in (("change_dsp", lambda: change_dsp(proj, "Musway", "M6V4", replace_map=True)),
+                            ("save_slot", lambda: save_slot(proj, "channels", "D", "m-L")),
+                            ("save_slot, a rename", lambda: save_slot(proj, "channels", "D", "mid-L")),
+                            ("move_slot", lambda: move_slot(proj, "channels", "mid-L", "E")),
+                            ("save_channel", lambda: save_channel(proj, "mid-L", slot="F"))):
+            del seen[:]
+            call()
+            if not seen or not all(held for _name, held in seen):
+                failures.append(f"{label}: {seen}")
+    finally:
+        for name, fn in real.items():
+            setattr(project.Project, name, fn)
+        globals()["_set_aside"] = real_set_aside
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "reached with the project's lock free:\n  " + "\n  ".join(failures)
+
+
+def _check_no_load_and_save_outside_update():
+    """No function here loads `project.json` and saves it itself (#141, J2b): each write goes through `Project.update`
+    or a `Project` writer, which hold the project's lock across the read and the write. Read off the source
+    (`project._load_and_save_paths`, shown each shape it looks for by `project.py`'s own check)."""
+    with open(os.path.realpath(__file__), encoding="utf-8") as fh:
+        found = project._load_and_save_paths(fh.read())
+    assert not found, f"load-and-save outside Project.update: {found}"
+
+
 def _selftest():
     import tempfile
 
     failures = []
-    for check in (_check_change_dsp_sets_an_unreadable_profile_aside, _check_gate_shut_over_an_unreadable_file):
+    for check in (_check_change_dsp_sets_an_unreadable_profile_aside, _check_gate_shut_over_an_unreadable_file,
+                  _check_set_car_waits_for_the_lock, _check_a_bad_timeout_is_a_usage_error,
+                  _check_composite_writers_hold_once, _check_no_load_and_save_outside_update):
         try:
             check()
         except AssertionError as exc:
@@ -2210,7 +2390,9 @@ def _selftest():
           "parts, a slot refuses to go in without its tier, and neither refusal writes anything; "
           "`missing` reports prose as unreadable rather than as a gap; a processor change sets a profile "
           "that cannot be read aside unread and byte for byte, saying where, and the gate list reports "
-          "that profile (#136).")
+          "that profile (#136); under another writer's lock set-car and every other writer answer 75 with "
+          "one busy line, writing nothing, a bad AUTOSOUND_LOCK_TIMEOUT_S is exit 2 making nothing, every "
+          "other refusal keeps its traceback, and no function loads and saves outside Project.update (#141).")
     return 0
 
 

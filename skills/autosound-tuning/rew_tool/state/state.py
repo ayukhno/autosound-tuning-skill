@@ -50,6 +50,7 @@ every snapshot going forward.
 """
 
 import argparse
+import contextlib
 import copy
 import datetime
 import json
@@ -81,6 +82,24 @@ def _siblings():
 def _project_io():
     """`rew_tool/project_io.py`: how this module writes the files it owns (skill #135)."""
     return _siblings().load("project_io.py")
+
+
+def _write_lock():
+    """`rew_tool/write_lock.py`: one writer at a time in a project (skill #141)."""
+    return _siblings().load("write_lock.py")
+
+
+def _hold(project_dir):
+    """The project's writer lock for a `with` (#141): `write_lock.hold`, waiting `AUTOSOUND_LOCK_TIMEOUT_S` for it.
+    The lock follows the PROJECT, not the ledger: `AUTOSOUND_STATE_ROOT` can put a ledger anywhere."""
+    return _write_lock().hold(project_dir)
+
+
+def _project_of(root):
+    """The project a ledger `root` belongs to when nothing names another: its parent (D1's `<project>/state/`), the
+    default `PresetHistory.project_dir` takes. What a writer that knows only the root holds (#141) -- spelled as
+    `PresetHistory` spells it, so a history it makes re-enters the hold rather than waiting for it."""
+    return os.path.dirname(os.path.abspath(root))
 
 
 # ── schema ──────────────────────────────────────────────────────────────────
@@ -678,38 +697,42 @@ def previous_config(root, version):
 
 
 def save_config(root, version, code, slot=None, dsp_preset=None, purpose=None, previous=None):
-    """Record that `version` was saved into a DSP preset under `code`, and put it in the slot. Returns the record."""
-    if ledger_layout(root) != "project":
-        raise SnapshotError(f"{root}: configurations live on the per-project version line; move to it first: "
-                            f"`{migrate_line_command(root)}`")
-    code = str(code or "").strip()
-    if not code:
-        raise SnapshotError("a configuration needs the name it was saved under in the DSP (SQ-2, FULL-v1)")
-    if not os.path.isfile(os.path.join(root, VERSIONS_DIR, version + ".json")):
-        raise SnapshotError(f"no version {version!r} on this line")
-    slots = _read_slots(root)
-    slot = slot or slots.get("active")
-    if not slot:
-        raise SnapshotError("which slot (preset) was it saved into? `--slot`, or set the active one first")
-    known = configs(root)
-    if previous is not None:
-        if previous not in known:
-            raise SnapshotError(f"no configuration {previous!r} to continue (saved: {', '.join(known) or 'none'})")
-        prev = {"code": previous, "version": known[previous]["version"]}
-    else:
-        prev = previous_config(root, version)
-    PresetHistory(root, slot).place(version)
-    slots = _read_slots(root)
-    now = datetime.datetime.now().isoformat(timespec="seconds")
-    rec = dict(known.get(code) or {})
-    rec.update(version=version, slot=slot, saved=now, previous=prev)
-    if purpose is not None:
-        rec["purpose"] = purpose
-    rec["history"] = list(rec.get("history") or []) + [{"version": version, "saved": now}]
-    slots.setdefault("configs", {})[code] = rec
-    if dsp_preset is not None:
-        slots["slots"].setdefault(slot, {})["dsp_preset"] = dsp_preset
-    _write_slots(root, slots)
+    """Record that `version` was saved into a DSP preset under `code`, and put it in the slot. Returns the record.
+
+    Read and written under the project's writer lock (#141) -- TCC's `config_writer` runs this -- the slot's own move
+    (`PresetHistory.place`) re-entering it."""
+    with _hold(_project_of(root)):
+        if ledger_layout(root) != "project":
+            raise SnapshotError(f"{root}: configurations live on the per-project version line; move to it first: "
+                                f"`{migrate_line_command(root)}`")
+        code = str(code or "").strip()
+        if not code:
+            raise SnapshotError("a configuration needs the name it was saved under in the DSP (SQ-2, FULL-v1)")
+        if not os.path.isfile(os.path.join(root, VERSIONS_DIR, version + ".json")):
+            raise SnapshotError(f"no version {version!r} on this line")
+        slots = _read_slots(root)
+        slot = slot or slots.get("active")
+        if not slot:
+            raise SnapshotError("which slot (preset) was it saved into? `--slot`, or set the active one first")
+        known = configs(root)
+        if previous is not None:
+            if previous not in known:
+                raise SnapshotError(f"no configuration {previous!r} to continue (saved: {', '.join(known) or 'none'})")
+            prev = {"code": previous, "version": known[previous]["version"]}
+        else:
+            prev = previous_config(root, version)
+        PresetHistory(root, slot).place(version)
+        slots = _read_slots(root)
+        now = datetime.datetime.now().isoformat(timespec="seconds")
+        rec = dict(known.get(code) or {})
+        rec.update(version=version, slot=slot, saved=now, previous=prev)
+        if purpose is not None:
+            rec["purpose"] = purpose
+        rec["history"] = list(rec.get("history") or []) + [{"version": version, "saved": now}]
+        slots.setdefault("configs", {})[code] = rec
+        if dsp_preset is not None:
+            slots["slots"].setdefault(slot, {})["dsp_preset"] = dsp_preset
+        _write_slots(root, slots)
     return {"code": code, **rec}
 
 
@@ -788,15 +811,17 @@ def _all_version_paths(root):
 def seal_all(root):
     """Seal every version not sealed yet -- for a ledger banked before seals existed. Returns the keys sealed.
     A version already sealed is never re-sealed: that would bless a mutation. A `seals.json` that cannot be read
-    raises (`_read_seals`): rebuilt from nothing, it would have sealed every version as it stands now."""
-    seals = _read_seals(root)
-    added = []
-    for key, path in _all_version_paths(root):
-        if key not in seals:
-            seals[key] = content_digest(_read_snapshot_json(path))
-            added.append(key)
-    if added:
-        _write_seals(root, seals)
+    raises (`_read_seals`): rebuilt from nothing, it would have sealed every version as it stands now. Read and
+    written under the project's writer lock (#141): a seal another writer adds meanwhile is not written over."""
+    with _hold(_project_of(root)):
+        seals = _read_seals(root)
+        added = []
+        for key, path in _all_version_paths(root):
+            if key not in seals:
+                seals[key] = content_digest(_read_snapshot_json(path))
+                added.append(key)
+        if added:
+            _write_seals(root, seals)
     return added
 
 
@@ -924,23 +949,24 @@ def repair_version(root, version, preset=None):
     It repairs the identity, not the content: what the file holds stays what was copied over it, and what was
     banked under this name before the copy is not in the ledger to restore. The seal is renewed only when it
     matched the file as it was -- the repair is then the one change -- so a mutation the seal already names stays
-    named. Returns `{"path", "was", "resealed"}`."""
-    path = (os.path.join(root, VERSIONS_DIR, version + ".json") if ledger_layout(root) == "project"
-            else os.path.join(root, preset or "", version + ".json"))
-    if ledger_layout(root) == "preset" and not preset:
-        raise SnapshotError(f"{root}: a per-preset ledger -- name the preset (--preset)")
-    snap = _read_snapshot_json(path)
-    if identity_error(path, snap) is None:
-        raise SnapshotError(f"{path}: already says it is {version} -- nothing to repair")
-    key = _seal_key(root, version, preset)
-    seals = _read_seals(root)
-    sealed_as_is = seals.get(key) == content_digest(snap)
-    was = snap["version"]
-    snap["version_was"], snap["version"] = was, version
-    _project_io().atomic_write_json(path, snap, indent=2, sort_keys=True, ensure_ascii=False)
-    if sealed_as_is:
-        seals[key] = content_digest(snap)
-        _write_seals(root, seals)
+    named. Returns `{"path", "was", "resealed"}`. Read and written under the project's writer lock (#141)."""
+    with _hold(_project_of(root)):
+        path = (os.path.join(root, VERSIONS_DIR, version + ".json") if ledger_layout(root) == "project"
+                else os.path.join(root, preset or "", version + ".json"))
+        if ledger_layout(root) == "preset" and not preset:
+            raise SnapshotError(f"{root}: a per-preset ledger -- name the preset (--preset)")
+        snap = _read_snapshot_json(path)
+        if identity_error(path, snap) is None:
+            raise SnapshotError(f"{path}: already says it is {version} -- nothing to repair")
+        key = _seal_key(root, version, preset)
+        seals = _read_seals(root)
+        sealed_as_is = seals.get(key) == content_digest(snap)
+        was = snap["version"]
+        snap["version_was"], snap["version"] = was, version
+        _project_io().atomic_write_json(path, snap, indent=2, sort_keys=True, ensure_ascii=False)
+        if sealed_as_is:
+            seals[key] = content_digest(snap)
+            _write_seals(root, seals)
     return {"path": path, "was": was, "resealed": sealed_as_is}
 
 
@@ -1029,95 +1055,98 @@ def migrate_line(root, apply=False):
     Resumes a stopped run: `versions/` is derived, so a run that stopped before `slots.json` rebuilds
     it from the per-preset directories, wherever they are now (at the root or already in `legacy/`).
     `slots.json` goes last, so until it exists the move has not happened.
+
+    `apply` reads and moves with the project's writer lock held (#141); the plan only reads, and takes none.
     """
     import shutil
-    legacy_root = os.path.join(root, LEGACY_DIR)
-    slots_path = os.path.join(root, SLOTS_FILE)
-    old_here = _old_preset_dirs(root)
-    if os.path.isfile(slots_path):
-        if old_here:
-            ledger_layout(root)                                   # raises with the way out
-        return {"done": True, "note": "already on the per-project line -- nothing to move"}
-    old_moved = [p_ for p_ in _old_preset_dirs(legacy_root) if p_ not in old_here]
-    presets = sorted(set(old_here) | set(old_moved))
-    if not presets:
-        return {"done": True, "note": "no per-preset ledger here -- nothing to move"}
+    with _hold(_project_of(root)) if apply else contextlib.nullcontext():
+        legacy_root = os.path.join(root, LEGACY_DIR)
+        slots_path = os.path.join(root, SLOTS_FILE)
+        old_here = _old_preset_dirs(root)
+        if os.path.isfile(slots_path):
+            if old_here:
+                ledger_layout(root)                                   # raises with the way out
+            return {"done": True, "note": "already on the per-project line -- nothing to move"}
+        old_moved = [p_ for p_ in _old_preset_dirs(legacy_root) if p_ not in old_here]
+        presets = sorted(set(old_here) | set(old_moved))
+        if not presets:
+            return {"done": True, "note": "no per-preset ledger here -- nothing to move"}
 
-    def pdir(name):
-        return os.path.join(root if name in old_here else legacy_root, name)
+        def pdir(name):
+            return os.path.join(root if name in old_here else legacy_root, name)
 
-    reg_path = next((c for c in (os.path.join(root, "registry.json"),
-                                 os.path.join(legacy_root, "registry.json")) if os.path.isfile(c)), None)
-    reg = {}
-    if reg_path:
-        with open(reg_path, encoding="utf-8") as fh:
-            reg = json.load(fh)
-    per = {}
-    for name in presets:
-        per[name] = sorted((fn[:-5] for fn in os.listdir(pdir(name))
-                            if fn.endswith(".json") and _VER_RE.match(fn[:-5])),
-                           key=lambda v: int(_VER_RE.match(v).group(1)))
-    active = reg.get("active")
-    keeper = active if active in per else sorted(presets, key=lambda n: (-len(per[n]), n))[0]
-    order = [keeper] + [n for n in presets if n != keeper]
-    mapping, top = {}, 0
-    for v in per[keeper]:
-        mapping[f"{keeper}/{v}"] = v
-        top = max(top, int(_VER_RE.match(v).group(1)))
-    for name in order[1:]:
-        for v in per[name]:
-            top += 1
-            mapping[f"{name}/{v}"] = f"v_{top:03d}"
-    heads = {}
-    for name in presets:
-        head = None
-        hp = os.path.join(pdir(name), "HEAD")
-        if os.path.isfile(hp):
-            with open(hp, encoding="utf-8") as fh:
-                head = fh.read().strip() or None
-        heads[name] = mapping[f"{name}/{head if head in per[name] else per[name][-1]}"]
-    plan = {"keeper": keeper, "active": active, "map": mapping, "slots": heads, "done": False}
-    if not apply:
+        reg_path = next((c for c in (os.path.join(root, "registry.json"),
+                                     os.path.join(legacy_root, "registry.json")) if os.path.isfile(c)), None)
+        reg = {}
+        if reg_path:
+            with open(reg_path, encoding="utf-8") as fh:
+                reg = json.load(fh)
+        per = {}
+        for name in presets:
+            per[name] = sorted((fn[:-5] for fn in os.listdir(pdir(name))
+                                if fn.endswith(".json") and _VER_RE.match(fn[:-5])),
+                               key=lambda v: int(_VER_RE.match(v).group(1)))
+        active = reg.get("active")
+        keeper = active if active in per else sorted(presets, key=lambda n: (-len(per[n]), n))[0]
+        order = [keeper] + [n for n in presets if n != keeper]
+        mapping, top = {}, 0
+        for v in per[keeper]:
+            mapping[f"{keeper}/{v}"] = v
+            top = max(top, int(_VER_RE.match(v).group(1)))
+        for name in order[1:]:
+            for v in per[name]:
+                top += 1
+                mapping[f"{name}/{v}"] = f"v_{top:03d}"
+        heads = {}
+        for name in presets:
+            head = None
+            hp = os.path.join(pdir(name), "HEAD")
+            if os.path.isfile(hp):
+                with open(hp, encoding="utf-8") as fh:
+                    head = fh.read().strip() or None
+            heads[name] = mapping[f"{name}/{head if head in per[name] else per[name][-1]}"]
+        plan = {"keeper": keeper, "active": active, "map": mapping, "slots": heads, "done": False}
+        if not apply:
+            return plan
+        vdir = os.path.join(root, VERSIONS_DIR)
+        if os.path.isdir(vdir):
+            shutil.rmtree(vdir)                     # derived: a stopped run's part is rebuilt whole
+        os.makedirs(vdir)
+        created = {}
+        for name in order:
+            prev = None
+            for v in per[name]:
+                snap = _read_snapshot_json(os.path.join(pdir(name), v + ".json"))
+                new = mapping[f"{name}/{v}"]
+                snap.update({"version": new, "preset": snap.get("preset") or name, "parent": prev,
+                             "migrated_from": f"{name}/{v}"})
+                with open(os.path.join(vdir, new + ".json"), "w", encoding="utf-8") as fh:
+                    json.dump(snap, fh, indent=2, sort_keys=True, ensure_ascii=False)
+                created[new] = snap.get("created")
+                prev = new
+        with open(os.path.join(root, LEGACY_MAP), "w", encoding="utf-8") as fh:
+            json.dump(mapping, fh, indent=2, sort_keys=True, ensure_ascii=False)
+        os.makedirs(legacy_root, exist_ok=True)
+        for name in old_here:
+            os.replace(os.path.join(root, name), os.path.join(legacy_root, name))
+        if reg_path and os.path.dirname(reg_path) == root:
+            os.replace(reg_path, os.path.join(legacy_root, "registry.json"))
+        slots = {"active": active if active in per else None, "slots": {}}
+        for name in order:
+            entry = dict((reg.get("slots") or {}).get(name) or {})
+            history = [{"version": mapping[f"{name}/{v}"], "since": created.get(mapping[f"{name}/{v}"])}
+                       for v in per[name]]
+            cut = next(i for i, h in enumerate(history) if h["version"] == heads[name]) + 1
+            entry.update({"version": heads[name], "since": created.get(heads[name]), "history": history[:cut]})
+            slots["slots"][name] = entry
+        _write_slots(root, slots)                   # last: until it exists, the move has not happened
+        # The moved versions are sealed on the new line, fresh: their keys changed with the layout.
+        old_seals = os.path.join(root, SEALS_FILE)
+        if os.path.isfile(old_seals):
+            os.replace(old_seals, os.path.join(legacy_root, SEALS_FILE))
+        seal_all(root)
+        plan["done"] = True
         return plan
-    vdir = os.path.join(root, VERSIONS_DIR)
-    if os.path.isdir(vdir):
-        shutil.rmtree(vdir)                     # derived: a stopped run's part is rebuilt whole
-    os.makedirs(vdir)
-    created = {}
-    for name in order:
-        prev = None
-        for v in per[name]:
-            snap = _read_snapshot_json(os.path.join(pdir(name), v + ".json"))
-            new = mapping[f"{name}/{v}"]
-            snap.update({"version": new, "preset": snap.get("preset") or name, "parent": prev,
-                         "migrated_from": f"{name}/{v}"})
-            with open(os.path.join(vdir, new + ".json"), "w", encoding="utf-8") as fh:
-                json.dump(snap, fh, indent=2, sort_keys=True, ensure_ascii=False)
-            created[new] = snap.get("created")
-            prev = new
-    with open(os.path.join(root, LEGACY_MAP), "w", encoding="utf-8") as fh:
-        json.dump(mapping, fh, indent=2, sort_keys=True, ensure_ascii=False)
-    os.makedirs(legacy_root, exist_ok=True)
-    for name in old_here:
-        os.replace(os.path.join(root, name), os.path.join(legacy_root, name))
-    if reg_path and os.path.dirname(reg_path) == root:
-        os.replace(reg_path, os.path.join(legacy_root, "registry.json"))
-    slots = {"active": active if active in per else None, "slots": {}}
-    for name in order:
-        entry = dict((reg.get("slots") or {}).get(name) or {})
-        history = [{"version": mapping[f"{name}/{v}"], "since": created.get(mapping[f"{name}/{v}"])}
-                   for v in per[name]]
-        cut = next(i for i, h in enumerate(history) if h["version"] == heads[name]) + 1
-        entry.update({"version": heads[name], "since": created.get(heads[name]), "history": history[:cut]})
-        slots["slots"][name] = entry
-    _write_slots(root, slots)                   # last: until it exists, the move has not happened
-    # The moved versions are sealed on the new line, fresh: their keys changed with the layout.
-    old_seals = os.path.join(root, SEALS_FILE)
-    if os.path.isfile(old_seals):
-        os.replace(old_seals, os.path.join(legacy_root, SEALS_FILE))
-    seal_all(root)
-    plan["done"] = True
-    return plan
 
 
 class PresetHistory:
@@ -1197,15 +1226,18 @@ class PresetHistory:
         return vs[-1] if vs else None
 
     def _set_head(self, version):
-        if self._project():
-            slots = _read_slots(self.root)
-            entry = slots["slots"].setdefault(self.preset, {})
-            now = datetime.datetime.now().isoformat(timespec="seconds")
-            entry["version"], entry["since"] = version, now
-            entry.setdefault("history", []).append({"version": version, "since": now})
-            _write_slots(self.root, slots)
-            return
-        _project_io().atomic_write_text(self._head_path(), version + "\n")
+        """Point this slot at `version`: `slots.json` read and written under the project's writer lock (#141) -- the
+        lock of `project_dir`, which follows the project wherever the ledger is."""
+        with _hold(self.project_dir):
+            if self._project():
+                slots = _read_slots(self.root)
+                entry = slots["slots"].setdefault(self.preset, {})
+                now = datetime.datetime.now().isoformat(timespec="seconds")
+                entry["version"], entry["since"] = version, now
+                entry.setdefault("history", []).append({"version": version, "since": now})
+                _write_slots(self.root, slots)
+                return
+            _project_io().atomic_write_text(self._head_path(), version + "\n")
 
     # -- read/write --
     def load(self, version=None):
@@ -1253,55 +1285,61 @@ class PresetHistory:
         Nothing is written beside a `project.json` or a `seals.json` that is there and cannot be read: each raises
         `Unreadable` first (#136, audit T-11). The first was a rev 0 stamped into the version; the second a seals file
         rewritten holding this version's seal alone.
+
+        The bank is one writer's step, under the project's writer lock (#141): the revision, the seals, the slot and
+        the line are read with it held, and the version, its seal and the slot's move are written before it is let
+        go. The lock is `project_dir`'s -- this history's project, wherever its ledger is -- also when another
+        `project_dir` is passed for the revision alone.
         """
         state = copy.deepcopy(state)
         state["preset"] = self.preset
         state["schema_version"] = SCHEMA_VERSION
-        if project_rev is None:
-            project_rev = _project_rev(project_dir if project_dir is not None else self.project_dir)
-        state["project_rev"] = project_rev
-        if note is not None:
-            state["note"] = note
-        validate(state)
-        # Read before anything is written, so a `seals.json` that cannot be read refuses the bank whole; it is read
-        # again where the seal is added, to keep that read next to its write.
-        _read_seals(self.root)
-        project_line = self._project()
-        if project_line:
-            # The version it was made from: a line of numbers is a tree of edits (hub #195).
-            state["parent"] = parent or self.head()
-        # The first snapshot is what creates the directory. On the per-project line `slots.json`
-        # goes down FIRST, so a stop between the two cannot leave `versions/` without it.
-        if project_line and not os.path.isfile(os.path.join(self.root, SLOTS_FILE)):
-            _write_slots(self.root, {"active": None, "slots": {}})
-        os.makedirs(os.path.join(self.root, VERSIONS_DIR) if project_line else self.dir, exist_ok=True)
-        # Two writers that read the line together pick one number. `open(path, "w")` let the second truncate the
-        # first's version and bank its own under that name; the file is created now, and the loser picks again.
-        first = None
-        for _ in range(100):
-            version = self._next_version()
-            first = first or version
-            state["version"] = version
-            state["created"] = datetime.datetime.now().isoformat(timespec="seconds")
-            text = json.dumps(state, indent=2, sort_keys=True, ensure_ascii=False)   # the bytes json.dump wrote
-            try:
-                _project_io().create_exclusive(self._path(version), text)
-                break
-            except FileExistsError:
-                continue
-        else:
-            # The numbers tried tell the two causes apart: numbers that moved are another writer's; one that never
-            # moved is held by a file `project_versions` does not list -- `V_002.JSON`, say, on a case-blind disk.
-            raise SnapshotError(
-                f"no free version number after 100 tries, {first} to {version}: each was taken when this writer came "
-                f"to it. If the numbers moved, another writer is claiming them as fast as this one; if they did not, "
-                f"a file the ledger does not list holds that name ({self._path(version)}, spelled in another letter case, "
-                f"e.g. V_002.JSON)")
-        seals = _read_seals(self.root)
-        seals[_seal_key(self.root, version, self.preset)] = content_digest(state)
-        _write_seals(self.root, seals)
-        if place:
-            self._set_head(version)
+        with _hold(self.project_dir):
+            if project_rev is None:
+                project_rev = _project_rev(project_dir if project_dir is not None else self.project_dir)
+            state["project_rev"] = project_rev
+            if note is not None:
+                state["note"] = note
+            validate(state)
+            # Read before anything is written, so a `seals.json` that cannot be read refuses the bank whole; it is
+            # read again where the seal is added, to keep that read next to its write.
+            _read_seals(self.root)
+            project_line = self._project()
+            if project_line:
+                # The version it was made from: a line of numbers is a tree of edits (hub #195).
+                state["parent"] = parent or self.head()
+            # The first snapshot is what creates the directory. On the per-project line `slots.json`
+            # goes down FIRST, so a stop between the two cannot leave `versions/` without it.
+            if project_line and not os.path.isfile(os.path.join(self.root, SLOTS_FILE)):
+                _write_slots(self.root, {"active": None, "slots": {}})
+            os.makedirs(os.path.join(self.root, VERSIONS_DIR) if project_line else self.dir, exist_ok=True)
+            # Two writers that read the line together pick one number. `open(path, "w")` let the second truncate the
+            # first's version and bank its own under that name; the file is created now, and the loser picks again.
+            first = None
+            for _ in range(100):
+                version = self._next_version()
+                first = first or version
+                state["version"] = version
+                state["created"] = datetime.datetime.now().isoformat(timespec="seconds")
+                text = json.dumps(state, indent=2, sort_keys=True, ensure_ascii=False)   # the bytes json.dump wrote
+                try:
+                    _project_io().create_exclusive(self._path(version), text)
+                    break
+                except FileExistsError:
+                    continue
+            else:
+                # The numbers tried tell the two causes apart: numbers that moved are another writer's; one that never
+                # moved is held by a file `project_versions` does not list -- `V_002.JSON`, say, on a case-blind disk.
+                raise SnapshotError(
+                    f"no free version number after 100 tries, {first} to {version}: each was taken when this writer "
+                    f"came to it. If the numbers moved, another writer is claiming them as fast as this one; if they "
+                    f"did not, a file the ledger does not list holds that name ({self._path(version)}, spelled in "
+                    f"another letter case, e.g. V_002.JSON)")
+            seals = _read_seals(self.root)
+            seals[_seal_key(self.root, version, self.preset)] = content_digest(state)
+            _write_seals(self.root, seals)
+            if place:
+                self._set_head(version)
         return version
 
     def revert(self, version, note=None):
@@ -1588,38 +1626,45 @@ class Registry:
         return {"active": None, "slots": {}}
 
     def _write(self, reg):
-        if self._project():
-            _write_slots(self.root, reg)
-            return
-        reg["updated"] = datetime.datetime.now().isoformat(timespec="seconds")
-        _project_io().atomic_write_json(self._path(), reg, indent=2, sort_keys=True, ensure_ascii=False,
-                                        makedirs=True)
+        """Write the registry under the project's writer lock (#141) -- the root's project, as a history of it holds
+        it; its writers below hold it over their read as well."""
+        with _hold(_project_of(self.root)):
+            if self._project():
+                _write_slots(self.root, reg)
+                return
+            reg["updated"] = datetime.datetime.now().isoformat(timespec="seconds")
+            _project_io().atomic_write_json(self._path(), reg, indent=2, sort_keys=True, ensure_ascii=False,
+                                            makedirs=True)
 
     def get_active(self):
         return self.load().get("active")
 
     def set_active(self, preset):
-        """Point the active slot at `preset`. Deterministic guard: it must already have a history."""
-        presets = self.list_presets()
-        if preset not in presets:
-            raise ValueError(f"preset {preset!r} has no snapshot history under {self.root!r} "
-                             f"(known: {presets or 'none'}) — seed it (history.snapshot) before "
-                             f"making it the active slot")
-        reg = self.load()
-        reg["active"] = preset
-        reg.setdefault("slots", {})
-        self._write(reg)
+        """Point the active slot at `preset`. Deterministic guard: it must already have a history. Read and written
+        under the project's writer lock (#141)."""
+        with _hold(_project_of(self.root)):
+            presets = self.list_presets()
+            if preset not in presets:
+                raise ValueError(f"preset {preset!r} has no snapshot history under {self.root!r} "
+                                 f"(known: {presets or 'none'}) — seed it (history.snapshot) before "
+                                 f"making it the active slot")
+            reg = self.load()
+            reg["active"] = preset
+            reg.setdefault("slots", {})
+            self._write(reg)
         return preset
 
     def describe_slot(self, preset, label=None, note=None):
-        """Attach an optional human label/desc to a slot (e.g. label='Slot 3', note='SQ-Comp-Ref')."""
-        reg = self.load()
-        entry = reg.setdefault("slots", {}).setdefault(preset, {})
-        if label is not None:
-            entry["label"] = label
-        if note is not None:
-            entry["note"] = note
-        self._write(reg)
+        """Attach an optional human label/desc to a slot (e.g. label='Slot 3', note='SQ-Comp-Ref'). Read and written
+        under the project's writer lock (#141)."""
+        with _hold(_project_of(self.root)):
+            reg = self.load()
+            entry = reg.setdefault("slots", {}).setdefault(preset, {})
+            if label is not None:
+                entry["label"] = label
+            if note is not None:
+                entry["note"] = note
+            self._write(reg)
         return entry
 
     def render(self):
@@ -1974,7 +2019,7 @@ def said_unread(unread):
     return 1 if unread else 0
 
 
-def repair_encoding(paths, codec, unread=None):
+def repair_encoding(paths, codec, unread=None, project_dir=None):
     """Rewrite every non-UTF-8 file among `paths` as UTF-8, decoding it as `codec`. A file that cannot be opened is not
     repaired, and goes into `unread` (`encoding_survey`).
 
@@ -2003,7 +2048,19 @@ def repair_encoding(paths, codec, unread=None):
 
     A write the disk refuses raises `RepairRefused` naming the file, the cause, the repair its cause
     allows and what is as it was (n1): it was the bare `OSError`, a traceback.
+
+    `project_dir` names the project whose writer lock the survey and the rewrite hold (#141): the files are another
+    writer's too -- a journal appended to meanwhile would lose the line. Both command lines that run this name it;
+    none is held without it.
     """
+    if project_dir is None:
+        return _repair_encoding(paths, codec, unread)
+    with _hold(project_dir):
+        return _repair_encoding(paths, codec, unread)
+
+
+def _repair_encoding(paths, codec, unread):
+    """`repair_encoding`'s work, its lock already decided."""
     io_ = _project_io()
     found = encoding_survey(paths, unread)
     if unread:
@@ -2059,7 +2116,7 @@ def repair_encoding(paths, codec, unread=None):
     return done
 
 
-def set_aside(paths, unread=None):
+def set_aside(paths, unread=None, project_dir=None):
     """Move the journal lines no code page makes JSON of out of each `.jsonl` among `paths`, on the person's word
     (#134, R56; the re-review's m1). Returns `[{"path", "set_aside", "lines"}]`, one per journal that had any.
 
@@ -2068,7 +2125,18 @@ def set_aside(paths, unread=None):
     kept, into `<journal>.set-aside` as `line N: <its bytes>` and a "\\n", after what that file holds already; every
     other line keeps its bytes and its line ending. Both are written atomically, the set-aside first, so the bytes are
     safe before they leave the journal. Nothing is moved while a file could not be read (`unread`, m3). A set-aside
-    file that cannot be read, and a write the disk refuses, raise `RepairRefused` with what landed (n1)."""
+    file that cannot be read, and a write the disk refuses, raise `RepairRefused` with what landed (n1).
+
+    `project_dir` names the project whose writer lock the read and the rewrite hold (#141), as `repair_encoding`'s
+    does: an event appended between the two would be written over. `contract.py repair-encoding` names it."""
+    if project_dir is None:
+        return _set_aside(paths, unread)
+    with _hold(project_dir):
+        return _set_aside(paths, unread)
+
+
+def _set_aside(paths, unread):
+    """`set_aside`'s work, its lock already decided."""
     io_ = _project_io()
     plan = []
     for path in paths:
@@ -2223,11 +2291,20 @@ def _main(argv=None):
     try:
         return _run(p, args)
     except Exception as exc:  # noqa: BLE001 -- matched below; anything else still raises
+        # The project's writer lock first (#141, `write_lock.py`): another writer held it past the wait -- 75, its one
+        # `busy:` line, nothing written, safe to retry -- or the wait, AUTOSOUND_LOCK_TIMEOUT_S, is no number of
+        # seconds: a usage error, said before anything was taken.
+        if getattr(type(exc), "is_busy", False):
+            return _write_lock().busy_exit(exc)
+        if getattr(type(exc), "exit_code", None) == 2:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
         # A file the ledger reads that is there and cannot be read -- `seals.json`, `project.json` (#136) -- or a
         # version it cannot take (`SnapshotError`: one a newer method wrote, audit T-21, or one in another code page)
         # is a refusal naming it and its repair: exit 1, as the traceback it was, with the sentence instead. Both are
         # matched by their attribute: a `SnapshotError` from another copy of this module (`variant --delta` loads
-        # `apply.py`, which loads `state.py` again) is another class. So is a repair's write the disk refused (n1).
+        # `apply.py`, which loads `state.py` again) is another class. So is a repair's write the disk refused (n1),
+        # and a project folder the lock cannot be made in (#141, `write_lock.Unwritable`).
         if not (getattr(exc, "is_unreadable", False) or getattr(exc, "is_snapshot_error", False)
                 or getattr(type(exc), "repair_refused", False)):
             raise
@@ -2313,7 +2390,7 @@ def _run(p, args):
                           + f"--from {c}", unread=unread, cut=cut))
             return said_unread(unread)
         try:
-            done = repair_encoding(paths, args.codec, unread)
+            done = repair_encoding(paths, args.codec, unread, project_dir=_project_of(args.root))
         except SnapshotError as exc:
             print(str(exc), file=sys.stderr)
             return 3
@@ -3387,6 +3464,139 @@ def _check_writers_go_through_the_move():
     assert not failures, "\n  ".join(["a writer item 8 lists does not go through the move:"] + failures)
 
 
+def _check_a_held_lock_answers_75():
+    """Another writer holding the project's lock makes the ledger's writing verbs wait AUTOSOUND_LOCK_TIMEOUT_S and exit
+    75 (#141, J2b) -- `config save` (the one TCC runs), `seal`, `registry set-active`, `revert`, `variant switch` -- one
+    `busy:` line naming the lock, no traceback, and the ledger byte for byte as it was. The lock is the PROJECT's,
+    `PresetHistory.project_dir`: the ledger root's parent here. A verb that only reads waits for nobody. Let go,
+    `config save` lands -- its slot write (`PresetHistory.place`) re-entering the hold `save_config` took, where a
+    second hold of its own would have waited for the first until the deadline."""
+    import shutil
+    import tempfile
+    pj = _siblings().load("project.py")
+    top = tempfile.mkdtemp(prefix="autosound_state_busy_")
+    failures = []
+    try:
+        proj = os.path.join(top, "car")
+        root = os.path.join(proj, "state")
+        h = PresetHistory(root, "SQ")
+        h.snapshot(_sample_state(), note="baseline")
+        h.snapshot(_sample_state(), note="second")
+        Registry(root).set_active("SQ")
+        before = pj._files_in(root)
+        with pj._held_elsewhere(proj):
+            for argv in (["config", "save", "v_002", "SQ-1", "--slot", "SQ"], ["seal"], ["registry", "set-active", "SQ"],
+                         ["revert", "SQ", "v_001"], ["variant", "switch", "SQ", "v_001"],
+                         ["repair-encoding", "--from", "cp1251"]):
+                rc, out, err = pj._run_cli(_main, ["--root", root, *argv], AUTOSOUND_LOCK_TIMEOUT_S="0.2")
+                why = pj._said_busy(rc, err, proj)
+                if why:
+                    failures.append(f"{' '.join(argv[:2])}: {why}")
+                if pj._files_in(root) != before:
+                    failures.append(f"{' '.join(argv[:2])}: wrote under another writer's lock")
+                    before = pj._files_in(root)
+            for argv in (["log", "SQ"], ["config", "list"], ["registry", "show"], ["verify"]):
+                rc, out, err = pj._run_cli(_main, ["--root", root, *argv], AUTOSOUND_LOCK_TIMEOUT_S="0.2")
+                if rc not in (None, 0, 3) or "busy" in err:          # `log` returns None: exit 0
+                    failures.append(f"{' '.join(argv)} waited for the lock: rc {rc}, said {err.strip()[-200:]!r}")
+        rc, out, err = pj._run_cli(_main, ["--root", root, "config", "save", "v_002", "SQ-1", "--slot", "SQ"],
+                                   AUTOSOUND_LOCK_TIMEOUT_S="0.2")
+        if rc != 0 or "SQ-1" not in configs(root):
+            failures.append(f"let go, config save did not land: rc {rc}, said {err.strip()[-200:]!r}")
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, f"{len(failures)} run(s) under a held lock:\n  " + "\n  ".join(failures)
+
+
+def _check_a_bad_timeout_is_a_usage_error():
+    """An AUTOSOUND_LOCK_TIMEOUT_S that is no number of seconds makes the ledger's writers a usage error (#141): exit 2,
+    one line naming the variable, no traceback, and nothing written or made -- the ledger as it was, and the project's
+    `.autosound/` not made again."""
+    import shutil
+    import tempfile
+    pj = _siblings().load("project.py")
+    top = tempfile.mkdtemp(prefix="autosound_state_bad_wait_")
+    failures = []
+    try:
+        proj = os.path.join(top, "car")
+        root = os.path.join(proj, "state")
+        PresetHistory(root, "SQ").snapshot(_sample_state(), note="baseline")
+        shutil.rmtree(os.path.join(proj, ".autosound"), ignore_errors=True)
+        before = pj._files_in(root)
+        for argv in (["seal"], ["config", "save", "v_001", "SQ-1", "--slot", "SQ"]):
+            rc, out, err = pj._run_cli(_main, ["--root", root, *argv], AUTOSOUND_LOCK_TIMEOUT_S="soon")
+            lines = err.strip().splitlines()
+            if rc != 2 or len(lines) != 1 or "AUTOSOUND_LOCK_TIMEOUT_S=soon" not in lines[0]:
+                failures.append(f"{argv[0]}: rc {rc}, said {err.strip()[-200:]!r}")
+            if pj._files_in(root) != before or os.path.exists(os.path.join(proj, ".autosound")):
+                failures.append(f"{argv[0]}: wrote or made something")
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["a bad AUTOSOUND_LOCK_TIMEOUT_S:"] + failures)
+
+
+def _check_no_load_and_save_outside_update():
+    """No function here loads `project.json` and saves it itself (#141, J2b): a writer of the project's facts goes
+    through `Project.update`, which holds the lock across the read and the write (`project._load_and_save_paths`)."""
+    with open(os.path.realpath(__file__), encoding="utf-8") as fh:
+        found = _siblings().load("project.py")._load_and_save_paths(fh.read())
+    assert not found, f"load-and-save outside Project.update: {found}"
+
+
+def _check_ledger_writers_read_with_the_lock_held():
+    """Every writer of the ledger reads what it decides on with the project's lock held (#141, J2b) -- the slots, the
+    seals, the versions -- so a change landed between its read and its write is not written over. Watched through the
+    ledger's own readers (`_read_slots`, `_read_seals`, `_read_snapshot_json`), each call noting whether this thread
+    holds the lock of the ledger's project: every writer below reads at least once, and every read is held."""
+    import shutil
+    import tempfile
+    lock = _write_lock()
+    top = tempfile.mkdtemp(prefix="autosound_state_reads_held_")
+    readers = ("_read_slots", "_read_seals", "_read_snapshot_json")
+    real = {name: globals()[name] for name in readers}
+    project, seen, failures = [None], [], []
+
+    def watched(name):
+        def call(*args, **kwargs):
+            seen.append(lock.held_here(project[0]))
+            return real[name](*args, **kwargs)
+        return call
+    try:
+        project[0] = os.path.join(top, "car")
+        root = os.path.join(project[0], "state")
+        h = PresetHistory(root, "SQ")
+        h.snapshot(_sample_state(), note="v1")
+        copied = h._path(h.snapshot(_sample_state(), note="v2"))
+        with open(copied, encoding="utf-8") as fh:
+            snap = json.load(fh)
+        snap["version"] = "v_001"                               # a version copied over another: repair-version's
+        with open(copied, "w", encoding="utf-8") as fh:
+            json.dump(snap, fh, indent=2, sort_keys=True, ensure_ascii=False)
+        old = os.path.join(top, "old", "state")                 # the per-preset layout migrate-line moves
+        os.makedirs(os.path.join(old, "SQ"))
+        with open(os.path.join(old, "SQ", "v_001.json"), "w", encoding="utf-8") as fh:
+            json.dump(dict(_sample_state(), preset="SQ", version="v_001", schema_version=SCHEMA_VERSION), fh)
+        globals().update({name: watched(name) for name in readers})
+        for label, folder, call in (
+                ("snapshot", project[0], lambda: h.snapshot(_sample_state(), note="v3")),
+                ("place", project[0], lambda: h.place("v_001")),
+                ("save_config", project[0], lambda: save_config(root, "v_001", "SQ-1", slot="SQ")),
+                ("repair_version", project[0], lambda: repair_version(root, "v_002")),
+                ("seal_all", project[0], lambda: seal_all(root)),
+                ("set_active", project[0], lambda: Registry(root).set_active("SQ")),
+                ("describe_slot", project[0], lambda: Registry(root).describe_slot("SQ", label="Slot 1")),
+                ("migrate_line --apply", os.path.dirname(old), lambda: migrate_line(old, apply=True))):
+            project[0] = folder
+            del seen[:]
+            call()
+            if not seen or not all(seen):
+                failures.append(f"{label}: read {len(seen)} time(s), {seen.count(False)} with the lock free")
+    finally:
+        globals().update(real)
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "the ledger read with the project's lock free:\n  " + "\n  ".join(failures)
+
+
 def _selftest():
     failures = []
     for check in (_check_variant_delta_refused, _check_eq_refusals, _check_canonical_code_uses_the_loaded_naming,
@@ -3397,7 +3607,9 @@ def _selftest():
                   _check_newer_version_refused, _check_snapshot_error_from_another_copy,
                   _check_variant_delta_blames_no_good_delta, _check_variant_new_refuses_its_base_in_one_line,
                   _check_sheet_says_an_unreadable_profile, _check_sheet_says_a_rate_it_cannot_use,
-                  _check_survey_names_a_cut_file, _check_writers_go_through_the_move):
+                  _check_survey_names_a_cut_file, _check_writers_go_through_the_move,
+                  _check_a_held_lock_answers_75, _check_a_bad_timeout_is_a_usage_error,
+                  _check_no_load_and_save_outside_update, _check_ledger_writers_read_with_the_lock_held):
         try:
             check()
         except AssertionError as exc:
@@ -3992,6 +4204,9 @@ def _selftest():
           f"absent root refused instead of answering 'NO ACTIVE SLOT SET'. "
           f"#136: a seals.json or a project.json that cannot be read refuses verify, seal and a bank, naming it and "
           f"its repair, every byte kept; a version a newer method wrote is refused. "
+          f"#141: under another writer's lock config save, seal, registry set-active, revert and variant switch "
+          f"answer 75 with one busy line, the ledger byte for byte as it was, while the reads wait for nobody; a "
+          f"bad AUTOSOUND_LOCK_TIMEOUT_S is exit 2 making nothing. "
           f"root={root}")
     return 0
 
