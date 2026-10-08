@@ -574,6 +574,7 @@ def save_profile(path, data):
 
     The write holds the project's writer lock (#141) -- the project being the folder the file is in. The stamp's git
     is asked before it is taken (`_ready_to_hold`), and the refusals above come first: a refused write makes nothing.
+    That folder, not there yet, is made through `write_lock.make_folder`: one it cannot make is `Unwritable`.
     """
     io_ = _project_io()
     newer = io_.newer_schema(data, SCHEMA_VERSION)
@@ -597,7 +598,7 @@ def save_profile(path, data):
     parent = os.path.dirname(path)
     with _hold(os.path.dirname(os.path.abspath(path))):
         if parent:
-            os.makedirs(parent, exist_ok=True)
+            _write_lock().make_folder(parent)
         io_.atomic_write_json(path, data, indent=2, sort_keys=True, ensure_ascii=False)
     return path
 
@@ -870,9 +871,11 @@ def start_draft(project_dir, vendor, model):
 def save_draft(project_dir, data):
     """Write the draft WITHOUT validating: a half-finished interview is invalid by definition (no
     groups yet, a name still null), and refusing to save it would defeat the point of having one.
-    Under the project's writer lock (#141); a writer that read the draft first holds it already."""
+    Under the project's writer lock (#141); a writer that read the draft first holds it already. The first draft of a
+    project folder that is not there yet makes it (`write_lock.make_folder`): one it cannot make -- under a parent this
+    user may not write -- is `Unwritable`, which the command line says in one line, exit 1."""
     with _hold(project_dir):
-        os.makedirs(project_dir, exist_ok=True)
+        _write_lock().make_folder(project_dir)
         path = draft_path(project_dir)
         _project_io().atomic_write_json(path, data, indent=2, sort_keys=True, ensure_ascii=False)
     return path
@@ -1374,7 +1377,8 @@ def _main(argv=None):
             print(f"error: {exc}", file=sys.stderr)
             return 2
         # A profile or a draft that is there and cannot be read, or that a newer method wrote (#136): a refusal naming
-        # it and its repair, exit 1, not a traceback. So is a project folder the lock cannot be made in (#141).
+        # it and its repair, exit 1, not a traceback. So is a project folder the lock cannot be made in, and a new one
+        # the interview's first draft cannot make (#141, `write_lock.make_folder`).
         if not getattr(exc, "is_unreadable", False):
             raise
         print(f"error: {exc}", file=sys.stderr)
@@ -2147,8 +2151,55 @@ def _check_no_profile_makes_nothing():
     assert not failures, "\n  ".join(["refused with no profile:"] + failures)
 
 
+def _check_the_interview_makes_its_new_folder():
+    """The interview's first write makes the project folder where it is not there yet (#141, R23): `start` makes it and
+    the draft -- the lock makes nothing there, a hold on a missing folder being this process's thread lock alone -- and
+    the next write, `set-field`, takes the lock, making `.autosound/`. The counterpart of the verbs that make nothing on
+    a missing folder (`_check_no_profile_makes_nothing`). Under a parent this user may not write, `start` and
+    `set-field` refuse as the lock does (`write_lock.make_folder`): one line, exit 1, nothing made -- and so does
+    `save_profile`, in process, `Unwritable`. Each was a raw PermissionError's traceback."""
+    import shutil
+    import tempfile
+    pj = _siblings().load("project.py")
+    top = tempfile.mkdtemp(prefix="autosound_profile_new_")
+    failures, read_only = [], False
+    try:
+        new = os.path.join(top, "new")
+        rc, out, err = pj._run_cli(_main, ["start", new, "Musway", "M6V4"])
+        made = sorted(os.listdir(new)) if os.path.isdir(new) else None
+        if rc != 0 or made != [os.path.basename(draft_path(new))]:
+            failures.append(f"start on a new folder: rc {rc}, said {err.strip()[-200:]!r}, made {made}")
+        rc, out, err = pj._run_cli(_main, ["set-field", new, "delay.max_ms", "20"])
+        if rc != 0 or not os.path.isfile(_write_lock().lock_path(new)):
+            failures.append(f"the next write there took no lock: rc {rc}, said {err.strip()[-200:]!r}")
+        read_only = pj._mode_refuses("start, set-field and save_profile under a parent this user may not write",
+                                     "dsp_profile")
+        if read_only:
+            with pj._under_a_read_only_parent(top) as new:
+                for argv in (["start", new, "Musway", "M6V4"], ["set-field", new, "delay.max_ms", "20"]):
+                    rc, out, err = pj._run_cli(_main, argv)
+                    said = (out + err).strip().splitlines()
+                    if rc != 1 or said != [f"error: {pj._cannot_be_made(new)}"] or os.listdir(os.path.dirname(new)):
+                        failures.append(f"{argv[0]} under a parent this user may not write: rc {rc}, said "
+                                        f"{said[-3:]}, made {sorted(os.listdir(os.path.dirname(new)))}")
+                try:
+                    save_profile(profile_path(new), {"dsp_profile": {"name": "M6V4", "vendor": "Musway", "groups": [
+                        {"id": "physical_outputs", "label": "Outputs", "fields": ["hp", "lp", "gain_db"]}]}})
+                    caught = None
+                except Exception as exc:  # noqa: BLE001 -- judged by its attribute below
+                    caught = exc
+                if not getattr(type(caught), "is_unreadable", False) or str(caught) != pj._cannot_be_made(new) \
+                        or os.listdir(os.path.dirname(new)):
+                    failures.append(f"save_profile under a parent this user may not write: {caught!r}, made "
+                                    f"{sorted(os.listdir(os.path.dirname(new)))}")
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["a new project folder:"] + failures)
+    return read_only
+
+
 def _selftest():
-    failures = []
+    failures, ran = [], {}
     for check in (_check_loads_by_path, _check_bind_model_rate_binds_the_callers_dsp_math,
                   _check_draft_refuses_unreadable, _check_newer_profile_refused,
                   _check_bind_model_rate_refuses_unreadable, _check_bind_model_rate_reads_the_sheets_rule,
@@ -2157,12 +2208,13 @@ def _selftest():
                   _check_writers_go_through_the_move, _check_refresh_names_an_unreadable_entry,
                   _check_a_held_lock_answers_75, _check_a_bad_timeout_is_a_usage_error,
                   _check_no_load_and_save_outside_update, _check_writers_read_with_the_lock_held,
-                  _check_no_profile_makes_nothing):
+                  _check_no_profile_makes_nothing, _check_the_interview_makes_its_new_folder):
         try:
-            check()
+            ran[check.__name__] = check()
         except AssertionError as exc:
             failures.append(f"{check.__name__}: {exc}")
     assert not failures, "\n".join(failures)
+    read_only = ran["_check_the_interview_makes_its_new_folder"]      # the OK line claims only what ran
 
     import tempfile
 
@@ -2630,6 +2682,8 @@ def _selftest():
             raise AssertionError(f"set_setting took {path_}={bad}")
         except ValueError:
             pass
+    ro_said = (" -- under a parent this user may not write start and set-field refuse in one line, exit 1, and "
+               "save_profile as Unwritable, nothing made" if read_only else "")
     print(f"selftest OK — max_count validated as a physical slot count (null = still open, 0/float/"
           f"bool/str refused) and physical_outputs mapped to the ledger's `channels` key (SCR-042); "
           f"validate rejects malformed groups, MUSWAY's missing virtual_channels "
@@ -2646,7 +2700,8 @@ def _selftest():
           f"profile a newer method wrote is refused on read and never written down. "
           f"#141: under another writer's lock start, set-field, reset-field, finalize, set-setting and refresh "
           f"--write answer 75 with one busy line, writing nothing, while draft waits for nobody; a bad "
-          f"AUTOSOUND_LOCK_TIMEOUT_S is exit 2 making nothing. "
+          f"AUTOSOUND_LOCK_TIMEOUT_S is exit 2 making nothing; start makes a new project folder and its draft, and "
+          f"the next write takes the lock{ro_said}. "
           f"tmp={tmp}")
     return 0
 

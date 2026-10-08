@@ -1083,12 +1083,13 @@ def _check_into_holds_from_its_read():
     import threading
     old = tempfile.mkdtemp(prefix="autosound_migrate_read_old_")
     top = tempfile.mkdtemp(prefix="autosound_migrate_read_new_")
-    real_fold, real_ready, got, threads = fold_identity, _dsp_profile._ready_to_hold, [], []
+    real_fold, real_ready, got, threads, wrote_before = fold_identity, _dsp_profile._ready_to_hold, [], [], []
     lock = _project._write_lock()
 
     def before_the_hold():          # the reads are done, the merge checked, git asked next: another writer writes
         if not lock.held_here(new):                     # not `save_profile`'s own ask, under the import's hold
             _project.Project(new).update(lambda d: d.update(before_hold=True))
+            wrote_before.append(True)
         return real_ready()
 
     def meanwhile():
@@ -1124,6 +1125,11 @@ def _check_into_holds_from_its_read():
             t.join(30)
         data = _project.Project(new).load()
         assert rc == 0, f"the import: rc {rc}, said {err.strip()[-200:]!r}"
+        # The writer before the hold runs where the import asks `_ready_to_hold` with the lock free, which it does only
+        # for an import that carries a profile (`_two_x`'s does): without it the check below would blame the merge.
+        assert wrote_before, "the writer before the hold never ran: the import never asked " \
+                             "_dsp_profile._ready_to_hold with its lock free -- it carries no profile, or no longer " \
+                             "asks -- so its merge under the hold was not tested"
         assert data.get("before_hold") is True, \
             "the import merged into a read made before its hold, over a change made since"
         assert got == [None], f"the other writer: {got}"

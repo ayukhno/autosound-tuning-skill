@@ -412,9 +412,9 @@ channels into one `project.json` lost 40 of the 80 (`project.py`'s selftest, run
   it), and `setup_import.py` says it as its other refusals, `REFUSED -- ...`, exit 3. A creator whose first write
   cannot make the project folder itself -- a new one under a parent this user may not write -- is refused the same
   way, with nothing made (`write_lock.make_folder`, `Unwritable`): `error: <folder> cannot be made (<why>), so nothing
-  was written -- <repair>`, exit 1, from `project.py set-channel`, `state/process.py enter-phase -1` and
-  `state/migrate.py --into`; `intake.py set-car` ends its traceback in that sentence, and `project_seed.seed` returns
-  it as `problem`.
+  was written -- <repair>`, exit 1, from `project.py set-channel`, `state/process.py enter-phase -1`, `dsp_profile.py
+  start` and `set-field` (the interview's first draft) and `state/migrate.py --into`; `intake.py set-car` ends its
+  traceback in that sentence, and `project_seed.seed` returns it as `problem`.
 - **In process** the three raise as they are: `write_lock.Busy` (`is_busy`, `exit_code` 75, `.path` the lock file,
   `.waited_s`), `BadTimeout` (`exit_code` 2) and `Unwritable`. Match the attribute, never the class: a copy of the
   module loaded under another name has classes of its own.
