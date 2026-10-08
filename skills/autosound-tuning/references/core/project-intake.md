@@ -27,9 +27,12 @@ numbers did not change, so a `project-intake.md §3` or `§4` pointer still land
 >
 > This changes which of the questions below you actually put: with a front-end, the language is the
 > one the app is already speaking and the reviewer channel is already picked, so steps 1 and 2 of
-> the sequence collapse into "note what the state says and move on". With no front-end, hand the
-> person the form's URL (`intake_form.py serve`); ask in chat only what the form marks *not
-> machine-readable*. Either way this is an "if you are told, do not ask" rule, not a removal.
+> the sequence collapse into "note what the state says and move on". With no front-end, ask steps 1
+> and 2 in chat as written — the form shows neither: it writes the reply language it was started with
+> (`intake_form.py serve <project> --lang <code>`; without `--lang` it saves `uk`) and never asks it,
+> and the reviewer channel is not on it; then hand the person the form's URL, and ask in chat only what
+> the form marks *not machine-readable*. Either way this is an "if you are told, do not ask" rule, not
+> a removal.
 >
 > **An answered step is a closed step.** Not asking is only half of it: leave the plan's language /
 > reviewer step open and the panel shows an unfinished intake for the rest of the project, and the
@@ -42,15 +45,16 @@ numbers did not change, so a `project-intake.md §3` or `§4` pointer still land
 > python3 rew_tool/state/process.py <project>/process decision "dialogue language" "uk" -1.1
 > python3 rew_tool/state/process.py <project>/process done -1.1 "project.json"
 >
-> # The reviewer channel is closed by an ANSWER, not by a setting. One live check, recorded,
-> # and the step closes on the doctor's exit code:
+> # The reviewer channel is closed by an ANSWER, not by a setting. One live check, recorded, run once
+> # `autosound_context.md` exists (phase_-1_intake.md §0.5 step 3): the doctor counts a missing profile
+> # as a failed check.
 > python3 scripts/autosound_ai.py doctor > <project>/rew_analitic/reviewer-check.md; rc=$?
-> # rc 0 -- the channel answered:
+> # rc 0 and a "✓ Живий виклик" line in the file -- the channel answered:
 > python3 rew_tool/state/process.py <project>/process reviewer <vendor> <the model you named> -1.2 \
 >   --review rew_analitic/reviewer-check.md
 > python3 rew_tool/state/process.py <project>/process done -1.2 "rew_analitic/reviewer-check.md"
-> # any other rc -- it did not; the step is blocked with what the doctor said:
-> python3 rew_tool/state/process.py <project>/process block -1.2 "<the first ✗ line of reviewer-check.md>"
+> # rc 0 with no live call (the clipboard route), or any other rc -- it did not:
+> python3 rew_tool/state/process.py <project>/process block -1.2 "<the first ✗ line of reviewer-check.md, or: clipboard-only>"
 > ```
 >
 > ⚠️ **Why a live check and not "configured".** Evidence must RESOLVE — a file, a ledger version, a
@@ -58,8 +62,9 @@ numbers did not change, so a `project-intake.md §3` or `§4` pointer still land
 > this file used to demonstrate was refused by the gate when run exactly as printed. A channel that
 > was configured and never answered is the one that fails in Phase 1, when a round is waiting on it.
 > The doctor runs a live one-line smoke through the channel; the redirect leaves what it said in the
-> project, and its exit code decides: on 0 that file is what closes the step (user's ruling
-> 2026-09-09); on anything else the step is blocked with the file's first ✗ line. A pipe into `tee`
+> project. Its exit code is every check's, not the channel's (`rew_tool/CONTRACT.md` §5), so the step
+> closes on rc 0 AND the file's `✓ Живий виклик` line (user's ruling 2026-09-09); otherwise it is
+> blocked with the file's first ✗ line, or as clipboard-only when no call was made. A pipe into `tee`
 > returned `tee`'s status, so a doctor that failed still closed the step.
 >
 > The evidence names where the answer came from AND where it now lives on disk — a state read is

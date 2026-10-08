@@ -96,8 +96,9 @@ Step names describe the action, not a command. The joint and L/R **phase** is th
 - **−1.1** log Phase −1; run the intake (`phase_-1_intake.md §0.5`); among its outputs, the dialogue
   language (`project.json` `language.reply` + a recorded decision); read the current DSP settings
   into the ledger; show the loss table above.
-- **−1.2** *the reviewer channel*: one live `doctor` run, recorded (`project-intake.md` §0) — the
-  step closes on the doctor's exit code, or is blocked with what it said.
+- **−1.2** *the reviewer channel*: one live `doctor` run once the profile is written, recorded
+  (`project-intake.md` §0) — the step closes on rc 0 with the doctor's live-call line, or is blocked with
+  what it said.
 - **−1.5** *new DSP* (only if not in the knowledge base): the question session → a profile (rate,
   delay step, crossover families, Q convention, the list of "effects and dynamic processing" to turn
   off) → into the knowledge base with consent (a GitHub Issue; email when the author publishes one).
