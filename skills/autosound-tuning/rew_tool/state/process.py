@@ -2756,12 +2756,13 @@ class Process:
     def _require_capture(self, round_id=None):
         """`(state, its open round)`, read strictly: every caller writes (#136, R25). `round_id`, given, is the round
         the caller read before (`capture-close`, #141, R7): another open now, or none, is refused naming both --
-        another writer closed or replaced it since -- and nothing is written."""
+        another writer closed or replaced it since -- and nothing is written. The refusal names no verb (#141's R25):
+        three public methods take `round_id`, and their caller may be none of the command line's."""
         state = self.load(strict=True)  # every caller writes (#136, R25)
         round_ = state.get("capture")
         if round_id is not None and (not round_ or round_.get("id") != round_id or round_.get("closed")):
             now = round_["id"] if round_ and not round_.get("closed") else None
-            raise _RoundMoved(f"round {round_id} was closed or replaced after capture-close read it "
+            raise _RoundMoved(f"round {round_id} was closed or replaced after it was read "
                               f"({f'{now} is the open round now' if now else 'no round is open now'}) -- nothing was "
                               "written", round_id, now)
         if not round_ or round_.get("closed"):
@@ -3092,8 +3093,8 @@ class Process:
         """Refuse a write into a process folder that is no project's, before anything is made (#141, W-8's R46): the
         writer lock's hold makes `.autosound/` in a project folder that is there, and the first write the process folder
         itself, so a mistyped path -- `<project>/process-typo` -- got a process of its own. `verb` names the writer
-        asking: a method's name, or `enter-phase <N>`, `session-close` and `capture-close` for the command line's own.
-        Two writers start a project where there is none yet.
+        asking: a method's name, or `enter-phase <N>`, `session-close`, `capture-close` and `capture-import` for the
+        command line's own. Two writers start a project where there is none yet.
 
         * the folder is there: nothing to check;
         * it is not, and is not called `process`: refused -- the method's process folder is called process;
@@ -7218,12 +7219,11 @@ def _check_a_held_lock_answers_75_with_nothing_written():
             assert time.monotonic() < deadline and child.is_alive(), f"the holder never held (exit {child.exitcode})"
             time.sleep(0.002)
         before = _project_bytes(d)
+        busy = f"busy: {lock.lock_path(project)} is held by another writer -- nothing was written, safe to retry"
         for argv in (["add-step", "2.7", "x"], ["decision", "keep 45 degrees?", "yes"], ["enter-phase", "2"],
                      ["session-close"], ["capture-close"]):
             r = _cli_env(d, argv, AUTOSOUND_LOCK_TIMEOUT_S="0.3")
-            last = (r.stderr.strip().splitlines() or [""])[-1]
-            if r.returncode != EXIT_BUSY or not last.startswith("busy: ") or lock.lock_path(project) not in last \
-                    or "Traceback" in r.stderr:
+            if r.returncode != EXIT_BUSY or r.stderr.strip().splitlines() != [busy]:   # that line, and nothing else
                 failures.append(f"{argv[0]}: rc {r.returncode}, said {r.stderr.strip()[-200:]!r}")
             if _project_bytes(d) != before:
                 failures.append(f"{argv[0]}: wrote under another writer's lock")
@@ -7280,6 +7280,52 @@ def _check_a_bad_timeout_is_a_usage_error():
     finally:
         shutil.rmtree(top, ignore_errors=True)
     assert not failures, f"{len(failures)} run(s) with a wait that is no number:\n  " + "\n  ".join(failures)
+
+
+def _check_capture_close_reads_the_wait_first():
+    """`capture-close` reads AUTOSOUND_LOCK_TIMEOUT_S before it asks REW (#141, R25): a value that is no number of
+    seconds is exit 2, one line naming it, nothing on stdout and nothing written. With REW down it printed "REW not
+    reached ...: closing on the record alone", then refused 2 at its first hold: a close announced and not made."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_process_close_wait_")
+    try:
+        d = _at_phase(top, "2")
+        Process(d).start_capture("1", expected=["a_1 (sw)"])
+        before = _project_bytes(d)
+        r = _cli_env(d, ["capture-close"], AUTOSOUND_LOCK_TIMEOUT_S="soon")
+        said = ("error: AUTOSOUND_LOCK_TIMEOUT_S=soon is not a number of seconds (0 or more) -- unset it for the "
+                "default 10")
+        assert r.returncode == EXIT_USAGE and r.stderr.strip().splitlines() == [said] and not r.stdout.strip(), \
+            (r.returncode, r.stdout.strip()[-200:], r.stderr.strip()[-200:])
+        assert _project_bytes(d) == before, "written"
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_a_moved_round_names_no_verb():
+    """A round another writer closed or replaced under a caller that read it is refused naming no verb (#141, R25):
+    `round_id` is a keyword of `reconcile_captures`, `check_captures` and `close_capture`, public all three, and the
+    refusal said "after capture-close read it" to whoever called. Now `round <id> was closed or replaced after it was
+    read (<now> is the open round now) -- nothing was written`, and nothing is."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_process_moved_round_")
+    try:
+        d = _at_phase(top, "2")
+        p = Process(d)
+        p.start_capture("1", expected=["a_1 (sw)"])
+        before = _project_bytes(d)
+        want = ("round cap_000 was closed or replaced after it was read (cap_001 is the open round now) -- nothing was "
+                "written")
+        for call in (lambda: p.reconcile_captures(["a_1 (sw)"], round_id="cap_000"),
+                     lambda: p.close_capture("done", round_id="cap_000")):
+            caught = _raised(call)
+            assert getattr(type(caught), "round_moved", False) and str(caught) == want, \
+                f"{type(caught).__name__}: {caught}"
+        assert _project_bytes(d) == before, "written"
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
 
 
 def _check_capture_check_reads_rew_unlocked():
@@ -7606,7 +7652,8 @@ _WRITING_RUNS = (
     ["reviewer", "gemini", "m"], ["target", "FULL", "EPY"], ["decision", "keep 45 degrees?", "yes"],
     ["session-start", "tcc", "opus"], ["session-close"], ["session-reopen", "it was a check"],
     ["capture-start", "1", "a_1 (sw)"], ["capture-check"], ["capture-taken", "a_1 (sw)"],
-    ["capture-import", "1", "a_1 (sw)", "--bind", "=v_001", "--knob", "K=1"], ["amp-gain", "sw=+3"],
+    ["capture-import", "1", "a_1 (sw)", "--bind", "=v_001", "--knob", "K=1"], ["capture-import", "1"],
+    ["amp-gain", "sw=+3"],
     ["capture-knobs", "SubRC=4/4"], ["capture-knobs", "--amend", "cap_001", "--reason", "late", "SubRC=4/4"],
     ["capture-protective", "w-L", "OFF"], ["capture-protective", "--amend", "cap_001", "--reason", "late", "w-L", "OFF"],
     ["listening-verdict", "--text", "heard"], ["capture-supersede", "a_1 (sw)", "a_1 (rta)"],
@@ -7862,6 +7909,7 @@ def _selftest():
                   _check_capture_start_held_leaves_the_open_rounds_plan, _check_says_what_it_did_not_check,
                   _check_project_bytes_leave_the_lock_out, _check_every_writer_holds_the_lock,
                   _check_a_held_lock_answers_75_with_nothing_written, _check_a_bad_timeout_is_a_usage_error,
+                  _check_capture_close_reads_the_wait_first, _check_a_moved_round_names_no_verb,
                   _check_capture_check_reads_rew_unlocked, _check_enter_phase_gates_run_unlocked,
                   _check_the_sha_is_asked_before_the_hold, _check_a_close_lands_state_first,
                   _check_capture_close_closes_the_round_it_read, _check_a_mistyped_process_folder_starts_nothing,
@@ -9021,6 +9069,9 @@ def _main(argv):
                 + ("" if entry["planned"] else " (unplanned -- not on this round's list)")
             )
         elif cmd == "capture-import":
+            # A folder that is no project's is said as such (#141, R46, R25), before REW is asked for a series' titles:
+            # with REW down, a mistyped folder answered REW's 69, not the home line.
+            p._require_home("capture-import")
             rest, binds, knobs, late = list(args), {}, {}, None
             while "--bind" in rest:
                 i = rest.index("--bind")
@@ -9277,8 +9328,10 @@ def _main(argv):
             p._require_home("capture-close")
             # The journal the close appends to is read and opened for appending first (batch 2's re-review, Out of
             # Scope 5): one that cannot be refuses before a line is printed. With REW down the verb said "closing on
-            # the record alone" and then refused at the close's own append.
+            # the record alone" and then refused at the close's own append. So does the wait (#141, R25): a bad
+            # AUTOSOUND_LOCK_TIMEOUT_S is exit 2 before REW is asked, where it came at the first hold, after the line.
             p._require_journal()
+            p._ready_to_hold()
             # The round this verb closes, read once, before REW (#141, R7): the reconcile, the checks and the close each
             # take the project's lock for themselves, and another writer can close or replace the round between them.
             # The close is of this round or refused, naming both -- it closed the round open by then, one this verb

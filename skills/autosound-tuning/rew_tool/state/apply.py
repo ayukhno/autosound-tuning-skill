@@ -730,6 +730,37 @@ def _check_one_hold_over_the_bank():
         shutil.rmtree(top, ignore_errors=True)
 
 
+def _check_a_bad_timeout_is_a_usage_error():
+    """An AUTOSOUND_LOCK_TIMEOUT_S that is no number of seconds makes `propose` and `attest` a usage error (#141, R25):
+    exit 2, one line naming the variable, no traceback, and nothing written or made -- no version, no delta, no sheet,
+    and the lock's `.autosound/` not made. The command line catches `ValueError` and `OSError` by class first (exit
+    1); `BadTimeout` is neither, so it reaches the lock's own answer."""
+    import shutil
+    import tempfile
+    pj = _state._siblings().load("project.py")
+    top = tempfile.mkdtemp(prefix="autosound_apply_bad_wait_")
+    failures = []
+    said = "error: AUTOSOUND_LOCK_TIMEOUT_S=soon is not a number of seconds (0 or more) -- unset it for the default 10"
+    try:
+        proj = os.path.join(top, "car")
+        root = os.path.join(proj, "state")
+        _state.PresetHistory(root, "SQ", project_dir=proj).snapshot(_state._sample_state(), note="baseline")
+        _state.Registry(root).set_active("SQ")
+        with open(os.path.join(proj, "eq-delta.json"), "w", encoding="utf-8") as fh:
+            json.dump({"w-L": {"gain_db": -1.0}}, fh)
+        shutil.rmtree(os.path.join(proj, ".autosound"), ignore_errors=True)
+        before = pj._files_in(proj)
+        for argv in (["propose", "eq-delta.json", "--evidence", "w-L_2 (sw)"], ["attest"]):
+            rc, out, err = pj._run_cli(_main, ["apply.py", proj, *argv], AUTOSOUND_LOCK_TIMEOUT_S="soon")
+            if rc != 2 or err.strip().splitlines() != [said] or out.strip():
+                failures.append(f"{argv[0]}: rc {rc}, said {(err or out).strip()[-200:]!r}")
+            if pj._files_in(proj) != before or os.path.exists(os.path.join(proj, ".autosound")):
+                failures.append(f"{argv[0]}: wrote or made something")
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["a bad AUTOSOUND_LOCK_TIMEOUT_S:"] + failures)
+
+
 def _check_a_missing_project_makes_nothing():
     """`attest --preset SQ` on a project folder that is not there makes nothing (#141, R23): exit 1, its one line, no
     folder and no `.autosound/` -- the lock made `<typo>/.autosound/` before the refusal."""
@@ -761,7 +792,8 @@ def _selftest():
     failures = []
     for check in (_check_cli_refuses_unreadable, _check_gain_grid_says_an_unreadable_profile,
                   _check_a_held_lock_answers_75, _check_one_hold_over_the_bank,
-                  _check_a_missing_project_makes_nothing, _check_no_load_and_save_outside_update):
+                  _check_a_missing_project_makes_nothing, _check_a_bad_timeout_is_a_usage_error,
+                  _check_no_load_and_save_outside_update):
         try:
             check()
         except AssertionError as exc:
@@ -995,7 +1027,8 @@ def _selftest():
           f"nothing (#136); under another writer's lock propose and attest exit 75 with one busy line, no "
           f"version, delta or sheet, and one hold covers the snapshot, its delta and its sheet, the snapshot "
           f"re-entering it with the ledger outside the project; attest on a project folder that is not there makes "
-          f"nothing (#141). root={root}")
+          f"nothing, and a bad AUTOSOUND_LOCK_TIMEOUT_S is exit 2 with its one line, nothing made (#141). "
+          f"root={root}")
     return 0
 
 

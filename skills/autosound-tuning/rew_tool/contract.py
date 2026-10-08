@@ -2199,6 +2199,33 @@ def _check_repair_encoding_waits_for_the_lock():
     assert not failures, f"{len(failures)} run(s) under a held lock:\n  " + "\n  ".join(failures)
 
 
+def _check_a_bad_timeout_is_a_usage_error():
+    """An AUTOSOUND_LOCK_TIMEOUT_S that is no number of seconds makes `repair-encoding --from` and `--set-aside` a usage
+    error (#141, R25): exit 2, one line naming the variable, no traceback, and nothing written or made -- the project's
+    files as they were, the lock's `.autosound/` not made."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_contract_bad_wait_")
+    failures = []
+    said = "error: AUTOSOUND_LOCK_TIMEOUT_S=soon is not a number of seconds (0 or more) -- unset it for the default 10"
+    try:
+        d = os.path.join(top, "car")
+        os.makedirs(os.path.join(d, "process"))
+        with open(os.path.join(d, "project.json"), "wb") as fh:
+            fh.write(json.dumps({"note": "лишаємо"}, ensure_ascii=False).encode("cp1251"))
+        before = project._files_in(d)
+        for argv in (["--from", "cp1251"], ["--set-aside"]):
+            rc, out, err = project._run_cli(_main, ["contract.py", "repair-encoding", d, *argv],
+                                            AUTOSOUND_LOCK_TIMEOUT_S="soon")
+            if rc != 2 or err.strip().splitlines() != [said] or out.strip():
+                failures.append(f"{argv[0]}: rc {rc}, said {(err or out).strip()[-200:]!r}")
+            if project._files_in(d) != before or os.path.exists(os.path.join(d, ".autosound")):
+                failures.append(f"{argv[0]}: wrote or made something")
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["a bad AUTOSOUND_LOCK_TIMEOUT_S:"] + failures)
+
+
 def _check_a_missing_project_makes_nothing():
     """`repair-encoding --from` and `--set-aside` on a project folder that is not there make nothing (#141, R23): exit
     0, their one line -- nothing to rewrite, nothing to set aside, "nothing was written" -- and no folder, no
@@ -2991,7 +3018,8 @@ def _selftest():
                   _check_cut_file_named_in_check, _check_phase0_gate_exit_over_an_unreadable_glossary,
                   _check_intake_line_over_an_unreadable_project_json, _check_bom_glossary_is_a_glossary,
                   _check_bom_project_json_one_verdict, _check_dangling_glossary_link_refused,
-                  _check_repair_encoding_waits_for_the_lock, _check_a_missing_project_makes_nothing):
+                  _check_repair_encoding_waits_for_the_lock, _check_a_missing_project_makes_nothing,
+                  _check_a_bad_timeout_is_a_usage_error):
         try:
             check()
         except AssertionError as exc:
@@ -3467,7 +3495,7 @@ def _selftest():
     assert "repair-encoding" in rendered_enc, rendered_enc
 
     # And the repair the report names actually runs, from here, on this project.
-    fixed = state_mod.repair_encoding(project_text_files(enc_root), "cp1251")
+    fixed = state_mod.repair_encoding(project_text_files(enc_root), "cp1251", project_dir=enc_root)
     assert [os.path.relpath(f["path"], enc_root) for f in fixed] == \
         [os.path.join("state", "versions", "v_001.json")], fixed
     assert check_project(enc_root, skip_rew=True)["encoding_damaged"] == [], "repair did not take"
@@ -3501,8 +3529,8 @@ def _selftest():
           f"once stays OK; a process state a newer method wrote is reported in JSON, and repair-encoding names a file "
           f"it could not open, exit 1, rewriting nothing beside it and never calling the set UTF-8; --set-aside moves "
           f"the journal lines no code page reads, bytes kept, and the journal reads again (#134, R56); its rewrites "
-          f"answer another writer's lock with 75, and make nothing on a project folder that is not there (#141). "
-          f"root={root}")
+          f"answer another writer's lock with 75 and a bad AUTOSOUND_LOCK_TIMEOUT_S with 2, and make nothing on a "
+          f"project folder that is not there (#141). root={root}")
     return 0
 
 

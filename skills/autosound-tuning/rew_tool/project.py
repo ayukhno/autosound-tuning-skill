@@ -1263,7 +1263,7 @@ class Project:
                 return hits[0]
         return None
 
-    def rename_channel(self, old, new, data=None):
+    def rename_channel(self, old, new):
         """Give one channel a new name, keeping its identity and its history (SCR-039).
 
         What actually happens: the row's `id` is materialised (it was implicitly the old code all
@@ -1280,8 +1280,9 @@ class Project:
         (`record_change`) — a rename corrects a label, so its `impact` is normally `none`: no
         measurement is invalidated, they simply carry the old name.
 
-        Without `data`, the read and the write are one step under the project's lock (`update`, #141). Given `data`,
-        the rename is made in it and it is saved as handed in -- the caller's own load.
+        The read and the write are one step under the project's lock (`update`, #141). It took facts of the caller's
+        own load (`data=`) and saved them as handed in, over any change made since: nothing passed them, and the
+        parameter is gone (R25; not in `IMPORTABLE`).
         """
         renamed = []
 
@@ -1321,10 +1322,7 @@ class Project:
                         seen.append(was)
                     entry["previous_names"] = seen
 
-        if not data:
-            self.update(rename)
-        elif rename(data) is not UNCHANGED:
-            self.save(data)
+        self.update(rename)
         return renamed[0]
 
     def add_flaw(self, **fields):
@@ -2183,11 +2181,12 @@ def _files_in(folder):
 
 
 def _said_busy(rc, err, project_dir):
-    """None when a run answered as a writer refused under another writer's lock answers (#141): exit 75, its last line
-    `busy: <the project's lock file> ...`, no traceback. Else what it did instead."""
+    """None when a run answered as a writer refused under another writer's lock answers (#141): exit 75, and stderr
+    exactly its one line, `busy: <the project's lock file> is held by another writer -- nothing was written, safe to
+    retry` -- no traceback, no other line (R25: the last line alone was read). Else what it did instead."""
     lock_file = _siblings().load("write_lock.py").lock_path(project_dir)
-    last = (err.strip().splitlines() or [""])[-1]
-    if rc == 75 and last.startswith("busy: ") and lock_file in last and "Traceback" not in err:
+    busy = f"busy: {lock_file} is held by another writer -- nothing was written, safe to retry"
+    if rc == 75 and err.strip().splitlines() == [busy]:
         return None
     return f"rc {rc}, said {err.strip()[-240:]!r}"
 
@@ -2289,7 +2288,8 @@ def _check_two_writers_lose_nothing():
     """Two writers of one `project.json` at once lose nothing (#141, J2b): two processes add 40 channels each, one
     write per channel, and every channel of both is in the file, `project_rev` 80 -- one per write. Each loaded,
     changed and saved on its own, so a write that landed between another's load and its save was written over:
-    channels gone, and the revision short of the writes."""
+    channels gone, and the revision short of the writes. The two wait up to 60 s for each other, whatever wait the
+    shell that runs the check has set (R25): a short one there made them busy, and the check red for no fault."""
     import shutil
     import subprocess
     import tempfile
@@ -2303,7 +2303,8 @@ def _check_two_writers_lose_nothing():
         for prefix in ("a", "b"):
             children.append(subprocess.Popen(
                 [sys.executable, "-c", _CHANNEL_WRITER, os.path.realpath(__file__), folder, prefix, "40", signals],
-                stdout=subprocess.DEVNULL, stderr=subprocess.PIPE))
+                stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+                env={**os.environ, "AUTOSOUND_LOCK_TIMEOUT_S": "60"}))
         deadline = time.monotonic() + 60
         while not all(os.path.exists(os.path.join(signals, f"ready-{p}")) for p in ("a", "b")):
             assert time.monotonic() < deadline and all(c.poll() is None for c in children), \
@@ -2641,6 +2642,28 @@ def _check_a_missing_project_makes_nothing():
     assert not failures, "\n  ".join(["a project folder that is not there:"] + failures)
 
 
+def _check_rename_channel_takes_no_facts_of_its_own():
+    """`rename_channel` loads, renames and saves as one step under the lock, always (#141, R25): its `data` -- facts a
+    caller had loaded, renamed in them and saved as handed in, over any change made since the caller's load -- is gone.
+    Nothing passed it, and `IMPORTABLE` does not list the method. Its rename still lands, and a rename to the name the
+    channel has writes nothing."""
+    import inspect
+    import shutil
+    import tempfile
+    assert "data" not in inspect.signature(Project.rename_channel).parameters, "rename_channel still takes data"
+    top = tempfile.mkdtemp(prefix="autosound_project_rename_")
+    try:
+        proj = Project(top)
+        proj.save({"schema_version": SCHEMA_VERSION, "channels": [{"code": "m-L"}]})
+        row = proj.rename_channel("m-L", "w-L")
+        assert row["code"] == "w-L" and proj.load()["channels"][0]["previous_names"] == ["m-L"], proj.load()
+        rev = proj.load()["project_rev"]
+        assert proj.rename_channel("w-L", "w-L")["code"] == "w-L" and proj.load()["project_rev"] == rev, \
+            "a rename to the name it has wrote"
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
 def _raised_by(call):
     """The exception `call()` raised, or None: a check reads what it got by its attributes, never by its class."""
     try:
@@ -2764,6 +2787,7 @@ def _selftest():
                   _check_two_writers_lose_nothing, _check_save_counts_from_the_disk,
                   _check_update_changes_under_the_lock, _check_update_writes_only_whole_facts,
                   _check_a_held_lock_answers_75, _check_catch_up_holds_once, _check_a_missing_project_makes_nothing,
+                  _check_rename_channel_takes_no_facts_of_its_own,
                   _check_a_bad_timeout_is_a_usage_error, _check_record_change_into_a_mistyped_folder,
                   _check_record_change_asks_git_with_the_lock_free, _check_no_load_and_save_outside_update):
         try:

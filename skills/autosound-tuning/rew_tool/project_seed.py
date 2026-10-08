@@ -489,8 +489,10 @@ def seed(source, target, *, include_findings=False, copy_profile=True, note=DEFA
     except Exception as exc:                # noqa: BLE001 -- the validator, or a disk that said no
         # Another writer holding the new project's lock past the wait (#141, R14) is said in the lock's own sentence --
         # the lock file, nothing written, safe to retry -- with no class name in front: TCC's new-project dialog
-        # shows this text as it is.
-        said = str(exc) if getattr(type(exc), "is_busy", False) else f"{type(exc).__name__}: {exc}"
+        # shows this text as it is. So is an AUTOSOUND_LOCK_TIMEOUT_S that is no number of seconds (R25), which the
+        # command line answers with 2.
+        lock_said = getattr(type(exc), "is_busy", False) or getattr(type(exc), "exit_code", None) == 2
+        said = str(exc) if lock_said else f"{type(exc).__name__}: {exc}"
         return Seeded(False, problem=said)
     result.written.append("project.json")
 
@@ -581,6 +583,18 @@ def main(argv=None):
 
     if not args.target:
         parser.error("a target directory is required unless --describe is given")
+
+    # The wait first (#141, R25): an AUTOSOUND_LOCK_TIMEOUT_S that is no number of seconds is a usage error, exit 2 by
+    # the method's table, said before the source is read or the target made -- it was a refused seed's 1, with the
+    # class name in front.
+    import project
+    try:
+        project._write_lock().timeout_s()
+    except Exception as exc:  # noqa: BLE001 -- matched by its attribute; anything else still raises
+        if getattr(type(exc), "exit_code", None) != 2:
+            raise
+        print(f"project_seed: {exc}", file=sys.stderr)
+        return 2
 
     result = seed(args.source, args.target, include_findings=args.findings,
                   copy_profile=not args.no_profile, note=args.note, seat=args.seat,
@@ -685,6 +699,32 @@ def _check_a_held_lock_said_in_the_result():
         assert again.ok and os.path.isfile(os.path.join(dst, "project.json")), again.problem
 
 
+def _check_a_bad_wait_is_a_usage_error():
+    """An AUTOSOUND_LOCK_TIMEOUT_S that is no number of seconds is a usage error (#141, R25; the method's exit table: 2):
+    the command line exits 2 with one line naming the variable and no class name in front, nothing read into the target
+    and the target not made -- it exited 1, `project_seed: BadTimeout: ...`. `seed()` in process, behind TCC's dialog,
+    returns that line itself as `problem`, as it returns a busy lock's."""
+    import contextlib
+    import io
+    import tempfile
+    import project
+    said = "AUTOSOUND_LOCK_TIMEOUT_S=soon is not a number of seconds (0 or more) -- unset it for the default 10"
+    with tempfile.TemporaryDirectory() as tmp:
+        src = _source_project(os.path.join(tmp, "old-car"))
+        dst = os.path.join(tmp, "new-car")
+        out, err = io.StringIO(), io.StringIO()
+        with project._env(AUTOSOUND_LOCK_TIMEOUT_S="soon"), contextlib.redirect_stdout(out), \
+                contextlib.redirect_stderr(err):
+            rc = main([src, dst])
+        lines = err.getvalue().strip().splitlines()
+        assert rc == 2 and lines == [f"project_seed: {said}"] and not out.getvalue(), (rc, lines, out.getvalue())
+        assert not os.path.lexists(dst), f"the target was made: {sorted(os.listdir(dst))}"
+        with project._env(AUTOSOUND_LOCK_TIMEOUT_S="soon"):
+            got = seed(src, dst, today=date(2026, 10, 8))
+        assert not got.ok and got.problem == said, got.problem
+        assert not os.path.lexists(dst), f"seed made the target: {sorted(os.listdir(dst))}"
+
+
 def _check_a_seed_makes_its_new_folder():
     """A seed still makes the new project where its folder is not there yet (#141, R23): the lock makes no project
     folder -- a hold on a missing one is this process's thread lock alone -- and the seed's first write, `project.json`,
@@ -703,7 +743,8 @@ def _selftest():
     import tempfile
 
     failures = []
-    for check in (_check_a_held_lock_said_in_the_result, _check_a_seed_makes_its_new_folder):
+    for check in (_check_a_held_lock_said_in_the_result, _check_a_seed_makes_its_new_folder,
+                  _check_a_bad_wait_is_a_usage_error):
         try:
             check()
         except AssertionError as exc:
@@ -905,7 +946,8 @@ def _selftest():
           f"a new processor keeps the car and drops all {len(DSP_KEYS)} DSP-bound keys, "
           f"findings still on offer there; under another writer's lock a seed refuses with the lock's own "
           f"busy line -- the lock file, nothing written, safe to retry -- and nothing written (#141, R14); a seed "
-          f"makes its new folder where none is yet (R23)")
+          f"makes its new folder where none is yet (R23); a bad AUTOSOUND_LOCK_TIMEOUT_S is exit 2 with its one line, "
+          f"no class name, nothing made (R25)")
 
 
 if __name__ == "__main__":

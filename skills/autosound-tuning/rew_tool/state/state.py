@@ -2019,7 +2019,7 @@ def said_unread(unread):
     return 1 if unread else 0
 
 
-def repair_encoding(paths, codec, unread=None, project_dir=None):
+def repair_encoding(paths, codec, unread=None, *, project_dir):
     """Rewrite every non-UTF-8 file among `paths` as UTF-8, decoding it as `codec`. A file that cannot be opened is not
     repaired, and goes into `unread` (`encoding_survey`).
 
@@ -2050,11 +2050,9 @@ def repair_encoding(paths, codec, unread=None, project_dir=None):
     allows and what is as it was (n1): it was the bare `OSError`, a traceback.
 
     `project_dir` names the project whose writer lock the survey and the rewrite hold (#141): the files are another
-    writer's too -- a journal appended to meanwhile would lose the line. Both command lines that run this name it;
-    none is held without it.
+    writer's too -- a journal appended to meanwhile would lose the line. A required keyword (R25): its default, None,
+    rewrote with no lock at all, and a caller that left it out was never told. Both command lines name it.
     """
-    if project_dir is None:
-        return _repair_encoding(paths, codec, unread)
     with _hold(project_dir):
         return _repair_encoding(paths, codec, unread)
 
@@ -2116,7 +2114,7 @@ def _repair_encoding(paths, codec, unread):
     return done
 
 
-def set_aside(paths, unread=None, project_dir=None):
+def set_aside(paths, unread=None, *, project_dir):
     """Move the journal lines no code page makes JSON of out of each `.jsonl` among `paths`, on the person's word
     (#134, R56; the re-review's m1). Returns `[{"path", "set_aside", "lines"}]`, one per journal that had any.
 
@@ -2128,9 +2126,8 @@ def set_aside(paths, unread=None, project_dir=None):
     file that cannot be read, and a write the disk refuses, raise `RepairRefused` with what landed (n1).
 
     `project_dir` names the project whose writer lock the read and the rewrite hold (#141), as `repair_encoding`'s
-    does: an event appended between the two would be written over. `contract.py repair-encoding` names it."""
-    if project_dir is None:
-        return _set_aside(paths, unread)
+    does: an event appended between the two would be written over. A required keyword, as there (R25).
+    `contract.py repair-encoding` names it."""
     with _hold(project_dir):
         return _set_aside(paths, unread)
 
@@ -2706,7 +2703,7 @@ def _check_repair_encoding_keeps_the_file():
                                          ("the file's move, a backup already there", path, True)):
             os.replace = failing_at(target)
             try:
-                repair_encoding([path], "cp1251")
+                repair_encoding([path], "cp1251", project_dir=h.project_dir)
                 raise AssertionError(f"{label}: a repair that failed reported success")
             except Exception as exc:  # noqa: BLE001 -- the kind is what is under test
                 # Said, naming the file it could not write and what is as it was (n1): it was the bare `OSError`.
@@ -2725,7 +2722,7 @@ def _check_repair_encoding_keeps_the_file():
             if backed_up:
                 with open(backup, "rb") as fh:
                     assert fh.read() == original, f"{label}: the backup is not the original's bytes"
-        done = repair_encoding([path], "cp1251")
+        done = repair_encoding([path], "cp1251", project_dir=h.project_dir)
         assert [d["backup"] for d in done] == [backup], done
         with open(path, encoding="utf-8") as fh:
             assert fh.read() == text, "the repair did not restore the text"
@@ -2836,7 +2833,7 @@ def _check_repair_encoding_line_by_line():
                 fh.write(original)
             found = encoding_survey([path])
             shown = render_survey(found, folder, lambda c: f"repair --from {c}")
-            done = repair_encoding([path], "cp1251")
+            done = repair_encoding([path], "cp1251", project_dir=folder)
             assert [d["path"] for d in done] == [path], done
             with open(path, "rb") as fh:
                 repaired = fh.read()
@@ -2879,22 +2876,23 @@ def _check_set_aside_what_no_page_reads():
         shown = render_survey(found, folder, lambda c: f"repair --from {c}", set_aside_command="repair --set-aside")
         assert "line 3" in shown and "repair --set-aside" in shown and "repair --from cp1251" in shown, shown
         unread = [(os.path.join(folder, "held.json"), "held")]
-        assert repair_encoding([path], "cp1251", unread) == [] and set_aside([path], unread) == []
+        assert repair_encoding([path], "cp1251", unread, project_dir=folder) == [] \
+            and set_aside([path], unread, project_dir=folder) == []
         with open(path, "rb") as fh:
             assert fh.read() == original, "a repair went on beside a file it could not read"
-        done = repair_encoding([path], "cp1251")
+        done = repair_encoding([path], "cp1251", project_dir=folder)
         assert [(d["path"], d["left"]) for d in done] == [(path, [3])], done
         with open(path, "rb") as fh:
             after_page = fh.read()
         assert after_page == b"\n".join([utf8, legacy.decode("cp1251").encode("utf-8"), glued, utf8, torn]) + b"\n", \
             after_page
-        moved = set_aside([path])
+        moved = set_aside([path], project_dir=folder)
         assert [(m["path"], m["set_aside"], m["lines"]) for m in moved] == [(path, path + ".set-aside", [3])], moved
         with open(path + ".set-aside", "rb") as fh:
             assert fh.read() == b"line 3: " + glued + b"\n", "the set-aside file is not the line's bytes"
         with open(path, "rb") as fh:
             assert fh.read() == b"\n".join([utf8, legacy.decode("cp1251").encode("utf-8"), utf8, torn]) + b"\n"
-        assert encoding_survey([path]) == [] and set_aside([path]) == [], "set aside, and still named"
+        assert encoding_survey([path]) == [] and set_aside([path], project_dir=folder) == [], "set aside, and still named"
     finally:
         shutil.rmtree(folder, ignore_errors=True)
 
@@ -3455,10 +3453,11 @@ def _check_writers_go_through_the_move():
             with open(journal, "wb") as fh:
                 fh.write(good + b"\n" + glued + b"\n" + good + b"\n")
         damaged()
-        failures += io_._moved_into_place("the journal --set-aside rewrites", journal, lambda: set_aside([journal]))
+        failures += io_._moved_into_place("the journal --set-aside rewrites", journal,
+                                          lambda: set_aside([journal], project_dir=top))
         damaged()
         failures += io_._moved_into_place("the <journal>.set-aside it writes first", journal + ".set-aside",
-                                          lambda: set_aside([journal]))
+                                          lambda: set_aside([journal], project_dir=top))
     finally:
         shutil.rmtree(top, ignore_errors=True)
     assert not failures, "\n  ".join(["a writer item 8 lists does not go through the move:"] + failures)
@@ -3535,6 +3534,18 @@ def _check_a_bad_timeout_is_a_usage_error():
     assert not failures, "\n  ".join(["a bad AUTOSOUND_LOCK_TIMEOUT_S:"] + failures)
 
 
+def _check_the_repairs_name_their_project():
+    """`repair_encoding` and `set_aside` take the project whose writer lock they hold as a required keyword (#141, R25):
+    `project_dir` defaulted to None, which rewrote the files with no lock at all, and a caller that left it out was
+    never told. Neither is in contract.py's `IMPORTABLE`, so the change is this module's own; both command lines and
+    `contract.py repair-encoding` name it already. Left out, it is a `TypeError` before anything is read."""
+    import inspect
+    for fn in (repair_encoding, set_aside):
+        param = inspect.signature(fn).parameters.get("project_dir")
+        assert param is not None and param.kind is inspect.Parameter.KEYWORD_ONLY \
+            and param.default is inspect.Parameter.empty, f"{fn.__name__}: project_dir is {param}"
+
+
 def _check_no_load_and_save_outside_update():
     """No function here loads `project.json` and saves it itself (#141, J2b): a writer of the project's facts goes
     through `Project.update`, which holds the lock across the read and the write (`project._load_and_save_paths`)."""
@@ -3609,7 +3620,8 @@ def _selftest():
                   _check_sheet_says_an_unreadable_profile, _check_sheet_says_a_rate_it_cannot_use,
                   _check_survey_names_a_cut_file, _check_writers_go_through_the_move,
                   _check_a_held_lock_answers_75, _check_a_bad_timeout_is_a_usage_error,
-                  _check_no_load_and_save_outside_update, _check_ledger_writers_read_with_the_lock_held):
+                  _check_no_load_and_save_outside_update, _check_ledger_writers_read_with_the_lock_held,
+                  _check_the_repairs_name_their_project):
         try:
             check()
         except AssertionError as exc:
@@ -3954,7 +3966,7 @@ def _selftest():
     assert json.loads(pages["cp1251"])["note"] == note_ru, pages["cp1251"]
     assert json.loads(pages["cp1252"])["note"] != note_ru, "cp1252 must not agree with cp1251 here"
 
-    done = repair_encoding(ledger_files(enc_root), "cp1251")
+    done = repair_encoding(ledger_files(enc_root), "cp1251", project_dir=eh.project_dir)
     assert [d["path"] for d in done] == [snap_path], done
     assert open(snap_path, encoding="utf-8").read() == text_before, \
         "repair must restore the bytes the writer would produce today, character for character"
@@ -3968,7 +3980,7 @@ def _selftest():
     with open(snap_path, "wb") as f:
         f.write(text_before.encode("cp1251"))
     try:
-        repair_encoding(ledger_files(enc_root), "utf-16")
+        repair_encoding(ledger_files(enc_root), "utf-16", project_dir=eh.project_dir)
         raise AssertionError("repair accepted a code page that does not decode the file")
     except SnapshotError as exc:
         assert "does not decode" in str(exc), exc

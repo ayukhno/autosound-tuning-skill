@@ -312,8 +312,9 @@ def run(project_dir, solos_dir=None, ellipsoid_dir=None, write=False, rew_ver=No
         result["left_out"] += left
     result["settle"] = settling_request(result["rows"], rew_ver)
     if write and result["rows"]:
-        # One hold of the project's writer lock over every row (#141, R14), each `add_flaw` re-entering it: the rows land
-        # together or not at all, so a busy lock's "nothing was written" is true. Worked out above, with the lock free.
+        # One hold of the project's writer lock over every row (#141, R14), each `add_flaw` re-entering it: a busy lock is
+        # met at that hold, before any row, so its "nothing was written" is true -- for a busy lock only: a row refused
+        # after others landed (its check, the disk) leaves those written. Worked out above, with the lock free.
         pj = _project.Project(project_dir)
         with _project._hold(project_dir):
             for row in result["rows"]:
