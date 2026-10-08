@@ -335,9 +335,9 @@ def _take(fd, project_dir, path, start, deadline):
 def _opened(project_dir, path, undo):
     """The lock file, open, its folder made first -- its close put on `undo` -- or None where the project folder itself
     is not there: the lock never makes it (R23). Not there is nothing standing at the path, `FileNotFoundError` alone: a
-    path that cannot be looked at -- a parent this user may not search, a file where a folder of it belongs, a loop of
-    links, a name too long, the disk's error -- goes on to be made, and is refused there. An `OSError` making either is
-    `Unwritable`, a refusal (R6)."""
+    path that cannot be looked at -- a parent this user may not search; on POSIX a file where a folder of it belongs, a
+    loop of links, a name too long; the disk's error -- goes on to be made, and is refused there. An `OSError` making
+    either is `Unwritable`, a refusal (R6)."""
     try:
         os.lstat(os.path.abspath(project_dir))
     except FileNotFoundError:
@@ -1186,7 +1186,9 @@ def _check_the_probe_answers():
     writer has made the lock file yet (a project folder that is not there too), and the probe makes nothing;
     `("free", None)`, the lock taken and let go at once; `("held", None)` while another (spawned) process holds it;
     `("cannot_lock", <the OS's reason>)` where the OS refuses the lock itself, faked at the call with the refusal this
-    system gives such a folder. It keeps nothing: after it the lock is free and the folder holds what it held."""
+    system gives such a folder; and `("cannot_lock", "<path> is not a file")` -- or `is not a folder` -- where a folder
+    stands at the lock file's path, or a file at its folder's, which a writer's hold there refuses (`Unwritable`). It
+    keeps nothing: after it the lock is free and the folder holds what it held."""
     import multiprocessing
     global _os_lock
     real = _os_lock
@@ -1249,8 +1251,14 @@ def _check_the_probe_answers():
             got = probe(folder)
             if got != ("cannot_lock", said):
                 failures.append(f"{said}: {got!r}")
-        if os.listdir(lock_path(a_folder)) or os.listdir(a_file) != [LOCK_DIR]:
-            failures.append(f"the probe changed what stands there: {sorted(os.listdir(a_file))}")
+        if os.listdir(os.path.join(a_folder, LOCK_DIR)) != [LOCK_FILE] or os.listdir(lock_path(a_folder)) \
+                or os.listdir(a_file) != [LOCK_DIR]:
+            failures.append(f"the probe changed what stands there: {sorted(os.listdir(os.path.join(a_folder, LOCK_DIR)))}"
+                            f", {sorted(os.listdir(a_file))}")
+        for folder in (a_folder, a_file):                  # ...where a writer's hold is refused, as it says
+            refused = _raised(lambda: _enter(folder, timeout_s=0))
+            if not getattr(type(refused), "is_unreadable", False):
+                failures.append(f"a hold where the probe says cannot_lock, {os.path.basename(folder)}: {refused!r}")
     finally:
         _os_lock = real
         with open(os.path.join(signals, "go"), "w", encoding="utf-8"):
