@@ -2293,8 +2293,8 @@ def _check_check_names_a_folder_that_cannot_lock():
         e = os.path.join(top, "folder-at-the-lock")
         os.makedirs(lock.lock_path(e))
         got = check_project(e, skip_rew=True).get("lock")
-        want = (f"{os.path.abspath(e)} cannot be locked ({lock.lock_path(e)} is not a file): the method's writers refuse "
-                "to write here until it is moved aside")
+        want = (f"{os.path.abspath(e)} cannot be locked ({lock.lock_path(e)} is not a file): the method's writers "
+                "refuse to write here until it is moved aside")
         if got != want:
             failures.append(f"a folder at the lock file's path: {got!r}")
         lock.probe = broken

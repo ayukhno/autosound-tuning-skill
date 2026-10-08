@@ -160,8 +160,8 @@ def make_folder(path):
     """Make `path`, a folder of a project, with its parents: what a creator's first write does where the project folder
     is not there yet, the lock never making it (R23). One there already is passed over. One that cannot be made -- under
     a folder this user may not write, on a read-only disk, a file where a folder of the path belongs -- is `Unwritable`
-    (#141), as a lock that cannot be made is: every command line says it in one line, exit 1. It was a raw `OSError` --
-    a traceback, or a bug's 70."""
+    (#141), as a lock that cannot be made is, and every command line refuses it as it refuses that one. It was a raw
+    `OSError` -- a traceback, or a bug's 70."""
     try:
         os.makedirs(path, exist_ok=True)
     except OSError as exc:
@@ -1253,8 +1253,8 @@ def _check_the_probe_answers():
                 failures.append(f"{said}: {got!r}")
         if os.listdir(os.path.join(a_folder, LOCK_DIR)) != [LOCK_FILE] or os.listdir(lock_path(a_folder)) \
                 or os.listdir(a_file) != [LOCK_DIR]:
-            failures.append(f"the probe changed what stands there: {sorted(os.listdir(os.path.join(a_folder, LOCK_DIR)))}"
-                            f", {sorted(os.listdir(a_file))}")
+            failures.append(f"the probe changed what stands there: "
+                            f"{sorted(os.listdir(os.path.join(a_folder, LOCK_DIR)))}, {sorted(os.listdir(a_file))}")
         for folder in (a_folder, a_file):                  # ...where a writer's hold is refused, as it says
             refused = _raised(lambda: _enter(folder, timeout_s=0))
             if not getattr(type(refused), "is_unreadable", False):
@@ -1339,10 +1339,10 @@ def _selftest():
           f"go; a file where the lock's folder belongs refused as Unwritable (EEXIST); "
           f"{'a project folder this user may not write refused as Unwritable, nothing taken or made; ' if unwritable else ''}"
           + (f"a project path that cannot be looked at -- a file in it, a loop of links, a name too long"
-             f"{', a parent this user may not search' if looked == 'all' else ''} -- refused as Unwritable, never taken "
-             f"for a folder that is not there; " if looked else "")
-          + f"make_folder makes a project's folder with its parents and refuses one it cannot make as Unwritable (a file "
-          f"in its place{', a parent this user may not write' if made else ''}); "
+             f"{', a parent this user may not search' if looked == 'all' else ''} -- refused as Unwritable, never "
+             f"taken for a folder that is not there; " if looked else "")
+          + f"make_folder makes a project's folder with its parents and refuses one it cannot make as Unwritable (a "
+          f"file in its place{', a parent this user may not write' if made else ''}); "
           f"the access repair fits the system; the refusals are no OSError or ValueError; busy_exit says one line and "
           f"returns 75; a check that breaks shows its traceback; probe answers no_lock_file (making nothing), free, "
           f"held by a spawned process, cannot_lock with the OS's reason, and cannot_lock naming a folder at the lock "

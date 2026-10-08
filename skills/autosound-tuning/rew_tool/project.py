@@ -917,7 +917,7 @@ class Project:
             rev = self.load().get("project_rev")
             data["project_rev"] = (rev if isinstance(rev, int) and not isinstance(rev, bool) and rev >= 0 else 0) + 1
             # The project folder, where this is its first write: one this user cannot make is the lock's own refusal,
-            # one line, exit 1 (#141) -- it was a raw OSError, a traceback.
+            # `Unwritable`, which every command line says as it says that one (#141) -- it was a raw OSError.
             _write_lock().make_folder(self.dir)
             io_.atomic_write_json(self.path, data, indent=2, sort_keys=True, ensure_ascii=False)
         return data

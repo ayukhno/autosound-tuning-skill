@@ -411,12 +411,12 @@ def import_current_state(old_dir, new_dir, dry_run=False):
         # Then the new project's writer lock, from a fresh read of its `project.json` to the import's last write (#141,
         # R14, R23): the import's facts are merged into that file as it stands under the hold, so a change another
         # writer made since the reads above is not written over. Of the import's refusals two can come under the hold,
-        # no other: such a change -- a `project.json` another writer made a newer method's, unreadable, or one the
-        # merge leaves `save` refusing -- refused before anything is written; and a version's name another writer took
-        # since the look, refused once `project.json` has landed, saying so (`_into_refused`). The lock's own -- busy,
-        # a folder that cannot be made -- come at the hold and at the first write. Nothing slow runs under it -- files
-        # read, merged and written. A profile's stamp asks git, so that is asked first, with the lock still free, and
-        # the wait read: a bad one is exit 2 before anything.
+        # no other: such a change -- a `project.json` another writer made a newer method's, unreadable, or one the merge
+        # leaves `save` refusing -- refused before anything is written; and a version's name another writer took since
+        # the look, refused once `project.json` has landed, saying so (`_into_refused`). The lock's own -- busy, a lock
+        # or a folder that cannot be made -- come at the hold and at the first write. Nothing slow runs under it --
+        # files read, merged and written. A profile's stamp asks git, so that is asked first, with the lock still free,
+        # and the wait read: a bad one is exit 2 before anything.
         if profile is not None:
             _dsp_profile._ready_to_hold()
         with _project._hold(new_dir):
@@ -792,7 +792,7 @@ def _check_import_reads_before_it_writes():
     refused -- cut off, a newer method's, one that holds a `project.json` -- left a project half made, and the refusal
     did not say what had landed. Now each refuses with the new folder as it was: not even made, when it was not
     there. A profile that reads is carried in, as before. A new folder under a parent this user may not write is
-    refused as the lock refuses one it cannot make (#141): one line, exit 1, nothing made."""
+    refused as a lock that cannot be made is (#141): one line, exit 1, nothing made."""
     import contextlib
     import io
     import json
