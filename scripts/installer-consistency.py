@@ -754,16 +754,100 @@ def checkout_problems(sh, ps1):
     return out
 
 
+#: T-40 (#142): where the method's copy is, and whether the SDK can build the engine from it -- `method_is_checkout`'s
+#: answer: the installer's clone (no --plugin), a plugin root that is a git checkout (a `.git` folder, or a `.git` file in
+#: a submodule), and a plugin copy, which is none.
+CHECKOUT_LAYOUTS = (("the installer's clone", None, 0), ("a plugin root with a .git folder", "folder", 0),
+                    ("a plugin root with a .git file (a submodule)", "file", 0), ("a plugin copy, no .git", "none", 1))
+#: The engine step's lines that must say the same in both installers: a plugin copy's 4 waits for an engine -- it has no
+#: SDK route (T-40) -- and an engine that does not run names the repair: the same tag's engine is never fetched again
+#: while it is there (T-44).
+ENGINE_PLUGIN_WAITS = "a plugin copy cannot build one -- Phase 1's desk step waits for an engine"
+ENGINE_REPAIR = "to fetch it again, remove"
+
+
+def engine_gate_problems(sh, ps1):
+    """T-40 (#142): install.sh's `method_is_checkout` RUN on CHECKOUT_LAYOUTS -- a constant answer passed a read of the
+    branches that ask it -- and READ: both installers' two build branches ask it, the SDK line after a 4 is said only for
+    a checkout (a plugin copy waits for an engine), and an engine that does not run names the repair. [] when all hold."""
+    import tempfile
+    out = []
+    functions, missing = cut_functions(sh, ("method_is_checkout",))
+    bash, why = find_bash()
+    if missing:
+        out.append("install.sh: no `method_is_checkout() { ... }` -- where the SDK can build the engine cannot be run "
+                   "(T-40)")
+    elif not bash:
+        out.append(f"{why} -- install.sh's method_is_checkout cannot be run, and unrun is not agreed")
+    else:
+        tmp = tempfile.mkdtemp(prefix="autosound_checkout_gate_")
+        try:
+            for what, git, want in CHECKOUT_LAYOUTS:
+                root = Path(tmp, what.replace(" ", "-").replace(",", "").replace("(", "").replace(")", ""))
+                root.mkdir()
+                if git == "folder":
+                    (root / ".git").mkdir()
+                elif git == "file":
+                    (root / ".git").write_text("gitdir: ../.git/modules/skill\n", encoding="utf-8")
+                plugin = "" if git is None else root.as_posix()
+                script = f'set -euo pipefail\nPLUGIN_ROOT="{plugin}"\n' + functions + "method_is_checkout\n"
+                r = subprocess.run([bash, "-s"], input=script.encode("utf-8"), capture_output=True)
+                if r.returncode != want:
+                    out.append(f"install.sh method_is_checkout, {what}: exit {r.returncode}, want {want} "
+                               f"({'a checkout' if want == 0 else 'no checkout'}) -- "
+                               f"{r.stderr.decode('utf-8', 'replace').strip()[-120:]!r} (T-40)")
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+    four_sh = re.search(r"^\s*4\) .*?;;", sh, re.M | re.S)
+    four_ps = re.search(r"\$engineRc -eq 4\) \{.*?\n    \}", ps1, re.S)
+    reads = (("install.sh: both build branches ask method_is_checkout",
+              len(re.findall(r'"\$WANT_ENGINE" = "auto" \] && method_is_checkout && have_dotnet', sh)) == 2),
+             ("install.ps1: both build branches ask $MethodIsCheckout",
+              len(re.findall(r'\$WantEngine -eq "auto" -and \$MethodIsCheckout -and \$HaveDotnet', ps1)) == 2),
+             ("install.ps1: $MethodIsCheckout is install.sh's method_is_checkout",
+              '$MethodIsCheckout = -not ($PluginRoot -and -not (Test-Path (Join-Path $PluginRoot ".git")))' in ps1),
+             ("install.sh: after a 4, the SDK line only for a checkout, and a plugin copy waits for an engine",
+              bool(four_sh) and "if method_is_checkout; then" in four_sh.group(0)
+              and ENGINE_PLUGIN_WAITS in four_sh.group(0)),
+             ("install.ps1: after a 4, the SDK line only for a checkout, and a plugin copy waits for an engine",
+              bool(four_ps) and "if ($MethodIsCheckout)" in four_ps.group(0) and ENGINE_PLUGIN_WAITS in four_ps.group(0)),
+             ("both: an engine that does not run names the repair",
+              f'"{ENGINE_REPAIR} $(pretty "$ENGINE_HOME")' in sh and f'"{ENGINE_REPAIR} $(Pretty $EngineHome)' in ps1))
+    out += [f"{what} -- does not hold (T-40, T-44)" for what, holds in reads if not holds]
+    return out
+
+
+#: T-38 (#142): install.sh's link block run in a temp HOME -- (case, what is at the link's place before, DRY_RUN,
+#: checkout_method's answer, exit, words, never, what is there after). `ours` is a link into the clone, `foreign` one to a
+#: folder of somebody else's, `dangling` one to nothing; an update that cannot be made (1) or is refused (2) is a stop
+#: that makes no link.
+RELINK_CASES = (
+    ("missing", None, "0", 0, 0, ("was missing — made again",), (), "ours"),
+    ("ours", "ours", "0", 0, 0, (), ("made again", "would make"), "ours"),
+    ("foreign", "foreign", "0", 0, 0, ("left exactly as it is",), ("made again",), "foreign"),
+    ("dangling", "dangling", "0", 0, 0, ("left exactly as it is",), ("made again",), "dangling"),
+    ("a real folder", "folder", "0", 0, 0, ("a real directory this script did not create",), ("made again",), "folder"),
+    ("missing, a dry run", None, "1", 0, 0, ("would make the missing link",), ("made again",), "nothing"),
+    ("missing, the update not made", None, "0", 1, 1, ("update failed",), ("made again",), "nothing"),
+    ("missing, the update refused", None, "0", 2, 1, ("not a signed release",), ("made again",), "nothing"))
+
+
 def relink_problems(sh, ps1):
     """T-38 (#142): a re-run repairs the link; [] when both installers' update branch does.
 
     The branch that updates the method's copy already there made no `~/.claude/skills/autosound-tuning` when it was
     missing -- removed by hand, or by a tidy-up -- and every re-run said "updating" over a method Claude Code could not
-    see. Each update branch now makes it again, under the test that it is missing (a link that is not ours, and a real
-    folder, were left and warned about before the branch, as for a new copy), and after the update's stops: a stop is
-    "nothing changed". READ, the text's shape: the branch is top-level script, not a function to cut out and run.
+    see. install.sh's link block (`ours=0` to the end of its if/elif chain) is cut out and RUN over RELINK_CASES with
+    `checkout_method` stubbed: a missing link is made again, after the update's stops; ours is left as it is; a link
+    that is not ours (dangling or not) and a real folder are warned about and left; a dry run makes nothing. On Windows
+    -- where install.sh never runs, and Git Bash's `ln -s` copies -- and wherever `ln -s` makes no link, the block is
+    read only, and said so. `(problems, ran)`.
+    install.ps1 is READ: its update branch makes the junction again under `-not $linkExists`, after its stops, and the
+    entry is looked at with `Get-Item -Force` -- `Test-Path` says False for a dangling junction, which then read as
+    missing: "made again" over a New-Item that fails.
     """
-    out = []
+    import tempfile
+    out, ran = [], None
     branches = (
         ("install.sh", re.search(r'^elif \[ -d "\$SKILL_SRC/\.git" \]; then\n(.*?)^else\n', sh, re.M | re.S),
          r"\bstop 1\b", 'ln -s "$SKILL_SRC/skills/autosound-tuning" "$SKILL_HOME"', '[ ! -L "$SKILL_HOME" ]'),
@@ -782,7 +866,66 @@ def relink_problems(sh, ps1):
         if link not in tail or when_missing not in tail or tail.find(when_missing) > tail.find(link):
             out.append(f"{where}: the update branch does not make a missing link again after its stops -- want "
                        f"`{link}` under `{when_missing}` (T-38)")
-    return out
+    if "$entry = Get-Item $SkillHome -Force -ErrorAction SilentlyContinue" not in ps1 or "$linkExists = [bool]$entry" \
+            not in ps1:
+        out.append("install.ps1: the link's place is looked at with Test-Path, which says False for a dangling junction "
+                   "-- it read as missing, and the update said \"made again\" over a New-Item that fails; want "
+                   "`$entry = Get-Item $SkillHome -Force -ErrorAction SilentlyContinue` and `$linkExists = [bool]$entry` "
+                   "(T-38)")
+    # install.sh's block, RUN.
+    block = re.search(r"^ours=0\n.*?(?=^# The beta channel's copy \(autosound-hub #145\))", sh, re.M | re.S)
+    bash, why = find_bash()
+    if not block:
+        return out + ["install.sh: no link block (`ours=0` up to the beta channel's copy) to run (T-38)"], False
+    if not bash:
+        return out + [f"{why} -- install.sh's link block cannot be run, and unrun is not agreed"], False
+    tmp = tempfile.mkdtemp(prefix="autosound_relink_")
+    try:
+        probe = subprocess.run([bash, "-c", 'cd "$1" && mkdir t && ln -s t l && [ -L l ]', "_", Path(tmp).as_posix()],
+                               capture_output=True)
+        ran = os.name != "nt" and probe.returncode == 0
+        for case, before, dry, co_rc, want_rc, words, never, after in (RELINK_CASES if ran else ()):
+            home = Path(tmp, case.replace(" ", "-").replace(",", ""))
+            src = home / ".claude" / "skills" / ".autosound-tuning-src"
+            (src / ".git").mkdir(parents=True)
+            (src / "skills" / "autosound-tuning").mkdir(parents=True)
+            (home / "elsewhere").mkdir()
+            setup = {None: ":", "ours": 'ln -s "$SKILL_SRC/skills/autosound-tuning" "$SKILL_HOME"',
+                     "foreign": 'ln -s "$HOME/elsewhere" "$SKILL_HOME"', "dangling": 'ln -s "$HOME/gone" "$SKILL_HOME"',
+                     "folder": 'mkdir -p "$SKILL_HOME/mine"'}[before]
+            script = ('set -euo pipefail\nsay() { printf "%s\\n" "$*"; }\nwarn() { printf "  ! %s\\n" "$*"; }\n'
+                      'stop() { _c="$1"; shift; printf "STOP %s\\n" "$*"; exit "$_c"; }\n'
+                      f'checkout_method() {{ return {co_rc}; }}\n'
+                      'SKILL_HOME="$HOME/.claude/skills/autosound-tuning"\n'
+                      'SKILL_SRC="$HOME/.claude/skills/.autosound-tuning-src"\n'
+                      f'SKILL_REF=v3.1.3\nDRY_RUN={dry}\n{setup}\n' + block.group(0))
+            r = subprocess.run([bash, "-s"], input=script.encode("utf-8"), capture_output=True,
+                               env=dict(os.environ, HOME=home.as_posix()))
+            said = (r.stdout + r.stderr).decode("utf-8", "replace")
+            place = home / ".claude" / "skills" / "autosound-tuning"
+            if not os.path.lexists(place):
+                state = "nothing"
+            elif place.is_symlink():
+                state = ("dangling" if not place.exists()
+                         else "ours" if os.path.samefile(place, src / "skills" / "autosound-tuning")
+                         else "foreign" if os.path.samefile(place, home / "elsewhere") else "something else")
+            else:
+                state = "folder" if place.is_dir() else "something else"
+            wrong = ([f"exit {r.returncode}, want {want_rc}"] if r.returncode != want_rc else [])
+            wrong += [f"never says {w!r}" for w in words if w not in said]
+            wrong += [f"says {w!r}" for w in never if w in said]
+            if state != after:
+                wrong.append(f"the link's place holds {state}, want {after}")
+            if before == "folder" and not (place / "mine").is_dir():
+                wrong.append("the real folder's content is gone")
+            if wrong:
+                out.append(f"install.sh's link block, {case}: " + "; ".join(wrong)
+                           + f" -- said {said.strip()[-200:]!r} (T-38)")
+    except OSError as exc:
+        out.append(f"the link block's fixtures could not be made ({exc}) -- unrun is not agreed")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    return out, ran
 
 
 def exit_contract_problems(sh, ps1):
@@ -1324,12 +1467,18 @@ def main():
                        "that is not a checkout alone; an update it cannot fetch, or whose local changes it cannot "
                        "keep, answers 1 with the copy where it was (run); install.ps1 the same, and both update paths "
                        "stop on it (read) (T-45, R32)")
-    relinked = relink_problems(sh, ps1)
+    relinked, ran = relink_problems(sh, ps1)
     if relinked:
         problems.extend(relinked)
+    elif ran:
+        checked.append(f"install.sh's link block, run over {len(RELINK_CASES)} cases: a missing link made again after "
+                       f"the update's stops, ours left, a foreign or dangling link and a real folder warned about and "
+                       f"left, nothing made by a dry run or a stop; install.ps1 the same and its entry seen with "
+                       f"Get-Item -Force (read) (T-38)")
     else:
         checked.append("both installers' update branch makes a missing ~/.claude/skills/autosound-tuning link again, "
-                       "after its stops -- a re-run repairs the link (read) (T-38)")
+                       "after its stops, and install.ps1 sees a dangling junction (read; install.sh's block is not run "
+                       "here -- this is Windows, or this bash's ln -s makes no link) (T-38)")
     # The exit contract (#142): what the run ended as, in its exit code and its receipt.
     contract = exit_contract_problems(sh, ps1)
     if contract:
@@ -1422,20 +1571,15 @@ def main():
         said = re.escape(words).replace(re.escape("<tag>"), r"\$\w+")
         engine += [f"{where}: the receipt's engine for fetch-binary's exit {code} does not say {words!r}"
                    for where, text in (("install.sh", sh), ("install.ps1", ps1)) if not re.search(said, text)]
-    # T-40 (#142): the wrapper is built from the method's own checkout -- `git submodule update` fetches the fork -- and
-    # a plugin copy is none: there `auto` fetches the prebuilt engine, as where there is no SDK. Both build branches
-    # (now, and on first use) ask it.
-    for where, text, gate in (("install.sh", sh, r'"\$WANT_ENGINE" = "auto" \] && \[ "\$METHOD_IS_CHECKOUT" = 1 \]'),
-                              ("install.ps1", ps1, r'\$WantEngine -eq "auto" -and \$MethodIsCheckout\b')):
-        if len(re.findall(gate, text)) != 2:
-            engine.append(f"{where}: `auto` builds the engine in a plugin copy, which no `git submodule update` can "
-                          f"build from -- both build branches must ask that the method is a checkout (T-40)")
+    engine += engine_gate_problems(sh, ps1)
     if engine:
         problems.extend(engine)
     else:
         checked.append("all three agree on the desk engine: fetched only where nothing can build it -- no .NET SDK, "
-                       "or a plugin copy, which is no checkout (T-40) -- by the method's own fetch-binary, whose "
-                       "0, 3, 4 and 5 both installers write into the receipt in the same words (T-44)")
+                       "or a plugin copy, which is no checkout (install.sh's method_is_checkout run on a clone, a .git "
+                       "folder, a .git file and a plugin copy; T-40) -- by the method's own fetch-binary, whose 0, 3, 4 "
+                       "and 5 both installers write into the receipt in the same words; a plugin copy's 4 waits for an "
+                       "engine, and one that does not run names the repair (T-44)")
 
     # 6. the TAG the world is told to paste. HUB-030 moved the one-liners off `main`, and a pinned
     # URL is only worth pinning while it is current: a stale one keeps handing new users a build

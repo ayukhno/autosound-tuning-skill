@@ -1361,16 +1361,16 @@ fi
 step "Phase 1's desk engine"
 ENGINE_PY="${SKILL_REAL:-$SKILL_HOME}/rew_tool/resonalyze_engine.py"
 have_dotnet() { find_bin dotnet >/dev/null 2>&1 || [ -x "$HOME/.dotnet/dotnet" ]; }
-# T-40 (#142): the SDK builds the wrapper from the method's own checkout -- `git submodule update` fetches the fork --
-# and a plugin copy is none (no .git above it): there `auto` fetches the prebuilt engine, as where there is no SDK.
-METHOD_IS_CHECKOUT=1
-if [ -n "$PLUGIN_ROOT" ] && [ ! -e "$PLUGIN_ROOT/.git" ]; then METHOD_IS_CHECKOUT=0; fi
+# T-40 (#142): 0 when the method's copy is a git checkout -- this script's clone, or a plugin root that is one (a .git
+# folder, or a .git file in a submodule) -- which the SDK builds the wrapper from (`git submodule update` fetches the
+# fork). A plugin copy is none: there `auto` fetches the prebuilt engine, as where there is no SDK.
+method_is_checkout() { [ -z "${PLUGIN_ROOT:-}" ] || [ -e "$PLUGIN_ROOT/.git" ]; }
 ENGINE_DID=""
 if [ "$WANT_ENGINE" = 0 ]; then
   ENGINE_DID="not fetched: --no-engine"
   say "  --no-engine: not fetched. It builds from the .NET SDK on first use, or later with"
   say "    python3 $(pretty "$ENGINE_PY") fetch-binary --tag $SKILL_REF"
-elif [ "$WANT_ENGINE" = "auto" ] && [ "$METHOD_IS_CHECKOUT" = 1 ] && have_dotnet && [ "$DRY_RUN" = 0 ] && usable python3 \
+elif [ "$WANT_ENGINE" = "auto" ] && method_is_checkout && have_dotnet && [ "$DRY_RUN" = 0 ] && usable python3 \
      && [ -f "$ENGINE_PY" ]; then
   # The Arbiter, 2026-09-23: the engine is installed WITH the skill and checked -- built now, not on first use.
   say "  the .NET SDK is here — building the engine from the method's own checkout now, then running it once"
@@ -1383,7 +1383,7 @@ elif [ "$WANT_ENGINE" = "auto" ] && [ "$METHOD_IS_CHECKOUT" = 1 ] && have_dotnet
     warn "the engine did not build or run — the method is installed and works; Phase 1's desk step waits for it:"
     warn "$(printf '%s' "$ENGINE_SAID" | tail -3)"
   fi
-elif [ "$WANT_ENGINE" = "auto" ] && [ "$METHOD_IS_CHECKOUT" = 1 ] && have_dotnet; then
+elif [ "$WANT_ENGINE" = "auto" ] && method_is_checkout && have_dotnet; then
   ENGINE_DID="not built: the .NET SDK is here and builds it on first use"
   say "  the .NET SDK is here — the engine builds from the method's own checkout on first use"
 elif ! usable python3; then
@@ -1396,7 +1396,7 @@ elif [ ! -f "$ENGINE_PY" ]; then
   warn "no $(pretty "$ENGINE_PY") — the method's checkout is not where this script expects it;"
   warn "the engine was not fetched, and Phase 1's desk step will ask for one when it is reached"
 else
-  [ "$METHOD_IS_CHECKOUT" = 1 ] || ! have_dotnet \
+  method_is_checkout || ! have_dotnet \
     || say "  the .NET SDK is here, but a plugin copy is no checkout to build the engine from — fetching it"
   say "  ~30 MB for $SKILL_REF, checked against the release's SHA256SUMS"
   ENGINE_RC=0
@@ -1413,12 +1413,18 @@ else
          ENGINE_DID="$ENGINE_DID; but it does not run: $(printf '%s' "$ENGINE_SAID" | tail -1)"
          warn "the engine was fetched but does not run here — Phase 1's desk step waits for it:"
          warn "$(printf '%s' "$ENGINE_SAID" | tail -3)"
+         # The same tag's engine is not downloaded again while it is there (fetch-binary's 0): this is the way to.
+         warn "to fetch it again, remove $(pretty "$ENGINE_HOME") (the engines this script fetched) and run this again"
        fi ;;
     3) ENGINE_DID="refused: the archive for $SKILL_REF does not match its SHA256SUMS -- nothing installed"
        warn "the engine's archive for $SKILL_REF does not match its SHA256SUMS — refused, nothing installed;"
        warn "the method is installed and works; Phase 1's desk step is the part that waits for an engine" ;;
     4) ENGINE_DID="not fetched: $SKILL_REF carries no engine for this machine"
-       say "  so the engine builds from the .NET SDK when there is one; nothing else is affected" ;;
+       if method_is_checkout; then
+         say "  so the engine builds from the .NET SDK when there is one; nothing else is affected"
+       else
+         say "  and a plugin copy cannot build one -- Phase 1's desk step waits for an engine; nothing else is affected"
+       fi ;;
     5) ENGINE_DID="not fetched: the release could not be reached -- run the installer again later"
        warn "the release could not be reached -- run the installer again later; the method is installed and works,"
        warn "and Phase 1's desk step is the part that waits for an engine" ;;

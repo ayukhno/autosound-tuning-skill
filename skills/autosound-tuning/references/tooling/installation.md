@@ -26,7 +26,10 @@ clones the method at the newest `v3.*` release into `~/.claude/skills/.autosound
   release that does not answer is said too, and a re-run tries again). `--engine` / `-Engine` fetches it anyway,
   `--no-engine` / `-NoEngine` never. A release that carries no archive for this platform or this
   engine pin — only `win-x64`, `win-arm64` and `osx-arm64` are built — is said out loud, and the
-  SDK route stands. By hand later, from the method's own folder:
+  SDK route stands where the method is a git checkout; in a plugin copy Phase 1's desk step waits for a
+  release that carries one. An engine already here from the same tag is not downloaded again: one that
+  does not run is fetched again once its folder (`~/.local/share/autosound/engines`, on Windows
+  `%LOCALAPPDATA%\autosound\engines`) is removed — the installer says so. By hand later, from the method's own folder:
   `python3 rew_tool/resonalyze_engine.py fetch-binary --tag v3.0.57` (or `install-binary --from <zip>`
   for a file you already have). `--uninstall` removes the engine with the rest.
 

@@ -1249,8 +1249,12 @@ def _selftest_in(tmp):
         return None
 
     # The fake tools are shell scripts, and `tool_version` starts each one: Windows cannot start a shell script, so this
-    # part, and the update below, run on POSIX only.
-    if os.name != "nt":
+    # part, and the update below, run on POSIX only -- said in a line there, and left out of the OK line.
+    tools_here = os.name != "nt"
+    if not tools_here:
+        print("upkeep: the tools' rows and their update were not checked here -- the fake tools are shell scripts, "
+              "which Windows cannot start")
+    if tools_here:
         rows = tool_rows(env=fake_env, runner=fake, fetch=fake_fetch)
         assert [r["name"] for r in rows] == ["omp", "agy"], "claude and gh are not here: not listed, not added"
         omp = rows[0]
@@ -1271,7 +1275,7 @@ def _selftest_in(tmp):
                                  home=fake_home) == "2.1.285", "the stable channel's newest"
     assert available_version("agy", "/x/agy", "self", "agy", fetch=lambda url, timeout=20: None) == ""
     assert available_version("claude", "/x/claude", "self", "c", fetch=lambda url, timeout=20: {"latest": "oops"}) == ""
-    if os.name != "nt":      # the fake tools again (above): shell scripts, which Windows cannot start
+    if tools_here:           # the fake tools again (above): shell scripts, which Windows cannot start
         calls.clear()
         done = update_tools(env=fake_env, runner=fake)
         assert [c[1:] for c in calls] == [["update"], ["update"]], calls
@@ -1294,8 +1298,9 @@ def _selftest_in(tmp):
           "(new files too) become a "
           "patch that brings them back, sent only when asked, and only then is the clone reset; the update lands "
           "the tag in refs/tags and refuses a dirty clone or a bad signature; the ready file is one line, \\n-ended, "
-          "and the SessionStart hook is silent once it is written; each tool is updated the way it was "
-          "installed and a missing one is not added; pip is asked to upgrade with the installers' flags")
+          "and the SessionStart hook is silent once it is written; "
+          + ("each tool is updated the way it was installed and a missing one is not added; " if tools_here else "")
+          + "pip is asked to upgrade with the installers' flags")
     return 0
 
 

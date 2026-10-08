@@ -1234,14 +1234,18 @@ if (-not $SkillRef) {
     Stop-Installer 1; return
 }
 Say "version $SkillRef"
-$linkExists = Test-Path $SkillHome
+# The link's place, seen with Get-Item -Force, not Test-Path (T-38, #142): Test-Path says False for a dangling junction,
+# which then read as missing -- the update said "made again" over a New-Item that fails. A link that is not ours,
+# dangling or not, is left and warned about, as install.sh does.
+$entry = Get-Item $SkillHome -Force -ErrorAction SilentlyContinue
+$linkExists = [bool]$entry
 $isOurs = $false
-if ($linkExists) {
-    $item = Get-Item $SkillHome -Force
-    $isLink = $item.LinkType -in @("SymbolicLink", "Junction")
-    if ($isLink -and $item.Target -and (($item.Target -join "") -like "$SkillSrc*")) { $isOurs = $true }
+if ($entry) {
+    $isLink = $entry.LinkType -in @("SymbolicLink", "Junction")
+    if ($isLink -and $entry.Target -and (($entry.Target -join "") -like "$SkillSrc*")) { $isOurs = $true }
     if ($isLink -and -not $isOurs) {
-        Warn "$SkillHome points at $($item.Target) -- left exactly as it is."
+        $gone = if (Test-Path $SkillHome) { "" } else { ", which is not there" }
+        Warn "$SkillHome points at $($entry.Target)$gone -- left exactly as it is."
         Warn "that is somebody's checkout, not this script's to replace."
     } elseif (-not $isLink) {
         Warn "$SkillHome is a real directory this script did not create -- left alone."
@@ -1282,9 +1286,9 @@ if ((-not $linkExists) -or $isOurs) {
         if (-not $DryRun) { New-Item -ItemType Directory -Force -Path (Split-Path $SkillHome) | Out-Null }
         $cloned = Sync-MethodCheckout $SkillSrc $SkillRef "the method"
         if ($cloned -and -not $DryRun) {
-            if (Test-Path $SkillHome) {
-                $old = Get-Item $SkillHome -Force
-                if ($old.LinkType) { [System.IO.Directory]::Delete($SkillHome) } else { Remove-Item $SkillHome -Force -Recurse }
+            # What is here is ours (a junction into the copy, dangling or not) or nothing: anything else was left above.
+            if ($entry) {
+                if ($entry.LinkType) { [System.IO.Directory]::Delete($SkillHome) } else { Remove-Item $SkillHome -Force -Recurse }
             }
             # A JUNCTION, not a symlink: junctions work for directories without Developer Mode
             # or an elevated prompt, which symlinks on Windows still require (INSTALLER-TZ section 3).
@@ -1427,6 +1431,8 @@ if ($WantEngine -eq "0") {
             $EngineDid = "$EngineDid; but it does not run: $(($engineSaid -split "`n")[-1])"
             Warn "the engine was fetched but does not run here -- Phase 1's desk step waits for it:"
             Warn $engineSaid
+            # The same tag's engine is not downloaded again while it is there (fetch-binary's 0): this is the way to.
+            Warn "to fetch it again, remove $(Pretty $EngineHome) (the engines this script fetched) and run this again"
         }
     }
     if ($engineRc -eq 3) {
@@ -1435,7 +1441,11 @@ if ($WantEngine -eq "0") {
         Warn "the method is installed and works; Phase 1's desk step is the part that waits for an engine"
     } elseif ($engineRc -eq 4) {
         $EngineDid = "not fetched: $SkillRef carries no engine for this machine"
-        Say "so the engine builds from the .NET SDK when there is one; nothing else is affected"
+        if ($MethodIsCheckout) {
+            Say "so the engine builds from the .NET SDK when there is one; nothing else is affected"
+        } else {
+            Say "and a plugin copy cannot build one -- Phase 1's desk step waits for an engine; nothing else is affected"
+        }
     } elseif ($engineRc -eq 5) {
         $EngineDid = "not fetched: the release could not be reached -- run the installer again later"
         Warn "the release could not be reached -- run the installer again later; the method is installed and works,"
