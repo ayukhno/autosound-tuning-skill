@@ -204,7 +204,7 @@ reveals a broken driver or wiring); without a rig, Fs from the datasheet with ma
 - **1.4** **coarse EQ per driver — BEFORE the delays** (the user's decision, 2026-09-17; Resonalyze's
   order too): the first part of `eq_propose` (`--part 1`) — resonances per driver group — cuts of minimum-phase
   peaks that stay across the positions, away from the junctions, Q no narrower than the ellipsoid's
-  ceiling, toward each driver's own per-band target; zero boosts. A PEQ rotates phase, so a delay
+  ceiling, toward each driver's own per-band target; 1.4 coarse EQ: cuts only. A PEQ rotates phase, so a delay
   computed without it is a delay redone after it. The rest of EQ is Phase 2.
 - **1.5** **joints bottom-up, with the coarse EQ in the chains** (sub↔sub → subs↔midbass → midbass↔mid →
   mid↔tweeter): delay × polarity by how much the pair loses when summed vs the ideal (`predict --align`:
@@ -324,7 +324,7 @@ reveals a broken driver or wiring); without a rig, Fs from the datasheet with ma
   **the junctions of each side**, left and right apart → **sub with mids** → **each side whole** → **everything
   together**, the tone per pair toward the target within max(1 dB, 2σ) → **the centre under everything** →
   **the rear under everything**. Only cuts of minimum-phase peaks that stay across the positions; below
-  ~150–200 Hz a point is trusted, above only what survives the ellipsoid; zero boosts. **A step whose EQ
+  ~150–200 Hz a point is trusted, above only what survives the ellipsoid; 2.1 second part of EQ: cuts only. **A step whose EQ
   touched a junction's band (±1 oct) re-checks that junction's delay (1.5); otherwise the delays stay** —
   a package says which junctions it reaches (`recheck_junctions`) before it is banked. **Between "each side
   whole" and "everything together" the scene's two presets go to the ear** (RES-011): A is the base as it stands,
@@ -349,7 +349,8 @@ reveals a broken driver or wiring); without a rig, Fs from the datasheet with ma
   **The plan of Phase 2 on this path is these four steps and no more** (the Arbiter, skill #73: a ten-step plan
   that mixed this path with the iterative one measured, computed and wrote without moving). Each step is named
   for what it ENDS IN, which he sees — a version, a verdict, a review file, a sheet — never for a rule it follows;
-  the rules (Q ceiling, tolerance, cuts only, +6 dB) are the tools' and are not steps. A capture round, a
+  the rules (Q ceiling, tolerance; ≤ 6 dB per band, and no boost unless `--allow-boost` AND the excess-phase
+  gate allow it — `eq_propose`, its packages cuts only) are the tools' and are not steps. A capture round, a
   listening or a control series has no place in it: those are Phase 3's. As `add-step` lines:
 
   ```
