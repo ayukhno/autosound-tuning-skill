@@ -795,11 +795,15 @@ def _two_x(old, preset="SQ", gain=-7.8):
 
 
 def _bytes_under(top):
-    """`{relative path: bytes}` of every file under `top` -- nothing written is every byte of it the same."""
+    """`{relative path: bytes}` of every file under `top` -- nothing written is every byte of it the same. A link is
+    its target, `-> <target>`, read without following it: one to nothing has no bytes to read."""
     out = {}
     for folder, _dirs, names in os.walk(top):
         for name in names:
             path = os.path.join(folder, name)
+            if os.path.islink(path):
+                out[os.path.relpath(path, top).replace(os.sep, "/")] = ("-> " + os.readlink(path)).encode("utf-8")
+                continue
             with open(path, "rb") as fh:
                 out[os.path.relpath(path, top).replace(os.sep, "/")] = fh.read()
     return out
@@ -811,7 +815,10 @@ def _check_into_a_project_refused():
     (#134, batch 4's re-review, the probe of `--into`, cases A-D). It wrote its `state/<preset>/v_001.json` and `HEAD`
     there -- over the version an earlier import banked (sealed or not), with the slot moved off the version banked
     after it -- and the 2.x profile over the project's, beside a per-project line nothing can read with them, and said
-    "imported", exit 0. A folder with a `project.json` alone, or empty, still imports, as before."""
+    "imported", exit 0. A folder with a `project.json` alone, or empty, still imports, as before. So do the look's three
+    edges (batch 4's N4-M4): an empty `state/versions/` and a `dsp_profile.json` link to nothing are refused -- each
+    went untested, and read as nothing an import would have gone in beside a half-moved line, or replaced the link --
+    and a front end's `state/.tcc/` imports, left as it was."""
     import contextlib
     import io
     import shutil
@@ -857,13 +864,30 @@ def _check_into_a_project_refused():
         with open(os.path.join(tgt, "state", "SQ", "V_001.JSON"), "w", encoding="utf-8") as fh:
             json.dump(three(-2.0), fh)
 
+    def profile_link_to_nothing(tgt):          # a link where the profile belongs, its target gone (batch 4's N4-M4)
+        os.makedirs(tgt)
+        os.symlink(os.path.join(tgt, "shared", "dsp_profile.json"), os.path.join(tgt, "dsp_profile.json"))
+
+    probe = os.path.join(top, "can-link")
+    try:
+        os.symlink(probe + "-target", probe)
+        links = True
+    except (OSError, NotImplementedError):
+        links = False
+        print("  (no symbolic links on this system: a dsp_profile.json link to nothing was not made)")
     try:
         failures = []
         old = os.path.join(top, "old")
         _two_x(old)
         old_versions = os.path.join(top, "old-versions")
         _two_x(old_versions, preset="versions")
-        for label, source, make, named in (
+        # Three of the look's branches no case held (batch 4's N4-M4): an empty `state/versions/` -- the half-moved line
+        # `state.py` refuses -- and a profile that is a link to nothing are refused; a front end's dot-folder imports.
+        more = [("an empty state/versions/", old, lambda t: os.makedirs(os.path.join(t, "state", "versions")),
+                 ["state/versions/ (0 versions)"])]
+        if links:
+            more.append(("a dsp_profile.json link to nothing", old, profile_link_to_nothing, ["dsp_profile.json"]))
+        for label, source, make, named in [
                 ("A: a per-project line and a profile", old, lambda t: native(t, (-3.0, -4.5), True),
                  ["state/slots.json", "state/versions/ (2 versions)", "dsp_profile.json"]),
                 ("B: the line an import made, a version banked on it", old, lambda t: imported(t, old),
@@ -873,7 +897,7 @@ def _check_into_a_project_refused():
                 ("D: a per-project line, the 2.x preset named versions", old_versions,
                  lambda t: native(t, (-3.0,), False), ["state/slots.json", "state/versions/ (1 version)"]),
                 ("a profile alone", old, lambda t: native(t, (), True), ["dsp_profile.json"]),
-                ("a version named in another letter case", old, other_case, ["state/SQ/ (1 version)"])):
+                ("a version named in another letter case", old, other_case, ["state/SQ/ (1 version)"])] + more:
             tgt = os.path.join(top, label.split(":")[0].replace(" ", "-"))
             make(tgt)
             before = _bytes_under(tgt)
@@ -899,6 +923,19 @@ def _check_into_a_project_refused():
                     "dsp_profile.json", "project.json", "state/SQ/HEAD", "state/SQ/v_001.json"] \
                     or open(head, encoding="utf-8").read() != "v_001\n":
                 failures.append(f"{label}: rc {rc!r}, said {(out + err)[-300:]!r}, files {sorted(_bytes_under(tgt))}")
+        # A front end's own folder under state/ -- TCC's `.tcc/`, holding what reads like a version -- is no ledger
+        # line: the import goes in beside it, and leaves it byte for byte.
+        tgt = os.path.join(top, "a-front-end-s-dot-folder")
+        os.makedirs(os.path.join(tgt, "state", ".tcc"))
+        with open(os.path.join(tgt, "state", ".tcc", "v_001.json"), "w", encoding="utf-8") as fh:
+            json.dump({"tcc": "a front end's scratch"}, fh)
+        kept = _bytes_under(tgt)
+        rc, out, err = run(old, tgt)
+        after = _bytes_under(tgt)
+        if rc != 0 or "imported: 1" not in out or sorted(after) != [
+                "dsp_profile.json", "project.json", "state/.tcc/v_001.json", "state/SQ/HEAD", "state/SQ/v_001.json"] \
+                or after["state/.tcc/v_001.json"] != kept["state/.tcc/v_001.json"]:
+            failures.append(f"a front end's state/.tcc/: rc {rc!r}, said {(out + err)[-300:]!r}, files {sorted(after)}")
         assert not failures, "\n  ".join(["--into a folder that holds a project:"] + failures)
     finally:
         shutil.rmtree(top, ignore_errors=True)

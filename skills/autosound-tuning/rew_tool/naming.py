@@ -193,18 +193,28 @@ def read_glossary_file(path, project_dir):
     place -- or that a newer method wrote raises `project_io.Unreadable` (`is_unreadable` on its class), naming it, the
     reason and the repair. So does a link to nothing (#134, batch 4's third re-review, N-M2): `read_json` reads a link
     whose target is gone as no file, and the strict read said "no glossary" where the lenient one, which looks past the
-    link, read `project.json`'s -- and `capture-start --plan` said it "needs the project's glossary" over one."""
+    link, read `project.json`'s -- and `capture-start --plan` said it "needs the project's glossary" over one. The
+    target is named where it is, a relative one against the link's folder, and removing the link is offered only where
+    `project.json` keeps a glossary to read then (batch 4's re-review N4-M5): where it keeps none, removing the link
+    leaves the project with no glossary at all."""
     io_ = _siblings().load("project_io.py")
     own = io_.read_json(path, None, repair=io_.restore_line(path), repair_encoding=io_.reencode_line(project_dir))
     if own is None:
         if os.path.islink(path):
             try:
                 target = os.readlink(path)
+                if not os.path.isabs(target):        # relative to the link's folder, not to where a command runs
+                    target = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(path)), target))
             except OSError:
                 target = "its target"
+            try:
+                kept = io_.read_json(os.path.join(project_dir, "project.json"), {})
+            except Exception:  # noqa: BLE001 -- a project.json that cannot be read keeps no glossary this one could offer
+                kept = {}
+            removal = (" -- or remove the link, and the glossary project.json keeps is read"
+                       if isinstance(kept, dict) and kept.get("glossary") else "")
             raise io_.Unreadable(path, f"is a link to {target}, which is not there",
-                                 f"restore {target}, or point the link at the glossary -- or remove the link, and the "
-                                 f"glossary project.json keeps is read")
+                                 f"restore {target}, or point the link at the glossary{removal}")
         return None
     newer = io_.newer_schema(own, SCHEMA_VERSION)
     if newer is not None:
@@ -1044,6 +1054,45 @@ def _check_dangling_glossary_link():
         shutil.rmtree(d, ignore_errors=True)
 
 
+def _check_dangling_link_repair_fits():
+    """The repair for a `glossary.json` that is a link to nothing fits the project (batch 4's re-review N4-M5): "remove
+    the link, and the glossary project.json keeps is read" only where `project.json` keeps one -- where it keeps none,
+    removing the link leaves no glossary, and `capture-start --plan` then says it "needs the project's glossary" --
+    and a target written relative is named where it is, against the link's folder: `restore ../elsewhere/glossary.json`
+    pointed at a path relative to wherever the person ran the command. Where this system makes no links, there is
+    nothing to make, and it says so."""
+    import shutil
+    import tempfile
+    d = tempfile.mkdtemp(prefix="autosound_naming_link_repair_")
+    failures = []
+    try:
+        link = os.path.join(d, "glossary.json")
+        try:
+            os.symlink(os.path.join("..", "elsewhere", "glossary.json"), link)       # relative, to nothing
+        except (OSError, NotImplementedError):
+            print("  (no symbolic links on this system: the link to nothing was not made)")
+            return
+        gone = os.path.normpath(os.path.join(d, "..", "elsewhere", "glossary.json"))
+        for keeps in (False, True):
+            with open(os.path.join(d, "project.json"), "w", encoding="utf-8") as fh:
+                json.dump({"glossary": {"channels": [{"code": "w-L", "active": True}]}} if keeps else
+                          {"channels": [{"code": "w-L"}]}, fh)
+            try:
+                Glossary.for_project(d, strict=True)
+            except Exception as exc:  # noqa: BLE001 -- the refusal is under test; matched by its type's attribute
+                said = str(exc)
+                want = (f"{link} is a link to {gone}, which is not there -- restore {gone}, or point the link at the "
+                        f"glossary" + (" -- or remove the link, and the glossary project.json keeps is read"
+                                       if keeps else ""))
+                if not getattr(type(exc), "is_unreadable", False) or said != want:
+                    failures.append(f"project.json keeps {'one' if keeps else 'none'}: {said!r}")
+            else:
+                failures.append(f"project.json keeps {'one' if keeps else 'none'}: read past the link")
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+    assert not failures, "\n  ".join(["a glossary.json that is a link to nothing, its repair:"] + failures)
+
+
 def _selftest():
     """The grammar's own checks, and SCR-039's: a renamed channel keeps its captures.
 
@@ -1052,7 +1101,8 @@ def _selftest():
     """
     failures = []
     for check in (_check_productions, _check_bom_glossary_read, _check_for_project_strict,
-                  _check_cli_reads_the_glossary_strictly, _check_dangling_glossary_link):
+                  _check_cli_reads_the_glossary_strictly, _check_dangling_glossary_link,
+                  _check_dangling_link_repair_fits):
         try:
             check()
         except AssertionError as exc:
