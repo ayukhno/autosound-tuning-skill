@@ -376,49 +376,54 @@ usage on stdout, exit 0.
   runs, and a bug in the checks (named with its type), are said as what happens: the checks were not run, and the
   round closes on the record, unchecked. The state that cannot be read at the checks, and the checks' journal line
   refused after their state write, are refusals, exit 1, the round open (batch 3's re-review O3): both read as
-  "checks not run" and the round closed. So are a lock held past the wait at the checks and a round moved under them
-  (#141, below).
+  "checks not run" and the round closed. So is a round moved under them (1); a lock held past the wait there is 75
+  (below).
 - **One writer at a time** (#141, J2b; `CONTRACT.md` item 8 has the lock's file, its sign and the method's other
   writers). Every verb that writes the state or the journal holds the project's writer lock,
   `<project>/.autosound/write.lock`, across its read, its change, its state write and its event: a writer of `Process`
   around its whole call (`_locked`) but `enter_phase` and `check_captures`, which take it after their slow part, and
   `project.py record-change` around its append. What is slow runs first, with the lock free. `capture-check` reads
   REW, then merges its verdicts by title, under the hold, into the state as it is then; a round closed or replaced
-  while REW was read is refused, `round <id> was closed or replaced while REW was read -- nothing was written; run
-  capture-check again`, exit 1. `enter-phase` runs its gates (git, `gh`), then refuses a phase another writer made
-  active meanwhile, `phase N is not entered: phase M is active now, and its gates were checked with phase K active --
-  another writer moved the process meanwhile; nothing was written, run enter-phase N again`, exit 1. The sha a run's
-  journal header carries is asked of git before the first hold. `session-close` reads what is open and records the
-  close under one hold; `--check` takes none. A held lock is waited for `AUTOSOUND_LOCK_TIMEOUT_S` seconds (read at
-  each call; 10 when unset), then exit 75 with its one `busy:` line; a value that is no number of seconds is exit 2,
-  before anything is taken or made. A folder the OS cannot lock is written without the lock, with a `note:` line on
-  stderr at each hold; one where the lock cannot be made (a project folder this user may not write, a read-only disk)
-  is refused, exit 1, in one line: `<path> cannot be made for the project's writer lock (<why>), so nothing was written
-  -- <repair>`. A writer's own refusals of its input (`done` on prose alone, `skip` with no reason) come under the
-  hold too, so behind a held lock they answer 75 first.
+  while REW was read is refused, `error: round <id> was closed or replaced while REW was read -- nothing was written;
+  run capture-check again`, exit 1. `enter-phase` runs its gates (git, `gh`), then refuses a phase another writer
+  made active meanwhile, `error: phase N is not entered: phase M is active now, and its gates were checked with phase
+  K active -- another writer moved the process meanwhile; nothing was written, run enter-phase N again`, exit 1. The
+  sha a run's journal header carries is asked of git before the first hold. `session-close` reads what is open and
+  records the close under one hold; `--check` takes none. A held lock is waited for `AUTOSOUND_LOCK_TIMEOUT_S` seconds
+  per hold (read at each call; 10 when unset), then exit 75 with its one `busy:` line; a value that is no number of
+  seconds is exit 2, before anything is taken or made -- and, in `capture-check` and `capture-close`, before REW is
+  asked. A folder the OS cannot lock (on Windows, any refusal of `LockFileEx` but a lock violation) is written without
+  the lock, with a `note:` line on stderr once per process for each folder; a hold on a project folder that is not
+  there makes nothing; one where the lock cannot be made (a project folder this user may not write, a read-only disk)
+  is refused, exit 1, in one line: `error: <path> cannot be made for the project's writer lock (<why>), so nothing was
+  written -- <repair>`. A writer's own refusals of its input (`done` on prose alone, `skip` with no reason) come under
+  the hold too, so behind a held lock they answer 75 first.
 - **A process folder that does not exist starts nothing** (#141, W-8's R46; `Process._require_home`). A mistyped path,
   `<project>/process-typo`, got a state and a journal of its own from the first verb that wrote there. Now every verb
   that writes is refused on a folder that does not exist, exit 1, before anything is made -- no folder, no
   `.autosound/`, no plan:
-  - not called `process`: `<folder> does not exist, and the method's process folder is called process -- a mistyped
-    path? nothing was written`;
-  - called `process`, with no `project.json` beside it: `<project> holds no project.json: not a project yet -- the
-    intake starts one with enter-phase -1; nothing was written`, but for `enter-phase -1`, the intake, which starts a
-    project there.
+  - not called `process`: `error: <folder> does not exist, and the method's process folder is called process -- a
+    mistyped path? nothing was written`;
+  - called `process`, with no `project.json` beside it: `error: <project> holds no project.json: not a project yet --
+    the intake starts one with enter-phase -1; nothing was written`, but for `enter-phase -1`, the intake, which
+    starts a project there, and `session-start` where the project folder itself is there (R19), which starts one too.
 
-  A `process` folder beside a `project.json` is the project's first process write, and goes through: TCC's
-  new-project dialog writes `project.json` before any verb. `project.py record-change` refuses the same way, exit 1,
-  in one line (it appends to the journal outside `_locked`). The verbs that only read make nothing either.
-  `capture-import <N>` with no titles asks REW before its writer looks, so REW's own answer can come first there.
+  A `process` folder beside a `project.json` is the project's first process write, and goes through: a project TCC's
+  new-project dialog seeds holds `project.json` before any verb. TCC's project gate also takes an empty folder, and at
+  a session's start runs `session-start`, then `enter-phase -1`, in one `try`: both go through there, where
+  `session-start` was refused and the second never ran. A mistyped `process-typo`, and `session-start` on a project
+  folder that is not there, stay refused. `project.py record-change` refuses the same way, exit 1, in one line (it
+  appends to the journal outside `_locked`), and so does `capture-import`, before it asks REW for a series' titles.
+  The verbs that only read make nothing either.
 - **`capture-close` closes the round it read** (#141, R7, R9). It reads the open round once, before REW -- no round
   open is refused there, before a line is printed -- and takes the lock for each of its stages: the reconcile against
   REW (when REW's list was read), the checks (when the round holds taken captures), the close; each is held to the
   round it read. A round another writer closed or replaced in between is refused, exit 1, the brackets saying `<id> is
-  the open round now` or `no round is open now`: before anything landed, `round <id> was closed or replaced after
-  capture-close read it (...) -- nothing was written`; after the reconcile landed, `round <id> was closed or replaced
-  by another writer while capture-close ran (...) -- <what> landed; <what> did not`, naming the reconcile of the round,
-  and its checks when they ran, and what did not (the checks and the close, or the close). It closed the round open
-  by then, one this verb never read against REW nor checked. A lock held past the wait at the first stage is
+  the open round now` or `no round is open now`: before anything landed, `error: round <id> was closed or replaced
+  after it was read (...) -- nothing was written`; after the reconcile landed, `error: round <id> was closed or
+  replaced by another writer while capture-close ran (...) -- <what> landed; <what> did not`, naming the reconcile of
+  the round, and its checks when they ran, and what did not (the checks and the close, or the close). It closed the
+  round open by then, one this verb never read against REW nor checked. A lock held past the wait at the first stage is
   write_lock's own `busy:` line, nothing written; at a later one, the verb's own, exit 75, naming the same: `busy:
   <the lock file> is held by another writer -- <what> landed; <what> did not; run capture-close again (<what> safe to
   repeat)`, as `... -- the reconcile of cap_002 landed; the checks and the close did not; run capture-close again

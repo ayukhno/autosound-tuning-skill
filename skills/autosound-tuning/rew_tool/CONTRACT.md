@@ -44,10 +44,11 @@ A state write that owes two journal lines (#141, F M-7) -- `capture-start` over 
 `capture_round_closed`, then the new round's `capture_task_issued` -- and cannot append the first says both, in order:
 `error: <state> is written, but its journal lines are not: <why>. ... append these lines to <journal>, in order:`,
 then each line, raw JSON, on a line of its own. That refusal ends in a bare event: a front end that shows only the
-last line of stderr shows that line. `capture-start` says its plan file
-(S-101): `plan: <the file, its absolute path>` as the last line on stdout once the file is written, else one line on
-stderr, `note: the round is open, but its plan <path> could not be written (<why>) -- process.py <dir> show holds its
-list`; exit 0 either way, the round open.
+last line of stderr shows that line.
+
+`capture-start` says its plan file (S-101): `plan: <the file, its absolute path>` as the last line on stdout once the
+file is written, else one line on stderr, `note: the round is open, but its plan <path> could not be written (<why>)
+-- process.py <dir> show holds its list`; exit 0 either way, the round open.
 
 **The verbs and their flags** are `VERB_FLAGS` in `process.py`, one string literal per flag:
 
@@ -116,7 +117,10 @@ that line). Over a `project.json` that cannot be read and no
 standalone `glossary.json`, the glossary is kept in the file nobody could read: it is not in `missing`, and its row
 says it was not read. A `glossary.json` with a UTF-8 BOM is a glossary. `encoding_unread` names the files the encoding
 survey could not open; `encoding_cut` (`[{file, repair}]`) the files it found cut inside their last character, each
-with its restore -- no code page's, so never in `encoding_damaged`.
+with its restore -- no code page's, so never in `encoding_damaged`. `lock` (W-9, #141) is one line when the project's
+writer lock cannot be taken in its folder -- the OS refuses the lock itself, and the writers write there without it
+(item 8) -- else null; the text report says it as `**Writer lock:** <line>.` It is never part of `ok`, and it is null
+too where no writer has made the lock file yet: `check` makes nothing.
 
 ## 4. `deployment.py [<project>] [--json]` — not promised
 
@@ -313,27 +317,40 @@ read, its change, its write and its event, so another writer -- TCC, a second co
 neither land between them and be written over, nor be written over by it. Before it, two processes each writing 40
 channels into one `project.json` lost 40 of the 80 (`project.py`'s selftest, run on the code without the lock).
 
-- **The file:** `<project>/.autosound/write.lock`. A hold makes `.autosound/` when it is not there, and in it a
-  `.gitignore` holding `*`: `git add -A` in the project stages nothing from the folder. It is never TCC's
-  `process/.process-write.lock`: TCC holds that one around the child it runs, and a child taking it would wait on its
-  own parent.
+- **The file:** `<project>/.autosound/write.lock`. A hold in a project folder that is there makes `.autosound/` when it
+  is not there yet, and in it a `.gitignore` holding `*`: `git add -A` in the project stages nothing from the folder.
+  It is never TCC's `process/.process-write.lock`: TCC holds that one around the child it runs, and a child taking it
+  would wait on its own parent.
+- **The lock never makes the project folder** (R23). A hold on a folder that is not there -- a mistyped path, one
+  gone -- is this process's thread lock alone, under the same wait, and makes nothing: no folder, no `.autosound/`, no
+  OS lock. So a verb run on a project folder that is not there makes nothing: it refuses, or answers as over an empty
+  project, as before the lock, which made `<typo>/.autosound/` under verbs that went on to say "nothing was written".
+  The writer's own first write makes the folder, and the next hold makes `.autosound/` and takes the lock. What that
+  costs: a hold that found no folder stays the thread lock alone until it ends, so what it writes once the folder is
+  there -- `intake.py set-car`'s `project.json`, `state/migrate.py --into`'s `project.json` and then its ledger and
+  profile -- is not ordered against another process's writer of that project. Two processes creating one new project
+  at the same moment are not ordered by the OS lock.
 - **The sign:** a line `PROTOCOL = 1`, on a line of its own, in `rew_tool/write_lock.py`. Read the file as text, never
   import it: TCC's `core/project_lock.py` `locks_itself` matches `^PROTOCOL\s*=\s*1[ \t]*(?:#.*)?$`, multiline. No copy
   up to v3.1.2 has the file, and such a copy takes no lock of its own.
-- **The lock:** `fcntl.flock` on the file on POSIX, `msvcrt.locking` on its first byte on Windows, both tried without
-  blocking and polled, under one deadline over this process's other threads and the other processes. Re-entrant within
-  a thread: a writer that calls another (`capture-import` its rounds, a bank its snapshot) takes it once.
+- **The lock:** `fcntl.flock` on the file on POSIX, `LockFileEx` on its first byte on Windows (through ctypes), both
+  tried without blocking and polled, under one deadline over this process's other threads and the other processes.
+  Only another writer's lock is "held": on Windows, `LockFileEx`'s ERROR_LOCK_VIOLATION alone -- a share that refuses
+  the lock any other way (access denied, not supported) is a folder that cannot be locked, below. Re-entrant within a
+  thread: a writer that calls another (`capture-import` its rounds, a bank its snapshot) takes it once.
 - **Who holds it:** every public writer of `Process` (`state/process.py`), and `Project.record_change`, which appends
   to the process journal; `Project.save` and `Project.update`; the ledger's writers in `state/state.py` --
   `PresetHistory.snapshot` and its HEAD on `PresetHistory.project_dir` (the project the caller names, else the ledger
   root's parent); `save_config`, `seal_all`, `repair_version`, the registry's writes and `migrate_line` with `apply`
-  on the root's parent; `repair_encoding` and `set_aside` on the `project_dir` they are given, which both command
-  lines give. The root's parent is the project in the usual `<project>/state/`; a ledger `AUTOSOUND_STATE_ROOT` keeps
-  outside its project is locked on the project only where a caller names it, and on the root's parent otherwise, as
-  from `state.py`'s command line. Then `state/apply.py`'s `propose` (one hold over the read of HEAD, the snapshot, its
-  delta and its sheet) and `attest` (over the read of HEAD and the snapshot); `dsp_profile.py`'s writers, on the
-  folder that holds `dsp_profile.json`; and the command lines of the table below. Not under it: the Resonalyze
-  impulse-response files, the review files, the exports and the reviewer's machine files.
+  on the root's parent; `repair_encoding` and `set_aside` on the `project_dir` every caller names (a required
+  keyword; both command lines name it). The root's parent is the project in the usual `<project>/state/`; a ledger
+  `AUTOSOUND_STATE_ROOT` keeps outside its project is locked on the project only where a caller names it, and on the
+  root's parent otherwise, as from `state.py`'s command line. Then `state/apply.py`'s `propose` (one hold over the read
+  of HEAD, the snapshot, its delta and its sheet) and `attest` (over the read of HEAD and the snapshot);
+  `dsp_profile.py`'s writers, on the folder that holds `dsp_profile.json`; and the command lines of the table below.
+  Not under it, among them: the Resonalyze impulse-response files, the review files, the exports, the reviewer's
+  machine files, and what `project_seed.seed` writes after its `project.json` -- the `.gitignore`, the
+  `dsp_profile.json` it copies, the prose files, and the repository `project_repo.init` makes with its `CLAUDE.md`.
 - **Never across REW, git, `gh` or any other subprocess.** What is slow runs first, with the lock free -- the reads
   of REW in `capture-check` and `capture-close`, `enter-phase`'s intake gate (git, `gh`), the git sha a journal's
   header or a profile's stamp carries -- then the hold, a fresh strict read, the change, the write and the event.
@@ -346,29 +363,32 @@ channels into one `project.json` lost 40 of the 80 (`project.py`'s selftest, run
   it for the default 10`. Set it per call, never in an environment every child inherits: TCC's `child_env()` is what an
   agent's session runs in too. No `--lock-timeout` flag.
 - **Busy:** the lock still held at the deadline is exit 75, one line on stderr, `busy: <the lock file> is held by
-  another writer -- nothing was written, safe to retry`, with nothing taken by that hold. A verb that takes one hold
-  has then written nothing. Two command lines take several in a row:
-  - `process.py capture-close` -- its reconcile against REW, its checks, its close (the close alone when REW was not
-    read). Past its first hold its own `busy:` line names what landed -- the reconcile of the round, and its checks
-    when they ran -- and what did not, and says a retry is safe, as `busy: <the lock file> is held by another writer
-    -- the reconcile of cap_002 landed; the checks and the close did not; run capture-close again (the reconcile is
-    safe to repeat)`. Exit 75; for this verb the "nothing was written" agreed with TCC (hub #254) holds at its first
-    hold alone;
-  - `project.py catch-up` -- its three fills, each its own hold. A busy at the second or the third leaves what the ones
-    before it filled written, under the same line; each fill is idempotent, so the retry is safe.
+  another writer -- nothing was written, safe to retry`, with nothing taken by that hold. The wait is per hold. A
+  writer that writes more than once with nothing slow between takes one hold over all of it (R20), so a held lock is
+  met before its first write and "nothing was written" is true: `project.py catch-up`'s three fills, the intake's knobs
+  and a new processor's base (its set-aside of another processor's draft or profile included), each answer of the
+  intake form, as `flaw_map.py --write`, `setup_import.py --write` and `state/migrate.py --into` already did. One
+  command line takes several holds in a row, because it reads REW between them: `process.py capture-close` -- its
+  reconcile against REW, its checks, its close (the close alone when REW was not read). Past its first hold its own
+  `busy:` line names what landed -- the reconcile of the round, and its checks when they ran -- and what did not, and
+  says a retry is safe, as `busy: <the lock file> is held by another writer -- the reconcile of cap_002 landed; the
+  checks and the close did not; run capture-close again (the reconcile is safe to repeat)`. Exit 75; for this verb the
+  "nothing was written" agreed with TCC (hub #254) holds at its first hold alone.
 - **A folder that cannot be locked** -- the OS refuses the lock itself, as some network, cloud and VM shared folders
-  do -- is written WITHOUT the lock, and each hold there says so on stderr: `note: <project> cannot be locked (<why>)
-  -- writing without the project lock; two writers at once can lose a change here`. Once per hold: a verb that takes
-  several says it as many times. Refused, it would stop every write in such a folder. Not promised: a lock between two
-  machines on one shared folder -- a Mac and its Windows VM -- where each side's lock may be its own, unseen by the
-  other, and then nothing is said.
+  do; on Windows, any refusal of `LockFileEx` but ERROR_LOCK_VIOLATION -- is written WITHOUT the lock, and the writer
+  says so on stderr, once per process for each folder (R22): `note: <project> cannot be locked (<why>) -- writing
+  without the project lock; two writers at once can lose a change here`. A `note:` line on stderr with exit 0 means
+  the write landed WITHOUT the lock -- show it. TCC's own lock refused such a folder. `contract.py check` names such a
+  folder in one line of its report (`lock`, item 3) once a writer has made the lock file there. Refused, the method
+  would stop every write in such a folder. Not promised: a lock between two machines on one shared folder -- a Mac and
+  its Windows VM -- where each side's lock may be its own, unseen by the other, and then nothing is said.
 - **A lock that cannot be made** -- `.autosound/`, its `.gitignore` or `write.lock`: a project folder this user may
   not write, a read-only disk, a file where the folder belongs -- is refused before anything is taken:
   `write_lock.Unwritable`, `is_unreadable` on its class, `.path`, `.reason` and `.repair`, said as
-  `project_io.Unreadable` says itself, `<path> cannot be made for the project's writer lock (<why>), so nothing was
-  written -- <repair>`. Exit 1, one line, from every command line of the table but two: `intake.py` keeps its
-  traceback (exit 1; the sentence in its last line, where TCC's `car_library` reads it), and `setup_import.py` says it
-  as its other refusals, `REFUSED -- ...`, exit 3.
+  `project_io.Unreadable` says itself. A command line prints it in one line, `error: <path> cannot be made for the
+  project's writer lock (<why>), so nothing was written -- <repair>`, exit 1 -- every command line of the table but
+  two: `intake.py` keeps its traceback (exit 1; the sentence in its last line, where TCC's `car_library` reads it),
+  and `setup_import.py` says it as its other refusals, `REFUSED -- ...`, exit 3.
 - **In process** the three raise as they are: `write_lock.Busy` (`is_busy`, `exit_code` 75, `.path` the lock file,
   `.waited_s`), `BadTimeout` (`exit_code` 2) and `Unwritable`. Match the attribute, never the class: a copy of the
   module loaded under another name has classes of its own.
@@ -389,10 +409,13 @@ and one `error:` line:
 | `setup_import.py` | `--write` | 3, `REFUSED -- ...` |
 | `state/migrate.py` | `--into` | 1, one line |
 
-Two front ends that are not command lines say it too. The intake form's server (`intake_form.py`) answers a save the
-lock refused, or a bad wait, with HTTP 400 and `{"error": "<its line>"}` -- in a batch, 200 with it as that answer's
-error, while the others go on. `project_seed.seed`, behind TCC's new-project dialog, returns `ok` false and `problem`
-the busy line itself, no class name before it; its command line exits 1.
+Two front ends that are not command lines say it too. The intake form's server (`intake_form.py`) writes each answer
+under one hold, and answers a save the lock refused, or a bad wait, with HTTP 400 and `{"error": "<its line>"}`. In a
+batch it is 200, with that line as the answer's error; the answers after a busy one get the same line untried -- each
+would wait as long again -- while an answer refused for any other reason leaves the others to go on.
+`project_seed.seed`, behind TCC's new-project dialog, returns `ok` false and `problem` the busy line itself, no class
+name before it, and a bad wait's line the same way; its command line exits 1 for the busy lock, and 2 for a bad wait,
+said before the source is read.
 
 **`Project.save` and `Project.update`.** `save(data)` holds the lock and writes `project_rev` as the revision on disk
 plus one -- no file counts as 0 -- whatever `data` carries: facts loaded at 3 and saved over a file at 7 are written
@@ -403,9 +426,10 @@ held and saved later still write over a change made meanwhile. A load-and-save g
 `project.json` goes so. `fn` returns one of four: None (it changed `data` in place, and `data` is written), `data`
 itself, a whole document -- a dict carrying the loaded facts' own `schema_version`, as `dict(data, ...)` gives one --
 or `UNCHANGED`, which writes nothing and moves no `project_rev`. Anything else raises `TypeError` and writes nothing:
-a block returned by mistake, `d.setdefault("car", {})`, would be written as the whole file. A refusal raised in `fn`
-writes nothing. `fn` runs with the lock held, so nothing slow goes in it. `update` returns what was saved, or,
-unchanged, the facts as they stand.
+a block returned by mistake, `d.setdefault("car", {})`, would otherwise be written as the whole file. A refusal raised
+in `fn` writes nothing. `fn` runs with the lock held, so nothing slow goes in it; and a writer of the same project
+called inside `fn` re-enters the lock, lands first, and is written over by `update`'s save. `update` returns what was
+saved, or, unchanged, the facts as they stand.
 
 **What `process.py` writes first, and where it starts nothing:**
 
@@ -418,17 +442,22 @@ unchanged, the facts as they stand.
   - not called `process`: `error: <folder> does not exist, and the method's process folder is called process -- a
     mistyped path? nothing was written`;
   - called `process`, with no `project.json` beside it: `error: <project> holds no project.json: not a project yet --
-    the intake starts one with enter-phase -1; nothing was written` -- but for `enter-phase -1`, which starts one.
+    the intake starts one with enter-phase -1; nothing was written` -- but for `enter-phase -1`, which starts one, and
+    `session-start` where the project folder itself is there (R19), which starts one too.
 
-  A `process` folder beside a `project.json` is the project's first process write, and goes through: TCC's
-  new-project dialog writes `project.json` first. `project.py record-change` refuses the same way, exit 1, one line.
-  `capture-import <N>` with no titles asks REW before its writer looks, so REW's own answer can come first there.
+  A `process` folder beside a `project.json` is the project's first process write, and goes through: a project TCC's
+  new-project dialog seeds holds `project.json` before any verb. TCC's project gate also takes an empty folder, and at
+  a session's start runs `session-start`, then `enter-phase -1`, in one `try`: both go through there, where
+  `session-start` was refused and the second never ran. A mistyped `process-typo`, and `session-start` on a project
+  folder that is not there, stay refused. `project.py record-change` refuses the same way, exit 1, one line, and
+  `capture-import` says this before it asks REW for a series' titles.
 - **`capture-close` closes the round it read.** It reads the open round once, before REW, and holds each of its
   three stages to it. A round another writer closed or replaced in between is refused, exit 1, the brackets saying
   `<id> is the open round now` or `no round is open now`: before anything landed, `error: round <id> was closed or
-  replaced after capture-close read it (...) -- nothing was written`; after the reconcile landed, `error: round <id>
-  was closed or replaced by another writer while capture-close ran (...) -- <what> landed; <what> did not`. It closed
-  the round open by then, unchecked.
+  replaced after it was read (...) -- nothing was written`; after the reconcile landed, `error: round <id> was closed
+  or replaced by another writer while capture-close ran (...) -- <what> landed; <what> did not`. It closed the round
+  open by then, unchecked. It reads `AUTOSOUND_LOCK_TIMEOUT_S` before it asks REW, so a bad one is exit 2 with nothing
+  printed before it.
 
 ## 9. The modules TCC imports — guaranteed (names); `sys.path` partly planned (W-10, J1b)
 
