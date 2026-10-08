@@ -42,9 +42,12 @@ answered in the car: the level as a quantity (`capture-start … --level "-25 dB
 
 ```
 BLOCK 0 · OPEN THE ROUND (laptop, ~1 min)                      [0.0]
+  process.py <project>/process enter-phase 0
+                                        → first: the round is stamped Phase 0, and --plan reads it
   naming.py <project> next-series       → N, this project's own (1 on a new one)
-  naming.py <project> expect 0 <N>      → the titles this session owes
-  process.py <project>/process capture-start <N> "<title>" ... [--level "<dB rel. max>"]
+  process.py <project>/process capture-start <N> --plan [--level "<dB rel. max>"]
+                                        → the titles this session owes, from the method's plan;
+                                          what it prints is the message to the Arbiter
   without it blocks E and F have nothing to write on: capture-taken,
     -protective, -knobs and -check all refuse while no round is open
 
@@ -55,8 +58,8 @@ BLOCK A · SESSION LEVELS (handheld, ~5 min, nothing saved)     [0.2]
   → both numbers to the passport; the SAME numbers in Phase 3
 
 BLOCK B · HANDHELD (before the tripod)                          [0.3]
-  RTA:        <ch>_01 (rta)  for every channel        (~20–30 s of movement)
-  ellipsoid:  <ch> p1…p9_01 (sw)  for w-L w-R m-L m-R (+ any channel with an
+  RTA:        <ch>_N (rta)  for every channel         (~20–30 s of movement)
+  ellipsoid:  <ch> p1…p9_N (sw)  for w-L w-R m-L m-R (+ any channel with an
               EQ decision in 0.2–2 kHz) — OPTIONAL; the RTA is not
   (near-field optional here or any time later on the v0 slot)
 
@@ -83,10 +86,10 @@ BLOCK C · TRIPOD P0                                             [0.4]
   drift pair:  m-L (sw) ×2 in a row → < 0.1 sample   (not saved)
 
 BLOCK D · TRIPOD BLOCK (tripod does NOT move until Phase 3)     [0.5]
-  m-L-ctl1_01 (sw)          (a CONTROL: opens the series; `m-L_01ctl (sw)` as typed in the car reads the same)
-  <ch>_01 (sw)  for sw (or SWs_01 (sw) for two subs) · w-L · w-R · m-L · m-R
-                · tw-L · tw-R · c · r-L · r-R
-  m-L-ctl3_01 (sw)          (closes it; `m-L_01rep (sw)` reads the same)
+  m-L-ctl1_N (sw)           (a CONTROL: opens the series; `m-L_Nctl (sw)` as typed in the car reads the same)
+  <ch>_N (sw)  for sw (or SWs_N (sw) for two subs) · w-L · w-R · m-L · m-R
+               · tw-L · tw-R · c · r-L · r-R
+  m-L-ctl3_N (sw)           (closes it; `m-L_Nrep (sw)` reads the same)
   doors shut · an even tempo · do not air the cabin
 
 BLOCK E · CHECK ON THE SPOT (laptop in the car)                [0.6]

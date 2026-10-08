@@ -63,20 +63,7 @@ Before taking raw baseline measurements, prepare the clean starting preset in He
 
 ### 3. Capture the Baseline (per-driver)
 
-**Open the capture round FIRST — before the first sweep that gets saved.** The series this phase
-expects comes off the glossary, so you do not type it from memory:
-
-```
-python3 rew_tool/naming.py <project> expect 0 1        # the titles this phase expects
-python3 rew_tool/state/process.py <project>/process capture-start 1 "sw_1 (sw)" "sw_1 (rta)" ...
-```
-
-The version is the `_N` the titles carry — the series being measured (a DSP state can have several), not the ledger's `v_NNN`
-(naming-and-structure.md §3); the titles are what you ASKED for, so
-`capture-close` can name what never came back. **Everything else on this page refuses until the round
-is open** — `capture-taken`, `capture-skip`, `capture-protective`, `capture-knobs` and
-`capture-check` all answer «no capture round is open: `capture-start <version> [expected ...]`
-first». Opening with no titles is allowed (`capture-start 1`) and costs the outstanding list.
+**Open the capture round FIRST — before the first sweep that gets saved:** `capture-start` by the one recipe, [`capture-session-sheet.md`](references/phases/capture-session-sheet.md) Block 0; every other `capture-*` command on this page refuses until the round is open.
 
 Instruct the user to measure **each driver we'll work with**, solo, on the clean `v0` profile (protective HPFs on fragile drivers; no TA/EQ). ⚠️ **Before any sweep, run the pre-sweep safety gate** `rew_tool/gates/presweep_safety.py` → `require_safe([...])`: a full-range sweep with no/too-low/too-gentle HPF on a fragile driver (tweeter/mid) can destroy it, so the gate refuses unless HPF ≥ 1.1×Fs @ ≥24 dB/oct + level under the safe ceiling + clip headroom. Pass each driver's `driver_fs` as `project.json` holds it (the fact, not a typed number): an Fs carried in from another project does not stop the sweep — `require_safe` names it as a warning (where it came from, how to confirm or measure it) and still holds the filter to 1.1 × that Fs (skill #36, hub #225). Hardware safety is acoustic-domain but HARD — no waiver (a blown tweeter isn't recoverable).
 

@@ -71,8 +71,13 @@ Rules:
     renumber left the routes on the old numbers, and a listening ✗ re-opened the crossover choice instead of the
     joint delay.
 
+14. **`no-capture-start-literal`** (#138, I-7). A capture round is opened by one recipe, `capture-session-sheet.md`'s
+    Block 0 (`enter-phase 0` → `naming.py next-series` → `capture-start <N> --plan`), and the phase files point to
+    it: none of `references/phases/*.md` opens a round at series 1 (`capture-start 1`). The series is the project's
+    own; a runbook that said 1, followed on a project at `_49` or on a second capture day, opened series 1 again.
+
 Rules 9-12 read a phrase as a reader does (`_phrase`): across a wrapped line and inline markup, in the
-case it is given, as whole words. Their cases, and rule 13's, are `_check_*` functions, run through one
+case it is given, as whole words. Their cases, and rules 13's and 14's, are `_check_*` functions, run through one
 loop that collects every failure.
 
 Run: `scripts/docs-check.py` (from anywhere), `--selftest` for the checker's own mechanics.
@@ -804,6 +809,40 @@ def rule_step_ids(root: str) -> list[str]:
     return bad
 
 
+#: A capture round opened at series 1 in a runbook, the number wrapped onto the next line too.
+CAPTURE_START_LITERAL = re.compile(r"capture-start\s+1\b")
+#: The one home of the recipe that opens a round, which every phase file points to.
+CAPTURE_RECIPE = os.path.join(SKILL, "references", "phases", "capture-session-sheet.md")
+
+
+def rule_no_capture_start_literal(root: str) -> list[str]:
+    """No runbook opens a capture round at series 1 (#138, I-7).
+
+    A round was opened three ways: `SKILL.md` with `--plan`, the phase-0 runbook and `virtual-first.md` with
+    `capture-start 1` and titles typed by hand, `phase_-1_intake.md` with `capture-start 1 …`. The series is the
+    project's own, never an example's: followed as written on a project at `_49`, or on a second capture day, those
+    runbooks opened series 1 again -- the failure the capture sheet records (a sheet that said `_2`, on a project at
+    `_49`, brought 47 measurements back under the wrong number). The recipe has one home, `capture-session-sheet.md`'s
+    Block 0 (`enter-phase 0` → `naming.py next-series` → `capture-start <N> --plan`), and the phase files point to
+    it, so none of `references/phases/*.md` may carry the literal.
+    """
+    bad = []
+    phases = os.path.join(root, SKILL, "references", "phases")
+    if not os.path.isdir(phases):
+        return bad
+    for name in sorted(os.listdir(phases)):
+        if not name.endswith(".md"):
+            continue
+        path = os.path.join(phases, name)
+        text = open(path, encoding="utf-8").read()
+        for m in CAPTURE_START_LITERAL.finditer(text):
+            n = text.count("\n", 0, m.start()) + 1
+            bad.append(f"{os.path.relpath(path, root)}:{n}: opens a capture round at series 1 "
+                       f"(`{' '.join(m.group().split())}`) — the series is the project's own (`naming.py <project> "
+                       f"next-series`), never an example's; point to the one recipe, {CAPTURE_RECIPE}'s Block 0")
+    return bad
+
+
 RULES = [("data-not-instructions", rule_data_not_instructions),
          ("phase-source", rule_phase_source),
          ("references-orphans", rule_references_orphans),
@@ -816,7 +855,8 @@ RULES = [("data-not-instructions", rule_data_not_instructions),
          ("owner-sentence", rule_owner_sentence),
          ("arrivals", rule_arrivals),
          ("one-path-banner", rule_one_path_banner),
-         ("step-ids", rule_step_ids)]
+         ("step-ids", rule_step_ids),
+         ("no-capture-start-literal", rule_no_capture_start_literal)]
 
 
 def run(root: str) -> int:
@@ -1139,6 +1179,39 @@ def _check_step_names_held():
     assert len(said) == 1 and "step 0.7 has no name" in said[0], said
 
 
+def _check_no_capture_start_literal():
+    """Rule 14 (#138, I-7): a phase file that opens a round at series 1 is named -- the three forms the runbooks
+    carried (a code line, a step bullet, a pointer in parentheses) and the number wrapped onto the next line -- while
+    the series the project gives, another number and a file outside the phases folder are not."""
+    phases = os.path.join(SKILL, "references", "phases")
+    with _scratch() as tmp:
+        literal = rule_no_capture_start_literal(_fixture(tmp, {
+            os.path.join(phases, "phase_0_baseline.md"):
+                "# P\n\n```\npython3 rew_tool/state/process.py <project>/process capture-start 1 \"sw_1 (sw)\" ...\n```\n",
+            os.path.join(phases, "virtual-first.md"):
+                "# V\n\n- **0.0** **open the capture round** — `python3 rew_tool/state/process.py <project>/process\n"
+                "  capture-start 1 \"<title>\" ...`.\n- **0.1** and again: `capture-start\n  1`.\n",
+            os.path.join(phases, "phase_-1_intake.md"):
+                "# I\n\nA Phase-0 baseline opens at its series number (`capture-start 1 …`) and needs no ledger.\n"}))
+        assert sorted(c.split(": ")[0] for c in literal) == [
+            os.path.join(phases, "phase_-1_intake.md:3"), os.path.join(phases, "phase_0_baseline.md:4"),
+            os.path.join(phases, "virtual-first.md:4"), os.path.join(phases, "virtual-first.md:5")], literal
+        assert all("never an example's" in c and "capture-session-sheet.md's Block 0" in c for c in literal), literal
+        assert any("(`capture-start 1`)" in c and "virtual-first.md:5" in c for c in literal), "the wrap is read through"
+        # the recipe and its pointers, a series the project gives, another number, and a file the rule does not read
+        pointed = _fixture(tmp, {
+            os.path.join(phases, "capture-session-sheet.md"):
+                "```\n  naming.py <project> next-series       → N\n"
+                "  process.py <project>/process capture-start <N> --plan [--level \"<dB rel. max>\"]\n"
+                "  process.py <project>/process capture-start <M> --under v_007 \"<title>\" ...\n```\n",
+            os.path.join(phases, "phase_0_baseline.md"):
+                "**Open the capture round FIRST:** `capture-start` by the one recipe; on a project at 11, "
+                "`capture-start 12 --plan`.\n",
+            os.path.join(SKILL, "rew_tool", "state", "process-schema.md"):
+                "`capture-start 1 -h` opened a round expecting a capture titled `-h`.\n"})
+        assert rule_no_capture_start_literal(pointed) == [], rule_no_capture_start_literal(pointed)
+
+
 def _selftest() -> int:
     import shutil
     import tempfile
@@ -1241,7 +1314,7 @@ def _selftest() -> int:
                               "Run `capture-protective <ch> OFF`, then `capture-close`.\n")
         assert any("never `capture-start`" in c for c in rule_capture_round_opened(unopened))
         opened = phase_file("phase_0_baseline.md",
-                            "`capture-start 1`, then `capture-protective <ch> OFF`.\n")
+                            "`capture-start <N> --plan`, then `capture-protective <ch> OFF`.\n")
         assert rule_capture_round_opened(opened) == [], rule_capture_round_opened(opened)
 
         def core_file(body: str):
@@ -1303,12 +1376,13 @@ def _selftest() -> int:
         moved_code = rule_protective_floor(floor_tree("HPF ≥ 1.1×Fs @ ≥24 dB/oct\n", margin="1.2"))
         assert any("1.1×Fs" in c for c in moved_code), "the gate is the home: a doc left behind is named"
 
-        # -- rules 9-13 (#138): each a `_check_*` of its own, and one loop that collects every failure
+        # -- rules 9-14 (#138): each a `_check_*` of its own, and one loop that collects every failure
         failures = []
         for check in (_check_plugin_route, _check_owner_sentence, _check_arrivals, _check_one_path_banner,
                       _check_step_ids, _check_step_ids_off_by_one, _check_step_ids_wishes_on_crossovers,
                       _check_step_ids_delays_on_coarse_eq, _check_step_ids_second_on_review,
-                      _check_step_ids_after_a_slash, _check_step_ids_read_as_written, _check_step_names_held):
+                      _check_step_ids_after_a_slash, _check_step_ids_read_as_written, _check_step_names_held,
+                      _check_no_capture_start_literal):
             try:
                 check()
             except AssertionError as exc:
@@ -1340,7 +1414,10 @@ def _selftest() -> int:
           "line cites, after a slash, behind a capital article) or whose step does not exist (1.10 too), a name table "
           "parted from the steps, a route by a bare number (one ending its sentence too) and a translation routing "
           "a row elsewhere are each named, while a value, a unit, a version, a section, a range, a word no step is "
-          "named by and a heading's number are not pointers; the rules' checks report every failure in one run")
+          "named by and a heading's number are not pointers; a phase file opening a capture round at series 1 "
+          "is named, on a code line, in a bullet, in a pointer and wrapped, while the series the project gives, "
+          "another number and a file outside the phases folder are not; the rules' checks report every failure in "
+          "one run")
     return 0
 
 

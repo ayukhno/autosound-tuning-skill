@@ -110,33 +110,29 @@ Step names describe the action, not a command. The joint and L/R **phase** is th
 Order of channels is the user's in TCC; the path only constrains: handheld before the tripod; the whole
 tripod block in one go, **tripod untouched until Phase 3**; `m-L-ctl1` first and `m-L-ctl3` last in the
 tripod block; every channel both `(sw)` and `(rta)`.
-- **0.0** **open the capture round** — `python3 rew_tool/state/process.py <project>/process
-  capture-start 1 "<title>" ...` (the expected titles: `python3 rew_tool/naming.py <project> expect
-  0 1`). Not a formality and not renumbered into 0.1: 0.6 and 0.7 below, and every `capture-taken`
-  between them, REFUSE while no round is open — the round is what makes these sweeps one series
-  instead of loose titles only REW remembers.
+- **0.0** **open the capture round** — `capture-start` by the one recipe, [`capture-session-sheet.md`](capture-session-sheet.md) Block 0.
 - **0.1** `v0` into the DSP (a permanent slot — near-field any time later), **effects and dynamic
   processing off** — everything that is not gain, delay, polarity, crossover or EQ. The vendor's own
   names for them are in the profile: `python3 rew_tool/dsp_profile.py effects <profile.json>` prints
   the list, and **exits 3 saying so when the DSP has none recorded** — that is a thing to go and read
-  off the DSP's screens, not a reason to guess which switches counted. Then the seat, then log Phase 0.
+  off the DSP's screens, not a reason to guess which switches counted. Then the seat.
 - **0.2** **session levels, handheld**: one REW output level for all sweeps, one head-unit/Conductor
   level for all RTA; then the knobs are not touched. Set by the **loudest-driver test** (usually the
   sub): peak −5…−10 dBFS in; the quietest driver above the cabin noise (example: sub −5, centre −15…−20,
   garage noise −40 works, because a 12 s sweep × 4 reps accumulates; garage noise is low-frequency, so
   the sub and midbass suffer, not the tweeters). The judge is `capture-check` per measurement, not a
   number. **The same numbers in Phase 3.**
-- **0.3** **handheld**: RTA `<ch>_01 (rta)` of every channel (~20–30 s of movement); the ellipsoid
-  `<ch> p1…p9_01 (sw)` for w-L/R, m-L/R and any channel with EQ decisions in 0.2–2 kHz. Near-field
+- **0.3** **handheld**: RTA `<ch>_N (rta)` of every channel (~20–30 s of movement); the ellipsoid
+  `<ch> p1…p9_N (sw)` for w-L/R, m-L/R and any channel with EQ decisions in 0.2–2 kHz. Near-field
   optional here or any time on the `v0` slot (the working sub LPF hides exactly the natural roll-off
   near-field is taken to see).
 - **0.4** **tripod P0**: two tape sets — (a) to return the tripod: three distances from the capsule to
   fixed body points (windscreen, driver's door glass, roof) + a seat-rail mark; (b) for the desk:
   capsule → each driver's centre (the L/R arbiter, §23). Timing = loopback. Drift pair `m-L (sw)` ×2 →
   < 0.1 sample (not saved).
-- **0.5** **tripod block**: `m-L-ctl1_01 (sw)` → the solos `<ch>_01 (sw)` of **every** channel (subs, w,
-  m, tw, centre, rear — a couple of minutes while the base is set; two subs → also `SWs_01 (sw)`) →
-  `m-L-ctl3_01 (sw)`. Doors shut, an even tempo.
+- **0.5** **tripod block**: `m-L-ctl1_N (sw)` → the solos `<ch>_N (sw)` of **every** channel (subs, w,
+  m, tw, centre, rear — a couple of minutes while the base is set; two subs → also `SWs_N (sw)`) →
+  `m-L-ctl3_N (sw)`. Doors shut, an even tempo.
 - **0.6** **check on the spot** (`capture-check --session`): each measurement present / usable — the
   IR peak above the pre-ringing ("broken impulse"), not a flat curve (loopback or a dead input), not
   in the noise; the whole session in one table (levels side by side, loudest/quietest); ctl1/ctl3 →
@@ -363,17 +359,17 @@ reveals a broken driver or wiring); without a rig, Fs from the datasheet with ma
 ### Phase 3 · Car, a short session — *goal: verify the desk against what the mic hears, do what the desk can't (MMM), and lock*
 - **3.1** **enter and check entry**: the preset into the DSP per the sheet (EQ by file import); "entered"
   in the ledger. Levels from the passport. Two controls, from the tripod: *base* — `m-L (sw)` vs
-  `m-L-ctl3` from Phase 0 → the drift between capture and today, recorded; *entry* — 1–2 solos `_02 (sw)`
+  `m-L-ctl3` from Phase 0 → the drift between capture and today, recorded; *entry* — 1–2 solos `_N (sw)`
   (e.g. tw-L, w-L) vs the predicted processed channel (`verify_prediction --entry`: shape after one
   offset, the worst point and the chain feature nearest to it) — catches a PC-Tool entry error before it
   becomes a "bad joint".
-- **3.2** **all sums from the tripod** `_02 (sw)`, at the same levels: the joints (sub+midbass L/R,
+- **3.2** **all sums from the tripod** `_N (sw)`, at the same levels: the joints (sub+midbass L/R,
   midbass+mid L/R, mid+tweeter L/R), L, R, ALL. Predicted/measured delta per joint band: ≤ 1 dB
   trusted; more → a **warning** (joint, band) + a "not trusted" mark, and we go on. For a warned joint,
   the decision is checked on the spot against the measured sum (delay/polarity/all-pass as today), a
   change in the DSP, the joint switch repeated. The only in-car iteration, and only for such joints.
   *A car that was already tuned:* the same — the prediction is the chosen variant's, and the "as is" block from Phase 0 is the before.
-- **3.3** **tripod down.** MMM `_02 (rta)` handheld: L, R, ALL, groups. Fine EQ over MMM as today
+- **3.3** **tripod down.** MMM `_N (rta)` handheld: L, R, ALL, groups. Fine EQ over MMM as today
   (2c/2d): group targets, the residual to target, only what stands in the MMM → enter → `_final (rta)`:
   every channel, groups, L, R, ALL. **What cuts and what booms** (`ear_suspects`): the top three peaks
   above the local trend on the MMM, classed (cuts 2–5 kHz, sibilant 5–9 kHz, nasal 0.8–2 kHz, boxy
