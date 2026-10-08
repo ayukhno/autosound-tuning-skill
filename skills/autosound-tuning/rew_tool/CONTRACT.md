@@ -100,9 +100,10 @@ tiers_vs_profile}`, `inherited`, `sources_gone`, `complete`. As built today (#13
 the exception's class into `state`: REW down is `reachable: false`; REW answering its list with an error or with
 something that is no measurement list is `reachable: true`, the list not read; an address that is none (`config`),
 or a failure that is none of REW's, is `reachable: null`, its note starting `skipped:` as `--no-rew`'s does.
-`unreadable` names a `project.json` or a standalone `glossary.json` that is there and cannot be read, which both
-gates' last lines name first (the glossary's row is then there and not valid, with its repair), and over which both
-gates exit 1 (#134: `--phase0-gate` exited 0 under that line). Over a `project.json` that cannot be read and no
+`unreadable` names a `project.json`, a standalone `glossary.json`, `state/slots.json` or an old layout's
+`state/<preset>/HEAD` that is there and cannot be read, which both gates' last lines name first (the file's row is
+then there and not valid, with its repair), and over which both gates exit 1 (#134: `--phase0-gate` exited 0 under
+that line). Over a `project.json` that cannot be read and no
 standalone `glossary.json`, the glossary is kept in the file nobody could read: it is not in `missing`, and its row
 says it was not read. A `glossary.json` with a UTF-8 BOM is a glossary. `encoding_unread` names the files the encoding
 survey could not open; `encoding_cut` (`[{file, repair}]`) the files it found cut inside their last character, each
