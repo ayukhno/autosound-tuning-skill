@@ -244,6 +244,10 @@ appended line is fsynced (and the folder, when the append made the file), so it 
   explicitly cyclical, so `enter_phase` is not a one-way ratchet.
 - **State writes are atomic** (write-temp-then-rename, the folder fsynced after on POSIX). A torn write would
   otherwise read back as an empty process, i.e. "nothing ever happened".
+- **One writer at a time** (#141, J2b). Every public writer of `Process` holds the project's writer lock across its
+  read, its change, its write and its event (below, and `CONTRACT.md` item 8), so a second writer -- TCC, another
+  command line -- neither lands in between nor is written over. The selftest holds every writer to it by its source
+  (`_check_every_writer_holds_the_lock`): `@_locked`, or a hold of its own after its slow part.
 - **A torn last journal line is skipped, not fatal** — the rest of the history still loads. A journal that cannot be
   opened, and a line in another code page, are refused, never read as missing (above).
 - **A state change and its event** (#134, F M-7). Each state write is followed by its event. A writer reads the
@@ -254,7 +258,14 @@ appended line is fsynced (and the folder, when the append made the file), so it 
   {...}` -- it was 70, a bug. An append refused with nothing written before it says `the <type> event was not
   recorded`, exit 1. A replace of `process-state.json` refused past the retries (Windows: a sync client, a scanner)
   is exit 1, `<state> could not be written (...) -- <repair>; it is as it was` (H minor 2). `session-close` records
-  its close before it prints its report, so a refused close prints nothing first.
+  its close before it prints its report, so a refused close prints nothing first. A round's close goes the same way
+  (#141, J2b): `capture-close`, and `capture-start` over an open round, write the state first and append
+  `capture_round_closed` after it, so a replace refused ("it is as it was") leaves no close in the journal either,
+  and the retry closes the round once. The event went first, and that retry closed the round a second time. One state
+  write that owes two lines -- `capture-start` over an open round: the old round's close, then the new round's
+  `capture_task_issued` -- says both, in order, when the first is refused: `<state> is written, but its journal lines
+  are not: <why>. ... append these lines to <journal>, in order:`, then each line, raw JSON, on a line of its own. That
+  refusal ends in a bare event: a front end that shows only the last line of stderr shows that line.
 
 ## Usage
 
@@ -284,11 +295,11 @@ usage on stdout, exit 0.
 | exit | means |
 |---|---|
 | 0 | done, or yes |
-| 1 | refused, or no: the reason on stderr (`error: …`); REW answering with an error (`error: REW answered with an error: <REW's words> -- nothing was written`), or with any other state but "unavailable" -- something the method cannot read (`protocol`), `write_mismatch`, `not_found`, `ambiguous`, `config` -- (`error: <its words> -- nothing was written`; a `write_mismatch` ends `-- REW may hold part of the write: check REW's EQ before going on`, and a filter write REW acknowledged and nobody could read back, `rew_unchecked` on its class, is said in its own words); `capture-check` with REW's list not read for any reason but REW not answering (`error: REW's measurement list was not read (<why>) -- nothing was recorded`); a typed mistake in a value the verb parses itself (a leg, a series) |
-| 2 | usage: an unknown verb, a flag the verb does not take, a flag's value missing (one of the verb's flags, `-h` or `--help` in its place, or nothing after it: a value flag left last), a value on a flag that takes none, one of the verb's flags with its hyphens autocorrected to a dash, `--help` or `-h` after other arguments, too few arguments |
+| 1 | refused, or no: the reason on stderr (`error: …`); REW answering with an error (`error: REW answered with an error: <REW's words> -- nothing was written`), or with any other state but "unavailable" -- something the method cannot read (`protocol`), `write_mismatch`, `not_found`, `ambiguous`, `config` -- (`error: <its words> -- nothing was written`; a `write_mismatch` ends `-- REW may hold part of the write: check REW's EQ before going on`, and a filter write REW acknowledged and nobody could read back, `rew_unchecked` on its class, is said in its own words); `capture-check` with REW's list not read for any reason but REW not answering (`error: REW's measurement list was not read (<why>) -- nothing was recorded`); a typed mistake in a value the verb parses itself (a leg, a series); a process folder that is no project's, the project's writer lock that cannot be made, a round another writer closed or replaced under `capture-close` or `capture-check`, a phase another writer entered under `enter-phase` (#141, below) |
+| 2 | usage: an unknown verb, a flag the verb does not take, a flag's value missing (one of the verb's flags, `-h` or `--help` in its place, or nothing after it: a value flag left last), a value on a flag that takes none, one of the verb's flags with its hyphens autocorrected to a dash, `--help` or `-h` after other arguments, too few arguments; an `AUTOSOUND_LOCK_TIMEOUT_S` that is no number of seconds (#141) |
 | 69 | REW did not answer, and nothing was written (sysexits' `EX_UNAVAILABLE`) -- but a filter write REW acknowledged before it stopped answering (`rew_unchecked` on its class), said in its own words: sent, acknowledged, not checked |
 | 70 | an unexpected error, a bug: Python's traceback on stderr, then `error: unexpected <type>: <message>` (`EX_SOFTWARE`) |
-| 75 | the project busy: reserved for the lock (J2b, W-9), not raised yet (`EX_TEMPFAIL`) |
+| 75 | the project busy (`EX_TEMPFAIL`; #141): another writer held the project's writer lock past `AUTOSOUND_LOCK_TIMEOUT_S`, said in one line, `busy: <the lock file> is held by another writer -- nothing was written, safe to retry` -- but `capture-close` stopped past its first hold, whose own `busy:` line names what landed (below) |
 
 - **Each verb takes its own flags, and only those.** `VERB_FLAGS` in `process.py` is the table, one string literal
   per flag, and `_FLAG_TAKES_VALUE` says of each whether it takes a value (the selftest holds the two to each other).
@@ -365,7 +376,59 @@ usage on stdout, exit 0.
   runs, and a bug in the checks (named with its type), are said as what happens: the checks were not run, and the
   round closes on the record, unchecked. The state that cannot be read at the checks, and the checks' journal line
   refused after their state write, are refusals, exit 1, the round open (batch 3's re-review O3): both read as
-  "checks not run" and the round closed.
+  "checks not run" and the round closed. So are a lock held past the wait at the checks and a round moved under them
+  (#141, below).
+- **One writer at a time** (#141, J2b; `CONTRACT.md` item 8 has the lock's file, its sign and the method's other
+  writers). Every verb that writes the state or the journal holds the project's writer lock,
+  `<project>/.autosound/write.lock`, across its read, its change, its state write and its event: a writer of `Process`
+  around its whole call (`_locked`) but `enter_phase` and `check_captures`, which take it after their slow part, and
+  `project.py record-change` around its append. What is slow runs first, with the lock free. `capture-check` reads
+  REW, then merges its verdicts by title, under the hold, into the state as it is then; a round closed or replaced
+  while REW was read is refused, `round <id> was closed or replaced while REW was read -- nothing was written; run
+  capture-check again`, exit 1. `enter-phase` runs its gates (git, `gh`), then refuses a phase another writer made
+  active meanwhile, `phase N is not entered: phase M is active now, and its gates were checked with phase K active --
+  another writer moved the process meanwhile; nothing was written, run enter-phase N again`, exit 1. The sha a run's
+  journal header carries is asked of git before the first hold. `session-close` reads what is open and records the
+  close under one hold; `--check` takes none. A held lock is waited for `AUTOSOUND_LOCK_TIMEOUT_S` seconds (read at
+  each call; 10 when unset), then exit 75 with its one `busy:` line; a value that is no number of seconds is exit 2,
+  before anything is taken or made. A folder the OS cannot lock is written without the lock, with a `note:` line on
+  stderr at each hold; one where the lock cannot be made (a project folder this user may not write, a read-only disk)
+  is refused, exit 1, in one line: `<path> cannot be made for the project's writer lock (<why>), so nothing was written
+  -- <repair>`. A writer's own refusals of its input (`done` on prose alone, `skip` with no reason) come under the
+  hold too, so behind a held lock they answer 75 first.
+- **A process folder that does not exist starts nothing** (#141, W-8's R46; `Process._require_home`). A mistyped path,
+  `<project>/process-typo`, got a state and a journal of its own from the first verb that wrote there. Now every verb
+  that writes is refused on a folder that does not exist, exit 1, before anything is made -- no folder, no
+  `.autosound/`, no plan:
+  - not called `process`: `<folder> does not exist, and the method's process folder is called process -- a mistyped
+    path? nothing was written`;
+  - called `process`, with no `project.json` beside it: `<project> holds no project.json: not a project yet -- the
+    intake starts one with enter-phase -1; nothing was written`, but for `enter-phase -1`, the intake, which starts a
+    project there.
+
+  A `process` folder beside a `project.json` is the project's first process write, and goes through: TCC's
+  new-project dialog writes `project.json` before any verb. `project.py record-change` refuses the same way, exit 1,
+  in one line (it appends to the journal outside `_locked`). The verbs that only read make nothing either.
+  `capture-import <N>` with no titles asks REW before its writer looks, so REW's own answer can come first there.
+- **`capture-close` closes the round it read** (#141, R7, R9). It reads the open round once, before REW -- no round
+  open is refused there, before a line is printed -- and takes the lock for each of its stages: the reconcile against
+  REW (when REW's list was read), the checks (when the round holds taken captures), the close; each is held to the
+  round it read. A round another writer closed or replaced in between is refused, exit 1, the brackets saying `<id> is
+  the open round now` or `no round is open now`: before anything landed, `round <id> was closed or replaced after
+  capture-close read it (...) -- nothing was written`; after the reconcile landed, `round <id> was closed or replaced
+  by another writer while capture-close ran (...) -- <what> landed; <what> did not`, naming the reconcile of the round,
+  and its checks when they ran, and what did not (the checks and the close, or the close). It closed the round open
+  by then, one this verb never read against REW nor checked. A lock held past the wait at the first stage is
+  write_lock's own `busy:` line, nothing written; at a later one, the verb's own, exit 75, naming the same: `busy:
+  <the lock file> is held by another writer -- <what> landed; <what> did not; run capture-close again (<what> safe to
+  repeat)`, as `... -- the reconcile of cap_002 landed; the checks and the close did not; run capture-close again
+  (the reconcile is safe to repeat)`. For this verb past its first hold, then, "nothing was written" does not hold:
+  what landed is said instead.
+- **`capture-start` says its plan file** (#141, S-101). Once the round is recorded, its list goes to
+  `docs/plans/<_N|v_NNN>-capture.md`, and the verb says which: `plan: <the file, its absolute path>`, the last line on
+  stdout; or, when the file could not be written, one line on stderr, `note: the round is open, but its plan <path>
+  could not be written (<why>) -- process.py <dir> show holds its list`. Exit 0 either way: the round is the record.
+  A file that could not be written was said nowhere.
 - **A bug is 70, not 1.** An exception no refusal names exits 70 with its traceback, where it exited 1 like a
   refusal or escaped as a bare traceback; an IndexError too. An unreadable file (`is_unreadable`) stays a refusal,
   exit 1.

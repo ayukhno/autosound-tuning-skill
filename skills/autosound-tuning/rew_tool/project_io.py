@@ -211,7 +211,8 @@ def append_line(path, line):
     the torn line stays one skipped line and the new one is read (audit T-14).
 
     Text mode, UTF-8: the line ending is the platform's, as the `open(path, "a")` this replaces wrote it. The append
-    itself is a plain one and takes no lock; the lock comes in W-9 (J2b). The line is fsynced, and the folder too when
+    itself is a plain one and takes no lock of its own: its one caller, `process.py`'s journal append, runs inside a
+    writer that holds the project's writer lock (`write_lock.py`, #141). The line is fsynced, and the folder too when
     the append made the file (F M-6): an event survives a power loss once this returns.
 
     A journal that is there and cannot be opened raises `Unreadable` (`cannot_open`), nothing appended (F M-7): it
