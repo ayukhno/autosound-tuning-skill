@@ -346,6 +346,11 @@ can still load a sibling that edits `sys.path`: `Process.enter_phase` loads `con
 loads `timebase.py`. From J1b (W-10), no module TCC imports, and no module those load, edits `sys.path` at import or
 at call time.
 
+The method's modules load their siblings through `rew_tool/siblings.py`, one module object per file under one lock
+(`siblings.load` adopts a copy already loaded, or waits for a load in progress); TCC's `reload_loaded()` drops
+`_autosound_<copy>_siblings` with that lock and its table, so drop it only when no method call is in flight, or a
+thread inside a load can run a file twice.
+
 TCC also compares values that no name pins: naming's method tags `"sw"` and `"rta"`, rew_api's measurement kinds
 `"sweep"`, `"rta"` and `"impedance"`, and the journal's event names and fields. The shapes of returned values (the
 keys of `verify.verdict`, the result of `resonalyze_vc.convert` or `eq_export.export_eq`) are written down in J1b
