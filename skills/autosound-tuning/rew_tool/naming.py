@@ -185,6 +185,33 @@ class NamingError(ValueError):
     """A title that cannot be expressed in, or parsed from, the grammar."""
 
 
+def read_glossary_file(path, project_dir):
+    """A standalone `glossary.json` as the method's own readers read it (`Glossary.for_project(..., strict=True)`) and as
+    `contract.py check` does: its JSON object, or None when there is no such file.
+
+    One that is there and cannot be read -- empty, cut off, not UTF-8, not JSON, not an object, held, a folder in its
+    place -- or that a newer method wrote raises `project_io.Unreadable` (`is_unreadable` on its class), naming it, the
+    reason and the repair. So does a link to nothing (#134, batch 4's third re-review, N-M2): `read_json` reads a link
+    whose target is gone as no file, and the strict read said "no glossary" where the lenient one, which looks past the
+    link, read `project.json`'s -- and `capture-start --plan` said it "needs the project's glossary" over one."""
+    io_ = _siblings().load("project_io.py")
+    own = io_.read_json(path, None, repair=io_.restore_line(path), repair_encoding=io_.reencode_line(project_dir))
+    if own is None:
+        if os.path.islink(path):
+            try:
+                target = os.readlink(path)
+            except OSError:
+                target = "its target"
+            raise io_.Unreadable(path, f"is a link to {target}, which is not there",
+                                 f"restore {target}, or point the link at the glossary -- or remove the link, and the "
+                                 f"glossary project.json keeps is read")
+        return None
+    newer = io_.newer_schema(own, SCHEMA_VERSION)
+    if newer is not None:
+        raise io_.Unreadable(path, f"is schema v{newer}; this method reads v{SCHEMA_VERSION}", io_.UPDATE_THE_METHOD)
+    return own
+
+
 class Glossary:
     """The agreed codes for ONE car (`autosound_context.md §5`), as data.
 
@@ -228,8 +255,10 @@ class Glossary:
         1 keeps for TCC. `strict` is the method's own readers' (#134, batch 4's re-review, Out of Scope 6): a
         `glossary.json` or a `project.json` that is there and cannot be read -- cut off, not UTF-8, not JSON, not an
         object, held, a folder in its place, or a glossary a newer method wrote -- raises `project_io.Unreadable`
-        (`is_unreadable` on its class), naming the file, the reason and the repair, as `contract.py check` reads them.
-        Read as none, `capture-start --plan` said it "needs the project's glossary" over a glossary cut off.
+        (`is_unreadable` on its class), naming the file, the reason and the repair, as `contract.py check` reads them;
+        so does a `glossary.json` that is a link to nothing (`read_glossary_file`), which the default reads past, to
+        `project.json`'s. Read as none, `capture-start --plan` said it "needs the project's glossary" over a glossary
+        cut off.
         """
         standalone = os.path.join(project_dir, "glossary.json")
         combined = os.path.join(project_dir, "project.json")
@@ -237,16 +266,8 @@ class Glossary:
             io_ = _siblings().load("project_io.py")
             data = io_.read_json(combined, {}, repair=io_.restore_line(combined),
                                  repair_encoding=io_.reencode_line(project_dir))
-            if os.path.lexists(standalone):
-                own = io_.read_json(standalone, {}, repair=io_.restore_line(standalone),
-                                    repair_encoding=io_.reencode_line(project_dir))
-                newer = io_.newer_schema(own, SCHEMA_VERSION)
-                if newer is not None:
-                    raise io_.Unreadable(standalone, f"is schema v{newer}; this method reads v{SCHEMA_VERSION}",
-                                         io_.UPDATE_THE_METHOD)
-                glossary = cls(own)
-            else:
-                glossary = cls(data.get("glossary") or {})
+            own = read_glossary_file(standalone, project_dir) if os.path.lexists(standalone) else None
+            glossary = cls(own) if own is not None else cls(data.get("glossary") or {})
         else:
             try:
                 with open(combined, encoding="utf-8-sig") as f:
@@ -975,6 +996,54 @@ def _check_cli_reads_the_glossary_strictly():
         shutil.rmtree(d, ignore_errors=True)
 
 
+def _check_dangling_glossary_link():
+    """A `glossary.json` that is a link to nothing is refused by the strict read, naming the link, where it points and
+    the repair -- never "no glossary" (#134, batch 4's third re-review, N-M2): `read_json` read the link as no file, so
+    the strict read gave an empty glossary over a `project.json` that keeps one, while the lenient read and `contract.py
+    check` read that one. The default read is unchanged: it reads past the link, to `project.json`'s glossary.
+    `naming.py codes` says it in one line, exit 1. Where this system makes no links (Windows without the privilege), the
+    check has nothing to make and says so."""
+    import contextlib
+    import io
+    import shutil
+    import tempfile
+    d = tempfile.mkdtemp(prefix="autosound_naming_link_")
+    try:
+        with open(os.path.join(d, "project.json"), "w", encoding="utf-8") as fh:
+            json.dump({"glossary": {"channels": [{"code": "w-L", "active": True}, {"code": "m-L", "active": True}]}},
+                      fh)
+        link, gone = os.path.join(d, "glossary.json"), os.path.join(d, "shared", "glossary.json")
+        try:
+            os.symlink(gone, link)
+        except (OSError, NotImplementedError):
+            print("  (no symbolic links on this system: the link to nothing was not made)")
+            return
+        failures = []
+        try:
+            got = Glossary.for_project(d, strict=True)
+        except Exception as exc:  # noqa: BLE001 -- the refusal is under test; matched by its type's attribute
+            want = (f"{link} is a link to {gone}, which is not there -- restore {gone}, or point the link at the "
+                    f"glossary -- or remove the link, and the glossary project.json keeps is read")
+            if not getattr(type(exc), "is_unreadable", False) or str(exc) != want:
+                failures.append(f"strict: raised {type(exc).__name__}: {exc}")
+        else:
+            failures.append(f"strict: read as {got.channel_codes()}")
+        if Glossary.for_project(d).channel_codes() != ["w-L", "m-L"]:
+            failures.append(f"the default read: {Glossary.for_project(d).channel_codes()}")
+        out, err = io.StringIO(), io.StringIO()
+        try:
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                rc = _main(["naming.py", d, "codes"])
+        except Exception as exc:  # noqa: BLE001 -- a traceback is a failure under test
+            rc = f"raised {type(exc).__name__}: {exc}"
+        if rc != 1 or out.getvalue() or err.getvalue().count("\n") != 1 \
+                or not err.getvalue().startswith(f"error: {link} is a link to {gone}"):
+            failures.append(f"codes: rc {rc!r}, stdout {out.getvalue()!r}, stderr {err.getvalue()[-300:]!r}")
+        assert not failures, "\n  ".join(["a glossary.json that is a link to nothing:"] + failures)
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+
+
 def _selftest():
     """The grammar's own checks, and SCR-039's: a renamed channel keeps its captures.
 
@@ -983,7 +1052,7 @@ def _selftest():
     """
     failures = []
     for check in (_check_productions, _check_bom_glossary_read, _check_for_project_strict,
-                  _check_cli_reads_the_glossary_strictly):
+                  _check_cli_reads_the_glossary_strictly, _check_dangling_glossary_link):
         try:
             check()
         except AssertionError as exc:

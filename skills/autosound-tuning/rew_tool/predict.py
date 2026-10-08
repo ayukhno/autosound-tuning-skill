@@ -2575,7 +2575,8 @@ def _check_profile_read_strictly():
     as "no rate stated" -- the advice "State dsp_processing_rate_hz in the profile" over a profile cut off after
     stating it -- and the run modelled at the assumed rate, with `--align` on a 0.01 ms grid and no delay ceiling.
     `_profile_limits` refuses it too, where it answered (None, None). No profile is still no rate, and the run goes
-    on."""
+    on. A rate the profile states that is no rate refuses the run the same way, by the settings sheet's rule (batch 4's
+    third re-review, Out of Scope 1)."""
     import contextlib
     import io as _io
     import shutil
@@ -2642,6 +2643,17 @@ def _check_profile_read_strictly():
                     failures.append(f"{label}: _profile_limits raised {type(exc).__name__}")
             else:
                 failures.append(f"{label}: _profile_limits read it as {got!r}")
+        # A rate the profile states that is no rate, by the settings sheet's rule (batch 4's third re-review, Out of
+        # Scope 1): `true` bound the model at 1 Hz, and the run went on without a word.
+        with open(path, "wb") as fh:
+            fh.write(json.dumps({"dsp_profile": {"name": "X", "vendor": "Y", "groups": [],
+                                                 "dsp_processing_rate_hz": True}}).encode("utf-8"))
+        rc, out, err = run(argv)
+        lines = err.strip().splitlines()
+        if rc != 1 or out.strip() or len(lines) != 1 \
+                or not lines[0].startswith(f"error: {path} states dsp_processing_rate_hz true, which is no processing "
+                                           f"rate"):
+            failures.append(f"a rate that is no rate: rc {rc!r}, stdout {len(out)} chars, said {lines[-3:]!r}")
         assert not failures, "\n  ".join(["a profile predict could not read:"] + failures)
     finally:
         if saved_env is not None:

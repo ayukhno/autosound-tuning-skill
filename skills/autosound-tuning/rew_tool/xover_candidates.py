@@ -223,7 +223,9 @@ def _check_cli_refuses_unreadable_profile():
     exit 3, the one line on stderr, nothing on stdout. It was read as "no range" (#136); then said as `error:` exit 1,
     beside every other refusal's `refusing:` exit 3, and after a rate note `bind_model_rate` made of the same file read
     as one stating no rate -- or, for a newer method's, bound to its rate. A `channel_gain.range_db` that is no
-    `[low, high]` in dB is refused the same way, naming the field: it read as "no range" in silence (H 17's twin)."""
+    `[low, high]` in dB is refused the same way, naming the field: it read as "no range" in silence (H 17's twin). So
+    is a stated rate that is no rate -- true, text, 0 -- by the settings sheet's rule, nothing bound (batch 4's third
+    re-review, Out of Scope 1): `true` bound the model at 1 Hz without a word."""
     import contextlib
     import io
     import shutil
@@ -242,6 +244,12 @@ def _check_cli_refuses_unreadable_profile():
             cases.append((json.dumps({"dsp_profile": {"name": "X", "channel_gain": {"range_db": bad}}}).encode(),
                           f"refusing: {path}: channel_gain.range_db is {json.dumps(bad)}, not [low, high] in dB",
                           "correct it in the profile"))
+        # A rate the profile states that is no rate (batch 4's third re-review, Out of Scope 1): the model was bound at
+        # 1 Hz for `true`, without a word.
+        for bad, shown in ((True, "true"), ("48000", '"48000"'), (0, "0")):
+            cases.append((json.dumps({"dsp_profile": {"name": "X", "dsp_processing_rate_hz": bad}}).encode(),
+                          f"refusing: {path} states dsp_processing_rate_hz {shown}, which is no processing rate",
+                          f"set-field {d} dsp_processing_rate_hz <Hz>, then finalize"))
         failures = []
         for raw, starts, said in cases:
             with open(path, "wb") as fh:
@@ -411,8 +419,16 @@ def _main(argv=None):
         return 3
     # The response model is bound to THIS device's processing rate before anything is modelled.
     # Not inside a branch: the crossover model runs on every path, and a binding that happens only
-    # where the delay grid is computed leaves the common case on a module constant (hub #28).
-    _rate_hz, _rate_note = dsp_profile.bind_model_rate(prof if prof is not None else args.project)
+    # where the delay grid is computed leaves the common case on a module constant (hub #28). A rate the profile states
+    # that is no rate -- text, 0, true -- is refused by the sheet's rule, in this tool's form, nothing bound (#134,
+    # batch 4's third re-review, Out of Scope 1).
+    try:
+        _rate_hz, _rate_note = dsp_profile.bind_model_rate(prof if prof is not None else args.project, path=path)
+    except Exception as exc:  # noqa: BLE001 -- matched by its attribute; anything else still raises
+        if not getattr(type(exc), "is_unreadable", False):
+            raise
+        print(f"refusing: {exc}", file=sys.stderr)
+        return 3
     if _rate_note:
         print(f"  \u26a0 {_rate_note}", file=sys.stderr)
 

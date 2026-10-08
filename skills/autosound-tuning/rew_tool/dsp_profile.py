@@ -48,6 +48,7 @@ import errno
 import glob
 import hashlib
 import json
+import math
 import os
 import sys
 import time
@@ -126,6 +127,34 @@ def processing_rate_hz(data):
     profile = _unwrap(data)
     v = profile.get(PROCESSING_RATE_KEY)
     return v if v is not None else profile.get(LEGACY_RATE_KEY)
+
+
+def stated_rate_hz(data, path, project_dir=None):
+    """The processing rate a profile states, read by the one rule the settings sheet (`state.processing_rate`) and the
+    model (`bind_model_rate`) read it by (#134, R58e; batch 4's third re-review, Out of Scope 1 and 2).
+
+    `data` is the profile's JSON, wrapper and all; `path` is the file it came from, named in a refusal, and
+    `project_dir` the project the repair names (None: `<project>`). The canonical key is read, and the legacy one when
+    the canonical is absent or null. No rate stated -- neither key, or null, the interview's open question -- is
+    None. A number of Hz above 0, finite and not true or false, is the rate. Anything else stated -- text ("48000",
+    "48 kHz"), 0, a negative number, true or false, NaN or infinite -- raises `project_io.Unreadable` naming the file,
+    the key, the value it holds and the repair. Read otherwise, `true` bound the model at 1 Hz without a word, "48000"
+    as text was taken, "48 kHz" raised `ValueError`, and 0 left the model at the assumed rate as "no processing rate in
+    the profile"."""
+    body = data.get("dsp_profile") if isinstance(data, dict) and isinstance(data.get("dsp_profile"), dict) else data
+    if not isinstance(body, dict):
+        return None
+    key = PROCESSING_RATE_KEY if body.get(PROCESSING_RATE_KEY) is not None else LEGACY_RATE_KEY
+    v = body.get(key)
+    if v is None:
+        return None
+    if isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) and v > 0:
+        return v
+    where = os.path.abspath(project_dir) if project_dir is not None else "<project>"
+    raise _project_io().Unreadable(path, f"states {key} {json.dumps(v)}, which is no processing rate (a number of Hz "
+                                         f"above 0)",
+                                   f"record the DSP's rate: python3 {_siblings().path_of('dsp_profile.py')} set-field "
+                                   f"{where} {PROCESSING_RATE_KEY} <Hz>, then finalize")
 
 
 def gain_range_db(data):
@@ -344,7 +373,7 @@ def validate_profile(data):
 
 
 # ── read/write ────────────────────────────────────────────────────────────────
-def bind_model_rate(project_dir_or_profile):
+def bind_model_rate(project_dir_or_profile, path=None):
     """Bind the response model to THIS device's processing rate, and say what happened.
 
     Returns `(rate_hz_or_None, note_or_None)`. The note is `None` only when the profile states a
@@ -368,6 +397,12 @@ def bind_model_rate(project_dir_or_profile):
     newer method wrote, raises its exception (`is_unreadable`), naming the file, before anything is bound. It was read
     as one stating no rate -- "State dsp_processing_rate_hz in the profile" over a profile cut off after stating it --
     and the model stayed at the assumed rate. No profile at all is "no rate stated", as before.
+
+    The rate is read by the settings sheet's rule (`stated_rate_hz`; batch 4's third re-review, Out of Scope 1): a
+    rate stated that is no rate -- text, 0, a negative number, true or false, not finite -- raises `Unreadable` naming
+    the file, the key, the value and the repair, and nothing is bound. `true` bound the model at 1 Hz with no note,
+    text was taken, "48 kHz" raised `ValueError`, and 0 left it at the assumed rate as "no processing rate in the
+    profile". `path` names the file a profile handed in as a dict came from (its folder is the repair's project).
     """
     profile = project_dir_or_profile
     if isinstance(profile, str):
@@ -376,16 +411,17 @@ def bind_model_rate(project_dir_or_profile):
             profile = load_profile(path)
         except FileNotFoundError:
             profile = None
-    dsp_math = _siblings().load("dsp_math.py")
     if profile is None:
-        return None, dsp_math.rate_note(None)
-    rate = processing_rate_hz(profile)
-    if rate:
+        return None, _siblings().load("dsp_math.py").rate_note(None)
+    rate = stated_rate_hz(profile, path if path is not None else "the profile",
+                          os.path.dirname(os.path.abspath(path)) if path is not None else None)
+    dsp_math = _siblings().load("dsp_math.py")
+    if rate is not None:
         try:
             dsp_math.bind_processing_rate(float(rate), source="profile")
         except dsp_math.RateConflict as exc:
             return float(rate), str(exc)
-    return (float(rate) if rate else None), dsp_math.rate_note(float(rate) if rate else None)
+    return (float(rate) if rate is not None else None), dsp_math.rate_note(float(rate) if rate is not None else None)
 
 
 def load_profile(path):
@@ -1595,6 +1631,66 @@ def _check_bind_model_rate_refuses_unreadable():
         shutil.rmtree(d, ignore_errors=True)
 
 
+def _check_bind_model_rate_reads_the_sheets_rule():
+    """`bind_model_rate` reads the rate by the settings sheet's rule (`stated_rate_hz`; #134, batch 4's third re-review,
+    Out of Scope 1): a stated rate that is no rate -- true, text ("48000", "48 kHz"), 0, a negative number, the legacy
+    key as text, an infinite number -- raises `is_unreadable` naming the file, the key, the value and the repair, before
+    anything is bound, whether the caller hands in the folder, the file, or the profile it read with its path. `true`
+    bound the model at 1 Hz with no note, "48000" was taken, "48 kHz" raised `ValueError`, and 0 left the model at the
+    assumed rate as "no processing rate in the profile". A rate that is one binds, as before, under either key; null,
+    and no key, state none."""
+    import shutil
+    import tempfile
+    dsp_math = _siblings().load("dsp_math.py")
+    saved = dict(dsp_math._RATE)
+    d = tempfile.mkdtemp(prefix="autosound_bind_rule_")
+    try:
+        path = profile_path(d)
+        failures = []
+
+        def write(body):
+            data = {"dsp_profile": dict({"name": "X", "vendor": "Y", "groups": []}, **body)}
+            with open(path, "w", encoding="utf-8") as fh:
+                json.dump(data, fh)
+            return data
+        for key, value, shown in ((PROCESSING_RATE_KEY, True, "true"), (PROCESSING_RATE_KEY, "48000", '"48000"'),
+                                  (PROCESSING_RATE_KEY, "48 kHz", '"48 kHz"'), (PROCESSING_RATE_KEY, 0, "0"),
+                                  (PROCESSING_RATE_KEY, -48000, "-48000"), (LEGACY_RATE_KEY, "48000", '"48000"'),
+                                  (PROCESSING_RATE_KEY, float("inf"), "Infinity")):
+            data = write({key: value})
+            want = (f"{path} states {key} {shown}, which is no processing rate (a number of Hz above 0) -- record the "
+                    f"DSP's rate: python3 {_siblings().path_of('dsp_profile.py')} set-field {os.path.abspath(d)} "
+                    f"{PROCESSING_RATE_KEY} <Hz>, then finalize")
+            for label, call in (("the folder", lambda: bind_model_rate(d)), ("the file", lambda: bind_model_rate(path)),
+                                ("the profile read", lambda: bind_model_rate(data, path=path))):
+                dsp_math.reset_processing_rate()
+                try:
+                    got = call()
+                except Exception as exc:  # noqa: BLE001 -- the refusal is under test; matched by its type's attribute
+                    if not getattr(type(exc), "is_unreadable", False) or str(exc) != want:
+                        failures.append(f"{key} {shown}, given {label}: raised {type(exc).__name__}: {exc}")
+                else:
+                    failures.append(f"{key} {shown}, given {label}: read as {got!r}")
+                if dsp_math.processing_rate() != (dsp_math.FS, "assumed"):
+                    failures.append(f"{key} {shown}, given {label}: the model bound at {dsp_math.processing_rate()}")
+        for body, rate in (({PROCESSING_RATE_KEY: 48000}, 48000.0), ({LEGACY_RATE_KEY: 44100}, 44100.0),
+                           ({PROCESSING_RATE_KEY: None}, None), ({}, None)):
+            write(body)
+            dsp_math.reset_processing_rate()
+            got = bind_model_rate(d)
+            bound = dsp_math.processing_rate()
+            if rate is not None and (got != (rate, None) or bound != (rate, "profile")):
+                failures.append(f"{body}: {got!r}, the model at {bound}")
+            if rate is None and (got[0] is not None or not (got[1] or "").startswith("no processing rate in the "
+                                                                                       "profile")
+                                 or bound != (dsp_math.FS, "assumed")):
+                failures.append(f"{body}: {got!r}, the model at {bound}")
+        assert not failures, "\n  ".join(["bind_model_rate by the sheet's rule:"] + failures)
+    finally:
+        dsp_math._RATE.update(saved)
+        shutil.rmtree(d, ignore_errors=True)
+
+
 def _check_writers_refuse_unreadable_profile():
     """With no draft, a `dsp_profile.json` that cannot be read, or that a newer method wrote, refuses every verb that
     reads it (#134, T I7b, T I7c): `set-setting`, and `set-field`, `reset-field`, `start` and `draft`, which read the
@@ -1759,9 +1855,9 @@ def _selftest():
     failures = []
     for check in (_check_loads_by_path, _check_bind_model_rate_binds_the_callers_dsp_math,
                   _check_draft_refuses_unreadable, _check_newer_profile_refused,
-                  _check_bind_model_rate_refuses_unreadable, _check_writers_refuse_unreadable_profile,
-                  _check_library_skips_unreadable, _check_finalize_says_a_draft_left,
-                  _check_draft_left_repair_by_cause):
+                  _check_bind_model_rate_refuses_unreadable, _check_bind_model_rate_reads_the_sheets_rule,
+                  _check_writers_refuse_unreadable_profile, _check_library_skips_unreadable,
+                  _check_finalize_says_a_draft_left, _check_draft_left_repair_by_cause):
         try:
             check()
         except AssertionError as exc:

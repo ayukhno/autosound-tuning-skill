@@ -1138,7 +1138,9 @@ def _main(argv=None):
 def _check_profile_read_strictly():
     """A `dsp_profile.json` that is there and cannot be read, or that a newer method wrote, refuses the run before
     anything is read or modelled (#134, H I-4): `error: <file> <reason> -- <repair>`, exit 1, one line, nothing on
-    stdout. It was read as "no rate stated" (`bind_model_rate`), and the model went on at the assumed rate."""
+    stdout. It was read as "no rate stated" (`bind_model_rate`), and the model went on at the assumed rate. So does a
+    rate it states that is no rate, by the settings sheet's rule (batch 4's third re-review, Out of Scope 1): `true`
+    modelled the run at 1 Hz."""
     import contextlib
     import io as _io
     import shutil
@@ -1153,7 +1155,9 @@ def _check_profile_read_strictly():
                 ("cut after its rate", b'{"dsp_profile": {"name": "X", "dsp_processing_rate_hz": 48000, "gro',
                  "checkout HEAD -- dsp_profile.json"),
                 ("a newer method's", json.dumps({"schema_version": newer, "dsp_profile": {"name": "X"}}).encode(),
-                 f"is schema v{newer}")):
+                 f"is schema v{newer}"),
+                ("a rate that is no rate", json.dumps({"dsp_profile": {"name": "X", "dsp_processing_rate_hz": True}})
+                 .encode(), "states dsp_processing_rate_hz true, which is no processing rate")):
             with open(path, "wb") as fh:
                 fh.write(raw)
             out, err = _io.StringIO(), _io.StringIO()

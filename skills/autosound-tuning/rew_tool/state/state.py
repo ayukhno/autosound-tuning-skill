@@ -53,7 +53,6 @@ import argparse
 import copy
 import datetime
 import json
-import math
 import os
 import re
 import sys
@@ -333,26 +332,16 @@ def processing_rate(project_dir):
     snapshot's rate for the profile's -- the guess the ruling above refuses. So is a rate stated that is no rate --
     text, 0, a negative number, true or false, not finite (batch 4's re-review, Out of Scope 2): it raises
     `Unreadable` too, naming the file, the key, the value it holds and the repair. A key left empty (null, the
-    interview's open question) states no rate.
+    interview's open question) states no rate. The rule is `dsp_profile.stated_rate_hz`, the one the model's binding
+    reads by too (batch 4's third re-review, Out of Scope 1).
     """
     path = os.path.join(project_dir or "", "dsp_profile.json")
+    dsp_profile = _siblings().load("dsp_profile.py")
     try:
-        data = _siblings().load("dsp_profile.py").load_profile(path)
+        data = dsp_profile.load_profile(path)
     except FileNotFoundError:
         return None
-    body = data.get("dsp_profile") if isinstance(data.get("dsp_profile"), dict) else data
-    if not isinstance(body, dict):
-        return None
-    key = "dsp_processing_rate_hz" if body.get("dsp_processing_rate_hz") is not None else "sample_rate_hz"
-    v = body.get(key)
-    if v is None:
-        return None
-    if isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) and v > 0:
-        return v
-    io_ = _project_io()
-    raise io_.Unreadable(path, f"states {key} {json.dumps(v)}, which is no processing rate (a number of Hz above 0)",
-                         f"record the DSP's rate: python3 {_siblings().path_of('dsp_profile.py')} set-field "
-                         f"{os.path.abspath(project_dir or '.')} dsp_processing_rate_hz <Hz>, then finalize")
+    return dsp_profile.stated_rate_hz(data, path, project_dir or ".")
 
 
 def current_target(project_dir, preset):

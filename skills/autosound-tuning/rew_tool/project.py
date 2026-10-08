@@ -815,11 +815,16 @@ class Project:
         was perfectly atomic and perfectly wrong.
 
         A brand-new folder still reads as "nothing known", because that is true.
+
+        A UTF-8 BOM is read, as `project_io.read_json` reads one -- an editor's marker, not damage -- so the file has one
+        rule (#134, batch 4's third re-review, Out of Scope 2): this read refused a BOM'd `project.json` as "exists and
+        cannot be read" while `read_json` and the glossary's readers read the same bytes, and `contract.py check` then
+        called the file unreadable beside a glossary row that had read it. `save` writes it back without the BOM.
         """
         if not os.path.isfile(self.path):
             return _empty_project()
         try:
-            with open(self.path, encoding="utf-8") as f:
+            with open(self.path, encoding="utf-8-sig") as f:
                 data = json.load(f)
         except UnicodeDecodeError as exc:
             # Told apart from the rest because the repair is a DIFFERENT one and it exists
@@ -1900,11 +1905,53 @@ def _check_save_refuses_newer():
         shutil.rmtree(top, ignore_errors=True)
 
 
+def _check_load_reads_a_bom():
+    """`Project.load` reads a `project.json` saved with a UTF-8 BOM, as `project_io.read_json` reads it (#134, batch 4's
+    third re-review, Out of Scope 2): it raised `ProjectError`, "exists and cannot be read" -- the one reader of the
+    file that refused what the others read -- and `contract.py check` called the file unreadable beside a glossary row
+    that had read it. The facts are the ones the same text reads as with no BOM; a save writes them back without it. A
+    file in another code page is still refused, as not UTF-8."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_project_bom_")
+    try:
+        proj = Project(top)
+        facts = {"schema_version": SCHEMA_VERSION, "project_rev": 4, "channels": [{"code": "w-L", "descr": "Низ ліво"}],
+                 "glossary": {"channels": [{"code": "w-L", "active": True}]}}
+        text = json.dumps(facts, ensure_ascii=False)
+
+        def put(raw):
+            with open(proj.path, "wb") as fh:
+                fh.write(raw)
+        put(text.encode("utf-8"))
+        plain = proj.load()
+        put(b"\xef\xbb\xbf" + text.encode("utf-8"))
+        try:
+            got = proj.load()
+        except ProjectError as exc:
+            raise AssertionError(f"a BOM'd project.json: {exc}") from None
+        assert got == plain and got["channels"] == facts["channels"] and got["project_rev"] == 4, got
+        saved = proj.save(got)
+        with open(proj.path, "rb") as fh:
+            raw = fh.read()
+        assert not raw.startswith(b"\xef\xbb\xbf") and saved["project_rev"] == 5, raw[:40]
+        assert proj.load()["channels"] == facts["channels"], proj.load()["channels"]
+        put(text.encode("cp1251"))
+        try:
+            proj.load()
+        except ProjectError as exc:
+            assert "is not UTF-8" in str(exc), str(exc)
+        else:
+            raise AssertionError("a project.json in cp1251 was read")
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
 def _selftest():
     import tempfile
 
     failures = []
-    for check in (_check_record_change_refuses_unreadable, _check_save_refuses_newer):
+    for check in (_check_record_change_refuses_unreadable, _check_save_refuses_newer, _check_load_reads_a_bom):
         try:
             check()
         except AssertionError as exc:

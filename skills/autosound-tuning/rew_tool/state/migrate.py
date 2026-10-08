@@ -291,9 +291,8 @@ def project_there(new_dir):
 
     The ledger is any line of it: a folder under `state/` holding a version (the per-preset layout, the one the import
     writes), the per-project `state/versions/` and `state/slots.json`; a version's name is read in any letter case. A
-    `dsp_profile.json` -- a file, a folder or a link -- is the project's profile, and a file standing where `state/`
-    belongs is no folder to write a ledger into. A `project.json` alone is not here: the import merges into it and
-    never overwrites a value (`fold_identity`)."""
+    `dsp_profile.json` -- a file, a folder or a link -- is the project's profile. A `project.json` alone is not here:
+    the import merges into it and never overwrites a value (`fold_identity`)."""
     found = []
     root = os.path.join(new_dir, "state")
     if os.path.isdir(root):
@@ -308,8 +307,6 @@ def project_there(new_dir):
                         if fn.lower().endswith(".json") and _state._VER_RE.match(fn[:-5].lower()))
                 if n or name == _state.VERSIONS_DIR:
                     found.append(f"state/{name}/ ({n} version{'' if n == 1 else 's'})")
-    elif os.path.lexists(root):
-        found.append("state (a file, where the ledger's folder belongs)")
     if os.path.lexists(os.path.join(new_dir, "dsp_profile.json")):
         found.append("dsp_profile.json")
     return found

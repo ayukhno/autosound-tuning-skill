@@ -199,13 +199,16 @@ both. No file at all is the one quiet case: a fresh project. It holds for:
   `repair-version`. A version banked after its ledger line's first seal and never sealed (its seal write failed) is
   reported by `verify` (exit 3) and `contract.py check`; one older than the line's first seal -- banked before seals
   existed, or imported by `migrate.py --into` -- is not;
-- `project.json`, where a bank stamps its `project_rev` and where the phase-1 gate reads the flaw map;
+- `project.json`, where a bank stamps its `project_rev` and where the phase-1 gate reads the flaw map; `Project.load()`,
+  and `contract.py check` through it, read a UTF-8 BOM in it, as `read_json` does (#134);
 - `glossary.json`, and the glossary `project.json` keeps (#134): `contract.py check` and the phase gates (below), and
   the method's own readers through `naming.Glossary.for_project(project_dir, strict=True)` -- `capture-start`, with
   `--plan` or not, `capture-close`'s read against REW, `capture-import`, `naming.py codes|parse|expect|check` and
   `flaw_map.py --rew` -- each in one line, `error: <file> <reason> -- <repair>`, exit 1, nothing written.
-  `Glossary.for_project(project_dir)`, the screen's read (TCC's, contract 1), stays lenient: a file it cannot read is
-  no glossary. Both read a UTF-8 BOM;
+  `Glossary.for_project(project_dir)`, the screen's read (TCC's, contract 1), stays lenient: a file it cannot read is no
+  glossary. Both read a UTF-8 BOM. A `glossary.json` that is a link to nothing is refused by the strict read and by
+  `contract.py check` (`<file> is a link to <target>, which is not there -- ...`), and read past by the lenient one, to
+  `project.json`'s glossary;
 - `dsp_profile.json` and `dsp_profile.draft.json`: `load_profile`, `load_draft` and every writer that reads through
   them (`set-field`, `reset-field`, `start`, `finalize`, `set-setting`, `refresh`), and the phase-1 and phase-2
   profile gate. The intake's processor change, which replaces the profile, sets such a file aside unread and byte for

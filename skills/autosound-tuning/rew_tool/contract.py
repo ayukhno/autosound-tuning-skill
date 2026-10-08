@@ -266,17 +266,13 @@ def check_glossary(project_dir):
     its last character -- not UTF-8, not JSON, not an object, held, a folder, or a newer method's, it is a row there
     and not valid, with the file and its repair, and `check_project` names it in `unreadable`. `Glossary.for_project`
     reads it leniently, as no glossary (contract 1 holds it so: a screen's read), and the row said "no glossary yet"
-    -- what intake had not produced -- over a glossary written and since cut off."""
+    -- what intake had not produced -- over a glossary written and since cut off. The read is the method's own readers'
+    (`naming.read_glossary_file`), so a link to nothing is refused here as there (batch 4's third re-review, N-M2):
+    the row read past it, to `project.json`'s glossary, where `capture-start` refused it."""
     standalone = os.path.join(project_dir, "glossary.json")
     if os.path.lexists(standalone):
-        io_ = _siblings().load("project_io.py")
         try:
-            data = io_.read_json(standalone, {}, repair=io_.restore_line(standalone),
-                                 repair_encoding=io_.reencode_line(project_dir))
-            newer = io_.newer_schema(data, naming.SCHEMA_VERSION)
-            if newer is not None:
-                raise io_.Unreadable(standalone, f"is schema v{newer}; this method reads v{naming.SCHEMA_VERSION}",
-                                     io_.UPDATE_THE_METHOD)
+            naming.read_glossary_file(standalone, project_dir)
         except Exception as exc:  # noqa: BLE001 -- matched by its attribute below; anything else still raises
             if not getattr(type(exc), "is_unreadable", False):
                 raise
@@ -295,7 +291,9 @@ def check_glossary(project_dir):
     shadow = None
     if os.path.isfile(standalone) and os.path.isfile(os.path.join(project_dir, "project.json")):
         try:
-            with open(os.path.join(project_dir, "project.json"), encoding="utf-8") as f:
+            # A UTF-8 BOM is read, as every reader of the file reads it (#134, batch 4's third re-review, Out of Scope
+            # 2): read as no glossary, a BOM'd `project.json`'s glossary was shadowed without the alarm.
+            with open(os.path.join(project_dir, "project.json"), encoding="utf-8-sig") as f:
                 inline = (json.load(f) or {}).get("glossary") or {}
         except (OSError, ValueError):
             inline = {}
@@ -921,8 +919,10 @@ def check_project(project_dir, skip_rew=False):
     # A `project.json` that is there and cannot be read holds the glossary when no standalone `glossary.json` does: of
     # that glossary nothing is known, so it is not "not produced" (#134, batch 4's re-review, Out of Scope 3) -- the
     # intake line counted it among what intake had not produced, and its row said "no glossary yet". Its file is named
-    # in `unreadable`; only what is absent outside it is missing.
-    if project_entry["exists"] and project_data is None \
+    # in `unreadable`; only what is absent outside it is missing. Only over a row that found no glossary: one verdict
+    # for the file (batch 4's third re-review, N-M1) -- a row that read the glossary says it exists and is valid, never
+    # "not read" beside it, as it did over a BOM'd `project.json` the glossary's reader read and this one did not.
+    if project_entry["exists"] and project_data is None and not glossary_entry["exists"] \
             and not os.path.lexists(os.path.join(project_dir, "glossary.json")):
         glossary_entry["issues"] = ["not read -- project.json cannot be read, and the glossary is kept in it"]
         missing = [m for m in missing if m != glossary_entry["file"]]
@@ -2640,6 +2640,88 @@ def _check_bom_glossary_is_a_glossary():
         shutil.rmtree(d, ignore_errors=True)
 
 
+def _check_bom_project_json_one_verdict():
+    """A `project.json` saved with a UTF-8 BOM has one verdict in the report (#134, batch 4's third re-review, N-M1 and
+    Out of Scope 2): `check_project_json` read it through `Project.load`, which refused the BOM, while the glossary's
+    row read it and found the glossary kept in it -- so `project.json` was in `unreadable` and the glossary's row said
+    `exists`, `valid` and "not read -- project.json cannot be read" at once. Now the file is read as `read_json` reads
+    it, by every row: valid, not in `unreadable`, its glossary there and valid, nothing said "not read". The glossary's
+    row never says "not read" beside a glossary it found, whatever `project.json`'s own row says. The shadow alarm
+    reads a BOM'd `project.json` too: a standalone `glossary.json` that drops one of its channels is said."""
+    import shutil
+    import tempfile
+    global check_project_json
+    real = check_project_json
+    d = tempfile.mkdtemp(prefix="autosound_contract_bom_project_")
+    try:
+        pj = project.Project(d)
+        data = pj.load()
+        data["glossary"] = {"channels": [{"code": "w-L", "active": True}, {"code": "c", "active": True}]}
+        pj.save(data)
+        with open(pj.path, "rb") as fh:
+            whole = fh.read()
+        with open(pj.path, "wb") as fh:
+            fh.write(b"\xef\xbb\xbf" + whole)
+        failures = []
+        report = check_project(d, skip_rew=True)
+        rows = {f["file"]: f for f in report["files"]}
+        prow, grow = rows["project.json"], rows["glossary.json (or project.json.glossary)"]
+        if prow["exists"] is not True or prow["valid"] is not True or report["unreadable"]:
+            failures.append(f"a BOM'd project.json: its row {prow}, unreadable {report['unreadable']}")
+        if grow["exists"] is not True or grow["valid"] is not True or grow["issues"] \
+                or any(m.startswith("glossary.json") for m in report["missing"]):
+            failures.append(f"a BOM'd project.json: the glossary's row {grow}, missing {report['missing']}")
+        # The rule alone: `project.json`'s row refused, the glossary found -- the row says one thing.
+        check_project_json = lambda project_dir: (_entry("project.json", True, None, False, ["(made to fail)"]),  # noqa: E731
+                                                  None)
+        try:
+            grow = next(f for f in check_project(d, skip_rew=True)["files"] if f["file"].startswith("glossary.json"))
+        finally:
+            check_project_json = real
+        if grow["exists"] is True and any("not read" in i for i in grow["issues"]):
+            failures.append(f"a glossary found beside a project.json row refused: {grow}")
+        with open(os.path.join(d, "glossary.json"), "w", encoding="utf-8") as fh:
+            json.dump({"schema_version": 1, "channels": [{"code": "w-L", "active": True}]}, fh)
+        grow = next(f for f in check_project(d, skip_rew=True)["files"] if f["file"].startswith("glossary.json"))
+        if grow["valid"] is not False or not any("SHADOWS" in i and "only in project.json: c" in i
+                                                 for i in grow["issues"]):
+            failures.append(f"a glossary.json shadowing a BOM'd project.json's: {grow}")
+        assert not failures, "\n  ".join(["a project.json saved with a BOM:"] + failures)
+    finally:
+        check_project_json = real
+        shutil.rmtree(d, ignore_errors=True)
+
+
+def _check_dangling_glossary_link_refused():
+    """A `glossary.json` that is a link to nothing is a row there and not valid, named in `unreadable` with the link,
+    where it points and the repair, and both gates name it (#134, batch 4's third re-review, N-M2): the check read past
+    it, to `project.json`'s glossary, and called the row valid -- where the method's own readers refuse it
+    (`naming.read_glossary_file`, one read for both). Where this system makes no links, there is nothing to make."""
+    import shutil
+    import tempfile
+    d = tempfile.mkdtemp(prefix="autosound_contract_glossary_link_")
+    try:
+        pj = project.Project(d)
+        data = pj.load()
+        data["glossary"] = {"channels": [{"code": "w-L", "active": True}]}
+        pj.save(data)
+        link, gone = os.path.join(d, "glossary.json"), os.path.join(d, "shared", "glossary.json")
+        try:
+            os.symlink(gone, link)
+        except (OSError, NotImplementedError):
+            print("  (no symbolic links on this system: the link to nothing was not made)")
+            return
+        report = check_project(d, skip_rew=True)
+        row = next(f for f in report["files"] if f["file"].startswith("glossary.json"))
+        said = f"{link} is a link to {gone}, which is not there -- restore {gone}"
+        last = {gate: render_report(report, gate=gate).strip().splitlines()[-1] for gate in ("intake", "phase0")}
+        assert row["exists"] is True and row["valid"] is False and row["issues"][0].startswith(said) \
+            and [u["file"] for u in report["unreadable"]] == ["glossary.json"] \
+            and all("glossary.json cannot be read" in line for line in last.values()), (row, report["unreadable"], last)
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+
+
 def _selftest():
     os.environ["AUTOSOUND_NO_GH"] = "1"          # the history line is checked; GitHub is never reached from a test
     failures = []
@@ -2650,7 +2732,8 @@ def _selftest():
                   _check_unreadable_profile_and_seals_reported, _check_version_verb, _check_version_shape,
                   _check_skill_version, _check_skill_sha, _check_glossary_read_strictly,
                   _check_cut_file_named_in_check, _check_phase0_gate_exit_over_an_unreadable_glossary,
-                  _check_intake_line_over_an_unreadable_project_json, _check_bom_glossary_is_a_glossary):
+                  _check_intake_line_over_an_unreadable_project_json, _check_bom_glossary_is_a_glossary,
+                  _check_bom_project_json_one_verdict, _check_dangling_glossary_link_refused):
         try:
             check()
         except AssertionError as exc:
