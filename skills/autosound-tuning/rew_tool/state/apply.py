@@ -730,6 +730,23 @@ def _check_one_hold_over_the_bank():
         shutil.rmtree(top, ignore_errors=True)
 
 
+def _check_a_missing_project_makes_nothing():
+    """`attest --preset SQ` on a project folder that is not there makes nothing (#141, R23): exit 1, its one line, no
+    folder and no `.autosound/` -- the lock made `<typo>/.autosound/` before the refusal."""
+    import shutil
+    import tempfile
+    pj = _state._siblings().load("project.py")
+    top = tempfile.mkdtemp(prefix="autosound_apply_gone_")
+    try:
+        gone = os.path.join(top, "gone")
+        rc, out, err = pj._run_cli(_main, ["apply.py", gone, "attest", "--preset", "SQ"])
+        said = (out + err).strip().splitlines()
+        assert rc == 1 and said == ["error: no snapshots yet for preset 'SQ'"], (rc, said)
+        assert not os.path.lexists(gone), f"made {sorted(os.listdir(gone)) if os.path.isdir(gone) else gone}"
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
 def _check_no_load_and_save_outside_update():
     """No function here loads `project.json` and saves it itself (#141, J2b): a writer of the project's facts goes
     through `Project.update`, which holds the lock across the read and the write (`project._load_and_save_paths`)."""
@@ -744,7 +761,7 @@ def _selftest():
     failures = []
     for check in (_check_cli_refuses_unreadable, _check_gain_grid_says_an_unreadable_profile,
                   _check_a_held_lock_answers_75, _check_one_hold_over_the_bank,
-                  _check_no_load_and_save_outside_update):
+                  _check_a_missing_project_makes_nothing, _check_no_load_and_save_outside_update):
         try:
             check()
         except AssertionError as exc:
@@ -977,7 +994,8 @@ def _selftest():
           f"ACTIVE/NON-ACTIVE; propose beside a seals.json that cannot be read exits 1 naming it, banking "
           f"nothing (#136); under another writer's lock propose and attest exit 75 with one busy line, no "
           f"version, delta or sheet, and one hold covers the snapshot, its delta and its sheet, the snapshot "
-          f"re-entering it with the ledger outside the project (#141). root={root}")
+          f"re-entering it with the ledger outside the project; attest on a project folder that is not there makes "
+          f"nothing (#141). root={root}")
     return 0
 
 

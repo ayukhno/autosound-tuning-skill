@@ -2017,7 +2017,8 @@ def _check_save_refuses_newer():
     """`Project.save` refuses facts a newer method wrote (#136, audit T-21). It stamped `schema_version` 3 over the 4
     before it validated, so a newer `project.json` loaded and saved by this copy was written down to v3. Now it raises
     `ProjectError` naming both numbers and the way to a newer method, before it stamps anything, and `project.json`
-    keeps its bytes -- or stays absent."""
+    keeps its bytes -- or stays absent, and the lock's `.autosound/` is not made either (#141, R23): the refusal comes
+    before the hold."""
     import shutil
     import tempfile
     top = tempfile.mkdtemp(prefix="autosound_project_newer_")
@@ -2045,6 +2046,8 @@ def _check_save_refuses_newer():
                 raise AssertionError(f"{label}: facts a newer method wrote were written down to v{SCHEMA_VERSION}")
             assert held() == before, f"{label}: project.json changed"
             assert sent == newer, f"{label}: the caller's data was stamped"
+            if before is None:
+                assert not os.path.lexists(os.path.join(top, ".autosound")), f"{label}: the lock's folder was made"
     finally:
         shutil.rmtree(top, ignore_errors=True)
 
@@ -2592,6 +2595,52 @@ def _check_catch_up_holds_once():
     assert not failures, "\n  ".join(["catch-up's one hold:"] + failures)
 
 
+def _check_a_missing_project_makes_nothing():
+    """A verb that does not create a project makes nothing on a project folder that is not there -- a mistyped path, one
+    gone (#141, R23): no folder, no `.autosound/`, the verb's own exit and its one line. The lock made
+    `<typo>/.autosound/` under verbs that went on to say "nothing was written"; base made nothing. The creator still
+    creates: `set-channel` makes the folder and its `project.json` -- the lock nothing, a hold on a missing folder being
+    this process's thread lock alone -- and the next write there takes the lock, making `.autosound/`. Looked for by
+    name: `_files_in` leaves `.autosound/` out."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_project_gone_")
+    failures = []
+    nothing = ("Only a `fact()` wrapper carries an origin — a bare value is, by construction, something this project "
+               "wrote.")
+    cases = ((["catch-up"], 0, "already current — nothing this schema gained is missing here"),
+             (["migrate-fields"], 0, "nothing to rename — project.json already uses the canonical names"),
+             (["backfill-tiers"], 0, "nothing to fill — every channel with a ledger row already names its tier"),
+             (["fix-ids", "--apply"], 0, "every channel id is its code or one of its previous names — nothing to fix"),
+             (["rename-channel", "w-L", "wf-L"], 1, "error: no channel 'w-L' to rename"),
+             (["mark-imported", "channels.w-L.fs_hz", "--from", "/old/car"], 1,
+              f"error: 'channels.w-L.fs_hz' is not a provenanced fact in this project. The ones that are: none. "
+              f"{nothing}"),
+             (["set-hardware", "SubRC", "4/4"], 1,
+              "error: SubRC: not on the user's list of controls (none yet). The list is his: ask whether he wants "
+              "«SubRC» tracked, and on yes record it with --source user"))
+    try:
+        for n, (argv, want_rc, line) in enumerate(cases):
+            gone = os.path.join(top, f"gone-{n}")
+            rc, out, err = _run_cli(_main, ["project.py", gone, *argv])
+            said = (out + err).strip().splitlines()
+            if rc != want_rc or said != [line]:
+                failures.append(f"{' '.join(argv)}: rc {rc}, said {said}")
+            if os.path.lexists(gone):
+                failures.append(f"{' '.join(argv)}: made {sorted(os.listdir(gone)) if os.path.isdir(gone) else gone}")
+        new = os.path.join(top, "new")
+        rc, out, err = _run_cli(_main, ["project.py", new, "set-channel", "m-L", "role=mid"])
+        made = sorted(os.listdir(new)) if os.path.isdir(new) else None
+        if rc != 0 or out.strip() != "channel m-L updated" or made != ["project.json"]:
+            failures.append(f"set-channel on a new folder: rc {rc}, said {(out + err).strip()[-200:]!r}, made {made}")
+        rc, out, err = _run_cli(_main, ["project.py", new, "set-channel", "w-L", "role=woofer"])
+        if rc != 0 or not os.path.isfile(_write_lock().lock_path(new)):
+            failures.append(f"the next write there took no lock: rc {rc}, made {sorted(os.listdir(new))}")
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["a project folder that is not there:"] + failures)
+
+
 def _raised_by(call):
     """The exception `call()` raised, or None: a check reads what it got by its attributes, never by its class."""
     try:
@@ -2714,7 +2763,7 @@ def _selftest():
     for check in (_check_record_change_refuses_unreadable, _check_save_refuses_newer, _check_load_reads_a_bom,
                   _check_two_writers_lose_nothing, _check_save_counts_from_the_disk,
                   _check_update_changes_under_the_lock, _check_update_writes_only_whole_facts,
-                  _check_a_held_lock_answers_75, _check_catch_up_holds_once,
+                  _check_a_held_lock_answers_75, _check_catch_up_holds_once, _check_a_missing_project_makes_nothing,
                   _check_a_bad_timeout_is_a_usage_error, _check_record_change_into_a_mistyped_folder,
                   _check_record_change_asks_git_with_the_lock_free, _check_no_load_and_save_outside_update):
         try:
@@ -3439,7 +3488,8 @@ def _selftest():
           f"answers 75 with one busy line under another's lock while the reads wait for nobody, catch-up holds it "
           f"once over its three fills (no writer between two; busy before the first, nothing filled), a bad "
           f"AUTOSOUND_LOCK_TIMEOUT_S is exit 2 making nothing, record-change into a mistyped folder makes nothing, "
-          f"and no function loads and saves outside update. root={root}")
+          f"every verb that creates no project makes nothing on a folder that is not there while set-channel "
+          f"makes it, and no function loads and saves outside update. root={root}")
     return 0
 
 

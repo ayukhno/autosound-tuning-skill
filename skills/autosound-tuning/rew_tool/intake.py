@@ -2158,6 +2158,39 @@ def _check_save_new_dsp_holds_once():
     assert not failures, "\n  ".join(["the new processor's one hold:"] + failures)
 
 
+def _check_a_missing_project_makes_nothing():
+    """A verb that does not create a project makes nothing on a project folder that is not there (#141, R23): no folder,
+    no `.autosound/`, and the verb's own refusal -- its `IntakeError` in its traceback's last line, exit 1 from the
+    command line -- which says "Nothing was written". The lock made `<typo>/.autosound/` under that sentence. The
+    creator still creates: `set-car` makes the folder and its `project.json`."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_intake_gone_")
+    failures = []
+    cases = ((["set-channel", "m-L", "slot=D"],
+              "IntakeError: channel 'm-L': a slot needs its tier in the same breath — slot letters repeat across "
+              "tiers, so this one is a legal address in more than one of them. Pass tier=channels for a physical "
+              "output (`dsp_profile.ledger_tier`). Nothing was written"),
+             (["set-amp", "model=GZPA 4SQ", "--index", "0"], "IntakeError: no amps[0] — this project has 0"))
+    try:
+        for n, (argv, line) in enumerate(cases):
+            gone = os.path.join(top, f"gone-{n}")
+            rc, out, err = project._run_cli(_main, [argv[0], gone, *argv[1:]])
+            last = (err.strip().splitlines() or [""])[-1]
+            if rc != "raised" or not last.endswith(line) or out.strip():
+                failures.append(f"{argv[0]}: rc {rc}, said {last!r}")
+            if os.path.lexists(gone):
+                failures.append(f"{argv[0]}: made {sorted(os.listdir(gone)) if os.path.isdir(gone) else gone}")
+        new = os.path.join(top, "new")
+        rc, out, err = project._run_cli(_main, ["set-car", new, "VW", "Passat", "B8", "sedan"])
+        made = sorted(os.listdir(new)) if os.path.isdir(new) else None
+        if rc != 0 or (project.Project(new).load().get("car") or {}).get("make") != "VW" or made != ["project.json"]:
+            failures.append(f"set-car on a new folder: rc {rc}, said {(out + err).strip()[-200:]!r}, made {made}")
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["a project folder that is not there:"] + failures)
+
+
 def _check_no_load_and_save_outside_update():
     """No function here loads `project.json` and saves it itself (#141, J2b): each write goes through `Project.update`
     or a `Project` writer, which hold the project's lock across the read and the write. Read off the source
@@ -2174,7 +2207,8 @@ def _selftest():
     for check in (_check_change_dsp_sets_an_unreadable_profile_aside, _check_gate_shut_over_an_unreadable_file,
                   _check_set_car_waits_for_the_lock, _check_a_bad_timeout_is_a_usage_error,
                   _check_composite_writers_hold_once, _check_save_controls_holds_once,
-                  _check_save_new_dsp_holds_once, _check_no_load_and_save_outside_update):
+                  _check_save_new_dsp_holds_once, _check_a_missing_project_makes_nothing,
+                  _check_no_load_and_save_outside_update):
         try:
             check()
         except AssertionError as exc:
@@ -2514,8 +2548,9 @@ def _selftest():
           "that profile (#136); under another writer's lock set-car and every other writer answer 75 with "
           "one busy line, writing nothing, the knobs and a new processor's base (its set-aside too) are written "
           "under one hold, no writer between two of their writes, a bad AUTOSOUND_LOCK_TIMEOUT_S is exit 2 "
-          "making nothing, every other refusal keeps its traceback, and no function loads and saves outside "
-          "Project.update (#141).")
+          "making nothing, a refusal on a project folder that is not there makes nothing while set-car makes it, "
+          "every other refusal keeps its traceback, and no function loads and saves outside Project.update "
+          "(#141).")
     return 0
 
 

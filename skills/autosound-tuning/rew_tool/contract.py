@@ -2199,6 +2199,31 @@ def _check_repair_encoding_waits_for_the_lock():
     assert not failures, f"{len(failures)} run(s) under a held lock:\n  " + "\n  ".join(failures)
 
 
+def _check_a_missing_project_makes_nothing():
+    """`repair-encoding --from` and `--set-aside` on a project folder that is not there make nothing (#141, R23): exit
+    0, their one line -- nothing to rewrite, nothing to set aside, "nothing was written" -- and no folder, no
+    `.autosound/`. The lock made `<typo>/.autosound/` under that line."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_contract_gone_")
+    failures = []
+    try:
+        for n, (argv, line) in enumerate((
+                (["--from", "cp1251"], "no file the method owns under {} is in another code page — nothing was written"),
+                (["--set-aside"], "no line to set aside under {}: every journal line is UTF-8, torn, or JSON in a code "
+                                  "page -- nothing was written"))):
+            gone = os.path.join(top, f"gone-{n}")
+            rc, out, err = project._run_cli(_main, ["contract.py", "repair-encoding", gone, *argv])
+            said = (out + err).strip().splitlines()
+            if rc != 0 or said != [line.format(gone)]:
+                failures.append(f"{argv[0]}: rc {rc}, said {said}")
+            if os.path.lexists(gone):
+                failures.append(f"{argv[0]}: made {sorted(os.listdir(gone)) if os.path.isdir(gone) else gone}")
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["repair-encoding on a project folder that is not there:"] + failures)
+
+
 def _check_never_sealed_after_the_first_seal():
     """"banked, never sealed" counts only a version banked after its ledger line's first seal (#134, R54). A ledger
     holds versions from before seals existed (#58 P1), and `migrate.py --into` imports a version and seals nothing, so
@@ -2966,7 +2991,7 @@ def _selftest():
                   _check_cut_file_named_in_check, _check_phase0_gate_exit_over_an_unreadable_glossary,
                   _check_intake_line_over_an_unreadable_project_json, _check_bom_glossary_is_a_glossary,
                   _check_bom_project_json_one_verdict, _check_dangling_glossary_link_refused,
-                  _check_repair_encoding_waits_for_the_lock):
+                  _check_repair_encoding_waits_for_the_lock, _check_a_missing_project_makes_nothing):
         try:
             check()
         except AssertionError as exc:
@@ -3475,7 +3500,8 @@ def _selftest():
           f"version banked after its line's first seal and never sealed is not OK, while a migrated project banked "
           f"once stays OK; a process state a newer method wrote is reported in JSON, and repair-encoding names a file "
           f"it could not open, exit 1, rewriting nothing beside it and never calling the set UTF-8; --set-aside moves "
-          f"the journal lines no code page reads, bytes kept, and the journal reads again (#134, R56). "
+          f"the journal lines no code page reads, bytes kept, and the journal reads again (#134, R56); its rewrites "
+          f"answer another writer's lock with 75, and make nothing on a project folder that is not there (#141). "
           f"root={root}")
     return 0
 

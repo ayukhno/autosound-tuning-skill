@@ -7675,8 +7675,9 @@ def _check_a_new_project_still_starts():
     """The rule against a mistyped folder stops no project starting (#141, R46). A folder called `process` that is not
     there yet is a project's first process write where `project.json` stands beside it -- TCC's new-project dialog
     writes that file first -- and, with none, the intake's own `enter-phase -1`, which starts the project, as
-    `session-start` does in a project folder that is there (R19, `_check_session_start_starts_a_project`). Any other
-    verb there first is refused, exit 1, "not a project yet", and nothing is made."""
+    `session-start` does in a project folder that is there (R19, `_check_session_start_starts_a_project`). The intake
+    starts one where the project folder is not there yet either, making it: the lock makes nothing there (R23), the
+    first write does. Any other verb there first is refused, exit 1, "not a project yet", and nothing is made."""
     import shutil
     import tempfile
     top = tempfile.mkdtemp(prefix="autosound_process_new_project_")
@@ -7687,6 +7688,11 @@ def _check_a_new_project_still_starts():
         rc, out, err = _run_main(["process.py", d, "enter-phase", "-1"])
         if rc != EXIT_OK or Process(d).load(strict=True).get("active_phase") != "-1":
             failures.append(f"enter-phase -1, the intake: rc {rc}, said {err.strip()[-200:]!r}")
+        d = os.path.join(top, "gone", "process")
+        rc, out, err = _run_main(["process.py", d, "enter-phase", "-1"])
+        if rc != EXIT_OK or Process(d).load(strict=True).get("active_phase") != "-1":
+            failures.append(f"enter-phase -1 on a project folder that is not there: rc {rc}, said "
+                            f"{err.strip()[-200:]!r}")
         for n, argv in enumerate(a for a in _WRITING_RUNS if a != ["enter-phase", "-1"] and a[0] != "session-start"):
             proj = os.path.join(top, f"first-{n}")
             os.makedirs(proj)

@@ -685,12 +685,25 @@ def _check_a_held_lock_said_in_the_result():
         assert again.ok and os.path.isfile(os.path.join(dst, "project.json")), again.problem
 
 
+def _check_a_seed_makes_its_new_folder():
+    """A seed still makes the new project where its folder is not there yet (#141, R23): the lock makes no project
+    folder -- a hold on a missing one is this process's thread lock alone -- and the seed's first write, `project.json`,
+    makes it. The counterpart of the verbs that make nothing on a missing folder."""
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmp:
+        src = _source_project(os.path.join(tmp, "old-car"))
+        dst = os.path.join(tmp, "not-there-yet")
+        out = seed(src, dst, today=date(2026, 10, 8))
+        assert out.ok and os.path.isfile(os.path.join(dst, "project.json")), out.problem
+        assert out.written[0] == "project.json", out.written
+
+
 def _selftest():
     os.environ["AUTOSOUND_NO_GH"] = "1"          # a seed makes a repository; the test never reaches GitHub
     import tempfile
 
     failures = []
-    for check in (_check_a_held_lock_said_in_the_result,):
+    for check in (_check_a_held_lock_said_in_the_result, _check_a_seed_makes_its_new_folder):
         try:
             check()
         except AssertionError as exc:
@@ -891,7 +904,8 @@ def _selftest():
           f"profile carried with {out.profile_open} facts still open, re-seed refused; "
           f"a new processor keeps the car and drops all {len(DSP_KEYS)} DSP-bound keys, "
           f"findings still on offer there; under another writer's lock a seed refuses with the lock's own "
-          f"busy line -- the lock file, nothing written, safe to retry -- and nothing written (#141, R14)")
+          f"busy line -- the lock file, nothing written, safe to retry -- and nothing written (#141, R14); a seed "
+          f"makes its new folder where none is yet (R23)")
 
 
 if __name__ == "__main__":
