@@ -108,8 +108,8 @@ project files), and Task 19's candidate is what TCC's race harness was waiting f
 
 ## What needs the Arbiter
 
-- **Before «го»:** read Task 12's two text decisions (the slot rule's sentence; P9 moves Phase 3's cross-vendor
-  verdicts from the car session to the desk after it) and Task 14's list of what leaves SKILL.md.
+- **Before «го» — done 2026-10-08:** the slot rule «Так»; Phase 3's cross-vendor verdicts at the desk by default,
+  in the car when the user wants them there; «Го зараз».
 - **Tasks 13 and 15:** the trigger runs must not see the other car-audio skill (`anthropic-skills:rew-car-audio-tuning`).
   If no setting hides it for `claude -p`, about a minute of his to switch it off for the runs.
 - **Task 19:** the Windows VM run, about 20–30 minutes: two writers at once on a project, and `install.cmd` fresh and
@@ -156,8 +156,8 @@ project files), and Task 19's candidate is what TCC's race harness was waiting f
     copy, and `doctor` and `contract.py check` name a copy that differs (Task 10).
 13. I-21: the home of the prose files is the project root (the structure doc's tree); every reader falls back to
     `rew_analitic/` and says so (Task 11).
-14. P9 reaches Phase 3: three documents put the cross-vendor verdicts in the car session; they move to the desk after
-    it (Task 12) — a text decision for the Arbiter to read before «го».
+14. P9 reaches Phase 3: three documents put the cross-vendor verdicts in the car session; by default they move to the
+    desk after it, and the car stays possible when the user wants them there (Task 12; the Arbiter, 2026-10-08).
 15. S2: the Map is not last today (6th of 8); keeping the order with the Map last moves Review Channel and Output Style
     before it, and the cut to 17,500 bytes before the Map is ~13.7 KB (Task 14).
 16. N3 is answered by TCC's code: TCC does not read SKILL.md (its six mentions are comments); asked anyway on hub #267.
@@ -1097,19 +1097,22 @@ they name, never from its text.
   slot rule's sentence ("a DSP slot is named by its preset number and its configuration's name"), and no method file
   calls a slot "memory N", "slot N" or "Preset N" alone (the pattern: the word followed by a bare number, outside code
   spans and REW's own "EQ slot"); rule `reviewer-at-desk`: SKILL.md's Review Channel and `review-loop.md` each carry
-  "never from inside a car session". Fixtures in the rule selftests for a red and a green case each.
+  "at the desk by default". Fixtures in the rule selftests for a red and a green case each.
 - [ ] **Step 2: Run — expect FAIL** (`python3 scripts/docs-check.py`).
 - [ ] **Step 3: Write the text**
-  1. P3, one home (`naming-and-structure.md` §1a): "A DSP slot is named by its preset number and its configuration's
+  1. P3 (the Arbiter, 2026-10-08: «Так»), one home (`naming-and-structure.md` §1a): "A DSP slot is named by its preset number and its configuration's
      name — `3.S-shelf`, `1.SQ-1`: the number the device shows, the name `state.py … config save` gave the
      configuration. Never a bare number ('memory 3', 'slot 3') or 'Preset 2'." §5, `preset-strategy.md` and
      `phase_5_variations.md:49` point to it; `:49`'s example becomes `2.FULL-v1` beside `1.SQ-1`.
-  2. P9: one line in the Review Channel and in `review-loop.md`: "The reviewer is called at the desk, never from
-     inside a car session: the car session measures and listens; what needs a verdict goes into the next desk round."
-     Phase 3 follows it: the car session (3.1–3.3) captures, does MMM and the ear's minimum pass, and backs up the
-     DSP's configuration before leaving; 3.4's two independent cross-vendor verdicts run at the desk after it, and the
-     technical lock is banked there (`virtual-first.md:397`, `phase_3_control.md` §2 and its gate, `process-control.md:26`).
-     The two places stop calling these A/B: those letters are the reviewer modes `process-control.md` owns.
+  2. P9 (the Arbiter, 2026-10-08: «п.1 як правило, але якщо користувач хоче це робити в машині — це можливо»): one
+     line in the Review Channel and in `review-loop.md`: "The reviewer is called at the desk by default, not from
+     inside a car session: the car session measures and listens, and what needs a verdict goes into the next desk
+     round. When the user wants a verdict in the car, it is called there — say first that the car session will wait
+     for the reviewer." Phase 3 follows the default: the car session (3.1–3.3) captures, does MMM and the ear's
+     minimum pass, and backs up the DSP's configuration before leaving; 3.4's two independent cross-vendor verdicts
+     run at the desk after it, and the technical lock is banked there — or in the car, when the user asks for it there
+     (`virtual-first.md:397`, `phase_3_control.md` §2 and its gate, `process-control.md:26`). The two places stop
+     calling these A/B: those letters are the reviewer modes `process-control.md` owns.
   3. P10: README `:8,101,103` and FAQ `:117-118` say the count the method prescribes: read `virtual-first.md`'s phases
      for which ones happen in the car and write that number ("two visits make a tune: one to measure, one to enter the
      numbers, verify and lock; the fine-tuning by ear after it takes as many as you like" — adjust to what the phases
