@@ -528,11 +528,13 @@ going_ahead() {
 }
 # going_ahead's EXIT trap: an end that came through neither `stop` nor `finish` is a stop, 1 -- a failing command's own
 # code is not the table's 2 or 3. Whatever $? says: under bash 3.2 an unbound variable (`set -u`) reaches this trap as
-# 0, and without it the run would end 0, ready.
+# 0, and without it the run would end 0, ready; a signal reaches it as 0 there too, and the run still ends by the
+# signal (130, 143) -- the receipt says `stopped` either way. The line names a code only when there is one.
 unplanned_end() {
   _ue_rc=$?
   [ -n "${ENDED:-}" ] && return 0
-  stop 1 "stopped (exit $_ue_rc) -- the lines above say where; run this again"
+  if [ "$_ue_rc" = 0 ]; then _ue_rc=""; else _ue_rc=" (exit $_ue_rc)"; fi
+  stop 1 "stopped$_ue_rc -- the lines above say where; run this again"
 }
 
 # THIS SCRIPT NEVER ASKS FOR YOUR PASSWORD. It used to: `sudo -v` read the password straight out

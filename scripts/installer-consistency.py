@@ -955,7 +955,7 @@ def exit_contract_problems(sh, ps1):
               ["the beta copy"], 0),
              ("a-stop", go + 'stop 1 "could not read the tags -- nothing was installed"\nsay "past the stop"\n',
               "python3", "0", False, 1, ("could not read the tags -- nothing was installed",),
-              ("past the stop", "Installed", "stopped (exit"), "stopped", [], 0),
+              ("past the stop", "Installed", "the lines above say where"), "stopped", [], 0),
              ("ready-no-python3", go + "finish\n", "shell", "0", True, 0, ("Installed.",), ("NOT ready",), "ready", [],
               1),
              ("not-ready-no-python3", go + 'missing numpy\nmissing TCC\nfinish\n', "shell", "0", True, 3,
@@ -974,7 +974,8 @@ def exit_contract_problems(sh, ps1):
               ("Nothing installed",), "ready", [], 0, earlier),
              # ...and a run that ends neither in `stop` nor in `finish`: a failure under `set -e` is a stop, 1 -- also
              # when the failing command's own code is the table's 3 -- and the receipt says `stopped`; where no trap
-             # sees the end (Ctrl-C under bash 3.2, a kill; here `exec`), it says `stopped` from going ahead on.
+             # sees the end (a kill; here `exec`) it says `stopped` from going ahead on, and a signal, which bash 3.2's
+             # trap sees with $? = 0, ends by the signal with the receipt the same.
              ("a-failure", go + "missing numpy\nfalse\nfinish\n", "python3", "0", False, 1,
               ("stopped (exit 1) -- the lines above say where",), ("Installed",), "stopped", ["numpy"], 0, earlier),
              ("a-failure-coded-3", go + "missing numpy\nsh -c 'exit 3'\nfinish\n", "python3", "0", False, 1,
@@ -982,9 +983,10 @@ def exit_contract_problems(sh, ps1):
              ("an-end-no-trap-sees", go + "missing numpy\nexec false\n", "python3", "0", False, 1, (), ("Installed",),
               "stopped", [], 0, earlier),
              # An unbound variable under `set -u`: bash 3.2 (macOS's) hands the trap $? = 0, and a trap that trusted it
-             # ended the run 0 -- ready.
+             # ended the run 0 -- ready. Its line then names no code (bash 5's, 1): never "exit 0" for a run ending 1.
              ("an-unbound-variable", go + 'missing numpy\n: "$NOT_SET_ANYWHERE"\nfinish\n', "python3", "0", False, 1,
-              ("unbound variable", "stopped (exit"), ("Installed",), "stopped", ["numpy"], 0, earlier))
+              ("unbound variable", "the lines above say where"), ("Installed", "(exit 0)"), "stopped", ["numpy"], 0,
+              earlier))
     try:
         for case, body, builder, dry, plugin, want_rc, words, never, status, missing_want, want_calls, *before in cases:
             rc, said, receipt, unreadable, calls, sha = run(case, body, builder, dry, plugin, *before)
