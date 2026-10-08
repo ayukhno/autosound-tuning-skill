@@ -625,6 +625,15 @@ def _load_naming_uncached():
     return _load_sibling("naming.py")
 
 
+def _naming_unloaded():
+    """`naming.py could not be loaded (<type>: <message>) -- a capture name cannot be recognised` when the grammar did
+    not load, else "" (the final review's M2): what the evidence verdicts (`done`, `check`, `handoff`) say beside a
+    capture name that resolves to nothing for want of a grammar, never only that the evidence resolves to nothing."""
+    if _load_naming() is not None:
+        return ""
+    return f"naming.py could not be loaded{_load_failure('naming.py')} -- a capture name cannot be recognised"
+
+
 def _state_root(project_dir):
     env = os.environ.get("AUTOSOUND_STATE_ROOT")
     return env if env else os.path.join(project_dir, "state")
@@ -1402,6 +1411,14 @@ class Process:
         versions = _ledger_versions(self.project_dir)
         naming = _load_naming()
         if not any(resolves(item, self.project_dir, versions, naming) for item in evidence):
+            if naming is None:
+                # The grammar's absence, not the evidence (the final review's M2): a name in the grammar resolves to
+                # nothing only because nothing here can recognise it.
+                raise ProcessError(
+                    f"step {step_id!r} has evidence, but none of it resolves here: "
+                    + "; ".join(repr(str(e)) for e in evidence)
+                    + f". {_naming_unloaded()}, so a REW measurement name resolves to nothing until it loads; a "
+                    "ledger version that exists (`v_003`) or a project file that exists still resolves")
             raise ProcessError(
                 f"step {step_id!r} has evidence, but none of it resolves: "
                 + "; ".join(repr(str(e)) for e in evidence)
@@ -1638,9 +1655,11 @@ class Process:
         if previous and not previous.get("closed"):
             self._close_capture(state, previous, reason="superseded")
         state["capture"] = round_
-        self._write(state)
-        round_["plan_path"] = self._write_capture_plan(round_)
-        self._write(state)
+        # One state write, the plan path in it (the final review's M3). The round went in first and its plan path in a
+        # second write, and that one refused -- a Windows holder past the retries -- said "it is as it was" over a
+        # state holding the round, with no `capture_issued`: the next round closed it as superseded. The plan file is
+        # written once the guards pass, before the state, so a refused guard leaves nothing beside it.
+        self._write(state, before_write=lambda: round_.update(plan_path=self._write_capture_plan(round_)))
         self._append(
             EV_CAPTURE_ISSUED,
             capture=round_["id"],
@@ -2800,10 +2819,12 @@ class Process:
                   "tell from one nobody ever thought of")
         unbacked = self.unbacked_done_steps(state)
         if unbacked:
+            unloaded = _naming_unloaded()            # the grammar's absence, not the prose's (the final review's M2)
             missing.append(
                 "done steps whose evidence resolves to nothing on disk: "
                 + ", ".join(str(e.get("id")) for e in unbacked)
-                + " — the chat is about to go, and prose that pointed at it goes with it")
+                + (f" — {unloaded}, so a step closed on one reads so here" if unloaded else
+                   " — the chat is about to go, and prose that pointed at it goes with it"))
         if not _ledger_versions(self.project_dir):
             missing.append(
                 "no ledger snapshot on disk (`state/<preset>/v_NNN.json`) — the next session reads "
@@ -2883,7 +2904,10 @@ class Process:
             raise ProcessError(f"no such step {step_id!r}")
         return entry
 
-    def _write(self, state):
+    def _write(self, state, before_write=None):
+        """Write the state, once its guards pass. `before_write`, when given, runs between the guards and the write: what
+        goes into the state from a file written beside it (`start_capture`'s plan path), so that file is never written
+        beside a state the guards refuse, and the state is written once (the final review's M3)."""
         state["updated"] = _now()
         validate(state)
         # Strictly first (#136, audit K-2): a file that is there and cannot be read is never replaced. Each transition
@@ -2897,6 +2921,8 @@ class Process:
         # the write left the change in the state with no line in the journal.
         self._require_journal()
         os.makedirs(self.dir, exist_ok=True)  # first real write is what creates `process/`
+        if before_write is not None:
+            before_write()
         # A temp of this writer's own, then one move (skill #135): a crash mid-write would otherwise leave truncated
         # JSON, and the next session would read an empty process and think nothing had happened; a fixed temp name
         # was shared by every writer of the file (audit T-8).
@@ -6267,6 +6293,123 @@ def _check_naming_load_error_named():
     assert not failures, "\n  ".join(["a naming.py that cannot be loaded, said without why:"] + failures)
 
 
+def _check_evidence_verdicts_name_the_naming_load_error():
+    """`done`, `check` and `handoff` over a `naming.py` that cannot be loaded name it and why (the final review's M2,
+    batch 1's m4 form), never only the evidence: with no grammar a capture name resolves to nothing. `done` refused
+    "none of it resolves ... a REW measurement name in the grammar" over a name that is one; `check` said a step
+    closed on a capture while the grammar loaded is UNBACKED, and `handoff` that its evidence resolves to nothing,
+    with no word of the load. Each still refuses -- nothing can vouch for the name -- and says the cause."""
+    import shutil
+    import tempfile
+    global _load_naming
+    real_naming = _load_naming
+    top = tempfile.mkdtemp(prefix="autosound_process_naming_evidence_")
+    said = ("naming.py could not be loaded (SyntaxError: invalid syntax (naming.py, line 12)) -- a capture name "
+            "cannot be recognised")
+    failures = []
+    try:
+        d = os.path.join(top, "process")
+        p = Process(d)
+        p.enter_phase("-1")
+        p.add_step("0.1", "baseline sweeps")
+        p.finish_step("0.1", ["w-L_1 (sw)"])             # closed while the grammar loads
+        p.add_step("0.2", "more sweeps")
+
+        def broken():
+            _LOAD_FAILURES["naming.py"] = SyntaxError("invalid syntax (naming.py, line 12)")
+            return None
+        _load_naming = broken
+        for argv in (["done", "0.2", "w-R_1 (sw)"], ["check"]):
+            rc, out, err = _run_main(["process.py", d, *argv])
+            if rc != EXIT_NO or said not in (out + err) or "Traceback" in err:
+                failures.append(f"{argv[0]}: rc {rc}, out {out.strip()[-300:]!r}, err {err.strip()[-300:]!r}")
+        missing = [m for m in Process(d).handoff()["missing"] if m.startswith("done steps whose evidence")]
+        if not missing or said not in missing[0]:
+            failures.append(f"handoff: {missing}")
+        if Process(d).step(Process(d).load(), "0.2").get("status") == STEP_DONE:
+            failures.append("done: the step was closed over evidence nothing could recognise")
+    finally:
+        _load_naming = real_naming
+        _LOAD_FAILURES.pop("naming.py", None)
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["a naming.py that cannot be loaded, the evidence blamed:"] + failures)
+
+
+def _check_capture_start_said_as_it_landed():
+    """`capture-start` refused at a state write says what landed (the final review's M3): it wrote the state twice --
+    the round, then its plan path -- and a second write refused (a Windows holder past the retries) said "it is as it
+    was" over a state holding the open round, with no `capture_issued` in the journal; the next round then closed it
+    as superseded, a close for a round never issued. Whichever state write a holder refuses, the state and the journal
+    agree after it: refused, both are as they were, byte for byte; through, the round is open, its plan path recorded
+    and its `capture_issued` in the journal."""
+    import shutil
+    import tempfile
+    io_ = _project_io()
+    real = io_.atomic_write_json
+    top = tempfile.mkdtemp(prefix="autosound_process_capture_start_landed_")
+    failures = []
+
+    def held_at(n):
+        """`atomic_write_json` with the `n`-th write of `process-state.json` refused, as a holder past the retries."""
+        seen = []
+
+        def write(path, data, *args, **kwargs):
+            if os.path.basename(path) == "process-state.json":
+                seen.append(path)
+                if len(seen) == n:
+                    raise PermissionError(13, "The process cannot access the file because it is being used by "
+                                              "another process", path)
+            return real(path, data, *args, **kwargs)
+        return write
+
+    def state_and_journal(p):
+        out = {}
+        for path in (p.state_path, p.journal_path):
+            with open(path, "rb") as fh:
+                out[path] = fh.read()
+        return out
+    try:
+        for refused_at in (1, 2):
+            d = os.path.join(top, f"held-at-{refused_at}", "process")
+            p = Process(d)
+            p.enter_phase("-1")
+            before = state_and_journal(p)
+            io_.atomic_write_json = held_at(refused_at)
+            try:
+                rc, out, err = _run_main(["process.py", d, "capture-start", "1", "w-L_1 (sw)"])
+            finally:
+                io_.atomic_write_json = real
+            round_ = Process(d).load().get("capture") or {}
+            issued = [e for e in Process(d).events() if e.get("type") == EV_CAPTURE_ISSUED]
+            label = f"the state's write {refused_at} held"
+            if rc == EXIT_NO:
+                if "it is as it was" in err and state_and_journal(p) != before:
+                    failures.append(f"{label}: said it is as it was, and the state holds {round_.get('id')!r} open "
+                                    f"with {len(issued)} capture_issued -- {err.strip()[-200:]!r}")
+            elif rc != EXIT_OK or round_.get("id") != "cap_001" or round_.get("closed") or len(issued) != 1 \
+                    or round_.get("plan_path") != "docs/plans/_1-capture.md":
+                failures.append(f"{label}: rc {rc}, round {round_.get('id')!r} closed {round_.get('closed')!r}, "
+                                f"plan {round_.get('plan_path')!r}, {len(issued)} issued, err {err.strip()[-200:]!r}")
+        # The plan file goes down only once the state's guards pass: a state damaged after the round's own read is
+        # refused by `_write`'s guard, and nothing -- the plan's list included -- is left beside it.
+        p = Process(_state_dir_with(_UNREADABLE["truncated"], top))
+        before = _project_bytes(p.dir)
+        with _StateReads(lambda n, read: _empty_state() if n == 1 else read()):
+            try:
+                p.start_capture("1", expected=["w-L_1 (sw)"])
+            except Exception as exc:  # noqa: BLE001 -- the kind is what is under test
+                if not getattr(type(exc), "is_unreadable", False):
+                    failures.append(f"damaged after its read: raised {type(exc).__name__}: {exc}")
+            else:
+                failures.append("damaged after its read: the round opened")
+        if _project_bytes(p.dir) != before:
+            failures.append(f"damaged after its read: left {sorted(set(_project_bytes(p.dir)) - set(before))}")
+    finally:
+        io_.atomic_write_json = real
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["capture-start refused at a state write:"] + failures)
+
+
 def _check_close_checks_stage_refusals():
     """capture-close's checks run after its read against REW, in an `except` that lets the close go on: REW stopping
     before them, or a bug in them, is said with its type and the round closes unchecked, exit 0 (as built). Two
@@ -6498,7 +6641,8 @@ def _selftest():
                   _check_naming_load_error_named, _check_round_lookups_read_the_state_strictly,
                   _check_intake_gate_names_an_unreadable_glossary, _check_plan_names_the_naming_load_error,
                   _check_phase1_gate_names_an_unreadable_glossary, _check_capture_verbs_read_the_glossary_strictly,
-                  _check_rate_note_reads_the_rule):
+                  _check_rate_note_reads_the_rule, _check_evidence_verdicts_name_the_naming_load_error,
+                  _check_capture_start_said_as_it_landed):
         try:
             check()
         except AssertionError as exc:
@@ -7968,6 +8112,9 @@ def _main(argv):
                     f"UNBACKED: {entry['id']} {entry.get('name','')} "
                     f"-- evidence resolves to nothing: {'; '.join(map(str, entry['evidence']))}"
                 )
+            unloaded = _naming_unloaded() if unbacked else ""
+            if unloaded:                              # the grammar's absence, not the evidence (the final review's M2)
+                print(f"  {unloaded}: a step closed on one reads as UNBACKED here")
             print(
                 f"{len(bad)} done step(s) without evidence, "
                 f"{len(unbacked)} whose evidence resolves to nothing"

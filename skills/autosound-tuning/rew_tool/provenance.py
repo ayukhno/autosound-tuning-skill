@@ -40,8 +40,8 @@ _SHA = re.compile(r"^[0-9a-f]{40}$")
 #: provenance is worth less than the artifact it rides on.
 _TIMEOUT = 3.0
 
-#: `skill_sha()` for the life of the process, once asked. `None` means "not asked yet"; `""` is an
-#: answer. A stamp that changed halfway through a run would put two writers in one file.
+#: `(skill_sha(), sha_unknown_because())` for the life of the process, once asked. `None` means "not asked yet"; a
+#: sha of `""` is an answer. A stamp that changed halfway through a run would put two writers in one file.
 _CACHE = None
 
 
@@ -79,25 +79,63 @@ def _is_root(path):
             or os.path.exists(os.path.join(path, ".git")))
 
 
-def _sha_at(root):
-    """`git rev-parse HEAD` in `root`, or "" — never an exception, never a traceback.
+def _same_folder(a, b):
+    """True when `a` and `b` name one folder: real paths, in the platform's case (git prints `C:/...` on Windows)."""
+    return os.path.normcase(os.path.realpath(a)) == os.path.normcase(os.path.realpath(b))
+
+
+def _answer_at(root):
+    """`(sha, why)` for the checkout at `root`: HEAD's forty characters and "", or "" and why it cannot be told --
+    never an exception, never a traceback.
 
     HEAD, not the state of the working tree: a modified checkout stamps the commit it is based on.
     That is coarse on purpose — the companion app's number means exactly the same thing, and a
     stamp that disagreed with what the screen shows would be worse than one that is honest about
     being a commit and nothing more.
+
+    Only `root`'s own repository answers (the final review's M1): `repo_root` takes a folder holding
+    `.claude-plugin/plugin.json` with no `.git`, and git asked there walks up into any repository the copy was unpacked
+    inside, whose HEAD is no commit of the method's. So the repository git finds must be `root` itself. `why` names
+    the cause -- no git, git not answering, git's own words, a repository around the copy -- where every one of them
+    read as "no git".
     """
     try:
-        done = subprocess.run(["git", "-C", root, "rev-parse", "HEAD"],
+        done = subprocess.run(["git", "-C", root, "rev-parse", "--show-toplevel", "HEAD"],
                               capture_output=True, text=True, timeout=_TIMEOUT, check=False, encoding="utf-8", errors="replace")
-    except Exception:  # noqa: BLE001 — no git on the machine is a finding, not a crash
-        return ""
-    lines = (done.stdout or "").strip().splitlines()
-    first = lines[0].strip() if lines else ""
+    except FileNotFoundError:
+        return "", "git is not installed here"
+    except subprocess.TimeoutExpired:
+        return "", f"git did not answer in {_TIMEOUT:g} s"
+    except Exception as exc:  # noqa: BLE001 — git that cannot be run is a finding, not a crash
+        return "", f"git could not be run ({type(exc).__name__}: {exc})"
+    lines = [line.strip() for line in (done.stdout or "").splitlines() if line.strip()]
+    if done.returncode != 0 or len(lines) < 2:
+        said = [line.strip() for line in (done.stderr or "").splitlines() if line.strip()]
+        return "", (f"git: {said[0]}" if said else f"git rev-parse exited {done.returncode}")
+    top, first = lines[0], lines[1]
+    if not _same_folder(top, root):
+        return "", f"{root} is no checkout of its own: git answers for {top}, a repository around it"
     # RECOGNISED, not trusted. git prints its failures as text, and `fatal: not a git repository`
     # standing in the field that identifies the method would be worse than an empty one: it looks
     # like data. Anything that is not forty hex characters is not an answer.
-    return first if _SHA.match(first) else ""
+    if not _SHA.match(first):
+        return "", f"git answered {first!r}, which is no commit"
+    return first, ""
+
+
+def _sha_at(root):
+    """`git rev-parse HEAD` in `root`'s own repository, or "" (`_answer_at`, without the why)."""
+    return _answer_at(root)[0]
+
+
+def _answer():
+    """`(sha, why)` for this checkout, asked once per process (`_CACHE`)."""
+    global _CACHE
+    if _CACHE is None:
+        root = repo_root()
+        _CACHE = (("", "this copy is in no checkout of the method (no .claude-plugin/plugin.json or .git in the four "
+                       "folders above rew_tool/provenance.py)") if root is None else _answer_at(root))
+    return _CACHE
 
 
 def skill_sha():
@@ -106,13 +144,16 @@ def skill_sha():
     `""` is a real answer, not a failure: a skill folder unpacked on its own is in no repository,
     and a machine without git cannot be asked. Writers stamp it as it comes rather than dropping
     the key, so a reader can tell "asked, could not be told" from "written before anything asked" —
-    the same distinction `dsp_profile` draws between a null fact and an absent one.
+    the same distinction `dsp_profile` draws between a null fact and an absent one. Why it could not be told is
+    `sha_unknown_because()`.
     """
-    global _CACHE
-    if _CACHE is None:
-        root = repo_root()
-        _CACHE = "" if root is None else _sha_at(root)
-    return _CACHE
+    return _answer()[0]
+
+
+def sha_unknown_because():
+    """Why `skill_sha()` is "": no checkout around this copy, a repository around the copy that is not its own, no git,
+    git not answering, or git's own words -- "" when the sha is told (the final review's M1)."""
+    return _answer()[1]
 
 
 # --------------------------------------------------------------------------- CLI
@@ -123,6 +164,42 @@ _USAGE = """usage: provenance.py [--selftest]
 """
 
 
+def _check_a_copy_inside_another_repository():
+    """A copy of the method unpacked inside another repository -- `.claude-plugin/plugin.json` and no `.git` of its own
+    -- has no sha, never that repository's (the final review's M1): `git -C <copy> rev-parse HEAD` walks up past the
+    copy, and `contract.py version` and the journal's `written_by` stamped the enclosing repository's HEAD as the
+    method's -- a wrong sha that looks exactly like a right one. The answer says why: the repository git found is
+    another folder. A copy in no repository at all says git's own words, never "no git" for a git that answered."""
+    import tempfile
+
+    def git(cwd, *args):
+        subprocess.run(["git", "-C", cwd, *args], capture_output=True, text=True, check=True,
+                       env={**os.environ, "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_SYSTEM": os.devnull},
+                       encoding="utf-8", errors="replace")
+    with tempfile.TemporaryDirectory() as tmp:
+        outer = os.path.join(tmp, "another-repo")
+        copy = os.path.join(outer, "vendor", "autosound-tuning")
+        os.makedirs(os.path.join(copy, ".claude-plugin"))
+        with open(os.path.join(copy, ".claude-plugin", "plugin.json"), "w", encoding="utf-8") as fh:
+            fh.write('{"name": "autosound-tuning", "version": "3.1.2"}\n')
+        git(outer, "init", "--quiet")
+        git(outer, "config", "user.email", "selftest@example.invalid")
+        git(outer, "config", "user.name", "selftest")
+        git(outer, "add", ".")
+        git(outer, "commit", "--quiet", "-m", "a repository the copy sits in")
+        assert _is_root(copy) and not os.path.exists(os.path.join(copy, ".git")), "the fixture is no bare copy"
+        assert _sha_at(copy) == "", f"a copy inside another repository answered {_sha_at(copy)!r}, that repository's"
+        sha, why = _answer_at(copy)
+        assert sha == "" and why.startswith(f"{copy} is no checkout of its own: git answers for ") \
+            and "a repository around it" in why, (sha, why)
+        # Outside any repository git says so itself; inside one the temp folder sits in, the folder is not that one's.
+        alone = os.path.join(tmp, "alone")
+        os.makedirs(alone)
+        sha, why = _answer_at(alone)
+        assert sha == "" and ((why.startswith("git: ") and "not a git repository" in why)
+                              or "is no checkout of its own" in why), (sha, why)
+
+
 def _selftest():
     """Both directions on real repositories, because both have been wrong in the neighbouring tree.
 
@@ -131,6 +208,13 @@ def _selftest():
     worth having: it is the case that produced `fatal: …` in an identifier field.
     """
     import tempfile
+    failures = []
+    for check in (_check_a_copy_inside_another_repository,):
+        try:
+            check()
+        except AssertionError as exc:
+            failures.append(f"{check.__name__}: {exc}")
+    assert not failures, "\n".join(failures)
 
     def git(cwd, *args):
         subprocess.run(["git", "-C", cwd, *args], capture_output=True, text=True, check=True,

@@ -612,17 +612,18 @@ def bundled_dir():
     return os.path.normpath(BUNDLED_DIR)
 
 
-def find_bundled(vendor, model, dir_=None):
+def find_bundled(vendor, model, dir_=None, skipped=None):
     """Exact vendor+model match only against a directory of reference profiles.
 
     No fuzzy/sibling matching — same rule as project-intake.md §4: another model's profile,
     even a platform sibling's, must never be assumed to apply. Returns None if no exact match.
 
     `dir_` defaults to the method's own library (`bundled_dir()`); pass one to search somebody
-    else's. It stays an argument because a consumer may legitimately ship its own.
+    else's. It stays an argument because a consumer may legitimately ship its own. `skipped`, a list, gets each file
+    the scan could not read, as `(path, why)` (`_library_entry`): the match looked for may be one of them.
     """
     for path in sorted(glob.glob(os.path.join(dir_ or bundled_dir(), "*.json"))):
-        data = _library_entry(path)
+        data = _library_entry(path, skipped)
         if data is None:
             continue
         profile = _unwrap(data)
@@ -644,14 +645,18 @@ def list_bundled(dir_=None):
     return sorted(out)
 
 
-def _library_entry(path):
+def _library_entry(path, skipped=None):
     """A library file's profile, or None when it cannot be read: a library is a shelf of candidates, and a file on it
     that cannot be read -- damaged, or written by a newer method (`load_profile`'s `Unreadable`, #136) -- is not one.
-    Nothing is written from a library scan; a project's own profile is read by `load_profile`, which refuses."""
+    Nothing is written from a library scan; a project's own profile is read by `load_profile`, which refuses. A file
+    skipped goes into `skipped` when given, as `(path, why)`, so a caller looking for one entry can say it may be
+    that one (`refresh`, the final review's M4)."""
     try:
         return load_profile(path)
     except Exception as exc:  # noqa: BLE001 -- what cannot be read is skipped; anything else still raises
         if isinstance(exc, (OSError, ValueError)) or getattr(exc, "is_unreadable", False):
+            if skipped is not None:
+                skipped.append((path, str(exc)))
             return None
         raise
 
@@ -668,6 +673,8 @@ def refresh_project(project_dir, dir_=None, write=False):
       * `("no-project", path)`      — no `dsp_profile.json` to refresh
       * `("no-dsp", None)`          — the profile names no vendor+model, so nothing can be matched
       * `("no-match", (v, m))`      — the library has no exact entry for that processor
+      * `("unreadable", (v, m, [(path, why)]))` — no readable exact entry, and these files on the shelf cannot be
+                                      read: the entry may be one of them (the final review's M4; it read as no-match)
       * `("current", diff={})`      — already identical to the library
       * `("stale", diff)`           — differs; written only when `write` is true
 
@@ -684,9 +691,10 @@ def refresh_project(project_dir, dir_=None, write=False):
     model = str(inner.get("name") or "").strip()
     if not (vendor and model):
         return "no-dsp", None
-    library = find_bundled(vendor, model, dir_)
+    skipped = []
+    library = find_bundled(vendor, model, dir_, skipped)
     if library is None:
-        return "no-match", (vendor, model)
+        return ("unreadable", (vendor, model, skipped)) if skipped else ("no-match", (vendor, model))
     delta = diff_profile(current, library)
     # `diff_profile` always returns {"top": {...}, "groups": {...}}, so the dict is truthy even
     # when nothing differs. Testing it directly made refresh report every up-to-date project as
@@ -1356,6 +1364,12 @@ def _run(args):
                   f"a wrong limit is enforced, a missing one is reported as unchecked)",
                   file=sys.stderr)
             return 1
+        if status == "unreadable":
+            vendor, model, skipped = detail
+            print(f"the library has no readable exact entry for {vendor} {model!r}, and {len(skipped)} file(s) on it "
+                  f"cannot be read -- the entry may be one of them: " + "; ".join(why for _path, why in skipped)
+                  + " — nothing changed", file=sys.stderr)
+            return 1
         if status == "current":
             print("already current with the library")
             return 0
@@ -1766,6 +1780,57 @@ def _check_library_skips_unreadable():
         shutil.rmtree(lib, ignore_errors=True)
 
 
+def _check_refresh_names_an_unreadable_entry():
+    """`refresh` over a library holding a file it cannot read -- cut off, or a newer method's -- names that file and
+    why, never "the library has no exact entry" (the final review's M4): the scan skips such a file, as a shelf of
+    candidates must, and the entry the project's DSP was looking for may be that very file. `refresh_project` answers
+    `("unreadable", (vendor, model, [(path, why)]))` and the command line says each file with its reason and repair,
+    exit 1, nothing changed. A readable exact entry beside such a file is found as before."""
+    import contextlib
+    import io
+    import shutil
+    import tempfile
+    lib, proj = tempfile.mkdtemp(prefix="autosound_library_cut_"), tempfile.mkdtemp(prefix="autosound_refresh_cut_")
+    failures = []
+    try:
+        mine = {"dsp_profile": {"name": "M6V4", "vendor": "Musway", "groups": [
+            {"id": "physical_outputs", "label": "Out", "fields": ["gain_db"]}]}}
+        other = {"dsp_profile": {"name": "Ultra S", "vendor": "Helix", "groups": [
+            {"id": "physical_outputs", "label": "Out", "fields": ["gain_db"]}]}}
+        with open(os.path.join(lib, "b-helix.json"), "w", encoding="utf-8") as fh:
+            json.dump(other, fh)
+        cut = os.path.join(lib, "a-musway-m6v4.json")
+        with open(cut, "wb") as fh:
+            fh.write(json.dumps(mine).encode("utf-8")[:40])             # the Musway entry, cut off
+        save_profile(profile_path(proj), mine)
+        with open(profile_path(proj), "rb") as fh:
+            kept = fh.read()
+        status, detail = refresh_project(proj, lib, write=True)
+        named = status == "unreadable" and detail[:2] == ("Musway", "M6V4") and [p for p, _ in detail[2]] == [cut]
+        if not named or "is not valid JSON" not in detail[2][0][1]:
+            failures.append(f"refresh_project: {status!r}, {detail!r}")
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            rc = _main(["refresh", proj, "--bundled-dir", lib, "--write"])
+        said = err.getvalue().strip()
+        if rc != 1 or out.getvalue() or "no exact entry" in said or cut not in said \
+                or "is not valid JSON" not in said or "checkout HEAD -- a-musway-m6v4.json" not in said:
+            failures.append(f"refresh: rc {rc}, out {out.getvalue()[-200:]!r}, said {said[-400:]!r}")
+        with open(profile_path(proj), "rb") as fh:
+            if fh.read() != kept:
+                failures.append("the project's profile changed over a library entry nobody could read")
+        with open(cut, "w", encoding="utf-8") as fh:                     # the entry whole again, the other cut
+            json.dump(mine, fh)
+        with open(os.path.join(lib, "b-helix.json"), "wb") as fh:
+            fh.write(b'{"dsp_profile": {"na')
+        if refresh_project(proj, lib)[0] != "current":
+            failures.append(f"a readable entry beside a cut file: {refresh_project(proj, lib)!r}")
+    finally:
+        shutil.rmtree(lib, ignore_errors=True)
+        shutil.rmtree(proj, ignore_errors=True)
+    assert not failures, "\n  ".join(["refresh over a library file it cannot read:"] + failures)
+
+
 def _check_finalize_says_a_draft_left():
     """`finalize` never swallows a draft it could not remove (#134, F M-9). The profile is written; a draft left
     beside it is read before it by `load_draft`, and the interview would resume from the stale draft. The remove is
@@ -1887,7 +1952,7 @@ def _selftest():
                   _check_bind_model_rate_refuses_unreadable, _check_bind_model_rate_reads_the_sheets_rule,
                   _check_writers_refuse_unreadable_profile, _check_library_skips_unreadable,
                   _check_finalize_says_a_draft_left, _check_draft_left_repair_by_cause,
-                  _check_writers_go_through_the_move):
+                  _check_writers_go_through_the_move, _check_refresh_names_an_unreadable_entry):
         try:
             check()
         except AssertionError as exc:

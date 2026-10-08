@@ -423,19 +423,29 @@ def _ledger_file(project_line, preset, head):
     return f"state/versions/{head}.json" if project_line else f"state/{preset}/{head}.json"
 
 
-def check_ledgers(project_dir):
+def check_ledgers(project_dir, unreadable=None):
     """One entry per preset directory under `state/` (D1's canonical layout).
 
     Dot-directories are skipped: a consumer app's own scratch (`.tcc/`) or a VCS directory sitting
     beside the presets is not a preset, and reporting it as one ("no snapshot history yet") sends
     the reader looking for a ledger that was never supposed to exist. Found live against the
     dogfood project, which has a `state/.tcc/`.
+
+    A ledger file that is there and cannot be read -- `slots.json`, an old layout's `HEAD` -- is its row, not valid,
+    with its repair, and goes into `unreadable` (a list, `{file, issue}`) when given, as `check_project` names
+    `project.json` (the final review's code M-3): `list_presets()` and `head()` raised `SnapshotError` out of `check`.
     """
     state_mod = _load_vendored("state")
     root = os.path.join(project_dir, "state")
     entries, snapshots = [], {}
     if not os.path.isdir(root):
         return entries, snapshots
+
+    def cannot_read(rel, path, exc):
+        issue = f"{exc} -- {_siblings().load('project_io.py').restore_line(path)}"
+        if unreadable is not None:
+            unreadable.append({"file": rel, "issue": issue})
+        return _entry(rel, True, None, False, [issue])
     # W-2 R (hub #195): on the per-project line a slot's current version lives in `versions/`, and
     # the slots are `slots.json`'s -- not directories. A line caught half-way is one row saying so.
     try:
@@ -443,13 +453,22 @@ def check_ledgers(project_dir):
     except state_mod.SnapshotError as exc:
         return [_entry("state/", True, None, False, [str(exc)])], snapshots
     if project_line:
-        presets = state_mod.Registry(root).list_presets()
+        try:
+            presets = state_mod.Registry(root).list_presets()
+        except state_mod.SnapshotError as exc:
+            slots = os.path.join(root, state_mod.SLOTS_FILE)
+            return [cannot_read(f"state/{state_mod.SLOTS_FILE}", slots, exc)], snapshots
     else:
         presets = sorted(n for n in os.listdir(root)
                          if not n.startswith(".") and os.path.isdir(os.path.join(root, n)))
     for preset in presets:
         h = state_mod.PresetHistory(root, preset)
-        head = h.head()
+        try:
+            head = h.head()
+        except state_mod.SnapshotError as exc:
+            entries.append(cannot_read(f"state/{preset}/HEAD", h._head_path(), exc))
+            snapshots[preset] = None
+            continue
         if head is None:
             entries.append(_entry(f"state/{preset}/", False,
                                    issues=["no snapshot history yet"]))
@@ -891,7 +910,8 @@ def check_project(project_dir, skip_rew=False):
     process_entry, journal_entry, process_state = check_process(project_dir)
     files.append(process_entry)
     files.append(journal_entry)
-    ledger_entries, snapshots = check_ledgers(project_dir)
+    ledger_unreadable = []
+    ledger_entries, snapshots = check_ledgers(project_dir, ledger_unreadable)
     files.extend(ledger_entries)
 
     cross = {
@@ -938,7 +958,7 @@ def check_project(project_dir, skip_rew=False):
     unreadable = [{"file": name, "issue": (entry.get("issues") or ["cannot be read"])[0]}
                   for name, entry, read in (("project.json", project_entry, project_data is not None),
                                             ("glossary.json", glossary_entry, glossary_read))
-                  if entry["exists"] and not read]
+                  if entry["exists"] and not read] + ledger_unreadable    # a ledger file too (the final review's M-3)
     prose = looks_like_prose(project_dir, files)
     if prose:
         # The per-file hint is "run intake", which is right for an empty folder and wrong here —
@@ -1573,13 +1593,22 @@ def _skill_version(start=None):
     return None
 
 
-def _skill_sha():
-    """The commit this copy is at (`provenance.skill_sha()`), or None when it cannot be told: no repository, no git,
-    or a provenance that cannot be loaded. Through `_siblings()`, so a contract.py loaded by path finds it."""
+def _skill_sha_and_why():
+    """`(sha, None)`: the commit this copy is at (`provenance.skill_sha()`); or `(None, why)` when it cannot be told --
+    provenance's own reason (`sha_unknown_because`: no checkout of its own, no git, git's own words) or the failure
+    that kept provenance from answering (the final review's M1). Through `_siblings()`, so a contract.py loaded by path
+    finds it."""
     try:
-        return _siblings().load("provenance.py").skill_sha() or None
-    except Exception:  # noqa: BLE001 -- a diagnostic that cannot tell the sha says so (null); it does not fail
-        return None
+        prov = _siblings().load("provenance.py")
+        sha = prov.skill_sha()
+        return (sha, None) if sha else (None, prov.sha_unknown_because() or "no reason given")
+    except Exception as exc:  # noqa: BLE001 -- a diagnostic that cannot tell the sha says why (null); it does not fail
+        return None, f"provenance.py could not answer -- {type(exc).__name__}: {exc}"
+
+
+def _skill_sha():
+    """The commit this copy is at, or None when it cannot be told (`_skill_sha_and_why`)."""
+    return _skill_sha_and_why()[0]
 
 
 _USAGE = """usage: contract.py check <project-dir> [--json] [--no-rew] [--gate] [--phase0-gate]
@@ -1712,13 +1741,15 @@ def _main(argv):
                       file=sys.stdout if rewritten else sys.stderr)
         return 0 if rewritten or not done else 3
     if argv[1] == "version":
+        sha, why = _skill_sha_and_why()
         info = {"contract_version": CONTRACT_VERSION, "format_version": FORMAT_VERSION,
-                "skill_version": _skill_version(), "sha": _skill_sha()}
+                "skill_version": _skill_version(), "sha": sha}
         if "--json" in argv:
             print(json.dumps(info))
         else:
+            shown = info["sha"] or f"sha unknown ({why})"      # the cause, never "no git" for every one (M1)
             print(f"contract {info['contract_version']} · format {info['format_version']} · "
-                  f"skill {info['skill_version'] or 'unknown'} · {info['sha'] or 'no git'}")
+                  f"skill {info['skill_version'] or 'unknown'} · {shown}")
         return 0
     if argv[1] != "check" or len(argv) < 3:
         print(_USAGE, file=sys.stderr)
@@ -2374,8 +2405,9 @@ def _check_version_shape():
     with contextlib.redirect_stdout(out):
         rc = _main(["contract.py", "version"])
     line = out.getvalue().strip()
+    shown = v["sha"] or f"sha unknown ({_skill_sha_and_why()[1]})"
     assert rc == 0 and line == (f"contract {CONTRACT_VERSION} · format {FORMAT_VERSION} · "
-                                f"skill {v['skill_version'] or 'unknown'} · {v['sha'] or 'no git'}"), line
+                                f"skill {v['skill_version'] or 'unknown'} · {shown}"), line
 
 
 def _check_skill_version():
@@ -2435,7 +2467,7 @@ def _check_skill_sha():
             assert rel == "provenance.py", rel
             if isinstance(answer, Exception):
                 raise answer
-            return types.SimpleNamespace(skill_sha=lambda: answer)
+            return types.SimpleNamespace(skill_sha=lambda: answer, sha_unknown_because=lambda: "" if answer else "x")
         return lambda: types.SimpleNamespace(load=load)
     try:
         for answer, want in ((sha, sha), ("", None), (ImportError("siblings: provenance.py is not in X"), None),
@@ -2445,6 +2477,100 @@ def _check_skill_sha():
     finally:
         globals()["_siblings"] = real
     assert _skill_sha() == (real().load("provenance.py").skill_sha() or None), _skill_sha()
+
+
+def _check_version_says_why_no_sha():
+    """`contract.py version` says why the sha cannot be told (the final review's M1), as `sha unknown (<why>)`:
+    provenance's own reason -- a copy unpacked in another repository, no git, git's own words -- or the failure that
+    kept provenance from answering. Every such case printed "no git", a `provenance.py` that would not load included.
+    `--json` keeps `sha` null, its four keys as they were (contract 1, item 1)."""
+    import contextlib
+    import io
+    import types
+    real = globals()["_siblings"]
+
+    def stub(answer, why):
+        def load(rel):
+            assert rel == "provenance.py", rel
+            if isinstance(answer, Exception):
+                raise answer
+            return types.SimpleNamespace(skill_sha=lambda: answer, sha_unknown_because=lambda: why)
+        return lambda: types.SimpleNamespace(load=load)
+    failures = []
+    around = "/p/autosound is no checkout of its own: git answers for /p, a repository around it"
+    try:
+        for answer, why, said in (
+                ("", around, f"sha unknown ({around})"),
+                ("", "git is not installed here", "sha unknown (git is not installed here)"),
+                (SyntaxError("invalid syntax (provenance.py, line 3)"), "",
+                 "sha unknown (provenance.py could not answer -- SyntaxError: invalid syntax (provenance.py, line 3))")):
+            globals()["_siblings"] = stub(answer, why)
+            for argv in (["contract.py", "version"], ["contract.py", "version", "--json"]):
+                out = io.StringIO()
+                with contextlib.redirect_stdout(out):
+                    rc = _main(argv)
+                text = out.getvalue().strip()
+                if "--json" in argv:
+                    shape = json.loads(text or "{}")
+                    if rc != 0 or sorted(shape) != ["contract_version", "format_version", "sha", "skill_version"] \
+                            or shape["sha"] is not None:
+                        failures.append(f"{answer!r} --json: rc {rc}, {text!r}")
+                elif rc != 0 or not text.endswith(" · " + said) or "no git" in text:
+                    failures.append(f"{answer!r}: rc {rc}, said {text!r}")
+    finally:
+        globals()["_siblings"] = real
+    assert not failures, "\n  ".join(["version, the sha unknown:"] + failures)
+
+
+def _check_ledger_file_that_cannot_be_read():
+    """A ledger file `check` cannot read -- `state/slots.json` cut off, an old layout's `HEAD` in no encoding -- is its
+    row, there and not valid, with the file and its repair, and the report's `unreadable` names it, so both gates' last
+    lines do (the final review's code M-3): `Registry.list_presets()` and `head()` raised `SnapshotError` out of
+    `check`, a traceback with nothing on stdout -- `check --json`, which TCC runs at launch, answered nothing, and
+    `enter-phase` said "the intake check raised SnapshotError"."""
+    import contextlib
+    import io
+    import shutil
+    import tempfile
+    d = tempfile.mkdtemp(prefix="autosound_contract_cut_slots_")
+    failures = []
+    try:
+        state_mod = _load_vendored("state")
+        root = os.path.join(d, "state")
+        state_mod.PresetHistory(root, "SQ", project_dir=d).snapshot(state_mod._sample_state(), note="v1")
+        slots = os.path.join(root, state_mod.SLOTS_FILE)
+        with open(slots, "rb") as fh:
+            whole = fh.read()
+        old = os.path.join(d, "old")
+        os.makedirs(os.path.join(old, "state", "SQ"))
+        with open(os.path.join(old, "state", "SQ", "v_001.json"), "w", encoding="utf-8") as fh:
+            json.dump(dict(state_mod._sample_state(), preset="SQ", version="v_001"), fh)
+        with open(os.path.join(old, "state", "SQ", "HEAD"), "wb") as fh:
+            fh.write(b"v_0\xff1\n")                                    # no encoding reads it
+        for project_dir, rel, cut in ((d, "state/slots.json", whole[:len(whole) // 2]),
+                                      (old, "state/SQ/HEAD", None)):
+            if cut is not None:
+                with open(slots, "wb") as fh:
+                    fh.write(cut)
+            out, err = io.StringIO(), io.StringIO()
+            try:
+                with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                    rc = _main(["contract.py", "check", project_dir, "--json", "--no-rew"])
+                report = json.loads(out.getvalue())
+            except Exception as exc:  # noqa: BLE001 -- a traceback, or no JSON, is the failure under test
+                failures.append(f"{rel}: {type(exc).__name__}: {exc}; stderr {err.getvalue()[-300:]!r}")
+                continue
+            row = next((f for f in report["files"] if f["file"] == rel), None)
+            named = [u["file"] for u in report.get("unreadable") or []]
+            last = {gate: render_report(report, gate=gate).strip().splitlines()[-1] for gate in ("intake", "phase0")}
+            if row is None or row["exists"] is not True or row["valid"] is not False \
+                    or "cannot be read" not in row["issues"][0] or "checkout HEAD --" not in row["issues"][0] \
+                    or rel not in named or report["ok"] is not False \
+                    or not all(f"{rel} cannot be read" in line for line in last.values()):
+                failures.append(f"{rel}: rc {rc}, row {row}, unreadable {named}, last {last}")
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+    assert not failures, "\n  ".join(["a ledger file check cannot read:"] + failures)
 
 
 def _check_glossary_read_strictly():
@@ -2730,7 +2856,8 @@ def _selftest():
                   _check_gates_name_an_unreadable_project_json, _check_rew_block_by_state,
                   _check_encoding_survey_in_check, _check_repair_encoding_refusals,
                   _check_unreadable_profile_and_seals_reported, _check_version_verb, _check_version_shape,
-                  _check_skill_version, _check_skill_sha, _check_glossary_read_strictly,
+                  _check_skill_version, _check_skill_sha, _check_version_says_why_no_sha,
+                  _check_ledger_file_that_cannot_be_read, _check_glossary_read_strictly,
                   _check_cut_file_named_in_check, _check_phase0_gate_exit_over_an_unreadable_glossary,
                   _check_intake_line_over_an_unreadable_project_json, _check_bom_glossary_is_a_glossary,
                   _check_bom_project_json_one_verdict, _check_dangling_glossary_link_refused):
