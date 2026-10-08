@@ -801,7 +801,7 @@ if (-not $HaveGit) {
     Say "Everything goes into your user profile except Git, which installs for the whole PC and"
     Say "asks Windows' permission once (a dialog: click Yes). It signs you in nowhere -- that comes at"
     Say "the end, in your browser -- and never touches a project folder."
-    Say "Downloads $size; a few minutes. After the dialog you can walk away."
+    Say "Downloads $size; 5 to 15 minutes. After the dialog you can walk away."
 } else {
     Say "Everything goes into your user profile. It signs you in nowhere -- that comes at the end,"
     Say "in your browser -- and never touches a project folder."

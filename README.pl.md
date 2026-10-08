@@ -45,7 +45,7 @@ Aplikację instaluje się jednym poleceniem. Ze sprzętu i subskrypcji będziesz
 
 ## Jak zainstalować i uruchomić
 
-**Domyślnie instalator konfiguruje:** Claude Code, metodę strojenia wraz z bibliotekami Pythona wymaganymi przez jej narzędzia, aplikację desktopową **Autosound TCC** oraz recenzenta Gemini (`agy`). Trwa to 10–20 minut za pierwszym razem na Macu bez narzędzi programistycznych, w przeciwnym razie kilka minut. W zależności od Twojego systemu inne instalatory mogą po drodze poprosić o uprawnienia — to normalne (szczegóły w FAQ).
+**Domyślnie instalator konfiguruje:** Claude Code, metodę strojenia wraz z bibliotekami Pythona wymaganymi przez jej narzędzia, aplikację desktopową **Autosound TCC** oraz recenzenta Gemini (`agy`). Trwa to 10–20 minut za pierwszym razem na Macu bez narzędzi programistycznych, 5–15 na Windowsie bez Gita, w przeciwnym razie kilka minut. W zależności od Twojego systemu inne instalatory mogą po drodze poprosić o uprawnienia — to normalne (szczegóły w FAQ).
 
 **macOS** — otwórz Terminal (⌘-Spacja, wpisz „terminal”, Enter) i wklej:
 ```sh

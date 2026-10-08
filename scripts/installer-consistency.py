@@ -147,11 +147,14 @@ ENGINE_ANSWERS = {0: "installed for <tag> and checked against SHA256SUMS",
                   3: "does not match its SHA256SUMS -- nothing installed",
                   4: "carries no engine for this machine",
                   5: "the release could not be reached -- run the installer again later"}
-#: E-time (#142): how long an install takes, said one way -- 10 to 20 minutes only on a Mac without Apple's Command
-#: Line Tools (Apple's ~1 GB, through their own window), a few minutes everywhere else: the installers' plan screen per
-#: machine, and README.md and FAQ.md in this sentence. They said 10-20 for everyone, and install.ps1 5 to 15.
-INSTALL_TIMES = {"install.sh": ["10 to 20 minutes", "a few minutes"], "install.ps1": ["a few minutes", "a few minutes"]}
-INSTALL_TIME_DOCS = "10–20 minutes the first time on a Mac without the developer tools, a few minutes otherwise"
+#: E-time (#142): how long an install takes, said one way -- 10 to 20 minutes on a Mac without Apple's Command Line Tools
+#: (Apple's ~1 GB, through their own window), 5 to 15 on Windows without Git (the fresh-VM runs of 2026-08-17, commit
+#: 9b46f65 -- on a fresh PC that is the first install; R44), a few minutes otherwise: the installers' plan screen per
+#: machine, and README.md and FAQ.md in this sentence. README and FAQ said 10-20 for everyone.
+INSTALL_TIMES = {"install.sh": ["10 to 20 minutes", "a few minutes"],
+                 "install.ps1": ["5 to 15 minutes", "a few minutes"]}
+INSTALL_TIME_DOCS = ("10–20 minutes the first time on a Mac without the developer tools, 5–15 on Windows without Git, "
+                     "a few minutes otherwise")
 #: The `python3` a run of `finish` sees: a `plugin-ready` call is written down in $PLUGIN_MARK, anything else goes to
 #: the interpreter running this check -- so the receipt's JSON is built the same way on every platform.
 FAKE_PYTHON3 = ('python3() {\n'
@@ -1215,8 +1218,8 @@ def main():
     if off:
         problems.append("the install time is not said one way -- " + "; ".join(off) + " (E-time, #142)")
     else:
-        checked.append("the install time is said one way: 10 to 20 minutes only on a Mac without Apple's tools, a "
-                       "few minutes everywhere else -- both installers' plan screen, README.md and FAQ.md")
+        checked.append("the install time is said one way: 10 to 20 minutes on a Mac without Apple's tools, 5 to 15 on "
+                       "Windows without Git, a few minutes otherwise -- both installers' plan screen, README.md and FAQ.md")
 
     # 4b. install.ps1 stops without closing a one-liner user's window (see ps1_stop_problems).
     stops = ps1_stop_problems(ps1)
