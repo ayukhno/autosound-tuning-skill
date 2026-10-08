@@ -3404,8 +3404,13 @@ def _selftest():
             failures.append(f"{check.__name__}: {exc}")
     assert not failures, "\n".join(failures)
 
+    import shutil
     import tempfile
-    root = tempfile.mkdtemp(prefix="autosound_state_")
+    # The chain's project is a folder of its own, removed at the end -- never $TMPDIR itself (the final review's m-8):
+    # the ledger's `project_dir` is its root's parent, and a bank reads `<project>/project.json` strictly, so a file
+    # another run left in the shared temp root failed this one, and `process/` here was written there for all.
+    parent = tempfile.mkdtemp(prefix="autosound_state_")
+    root = os.path.join(parent, "state")
     h = PresetHistory(root, "SQ_Jazzi")
 
     v1 = h.snapshot(_sample_state(), note="baseline clean-slate")
@@ -3974,6 +3979,7 @@ def _selftest():
 
     print("selftest[configurations] OK -- SQ-2 (v_006) compares with SQ-1 (v_003) up its parent line, not v_005; "
           "a name saved again keeps its history; the DSP preset number rides on the slot")
+    shutil.rmtree(parent, ignore_errors=True)
     print(f"selftest OK — 3 snapshots, diff caught the channels+virtual_channels changes (schema "
           f"v2 tier-aware), 5.38 ms → 516 smp @96k (258 @48k), revert forward-only (v_001→v_003), "
           f"validation rejected bad polarity + an unknown EQ type, structured EQ round-tripped "

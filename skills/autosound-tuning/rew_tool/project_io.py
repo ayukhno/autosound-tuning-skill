@@ -400,6 +400,22 @@ def set_aside_line(project_dir):
 
 # ── selftest ─────────────────────────────────────────────────────────────────────────────────────────────────────────
 
+#: What this run of the selftest could not check on this machine, `(case, why)`, said one line each above its OK line
+#: (the final review's m-5): an OK line claims only what ran.
+_NOT_CHECKED_HERE = []
+
+
+def _mode_refuses(case):
+    """True where a file's mode refuses this user -- POSIX, not root -- so `case`, which needs that, runs. Elsewhere it
+    is recorded in `_NOT_CHECKED_HERE` and skipped: root opens a mode-0 file all the same, and Windows keeps no POSIX
+    mode."""
+    if os.name == "posix" and os.geteuid() != 0:
+        return True
+    _NOT_CHECKED_HERE.append((case, "run as root, whom no file mode refuses" if os.name == "posix" else
+                              "Windows keeps no POSIX mode"))
+    return False
+
+
 def _scratch():
     import tempfile
     return tempfile.mkdtemp(prefix="autosound_project_io_")
@@ -682,8 +698,9 @@ def _check_private_mode():
     opened it in a wider window would keep reading after any chmod). `mode` is set again before the move, since the
     umask may have narrowed the create: under umask 077 a 0640 file is 0640 by the time it has its name. Without a mode
     a file gets what `open(path, "w")` gave -- the umask's default, never 0600 by accident (a `mkstemp` temp would make
-    every `project.json` private)."""
+    every `project.json` private). Windows keeps no POSIX mode: there it is said, one line above the OK line."""
     if os.name == "nt":
+        _NOT_CHECKED_HERE.append(("a private file's mode from its first byte", "Windows keeps no POSIX mode"))
         return
     import stat
     d = _scratch()
@@ -977,16 +994,16 @@ def _check_read_json():
                 assert getattr(exc, "is_unreadable", False) and exc.repair == _REPAIR_NOT_A_FOLDER, repr(exc)
             else:
                 raise AssertionError("a path through a file was read as no file")
-            if os.geteuid() != 0:                # root opens a mode-0 file all the same
-                os.chmod(path, 0)
-                try:
-                    read_json(path, {}, repair="REPAIR")
-                except Exception as exc:  # noqa: BLE001
-                    assert getattr(exc, "is_unreadable", False) and exc.repair == _REPAIR_PERMISSION, repr(exc)
-                else:
-                    raise AssertionError("a file this user may not open was read")
-                finally:
-                    os.chmod(path, 0o600)
+        if _mode_refuses("a file this user may not open (mode 0)"):
+            os.chmod(path, 0)
+            try:
+                read_json(path, {}, repair="REPAIR")
+            except Exception as exc:  # noqa: BLE001
+                assert getattr(exc, "is_unreadable", False) and exc.repair == _REPAIR_PERMISSION, repr(exc)
+            else:
+                raise AssertionError("a file this user may not open was read")
+            finally:
+                os.chmod(path, 0o600)
         os.remove(path)
         os.makedirs(path)
         try:
@@ -1148,6 +1165,31 @@ def _check_every_writer_moves():
     assert not failures, "\n  ".join(["a writer item 8 lists does not go through the move:"] + failures)
 
 
+def _check_says_what_it_did_not_check():
+    """A case this machine cannot make is said one line above the OK line, never passed in silence (the final review's
+    m-5; the form siblings.py's selftest uses): run as root a mode-0 file opens all the same, and Windows keeps no POSIX
+    mode, so a file this user may not open (`_check_read_json`) and a private file's mode from its first byte
+    (`_check_private_mode`) are skipped there, each recorded for that line. Both made here: root faked for the first,
+    Windows for the second."""
+    saved = list(_NOT_CHECKED_HERE)
+    real_euid, real_name = getattr(os, "geteuid", None), os.name
+    try:
+        del _NOT_CHECKED_HERE[:]
+        os.geteuid = lambda: 0
+        _check_read_json()
+        os.name = "nt"
+        _check_private_mode()
+    finally:
+        os.name = real_name
+        if real_euid is None:
+            del os.geteuid
+        else:
+            os.geteuid = real_euid
+        said = [case for case, _why in _NOT_CHECKED_HERE]
+        _NOT_CHECKED_HERE[:] = saved
+    assert said == ["a file this user may not open (mode 0)", "a private file's mode from its first byte"], said
+
+
 def _check_two_writers_one_reader():
     """Audit T-8's test: two processes write one file 100 times each while a third reads it: every read parses.
 
@@ -1194,6 +1236,9 @@ def _check_two_writers_one_reader():
                     w.terminate()
         assert [w.exitcode for w in writers] == [0, 0], f"a writer failed: exit codes {[w.exitcode for w in writers]}"
         assert not failures, f"{len(failures)} of {tries} reads failed: {failures[:3]}"
+        # A zero is not a result until the counter moves (the final review's m-4): a reader that read nothing while the
+        # writers ran -- started after them, or refused every time -- proved nothing about a torn read.
+        assert reads > 0, f"the reader read the file 0 times in {tries} tries while the two writers ran"
         with open(path, encoding="utf-8") as f:
             assert json.load(f)["n"] == rounds - 1
         assert os.listdir(d) == ["process-state.json"], os.listdir(d)
@@ -1209,7 +1254,7 @@ def _selftest():
                   _check_write_fails_clean,
                   _check_replace_retry, _check_private_mode, _check_create_exclusive, _check_append_line,
                   _check_durable, _check_append_refused, _check_read_json, _check_newer_schema,
-                  _check_every_writer_moves, _check_two_writers_one_reader):
+                  _check_every_writer_moves, _check_says_what_it_did_not_check, _check_two_writers_one_reader):
         try:
             seen[check.__name__] = check()
         except Exception as exc:  # noqa: BLE001 -- each check is reported by name; one failing must not hide the rest
@@ -1218,6 +1263,8 @@ def _selftest():
         print("\n".join(failures))
         print(f"project_io selftest FAILED -- {len(failures)} check(s)")
         return 1
+    for case, why in _NOT_CHECKED_HERE:            # the OK line below claims only what ran (m-5)
+        print(f"project_io: {case} was not checked here -- {why}")
     reads = seen["_check_two_writers_one_reader"]
     print(f"project_io selftest OK -- text, JSON and bytes land with the old sites' bytes, every temp opened binary "
           f"(O_BINARY) and read back as written; a foreign <file>.tmp is "

@@ -616,6 +616,7 @@ def _check_gain_grid_says_an_unreadable_profile():
 
 
 def _selftest():
+    import shutil
     import tempfile
     failures = []
     for check in (_check_cli_refuses_unreadable, _check_gain_grid_says_an_unreadable_profile):
@@ -625,7 +626,11 @@ def _selftest():
             failures.append(f"{check.__name__}: {exc}")
     assert not failures, "\n".join(failures)
 
-    root = tempfile.mkdtemp(prefix="autosound_apply_")
+    # The chain's project is a folder of its own, removed at the end -- never $TMPDIR itself (the final review's m-8): the
+    # ledger's `project_dir` is its root's parent, and the evidence files, the review and `docs/sheets/` below were
+    # written straight into the shared temp root, where a bank also read `project.json` strictly.
+    parent = tempfile.mkdtemp(prefix="autosound_apply_")
+    root = os.path.join(parent, "state")
     h = _state.PresetHistory(root, "SQ_Jazzi")
     h.snapshot(_state._sample_state(), note="baseline")   # seed HEAD (all applied)
 
@@ -836,6 +841,7 @@ def _selftest():
         assert _main(["apply.py", cli_root, "attest"]) == 0
     assert "🟢 v_003" in out.getvalue() and cli_h.load("v_003")["channels"]["w-L"]["status"] == "applied", out.getvalue()
     assert _main(["apply.py", cli_root, "propose", "no-such.json"]) == 1
+    shutil.rmtree(parent, ignore_errors=True)
 
     print(f"selftest OK — propose banked 🟡 + settings-sheet (old→new, 5.45 ms=523 smp@96k), "
           f"advisory on polarity flip, attest flipped 🟡→🟢 (w-L,sub); tier-keyed delta proposed+"

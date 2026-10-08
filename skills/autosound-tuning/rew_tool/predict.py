@@ -2661,6 +2661,42 @@ def _check_profile_read_strictly():
         shutil.rmtree(top, ignore_errors=True)
 
 
+#: What this run of the selftest could not check on this machine, `(case, why)`, said one line each above its OK line
+#: (the final review's m-5): an OK line claims only what ran.
+_NOT_CHECKED_HERE = []
+
+
+def _mode_refuses(case):
+    """True where a file's mode refuses this user -- POSIX, not root -- so `case`, which needs that, runs. Elsewhere it
+    is recorded in `_NOT_CHECKED_HERE` and skipped: root opens and writes a mode-0 file all the same, and Windows keeps
+    no POSIX mode."""
+    if os.name == "posix" and os.geteuid() != 0:
+        return True
+    _NOT_CHECKED_HERE.append((case, "run as root, whom no file mode refuses" if os.name == "posix" else
+                              "Windows keeps no POSIX mode"))
+    return False
+
+
+def _check_says_what_it_did_not_check():
+    """A case this machine cannot make is said one line above the OK line, never passed in silence (the final review's
+    m-5; the form siblings.py's selftest uses). Run as root a mode-0 file reads all the same, so the knobs' read over
+    a mode-0 journal is skipped there, recorded for that line. Made here with root faked."""
+    saved = list(_NOT_CHECKED_HERE)
+    real_euid = getattr(os, "geteuid", None)
+    try:
+        del _NOT_CHECKED_HERE[:]
+        os.geteuid = lambda: 0
+        _check_knobs_read_strictly()
+    finally:
+        if real_euid is None:
+            del os.geteuid
+        else:
+            os.geteuid = real_euid
+        said = [case for case, _why in _NOT_CHECKED_HERE]
+        _NOT_CHECKED_HERE[:] = saved
+    assert said == ["the knobs read from a mode-0 journal"], said
+
+
 def _check_knobs_read_strictly():
     """The knobs a series was taken at are read from the journal as the method reads it, strictly (#134, R53): a
     journal that cannot be opened -- mode 0 -- or that holds a line in another code page refuses the run in one line,
@@ -2731,7 +2767,7 @@ def _check_knobs_read_strictly():
             with open(journal, "ab") as fh:
                 fh.write(foreign + b"\n")
         damages = [("a line in another code page", cp1251_line)]
-        if os.name == "posix" and os.geteuid() != 0:           # root reads a mode-0 file all the same
+        if _mode_refuses("the knobs read from a mode-0 journal"):
             damages.insert(0, ("mode 0", mode_0))
         failures = []
         for way, argv in (("--solos with --process", ["--solos", solos, "--project", proj, "--process", proc]),
@@ -3588,6 +3624,15 @@ def _selftest():
     _check_unmodelled_families_refused_up_front()
     _check_predict_refusals_are_one_line()
     _check_refused_notes_never_cut()
+    failures = []
+    for check in (_check_says_what_it_did_not_check,):
+        try:
+            check()
+        except AssertionError as exc:
+            failures.append(f"{check.__name__}: {exc}")
+    assert not failures, "\n".join(failures)
+    for case, why in _NOT_CHECKED_HERE:              # the OK line below claims only what ran (m-5)
+        print(f"predict: {case} was not checked here -- {why}")
     print("selftest[predict] OK -- chain arithmetic (gain/pol/delay/LR corner/PK), ledger row == anchors "
           "entry, a phase angle is realized at the row's configured reference (LPF on a sub, HPF "
           "otherwise; slope OFF keeps it), delivered AT the reference, capped by name, refused without "

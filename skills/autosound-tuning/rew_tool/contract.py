@@ -1774,6 +1774,45 @@ def _main(argv):
 
 
 # ── self-test ─────────────────────────────────────────────────────────────────
+#: What this run of the selftest could not check on this machine, `(case, why)`, said one line each above its OK line
+#: (the final review's m-5): an OK line claims only what ran.
+_NOT_CHECKED_HERE = []
+
+
+def _mode_refuses(case):
+    """True where a file's mode refuses this user -- POSIX, not root -- so `case`, which needs that, runs. Elsewhere it
+    is recorded in `_NOT_CHECKED_HERE` and skipped: root opens and writes a mode-0 file all the same, and Windows keeps
+    no POSIX mode."""
+    if os.name == "posix" and os.geteuid() != 0:
+        return True
+    _NOT_CHECKED_HERE.append((case, "run as root, whom no file mode refuses" if os.name == "posix" else
+                              "Windows keeps no POSIX mode"))
+    return False
+
+
+def _check_says_what_it_did_not_check():
+    """A case this machine cannot make is said one line above the OK line, never passed in silence (the final review's
+    m-5; the form siblings.py's selftest uses). Run as root a mode refuses nothing, so the two cases met for real
+    through one -- `--set-aside` into a read-only `process/`, the survey over a file this user may not open -- are
+    skipped there, each recorded for that line. Made here with root faked."""
+    saved = list(_NOT_CHECKED_HERE)
+    real_euid = getattr(os, "geteuid", None)
+    try:
+        del _NOT_CHECKED_HERE[:]
+        os.geteuid = lambda: 0
+        for check in (_check_repair_encoding_refusals, _check_encoding_survey_in_check):
+            check()
+    finally:
+        if real_euid is None:
+            del os.geteuid
+        else:
+            os.geteuid = real_euid
+        said = [case for case, _why in _NOT_CHECKED_HERE]
+        _NOT_CHECKED_HERE[:] = saved
+    assert said == ["--set-aside into a read-only process/ folder", "the survey over a file this user may not open"], \
+        said
+
+
 def _check_invalid_project_json():
     """A `project.json` that is present and invalid is reported as one: exists, not valid, with the validator's own
     refusal (any refusal passed here once, and with the list check gone the string was refused per character).
@@ -2036,7 +2075,7 @@ def _check_repair_encoding_refusals():
         rc, out, err = run("repair-encoding", d, "--from", "cp1251")
         if rc != 3 or "--set-aside" not in err or "--set-aside" in out:
             failures.append(f"n1: --from over set-aside lines alone: rc {rc}, out {out[-200:]!r}, err {err[-200:]!r}")
-        if os.name == "posix" and os.geteuid() != 0:            # root writes a read-only folder all the same
+        if _mode_refuses("--set-aside into a read-only process/ folder"):
             target = journal + ".set-aside"
             listed = sorted(os.listdir(proc_dir))
             os.chmod(proc_dir, 0o555)
@@ -2230,7 +2269,7 @@ def _check_encoding_survey_in_check():
             fh.write(cut)
         report = check_project(d, skip_rew=True)
         assert report["encoding_damaged"] == [], ("a cut file listed as another code page", report["encoding_damaged"])
-        if os.name == "posix" and os.geteuid() != 0:            # root opens a mode-0 file all the same
+        if _mode_refuses("the survey over a file this user may not open"):
             held = os.path.join(proc, "extra.json")
             with open(held, "w", encoding="utf-8") as fh:
                 fh.write("{}")
@@ -2857,7 +2896,8 @@ def _selftest():
                   _check_encoding_survey_in_check, _check_repair_encoding_refusals,
                   _check_unreadable_profile_and_seals_reported, _check_version_verb, _check_version_shape,
                   _check_skill_version, _check_skill_sha, _check_version_says_why_no_sha,
-                  _check_ledger_file_that_cannot_be_read, _check_glossary_read_strictly,
+                  _check_ledger_file_that_cannot_be_read, _check_says_what_it_did_not_check,
+                  _check_glossary_read_strictly,
                   _check_cut_file_named_in_check, _check_phase0_gate_exit_over_an_unreadable_glossary,
                   _check_intake_line_over_an_unreadable_project_json, _check_bom_glossary_is_a_glossary,
                   _check_bom_project_json_one_verdict, _check_dangling_glossary_link_refused):
@@ -3345,6 +3385,8 @@ def _selftest():
     os.makedirs(empty_dir, exist_ok=True)
     assert gaps_report([empty_dir]) == [] and "no `project.json` found" in render_gaps([])
 
+    for case, why in _NOT_CHECKED_HERE:              # the OK line below claims only what ran (m-5)
+        print(f"contract: {case} was not checked here -- {why}")
     print(f"selftest OK — empty project reports missing files without crashing; a seeded project "
           f"(project.json+glossary, dsp_profile.json, ledger, process) validates at the right "
           f"schema versions; cross-checks caught a glossary/ledger mismatch, a profile missing "

@@ -3942,7 +3942,7 @@ def _check_journal_that_cannot_be_opened():
                     failures.append(f"{' '.join(argv)}: rc {rc}, out {out.strip()[:80]!r}, err {err.strip()[-200:]!r}")
         if _project_bytes(d) != before:
             failures.append("something was written beside the journal that could not be opened")
-        if os.name == "posix" and os.geteuid() != 0:            # the same, met for real: a permission
+        if _mode_refuses("a mode-0 journal, met for real"):     # the same, met for real: a permission
             os.chmod(journal, 0)
             try:
                 refused("_events() on a mode-0 journal", lambda: Process(d)._events())
@@ -4150,7 +4150,7 @@ def _check_event_refused_after_the_state():
         # append's own refusal says it, never "cannot be opened".
         assert rc == EXIT_NO and "journal.jsonl cannot be appended to (" in err and "Traceback" not in err, (rc, err)
         assert _project_bytes(d) == before, "the state was written beside a journal that refused the append"
-        if os.name == "posix" and os.geteuid() != 0:            # met for real: a read-only journal, both ways in
+        if _mode_refuses("a read-only journal, met for real"):  # both ways in
             os.chmod(p.journal_path, 0o444)
             try:
                 for argv in (["start", "-1.8"], ["decision", "q", "a"]):
@@ -4850,6 +4850,22 @@ def _cli_env(d, argv, **env):
                           encoding="utf-8", errors="replace",
                           env={**os.environ, "PYTHONIOENCODING": "utf-8", "REW_API_URL": "http://127.0.0.1:1",
                                **env})
+
+
+#: What this run of the selftest could not check on this machine, `(case, why)`, said one line each above its OK line
+#: (the final review's m-5): an OK line claims only what ran.
+_NOT_CHECKED_HERE = []
+
+
+def _mode_refuses(case):
+    """True where a file's mode refuses this user -- POSIX, not root -- so `case`, which needs that, runs. Elsewhere it
+    is recorded in `_NOT_CHECKED_HERE` and skipped: root opens and writes a mode-0 file all the same, and Windows keeps
+    no POSIX mode."""
+    if os.name == "posix" and os.geteuid() != 0:
+        return True
+    _NOT_CHECKED_HERE.append((case, "run as root, whom no file mode refuses" if os.name == "posix" else
+                              "Windows keeps no POSIX mode"))
+    return False
 
 
 def _project_bytes(d):
@@ -5808,7 +5824,7 @@ def _check_handoff_says_an_unreadable_changelog():
         rc, out, err = _run_main(["process.py", p.dir, "handoff", "--json"])
         answer = json.loads(out)
         assert rc == 1 and answer["ok"] is False and any(path in m for m in answer["missing"]), (rc, out, err)
-        if os.name == "posix" and hasattr(os, "geteuid") and os.geteuid() != 0:
+        if _mode_refuses("a mode-0 changelog at handoff"):
             with open(path, "wb") as f:
                 f.write("## ▶️ CONTINUE\n".encode("utf-8"))
             os.chmod(path, 0)
@@ -6335,6 +6351,30 @@ def _check_evidence_verdicts_name_the_naming_load_error():
     assert not failures, "\n  ".join(["a naming.py that cannot be loaded, the evidence blamed:"] + failures)
 
 
+def _check_says_what_it_did_not_check():
+    """A case this machine cannot make is said one line above the OK line, never passed in silence (the final review's
+    m-5; the form siblings.py's selftest uses). Run as root a file's mode refuses nothing, so the four cases met for
+    real through one -- a mode-0 journal, a read-only journal, a mode-0 changelog at handoff, a journal capture-close
+    cannot open with REW down -- are skipped there, each recorded for that line. Made here with root faked."""
+    saved = list(_NOT_CHECKED_HERE)
+    real_euid = getattr(os, "geteuid", None)
+    try:
+        del _NOT_CHECKED_HERE[:]
+        os.geteuid = lambda: 0
+        for check in (_check_journal_that_cannot_be_opened, _check_event_refused_after_the_state,
+                      _check_handoff_says_an_unreadable_changelog, _check_close_checks_stage_refusals):
+            check()
+    finally:
+        if real_euid is None:
+            del os.geteuid
+        else:
+            os.geteuid = real_euid
+        said = [case for case, _why in _NOT_CHECKED_HERE]
+        _NOT_CHECKED_HERE[:] = saved
+    assert said == ["a mode-0 journal, met for real", "a read-only journal, met for real",
+                    "a mode-0 changelog at handoff", "a journal capture-close cannot open, REW down"], said
+
+
 def _check_capture_start_said_as_it_landed():
     """`capture-start` refused at a state write says what landed (the final review's M3): it wrote the state twice --
     the round, then its plan path -- and a second write refused (a Windows holder past the retries) said "it is as it
@@ -6478,7 +6518,7 @@ def _check_close_checks_stage_refusals():
                 failures.append(f"{what}: the line to append is not said: {err.strip()[-300:]!r}")
         # A journal the close cannot append to is refused before a line is printed (batch 2's re-review, Out of Scope
         # 5): with REW down, "REW not reached ...: closing on the record alone" was printed, and then the close refused.
-        if os.name == "posix" and os.geteuid() != 0:            # root opens a mode-0 file all the same
+        if _mode_refuses("a journal capture-close cannot open, REW down"):
             d = fresh()
 
             def down():
@@ -6642,7 +6682,7 @@ def _selftest():
                   _check_intake_gate_names_an_unreadable_glossary, _check_plan_names_the_naming_load_error,
                   _check_phase1_gate_names_an_unreadable_glossary, _check_capture_verbs_read_the_glossary_strictly,
                   _check_rate_note_reads_the_rule, _check_evidence_verdicts_name_the_naming_load_error,
-                  _check_capture_start_said_as_it_landed):
+                  _check_capture_start_said_as_it_landed, _check_says_what_it_did_not_check):
         try:
             check()
         except AssertionError as exc:
@@ -7467,6 +7507,8 @@ def _selftest():
         _main(["process.py", rr.dir, "capture-close", "--no-rew", "desk only"])
     assert "not checked against REW" in buf.getvalue(), buf.getvalue()
 
+    for case, why in _NOT_CHECKED_HERE:              # the OK line below claims only what ran (m-5)
+        print(f"process: {case} was not checked here -- {why}")
     print(
         "selftest OK — a skip refused without a reason and taken with either a sentence or a "
         "superseding step; evidence refused when empty and when it resolves to nothing (SCR-035), "
