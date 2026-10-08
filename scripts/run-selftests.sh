@@ -33,6 +33,25 @@ unset PYTHONOPTIMIZE   # -O strips every assert, and a selftest whose asserts ar
 says_not_run() { printf '%s\n' "$1" | grep -w 'SKIPPED' >/dev/null; }
 says_ok()      { printf '%s\n' "$1" | grep -w 'OK' >/dev/null; }
 
+# The LINTER, at the pin CI uses: the pinned ruff on PATH, else uvx at the pin, else an unpinned ruff, said so. A check
+# that quietly does not run is worse than one that is absent: no ruff and no uvx here is NOT RUN, counted, and under CI
+# that fails the run. A function, so the runner's own selftest runs that branch with an empty PATH (the final review's
+# m-3). It counts into the run's `pass`/`fail`/`notrun`. No arrays for the command: macOS's bash 3.2 calls an empty
+# array unbound under `set -u`.
+lint_with_ruff() {
+  local ruff_cmd="" note="" out
+  if command -v ruff >/dev/null 2>&1 && [ "$(ruff --version 2>/dev/null)" = "ruff 0.12.0" ]; then ruff_cmd="ruff check"
+  elif command -v uvx >/dev/null 2>&1; then ruff_cmd="uvx ruff@0.12.0 check"
+  elif command -v ruff >/dev/null 2>&1; then ruff_cmd="ruff check"; note=" (unpinned local ruff)"; fi
+  if [ -z "$ruff_cmd" ]; then
+    notrun=$((notrun + 1)); skipped+=("ruff"); echo "  --   ruff                     NOT RUN: no uvx and no ruff here"
+  elif out="$($ruff_cmd 2>&1)"; then   # word-split on purpose
+    pass=$((pass + 1)); echo "  ok   ruff                     $(printf '%s' "$out" | tail -n1)$note"
+  else
+    fail=$((fail + 1)); failed+=("ruff"); printf '%s\n' "$out" | sed 's/^/       /'
+  fi
+}
+
 if [ "${1:-}" = "--selftest" ]; then
   tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
   mkdir -p "$tmp/t" "$tmp/t2"
@@ -76,6 +95,10 @@ if [ "${1:-}" = "--selftest" ]; then
   printf 'def _selftest():\n    print("selftest OK")\n\n\nif __name__ == "__main__":\n    _selftest()\n' \
                                                             > "$tmp/t/hidden.py"
   printf 'print("selftest OK")\n'                           > "$tmp/t/unlisted.py"
+  # ...and one in a subfolder, as state/ and gates/ are: a scan that did not recurse once left six modules out.
+  mkdir -p "$tmp/t/sub"
+  printf 'def _selftest():\n    print("selftest OK")\n\n\nif __name__ == "__main__":\n    _selftest()\n' \
+                                                            > "$tmp/t/sub/unlisted2.py"
   # A skip line names a file on disk and gives a reason; the manifest's last line counts without its newline.
   { printf '%s\n' "$tmp/t/good.py" "$tmp/t/usage.py" "$tmp/t/skipped.py" "$tmp/t/slow.py" "$tmp/t/spawner.py" \
                   "$tmp/t/leaver.py" "$tmp/t/deaf.py" "$tmp/t/exit3.py" "$tmp/t/okrc1.py" "$tmp/t/oknotlast.py" \
@@ -111,7 +134,8 @@ if [ "${1:-}" = "--selftest" ]; then
   want '^  FAIL hidden\.py .*has a selftest: list it, do not skip it'
   want '^  FAIL gone\.py .*listed in .*not on disk'   # the manifest's last line, which has no newline
   want '^  FAIL unlisted\.py .*not in '
-  last_is "FAILED: 12 of 17 -- usage.py slow.py spawner.py deaf.py exit3.py okrc1.py oknotlast.py vanished.py noreason.py hidden.py gone.py unlisted.py; NOT RUN: skipped.py"
+  want '^  FAIL sub/unlisted2\.py .*not in '
+  last_is "FAILED: 13 of 18 -- usage.py slow.py spawner.py deaf.py exit3.py okrc1.py oknotlast.py vanished.py noreason.py hidden.py gone.py sub/unlisted2.py unlisted.py; NOT RUN: skipped.py"
   # Under CI a NOT RUN alone fails the run; locally it is counted and the run passes. A valid skip line -- a file
   # with no selftest, and the reason -- fails nothing, and is printed.
   cp "$tmp/t/good.py" "$tmp/t/skipped.py" "$tmp/t2/"
@@ -124,7 +148,13 @@ if [ "${1:-}" = "--selftest" ]; then
   [ "$rc" -eq 0 ] || { printf 'runner selftest: locally a NOT RUN is counted, not failed (rc %s)\n%s\n' "$rc" "$out"; exit 1; }
   want '^  --   plot\.py +skipped: a plotting helper$'
   last_is "all 1 checks passed; NOT RUN: skipped.py"
-  ok_line="runner selftest OK -- every failure is named and counted in the verdict: a usage text, rc 1 under an OK line, an OK line not last, rc 3, a module that prints it skipped, a timeout, a missing or unlisted module, a bad skip line or one hiding a selftest; a child left behind, or deaf to TERM, is stopped; checks see REW at the dead port, with asserts on"
+  # The linter with no ruff and no uvx anywhere -- an empty PATH -- is NOT RUN, counted as such, never a pass. In a
+  # subshell: this run's counters and PATH are not touched.
+  out="$(pass=0 fail=0 notrun=0; failed=(); skipped=(); PATH=""; lint_with_ruff
+         echo "pass=$pass fail=$fail notrun=$notrun skipped=${skipped[*]:-}")"
+  want '^  --   ruff +NOT RUN: no uvx and no ruff here$'
+  last_is "pass=0 fail=0 notrun=1 skipped=ruff"
+  ok_line="runner selftest OK -- every failure is named and counted in the verdict: a usage text, rc 1 under an OK line, an OK line not last, rc 3, a module that prints it skipped, a timeout, a missing or unlisted module (one in a subfolder too), a bad skip line or one hiding a selftest; no ruff anywhere is NOT RUN; a child left behind, or deaf to TERM, is stopped; checks see REW at the dead port, with asserts on"
   # In a full run this line is the runner's own last line, read by the same rules as every check's: it must read as a
   # pass. One that named the NOT RUN word counted the runner itself as NOT RUN -- and failed CI -- while all passed.
   if says_not_run "$ok_line" || ! says_ok "$ok_line"; then
@@ -295,21 +325,8 @@ $(find "$TOOL" -name '*.py' | sort)
 EOF
 
 if [ -z "${SELFTEST_ONLY_TOOL:-}" ]; then
-  # The LINTER, at the pin CI uses. A check that quietly does not run is worse than one that is absent: no ruff here is
-  # NOT RUN, and under CI that fails the run.
-  # No arrays here: macOS's bash 3.2 calls an empty array unbound under `set -u`.
   echo
-  ruff_cmd="" note=""
-  if command -v ruff >/dev/null 2>&1 && [ "$(ruff --version 2>/dev/null)" = "ruff 0.12.0" ]; then ruff_cmd="ruff check"
-  elif command -v uvx >/dev/null 2>&1; then ruff_cmd="uvx ruff@0.12.0 check"
-  elif command -v ruff >/dev/null 2>&1; then ruff_cmd="ruff check"; note=" (unpinned local ruff)"; fi
-  if [ -z "$ruff_cmd" ]; then
-    notrun=$((notrun + 1)); skipped+=("ruff"); echo "  --   ruff                     NOT RUN: no uvx and no ruff here"
-  elif out="$($ruff_cmd 2>&1)"; then   # word-split on purpose
-    pass=$((pass + 1)); echo "  ok   ruff                     $(printf '%s' "$out" | tail -n1)$note"
-  else
-    fail=$((fail + 1)); failed+=("ruff"); printf '%s\n' "$out" | sed 's/^/       /'
-  fi
+  lint_with_ruff
 fi
 
 echo
