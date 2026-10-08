@@ -182,7 +182,10 @@ def selftest():
 
     # the real tree: the reader of this rule is the file it guards
     assert deps_of("rew_tool/predict.py") == "numpy + scipy", deps_of("rew_tool/predict.py")
-    assert deps_of("rew_tool/naming.py") == "stdlib only", deps_of("rew_tool/naming.py")
+    # The stdlib example is a module whose whole closure is stdlib: `rew_api` reaches only `timebase` (a sibling load)
+    # and `console`. It was `naming.py` until W-8, which now reaches `dsp_math` through lazy sibling loads
+    # (`state/process` -> `dsp_profile` -> `dsp_math`), though `naming.py <project> next-series` runs on the stdlib.
+    assert deps_of("rew_tool/rew_api.py") == "stdlib only", deps_of("rew_tool/rew_api.py")
     # transitive: it imports numpy itself and reaches scipy through `protective`/`dsp_math`
     assert deps_of("rew_tool/resonalyze_ir.py") == "numpy + scipy", deps_of("rew_tool/resonalyze_ir.py")
     assert deps_of("rew_tool/no_such.py") is None
@@ -190,7 +193,7 @@ def selftest():
     assert claim_in("… numpy + scipy.") == "numpy + scipy"
     assert claim_in("… nothing said …") is None
     # a wrong claim is caught, and a flag from prose about another tool is not
-    fake = ("* **`rew_tool/naming.py`** — the names. numpy. `naming.py --nope`\n"
+    fake = ("* **`rew_tool/rew_api.py`** — REW's API. numpy. `rew_api.py --nope`\n"
             "* **`rew_tool/predict.py`** — reads `analyze-joints --process` too. numpy + scipy.\n")
     problems, missing = check(fake)
     assert any("the entry says 'numpy', the imports say 'stdlib only'" in p for p in problems), problems
