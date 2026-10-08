@@ -48,6 +48,27 @@ import os
 import re
 import sys
 
+
+def _siblings():
+    """`rew_tool/siblings.py`, by its path: how this module reaches a sibling (skill #137).
+
+    The same text in every module that loads a sibling -- only the `here` line differs with the file's folder;
+    scripts/contract-guard.py holds the copies identical.
+    """
+    import hashlib
+    import importlib.util
+    here = os.path.dirname(os.path.realpath(__file__))
+    name = "_autosound_" + hashlib.sha1(here.encode("utf-8")).hexdigest()[:8] + "_siblings"
+    module = sys.modules.get(name)
+    if module is None:
+        spec = importlib.util.spec_from_file_location(name, os.path.join(here, "siblings.py"))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        # Published only once it has run: a thread racing this first call never gets a half-run siblings.py.
+        module = sys.modules.setdefault(name, module)
+    return module
+
+
 SCHEMA_VERSION = 1
 
 METHOD_SWEEP = "sw"
@@ -184,31 +205,55 @@ class Glossary:
     @classmethod
     def load(cls, path):
         """Read `glossary.json`. A project without one gets an empty glossary, not an error —
-        naming still parses, it just cannot check codes against anything."""
+        naming still parses, it just cannot check codes against anything.
+
+        A UTF-8 BOM is read, as `project_io.read_json` reads it (#134, batch 4's re-review, Out of Scope 1): older
+        Windows Notepad saves one, and a valid glossary read as none."""
         try:
-            with open(path, encoding="utf-8") as f:
+            with open(path, encoding="utf-8-sig") as f:
                 return cls(json.load(f))
         except (OSError, ValueError):
             return cls()
 
     @classmethod
-    def for_project(cls, project_dir):
+    def for_project(cls, project_dir, strict=False):
         """`<project>/glossary.json`, or the `glossary` key of `project.json` (SCR-011).
 
         **Whether a channel is active comes from the project's channel rows** (skill #83): `channels[]` in
         `project.json` is where the intake's slot switch writes `hidden` / role `unused`, and the glossary's own
         `active` flag stayed true for `r-L`/`r-R` after they were switched off, so the plan asked for captures of
         channels the car no longer had. A code the project has no row for keeps the glossary's flag.
+
+        Read leniently by default -- a file that cannot be read is no glossary -- the read of a screen, which contract
+        1 keeps for TCC. `strict` is the method's own readers' (#134, batch 4's re-review, Out of Scope 6): a
+        `glossary.json` or a `project.json` that is there and cannot be read -- cut off, not UTF-8, not JSON, not an
+        object, held, a folder in its place, or a glossary a newer method wrote -- raises `project_io.Unreadable`
+        (`is_unreadable` on its class), naming the file, the reason and the repair, as `contract.py check` reads them.
+        Read as none, `capture-start --plan` said it "needs the project's glossary" over a glossary cut off.
         """
         standalone = os.path.join(project_dir, "glossary.json")
         combined = os.path.join(project_dir, "project.json")
-        data = {}
-        try:
-            with open(combined, encoding="utf-8") as f:
-                data = json.load(f) or {}
-        except (OSError, ValueError):
-            data = {}
-        glossary = cls.load(standalone) if os.path.isfile(standalone) else cls(data.get("glossary") or {})
+        if strict:
+            io_ = _siblings().load("project_io.py")
+            data = io_.read_json(combined, {}, repair=io_.restore_line(combined),
+                                 repair_encoding=io_.reencode_line(project_dir))
+            if os.path.lexists(standalone):
+                own = io_.read_json(standalone, {}, repair=io_.restore_line(standalone),
+                                    repair_encoding=io_.reencode_line(project_dir))
+                newer = io_.newer_schema(own, SCHEMA_VERSION)
+                if newer is not None:
+                    raise io_.Unreadable(standalone, f"is schema v{newer}; this method reads v{SCHEMA_VERSION}",
+                                         io_.UPDATE_THE_METHOD)
+                glossary = cls(own)
+            else:
+                glossary = cls(data.get("glossary") or {})
+        else:
+            try:
+                with open(combined, encoding="utf-8-sig") as f:
+                    data = json.load(f) or {}
+            except (OSError, ValueError):
+                data = {}
+            glossary = cls.load(standalone) if os.path.isfile(standalone) else cls(data.get("glossary") or {})
         glossary.follow_project_channels(data.get("channels") or [])
         return glossary
 
@@ -786,6 +831,150 @@ def _check_productions():
         assert got["control"] in role, (title, got["control"], role)
 
 
+def _check_bom_glossary_read():
+    """A `glossary.json` saved with a UTF-8 BOM -- older Windows Notepad saves so -- is a glossary (#134, batch 4's
+    re-review, Out of Scope 1). `Glossary.load` opened it as `utf-8`, the BOM failed the JSON, and it read as no
+    glossary: "no glossary yet" over a valid file, the intake gate shut, every name check inert. `project_io.read_json`
+    reads a BOM as the editor's marker it is; so does every read here, `project.json`'s own included."""
+    import shutil
+    import tempfile
+    d = tempfile.mkdtemp(prefix="autosound_naming_bom_")
+    try:
+        body = {"schema_version": 1, "channels": [{"code": "w-L", "active": True}, {"code": "m-L", "active": True}]}
+        bom = b"\xef\xbb\xbf"
+        path = os.path.join(d, "glossary.json")
+        with open(path, "wb") as fh:
+            fh.write(bom + json.dumps(body).encode("utf-8"))
+        failures = []
+        for label, got in (("Glossary.load", Glossary.load(path)), ("Glossary.for_project", Glossary.for_project(d))):
+            if got.channel_codes() != ["w-L", "m-L"]:
+                failures.append(f"{label} over a BOM'd glossary.json: {got.channel_codes()}")
+        os.remove(path)
+        with open(os.path.join(d, "project.json"), "wb") as fh:          # the glossary inside project.json, BOM'd
+            fh.write(bom + json.dumps({"channels": [{"code": "m-L", "hidden": True}], "glossary": body}).encode())
+        got = Glossary.for_project(d)
+        if got.channel_codes() != ["w-L", "m-L"] or got.is_active("m-L") is not False:
+            failures.append(f"Glossary.for_project over a BOM'd project.json: {got.channel_codes()}, "
+                            f"m-L active {got.is_active('m-L')}")
+        assert not failures, "; ".join(failures)
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+
+
+def _check_for_project_strict():
+    """`Glossary.for_project(project_dir, strict=True)` -- the method's own readers' -- refuses a file it cannot read
+    (#134, batch 4's re-review, Out of Scope 6): a `glossary.json` or a `project.json` that is there and cannot be read
+    raises `project_io.Unreadable` (`is_unreadable` on its class), naming the file, the reason and the repair, as
+    `contract.py check` reads it. Read leniently, as no glossary, `capture-start --plan` said it "needs the project's
+    glossary" over one cut after phase 0 was entered. The default stays lenient, a screen's read (contract 1: TCC calls
+    `for_project(project_dir)`), and over a whole project both reads are one glossary."""
+    import shutil
+    import tempfile
+    d = tempfile.mkdtemp(prefix="autosound_naming_strict_")
+    try:
+        body = {"schema_version": 1, "channels": [{"code": "w-L", "active": True, "label": "Низ ліво"}]}
+        whole = json.dumps(body, ensure_ascii=False).encode("utf-8")
+        gloss, proj = os.path.join(d, "glossary.json"), os.path.join(d, "project.json")
+        with open(proj, "w", encoding="utf-8") as fh:
+            json.dump({"channels": [{"code": "w-L"}], "glossary": body}, fh)
+        failures = []
+
+        def refused(label, path, why, repair):
+            try:
+                got = Glossary.for_project(d, strict=True)
+            except Exception as exc:  # noqa: BLE001 -- the refusal is under test; matched by its type's attribute
+                said = str(exc)
+                if not getattr(type(exc), "is_unreadable", False) or not said.startswith(f"{path} ") \
+                        or why not in said or repair not in said:
+                    failures.append(f"{label}: raised {type(exc).__name__}: {said}")
+            else:
+                failures.append(f"{label}: read as {got.channel_codes()}")
+            try:
+                Glossary.for_project(d)
+            except Exception as exc:  # noqa: BLE001 -- the default must not raise
+                failures.append(f"{label}: the default raised {type(exc).__name__}: {exc}")
+        for label, raw, why, repair in (
+                ("cut inside a character", whole[: whole.index("ліво".encode("utf-8")) + 1],
+                 "is cut off inside a character", "checkout HEAD -- glossary.json"),
+                ("cut at an ASCII byte", whole[: whole.index(b'"channels"') + 4], "is not valid JSON",
+                 "checkout HEAD -- glossary.json"),
+                ("an array", b"[]", "holds an array where an object belongs", "checkout HEAD -- glossary.json"),
+                ("a newer method's", json.dumps({"schema_version": SCHEMA_VERSION + 1}).encode(),
+                 f"is schema v{SCHEMA_VERSION + 1}; this method reads v{SCHEMA_VERSION}", "update the method")):
+            with open(gloss, "wb") as fh:
+                fh.write(raw)
+            refused(f"glossary.json {label}", gloss, why, repair)
+        os.remove(gloss)
+        os.makedirs(gloss)
+        refused("a folder where glossary.json belongs", gloss, "is a directory", "move the folder aside")
+        os.rmdir(gloss)
+        with open(proj, "rb") as fh:
+            pj = fh.read()
+        with open(proj, "wb") as fh:
+            fh.write(pj[: len(pj) // 2])
+        refused("project.json cut off, no glossary.json", proj, "is not valid JSON", "checkout HEAD -- project.json")
+        with open(proj, "wb") as fh:
+            fh.write(pj)
+        for label, raw in (("whole", whole), ("BOM'd", b"\xef\xbb\xbf" + whole)):
+            with open(gloss, "wb") as fh:
+                fh.write(raw)
+            got = Glossary.for_project(d, strict=True)
+            if got.channel_codes() != ["w-L"] or got.channels != Glossary.for_project(d).channels:
+                failures.append(f"{label} glossary.json read strictly as {got.channel_codes()}")
+        shutil.rmtree(d)
+        os.makedirs(d)
+        if Glossary.for_project(d, strict=True).channel_codes() != []:
+            failures.append("no file at all is no glossary, and no refusal")
+        assert not failures, "\n  ".join(["Glossary.for_project(strict=True):"] + failures)
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+
+
+def _check_cli_reads_the_glossary_strictly():
+    """`naming.py <project> codes|parse|expect|check` read the glossary as the method's readers do, strictly (#134,
+    batch 4's re-review, Out of Scope 6): one that cannot be read is one line, `error: <file> <reason> -- <repair>`,
+    exit 1, nothing on stdout -- `codes` printed nothing and exited 0, `parse` and `expect` worked to no codes. `name`
+    reads no glossary and still answers."""
+    import contextlib
+    import io
+    import shutil
+    import tempfile
+    d = tempfile.mkdtemp(prefix="autosound_naming_cli_")
+    try:
+        whole = json.dumps({"schema_version": 1, "channels": [{"code": "w-L", "active": True, "label": "Низ"}]},
+                           ensure_ascii=False).encode("utf-8")
+        path = os.path.join(d, "glossary.json")
+        with open(path, "wb") as fh:
+            fh.write(whole[: whole.index("Низ".encode("utf-8")) + 1])         # inside `Н`: a write cut off
+        failures = []
+
+        def run(*args):
+            out, err = io.StringIO(), io.StringIO()
+            try:
+                with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                    rc = _main(["naming.py", d, *args])
+            except Exception as exc:  # noqa: BLE001 -- a traceback is a failure under test
+                rc = f"raised {type(exc).__name__}: {exc}"
+            return rc, out.getvalue(), err.getvalue()
+        for args in (("codes",), ("parse", "w-L_3 (sw)"), ("expect", "0", "3")):
+            rc, out, err = run(*args)
+            if rc != 1 or out or err.count("\n") != 1 or not err.startswith(f"error: {path} is cut off inside a "
+                                                                             f"character") \
+                    or "checkout HEAD -- glossary.json" not in err:
+                failures.append(f"{args[0]}: rc {rc!r}, stdout {out[-120:]!r}, stderr {err[-300:]!r}")
+        rc, out, err = run("name", "w-L", "3", "sw")
+        if (rc, out.strip(), err) != (0, "w-L_3 (sw)", ""):
+            failures.append(f"name: rc {rc!r}, stdout {out!r}, stderr {err!r}")
+        with open(path, "wb") as fh:
+            fh.write(whole)
+        rc, out, err = run("codes")
+        if rc != 0 or out.split() != ["w-L"] or err:
+            failures.append(f"codes over the whole file: rc {rc!r}, stdout {out!r}, stderr {err!r}")
+        assert not failures, "\n  ".join(["naming.py over a glossary.json it cannot read:"] + failures)
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+
+
 def _selftest():
     """The grammar's own checks, and SCR-039's: a renamed channel keeps its captures.
 
@@ -793,7 +982,8 @@ def _selftest():
     touches disk.
     """
     failures = []
-    for check in (_check_productions,):
+    for check in (_check_productions, _check_bom_glossary_read, _check_for_project_strict,
+                  _check_cli_reads_the_glossary_strictly):
         try:
             check()
         except AssertionError as exc:
@@ -1090,8 +1280,11 @@ def _main(argv):
     project, cmd, args = argv[1], argv[2], argv[3:]
     if cmd == "selftest":
         return _selftest()
-    g = Glossary.for_project(project)
     try:
+        # The commands that read the glossary read it as the method's readers do, strictly (#134, batch 4's re-review,
+        # Out of Scope 6): one that cannot be read is said below, never worked to no codes. `name` and `next-series`
+        # read none.
+        g = Glossary.for_project(project, strict=True) if cmd in ("codes", "parse", "expect", "check") else None
         if cmd == "codes":
             for c in g.channels:
                 flag = "" if c.get("active", True) else "   [inactive]"
@@ -1153,8 +1346,9 @@ def _main(argv):
         print(f"error: {exc}", file=sys.stderr)
         return 1
     except Exception as exc:  # noqa: BLE001 -- matched by its attribute below; anything else still raises
-        # `next-series` reads the journal as the method does, strictly (#134, R53): one it cannot read is a refusal in
-        # one line, `error: <file> <reason> -- <repair>`, exit 1, never a traceback -- nor a number counted without it.
+        # `next-series` reads the journal as the method does, strictly (#134, R53), and the glossary's readers the
+        # glossary: one it cannot read is a refusal in one line, `error: <file> <reason> -- <repair>`, exit 1, never a
+        # traceback -- nor a number counted without it.
         if not getattr(type(exc), "is_unreadable", False):
             raise
         print(f"error: {exc}", file=sys.stderr)

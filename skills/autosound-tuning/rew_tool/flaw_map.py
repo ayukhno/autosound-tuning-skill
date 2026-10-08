@@ -222,7 +222,10 @@ def _load_from_rew(project_dir, ver, f, channels=None, process_dir=None):
     of the solos in REW, or no capture round for `_N` -- reading a baseline solo "as configured" on
     top of a missing record is how a protective filter stays in a flaw row unseen."""
     import naming
-    codes = list(channels) if channels else naming.Glossary.for_project(project_dir).channel_codes(active_only=True)
+    # The glossary read strictly (#134, batch 4's re-review, Out of Scope 6): one cut off is `error: <file> ...`, never
+    # the "needs ... a glossary in the project" below over a glossary written.
+    codes = list(channels) if channels else \
+        naming.Glossary.for_project(project_dir, strict=True).channel_codes(active_only=True)
     if not codes:
         raise SystemExit("refusing: --rew needs the channel codes -- a glossary in the project, or --channels")
     loaded, notes = {}, []
@@ -407,11 +410,47 @@ def _check_refusal_names_its_reason():
         shutil.rmtree(top, ignore_errors=True)
 
 
+def _check_rew_reads_the_glossary_strictly():
+    """`--rew` with no `--channels` takes its codes from the glossary as the method reads it, strictly (#134, batch 4's
+    re-review, Out of Scope 6): a `glossary.json` that is there and cannot be read is one line, `error: <file> <reason>
+    -- <repair>`, exit 1, before REW is asked. Read as no glossary, it was `refusing: --rew needs the channel codes --
+    a glossary in the project, or --channels`: a glossary written, and a person sent to write one."""
+    import contextlib
+    import io
+    import shutil
+    import tempfile
+    proj = tempfile.mkdtemp(prefix="autosound_flaw_map_glossary_")
+    try:
+        whole = json.dumps({"schema_version": 1, "channels": [{"code": "w-L", "active": True, "label": "Низ"}]},
+                           ensure_ascii=False).encode("utf-8")
+        path = os.path.join(proj, "glossary.json")
+        with open(path, "wb") as fh:
+            fh.write(whole[: whole.index("Низ".encode("utf-8")) + 1])         # inside `Н`: a write cut off
+        out, err = io.StringIO(), io.StringIO()
+        try:
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                rc = _main(["--project", proj, "--rew", "55"])
+        except SystemExit as exc:                    # the old refusal: a glossary nobody wrote
+            rc = f"SystemExit {exc.code!r}"
+        said = err.getvalue()
+        assert rc == 1 and not out.getvalue() and said.count("\n") == 1 \
+            and said.startswith(f"error: {path} is cut off inside a character") \
+            and "checkout HEAD -- glossary.json" in said, (rc, out.getvalue()[-200:], said[-300:])
+    finally:
+        shutil.rmtree(proj, ignore_errors=True)
+
+
 def _selftest():
     import shutil
     import tempfile
 
-    _check_refusal_names_its_reason()
+    failures = []
+    for check in (_check_refusal_names_its_reason, _check_rew_reads_the_glossary_strictly):
+        try:
+            check()
+        except AssertionError as exc:
+            failures.append(f"{check.__name__}: {exc}")
+    assert not failures, "\n".join(failures)
 
     # --- the classifier, rule by rule, on definitions ---
     peak = {"f_center": 1000.0, "width_oct": 0.33, "extremum_db": 5.0, "kind": "peak", "route": "x"}

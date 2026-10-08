@@ -171,35 +171,45 @@ The decision stays in one place. What is in the data is its shadow, and a shadow
 without stopping the build is not a second source of truth — it is the first one, made visible to
 somebody standing outside the code.
 
-### The one refusal that withholds a NUMBER
+### The refusals that withhold a NUMBER
 
-Written 2026-09-01 (`autosound-hub#31`). Everything in §2 says where a tool is **silent**. This says
-where the method **refuses**, and it exists because that row was the *behaviour* and not the
-*decision*: three commands leaned on a refusal nobody had signed, which is a mechanism that looks
-ratified because it acts ratified.
+Written 2026-09-01 (`autosound-hub#31`); the second refusal since #134 (R52). Everything in §2 says where a tool is
+**silent**. This says where the method **refuses**, and it exists because that row was the *behaviour* and not the
+*decision*: three commands leaned on a refusal nobody had signed, which is a mechanism that looks ratified because it
+acts ratified.
 
-**One verdict, one condition.** `protective.should_de_embed(record, channel, baseline=True)` returns
-`("check", …)` for a channel that is **not marked raw, has no round record, and was captured at
-baseline** — before any crossover existed. Nothing else in the method refuses on this ground.
-`predict.de_embed_solos` is what enforces it: the channel is left out of `solos` and a note
-`"<code>: REFUSED — …"` is added.
+**Two refusals, each with its condition, enforced in one place.** `predict.de_embed_solos` leaves the channel out of
+`solos` and adds a note `"<code>: REFUSED -- <why>"`, whose words every caller says (`predict.refusal_reason`):
+
+- **An unmarked baseline.** `protective.should_de_embed(record, channel, baseline=True)` returns `("check", …)` for a
+  channel that is **not marked raw, has no round record, and was captured at baseline** — before any crossover
+  existed. It fires only where the caller says the capture is a baseline.
+- **A leg the method cannot model** (R52). A recorded protective leg of a family outside LR, BW and BE — a Chebyshev,
+  `CH`, recorded as typed — is never taken out as another family: `protective.de_embed` raises `Unmodelled`, and the
+  channel is refused wherever its leg would be taken out, without `--baseline` too, in every caller. The way on is on
+  the DSP: a filter the method models, or the protective filter OFF where the driver is safe without it
+  (`references/core/project-intake.md` §3).
 
 | command | when it can fire | what the caller gets instead of a number |
 |---|---|---|
-| `predict …` | only with `--baseline` | the channel is out of the prediction and out of any joint that uses it; `<code>: refused -- see notes` on stderr |
-| `eq_propose --solos … / --rew …` | `--part 1` / `all` when the round's phase is 0/−1 or unknown; **never** `--part 2`, which reads a series measured as configured (until 2026-09-23 baseline was passed unconditionally — skill `#56` item 8) | no EQ package for that channel; `<code>: refused at de-embed …` on stderr in **both** modes (since 2026-09-01; before that it was invisible under `--json`, and the channel simply vanished from the proposal) |
-| `flaw_map --solos …` | always | no flaw rows for it; `refused at de-embed (no recorded protective state): <codes>` in the report |
+| `predict …` | an unmarked baseline: only with `--baseline`; a leg it cannot model: whenever that leg would be taken out, `--baseline` or not | the channel is out of the prediction and out of any joint that uses it; `<code>: refused -- see notes` on stderr, the reason in the notes |
+| `eq_propose --solos … / --rew …` | an unmarked baseline: `--part 1` / `all` when the round's phase is 0/−1 or unknown; **never** `--part 2`, which reads a series measured as configured (until 2026-09-23 baseline was passed unconditionally — skill `#56` item 8); a leg it cannot model: whenever that leg would be taken out, in any part | no EQ package for that channel; `<code>: refused at de-embed -- no EQ proposed for it: <the note's words>` on stderr in **both** modes (since 2026-09-01; before that it was invisible under `--json`, and the channel simply vanished from the proposal) |
+| `flaw_map --solos … / --rew …` | always | no flaw rows for it; `refused at de-embed: <code> -- <the note's words>` in the report, one line per channel |
 
-Every other channel proceeds, no exit code changes, and nothing is guessed on the refused one.
+A leg it cannot model is refused by the other callers too: `xover_candidates` (its `refusing:` line says why) and
+`resonalyze_engine` leave the channel out, and `rew_tool.py analyze-joints` holds the joint back (`protective not
+modelled`). Every other channel proceeds, no exit code changes, and nothing is guessed on the refused one.
 
-**What it never refuses** — worth listing together, because "it refuses on principle" is the fear:
+**What they never refuse** — worth listing together, because "it refuses on principle" is the fear:
 
 - a **working** capture — the default is `no`, and that is an answer rather than a shrug;
-- a capture **marked raw** — that one gets de-embedded, which is the whole point;
-- a baseline capture **with a round record** — the record answers the question;
+- a capture **marked raw** — that one gets de-embedded, which is the whole point (through a leg the method models;
+  one it cannot is the second refusal);
+- a baseline capture **with a round record** — the record answers the question (a leg in it the method cannot model
+  is the second refusal);
 - a file older than the `protectiveState` mark (writer ≤ 3.0.27) — read as unfiltered, said out loud.
 
-**The price of cancelling it.** Exactly one class of error comes back: rotation belonging to the
+**The price of cancelling the first.** Exactly one class of error comes back: rotation belonging to the
 measuring rig, read as the car's phase. On the reference car's own protective set, with this
 module's maths — HPF `LR4 @100` still owes ~52° at 320 Hz; LPF `LR4 @500` ~53.5° at 160 Hz. So a
 junction three-ish times away from a protective corner carries about fifty degrees that is not the
@@ -223,6 +233,11 @@ an exception and kept: at baseline an unmarked capture is *not* read as working 
 withholds the number for that channel and asks a person. Cancelling it now takes a decision of the
 same weight, not an edit. Recorded here because until this line existed the mechanism had authority
 with no author (`autosound-hub#31`, split out of `#22`).
+
+**The second is the Arbiter's ruling** (#134, R52): the method has no Chebyshev model verified on a DSP — its ripple
+is not identified, so the filter is not determined — and it never puts another family in its place; there is no
+override. A user who verifies the Chebyshev mathematics against their own DSP teaches it to the method through an
+issue in the skill's repo (`references/core/project-intake.md` §3).
 
 ### How experience flows back into the skill
 

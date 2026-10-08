@@ -53,6 +53,7 @@ import argparse
 import copy
 import datetime
 import json
+import math
 import os
 import re
 import sys
@@ -329,7 +330,10 @@ def processing_rate(project_dir):
     Read as the profile's own reader reads it (`dsp_profile.load_profile`, #134, R58e): no profile, and a profile
     that states no rate, are None; one that is there and cannot be read, or that a newer method wrote, raises its
     `Unreadable` (`is_unreadable`), naming the file and its repair. It was read as None, and the sheet took the
-    snapshot's rate for the profile's -- the guess the ruling above refuses.
+    snapshot's rate for the profile's -- the guess the ruling above refuses. So is a rate stated that is no rate --
+    text, 0, a negative number, true or false, not finite (batch 4's re-review, Out of Scope 2): it raises
+    `Unreadable` too, naming the file, the key, the value it holds and the repair. A key left empty (null, the
+    interview's open question) states no rate.
     """
     path = os.path.join(project_dir or "", "dsp_profile.json")
     try:
@@ -339,9 +343,16 @@ def processing_rate(project_dir):
     body = data.get("dsp_profile") if isinstance(data.get("dsp_profile"), dict) else data
     if not isinstance(body, dict):
         return None
-    v = body.get("dsp_processing_rate_hz")
-    v = v if v is not None else body.get("sample_rate_hz")
-    return v if isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0 else None
+    key = "dsp_processing_rate_hz" if body.get("dsp_processing_rate_hz") is not None else "sample_rate_hz"
+    v = body.get(key)
+    if v is None:
+        return None
+    if isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) and v > 0:
+        return v
+    io_ = _project_io()
+    raise io_.Unreadable(path, f"states {key} {json.dumps(v)}, which is no processing rate (a number of Hz above 0)",
+                         f"record the DSP's rate: python3 {_siblings().path_of('dsp_profile.py')} set-field "
+                         f"{os.path.abspath(project_dir or '.')} dsp_processing_rate_hz <Hz>, then finalize")
 
 
 def current_target(project_dir, preset):
@@ -2474,20 +2485,22 @@ def _variant_cli(h, args):
             print(f"{refused}: {exc} -- nothing was banked", file=sys.stderr)
             return 1
     state["variant"] = args.arg
-    if args.delta:
-        # The version the delta makes is checked as the bank checks it, before the bank (#134, batch 4's re-review N3),
-        # and the base alone when it fails: a base banked under an older, looser check fails on its own, and was said
-        # as the delta's fault (`--delta <file>: <the check's words>`). A delta that mends the base's fault banks.
-        fault = _bank_check(h, state)
-        if fault is not None:
-            own = _bank_check(h, dict(as_banked, variant=args.arg))
-            if own is not None:
-                print(f"error: variant new: the base {base} does not pass the ledger's check on its own ({own}) -- the "
-                      f"delta is not what fails; nothing was banked", file=sys.stderr)
-            else:
-                print(f"error: variant new: --delta {args.delta}: the version it makes from {base} does not pass the "
-                      f"ledger's check ({fault}) -- nothing was banked", file=sys.stderr)
-            return 1
+    # The version this makes is checked as the bank checks it, before the bank (#134, batch 4's re-review N3, M1, Out
+    # of Scope 7). A base banked under an older, looser check fails on its own: when the fault the version fails on is
+    # the base's own -- the one the base alone fails on -- the refusal names the base, its file and the way on; any
+    # other fault is the delta's. With no delta, the base's fault ended in the bank's traceback; with one, it was said
+    # as the delta's, and then the base was named over the delta's own fault too. A delta that mends the base banks.
+    fault = _bank_check(h, state)
+    if fault is not None:
+        own = _bank_check(h, dict(as_banked, variant=args.arg)) if args.delta else fault
+        if own == fault:
+            print(f"error: variant new: the base {base} ({h._path(base)}) does not pass the ledger's check: {fault} -- "
+                  f"start from another version (--from <version>), or give a --delta that mends that field; nothing "
+                  f"was banked", file=sys.stderr)
+        else:
+            print(f"error: variant new: --delta {args.delta}: the version it makes from {base} does not pass the "
+                  f"ledger's check: {fault} -- set that field right in the delta; nothing was banked", file=sys.stderr)
+        return 1
     v = h.snapshot(state, note=args.note or f"variant {args.arg} from {base}", place=False, parent=base)
     print(f"{v}: variant {args.arg} from {base}, not in the slot -- `variant switch {h.preset} {v}` "
           f"puts it there")
@@ -3087,10 +3100,12 @@ def _check_variant_delta_refused():
 
 
 def _check_variant_delta_blames_no_good_delta():
-    """`variant new --delta` never blames a good delta for its base (#134, batch 4's re-review N3). A base banked under
-    an older, looser check, which the bank's check now refuses, was said as `--delta <file>: <the check's words>`.
-    The version the delta makes is checked before the bank: when the base fails the check on its own, the refusal
-    names the base; a delta that mends the base's fault banks."""
+    """`variant new --delta` names the fault that fails, its file and the way on (#134, batch 4's re-review N3, M1). A
+    base banked under an older, looser check, which the bank's check now refuses, was said as `--delta <file>: <the
+    check's words>`; then the base was named over every delta, the delta's own fault included, with "the delta is not
+    what fails". The version the delta makes is checked before the bank: when the fault it fails on is the base's own
+    -- the one the base alone fails on -- the refusal names the base, its file, and the way on (another `--from`, or a
+    delta that mends that field); any other fault is the delta's, named so. A delta that mends the base banks."""
     import contextlib
     import io
     import shutil
@@ -3105,9 +3120,16 @@ def _check_variant_delta_blames_no_good_delta():
             json.dump(loose, fh)
         banked = h.versions()
         failures = []
+        base = (f"error: variant new: the base v_002 ({h._path('v_002')}) does not pass the ledger's check: "
+                f"channels.sub.gain_db must be a number, got '-6' -- start from another version (--from <version>), "
+                f"or give a --delta that mends that field; nothing was banked")
         for label, change, rc_want, said in (
-                ("a good delta on a base the check refuses", {"w-L": {"gain_db": -3.0}}, 1,
-                 "error: variant new: the base v_002 does not pass the ledger's check on its own"),
+                ("a good delta on a base the check refuses", {"w-L": {"gain_db": -3.0}}, 1, base),
+                ("a delta that breaks w-L, the base's own fault first", {"w-L": {"gain_db": "loud"}}, 1, base),
+                ("a delta that mends the base and breaks w-L",
+                 {"sub": {"gain_db": -6.0}, "w-L": {"gain_db": "loud"}}, 1,
+                 "the version it makes from v_002 does not pass the ledger's check: channels.w-L.gain_db must be a "
+                 "number, got 'loud' -- set that field right in the delta; nothing was banked"),
                 ("a delta that mends the base", {"sub": {"gain_db": -6.0}}, 0, "variant B from v_002")):
             path = os.path.join(root, "delta.json")
             with open(path, "w", encoding="utf-8") as fh:
@@ -3119,11 +3141,51 @@ def _check_variant_delta_blames_no_good_delta():
             except Exception as exc:  # noqa: BLE001 -- a traceback is the failure under test
                 rc = f"raised {type(exc).__name__}: {exc}"
             text = (out.getvalue() if rc_want == 0 else err.getvalue()).strip()
-            if rc != rc_want or said not in text or (rc_want and (f"--delta {path}" in text or "\n" in text
-                                                                 or "gain_db must be a number" not in text
+            delta_named = said is not base
+            if rc != rc_want or said not in text or (rc_want and ("\n" in text or "the delta is not what fails" in text
+                                                                 or (f"--delta {path}" in text) is not delta_named
                                                                  or h.versions() != banked)):
-                failures.append(f"{label}: rc {rc!r}, said {text[-300:]!r}, versions {h.versions()}")
-        assert not failures, "\n  ".join(["a base's fault said as the delta's:"] + failures)
+                failures.append(f"{label}: rc {rc!r}, said {text[-400:]!r}, versions {h.versions()}")
+            if rc == 0:
+                banked = h.versions()
+        assert not failures, "\n  ".join(["variant new --delta over a base the check refuses:"] + failures)
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def _check_variant_new_refuses_its_base_in_one_line():
+    """`variant new` with no delta, from a base the bank's check refuses, is the same one line as with one (#134, batch
+    4's re-review, Out of Scope 7): the base, its file and the way on, exit 1, nothing banked. It went on to the bank,
+    whose `ValueError` ended the run in a traceback. A base that passes banks."""
+    import contextlib
+    import io
+    import shutil
+    import tempfile
+    root = tempfile.mkdtemp(prefix="autosound_variant_nodelta_")
+    try:
+        h = PresetHistory(root, "SQ")
+        h.snapshot(_sample_state(), note="baseline")
+        loose = h.load("v_001")
+        loose["version"], loose["channels"]["sub"]["gain_db"] = "v_002", "-6"
+        with open(h._path("v_002"), "w", encoding="utf-8") as fh:
+            json.dump(loose, fh)
+        banked = h.versions()
+
+        def run(base):
+            out, err = io.StringIO(), io.StringIO()
+            try:
+                with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                    rc = _main(["--root", root, "variant", "new", "SQ", "B", "--from", base])
+            except Exception as exc:  # noqa: BLE001 -- a traceback is the failure under test
+                rc = f"raised {type(exc).__name__}: {exc}"
+            return rc, out.getvalue(), err.getvalue()
+        rc, out, err = run("v_002")
+        want = (f"error: variant new: the base v_002 ({h._path('v_002')}) does not pass the ledger's check: "
+                f"channels.sub.gain_db must be a number, got '-6' -- start from another version (--from <version>), "
+                f"or give a --delta that mends that field; nothing was banked\n")
+        assert (rc, out, err) == (1, "", want) and h.versions() == banked, (rc, out, err[-400:], h.versions())
+        rc, out, err = run("v_001")
+        assert rc == 0 and "variant B from v_001" in out and len(h.versions()) == len(banked) + 1, (rc, out, err)
     finally:
         shutil.rmtree(root, ignore_errors=True)
 
@@ -3189,6 +3251,59 @@ def _check_sheet_says_an_unreadable_profile():
             if rc not in (0, None) or "processing rate: NOT READ" not in out.getvalue():
                 failures.append(f"{label}: `render` rc {rc!r}, {out.getvalue()[:200]!r}")
         assert not failures, "\n  ".join(["the sheet over a profile it cannot read:"] + failures)
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_sheet_says_a_rate_it_cannot_use():
+    """A profile that states a processing rate the sheet cannot use -- text, 0, a negative number, true or false, not a
+    finite number -- is said on the sheet, its file, the key and the value it holds, and the repair, and no samples are
+    derived (#134, batch 4's re-review, Out of Scope 2; R58e): it was read as no rate stated, and the column came from
+    the snapshot's own rate without a word. A profile that states no rate at all -- no key, or the key empty (null,
+    the interview's open question) -- keeps the snapshot's rate, its sheet byte for byte the one with no profile."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_sheet_rate_")
+    try:
+        root = os.path.join(top, "state")
+        h = PresetHistory(root, "SQ", project_dir=top)
+        h.snapshot(_sample_state(), note="baseline")
+        path = os.path.join(top, "dsp_profile.json")
+        bare = h.render()
+
+        def write(body):
+            with open(path, "wb") as fh:
+                fh.write(json.dumps({"dsp_profile": dict({"name": "X", "vendor": "Y"}, **body)}).encode())
+
+        failures = []
+        for key, value, shown in (("dsp_processing_rate_hz", "48000", '"48000"'), ("dsp_processing_rate_hz", 0, "0"),
+                                  ("dsp_processing_rate_hz", -48000, "-48000"),
+                                  ("dsp_processing_rate_hz", True, "true"), ("sample_rate_hz", "48000", '"48000"'),
+                                  ("dsp_processing_rate_hz", float("inf"), "Infinity")):
+            write({key: value})
+            label = f"{key} {shown}"
+            try:
+                text = h.render()
+            except Exception as exc:  # noqa: BLE001 -- a sheet that does not render is the failure under test
+                failures.append(f"{label}: raised {type(exc).__name__}: {exc}")
+                continue
+            rate = next(ln for ln in text.splitlines() if ln.startswith("- processing rate:"))
+            smp = [c.strip() for c in next(ln for ln in text.splitlines() if ln.startswith("| sub |")).split("|")][7]
+            if not rate.startswith(f"- processing rate: NOT READ — {path} states {key} {shown}") \
+                    or "set-field" not in rate or smp != "—":
+                failures.append(f"{label}: {rate!r}, samples {smp!r}")
+            try:
+                processing_rate(top)
+            except Exception as exc:  # noqa: BLE001 -- the kind is what is under test
+                if not getattr(type(exc), "is_unreadable", False):
+                    failures.append(f"{label}: processing_rate raised {type(exc).__name__}")
+            else:
+                failures.append(f"{label}: processing_rate read it")
+        for label, body in (("no key", {}), ("the key null", {"dsp_processing_rate_hz": None})):
+            write(body)
+            if h.render() != bare or processing_rate(top) is not None:
+                failures.append(f"{label}: the sheet is not the one with no profile")
+        assert not failures, "\n  ".join(["the sheet over a rate it cannot use:"] + failures)
     finally:
         shutil.rmtree(top, ignore_errors=True)
 

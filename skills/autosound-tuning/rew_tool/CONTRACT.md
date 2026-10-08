@@ -101,9 +101,12 @@ the exception's class into `state`: REW down is `reachable: false`; REW answerin
 something that is no measurement list is `reachable: true`, the list not read; an address that is none (`config`),
 or a failure that is none of REW's, is `reachable: null`, its note starting `skipped:` as `--no-rew`'s does.
 `unreadable` names a `project.json` or a standalone `glossary.json` that is there and cannot be read, which both
-gates' last lines name first (the glossary's row is then there and not valid, with its repair); `encoding_unread` the
-files the encoding survey could not open; `encoding_cut` (`[{file, repair}]`) the files it found cut inside their last
-character, each with its restore -- no code page's, so never in `encoding_damaged`.
+gates' last lines name first (the glossary's row is then there and not valid, with its repair), and over which both
+gates exit 1 (#134: `--phase0-gate` exited 0 under that line). Over a `project.json` that cannot be read and no
+standalone `glossary.json`, the glossary is kept in the file nobody could read: it is not in `missing`, and its row
+says it was not read. A `glossary.json` with a UTF-8 BOM is a glossary. `encoding_unread` names the files the encoding
+survey could not open; `encoding_cut` (`[{file, repair}]`) the files it found cut inside their last character, each
+with its restore -- no code page's, so never in `encoding_damaged`.
 
 ## 4. `deployment.py [<project>] [--json]` — not promised
 
@@ -195,6 +198,12 @@ both. No file at all is the one quiet case: a fresh project. It holds for:
   reported by `verify` (exit 3) and `contract.py check`; one older than the line's first seal -- banked before seals
   existed, or imported by `migrate.py --into` -- is not;
 - `project.json`, where a bank stamps its `project_rev` and where the phase-1 gate reads the flaw map;
+- `glossary.json`, and the glossary `project.json` keeps (#134): `contract.py check` and the phase gates (below), and
+  the method's own readers through `naming.Glossary.for_project(project_dir, strict=True)` -- `capture-start`, with
+  `--plan` or not, `capture-close`'s read against REW, `capture-import`, `naming.py codes|parse|expect|check` and
+  `flaw_map.py --rew` -- each in one line, `error: <file> <reason> -- <repair>`, exit 1, nothing written.
+  `Glossary.for_project(project_dir)`, the screen's read (TCC's, contract 1), stays lenient: a file it cannot read is
+  no glossary. Both read a UTF-8 BOM;
 - `dsp_profile.json` and `dsp_profile.draft.json`: `load_profile`, `load_draft` and every writer that reads through
   them (`set-field`, `reset-field`, `start`, `finalize`, `set-setting`, `refresh`), and the phase-1 and phase-2
   profile gate. The intake's processor change, which replaces the profile, sets such a file aside unread and byte for
@@ -203,7 +212,9 @@ both. No file at all is the one quiet case: a fresh project. It holds for:
 Each phase gate refuses what it cannot check. Leaving phase −1: an intake check that raises or cannot be loaded, and a
 `project.json` or a standalone `glossary.json` that cannot be read, named with its repair (#134) -- the glossary inside
 the one read as not produced, and the other as no glossary. Leaving phase 0: a `project.json` that cannot be read, where
-the flaw-map gate reads the map. Into phases 1 and 2: a `dsp_profile.json` that cannot be read or that a newer method
+the flaw-map gate reads the map, and a standalone `glossary.json` that cannot be read -- the intake check runs on every
+move forward, so `enter-phase 1` names either, and `contract.py check --phase0-gate` exits 1 under the last line that
+names it (#134; it exited 0 there). Into phases 1 and 2: a `dsp_profile.json` that cannot be read or that a newer method
 wrote, and a profile check that cannot be loaded. Leaving −1 still gates on missing files and those two only, so
 `enter-phase 0` passes over a `dsp_profile.json` that is there and cannot be read, or a newer one, where `contract.py
 check --gate` says NOT READY; gating it on the profile's readability, with that parity, waits for J3b (W-11).

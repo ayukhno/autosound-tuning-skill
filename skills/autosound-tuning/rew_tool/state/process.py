@@ -1565,7 +1565,10 @@ class Process:
         optional = [str(item) for item in (optional or []) if str(item).strip()]
         phase_key = str(phase) if phase is not None else state.get("active_phase")
         naming = _load_naming()
-        glossary = naming.Glossary.for_project(self.project_dir) if naming is not None else None
+        # Read strictly (#134, batch 4's re-review, Out of Scope 6): a `glossary.json` or a `project.json` that
+        # cannot be read refuses the round as itself, its file and repair, before anything is written -- read as no
+        # glossary, `--plan` said it "needs the project's glossary", and a round opened, its titles placed by no codes.
+        glossary = naming.Glossary.for_project(self.project_dir, strict=True) if naming is not None else None
         groups = []
         if plan:
             if naming is None:
@@ -1693,7 +1696,8 @@ class Process:
         if naming is None:
             raise ProcessError(f"naming.py could not be loaded{_load_failure('naming.py')} -- the round cannot be read "
                                "against REW")
-        glossary = naming.Glossary.for_project(self.project_dir)
+        # Strictly: a glossary cut off is refused, never read as none (#134, batch 4's re-review, Out of Scope 6).
+        glossary = naming.Glossary.for_project(self.project_dir, strict=True)
         expected = [str(x) for x in round_.get("expected") or []]
         verdict = naming.validate_series([str(t) for t in rew_titles], expected, glossary)
         gone = {t for t in round_.get("taken") or {} if not _is_taken(round_, t)}
@@ -1822,7 +1826,8 @@ class Process:
         if not isinstance(knobs, dict) or not knobs:
             raise ProcessError("capture-import needs the knobs as they stood (NAME=POS): two series cannot be "
                                "compared on the assumption that nobody touched anything")
-        glossary = _naming.Glossary.for_project(self.project_dir)
+        # Strictly: a glossary cut off is refused, never read as none (#134, batch 4's re-review, Out of Scope 6).
+        glossary = _naming.Glossary.for_project(self.project_dir, strict=True)
         groups, stray = {}, []
         for title in titles:
             parts = _naming.parse_name(title, glossary)
@@ -3511,6 +3516,106 @@ def _check_plan_names_the_naming_load_error():
     finally:
         _load_naming = real_naming
         _LOAD_FAILURES.pop("naming.py", None)
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _cut_glossary(root):
+    """Write `<root>/glossary.json` cut inside a character (a write cut off); returns `(path, whole bytes)`."""
+    path = os.path.join(root, "glossary.json")
+    whole = json.dumps({"schema_version": 1, "channels": [{"code": "w-L", "active": True, "label": "Низ"}]},
+                       ensure_ascii=False).encode("utf-8")
+    with open(path, "wb") as f:
+        f.write(whole[: whole.index("Низ".encode("utf-8")) + 1])            # inside `Н`
+    return path, whole
+
+
+def _check_phase1_gate_names_an_unreadable_glossary():
+    """Leaving phase 0 over a standalone `glossary.json` that is there and cannot be read is refused naming that file
+    and its repair (#134, batch 4's re-review I1): `contract.py check --phase0-gate` ended NOT READY over it and exited
+    0. `enter-phase 1` reads the check's `unreadable` through the intake check, which runs on every move forward, so
+    the gate and the move answer one rule. The flaw map here stands on a measurement and a target is recorded: the
+    glossary is the one thing that stops it. Refused before anything is written; the file whole again, phase 1 is
+    entered."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_phase1_cut_glossary_")
+    try:
+        root = os.path.join(top, "p")
+        os.makedirs(root)
+        _seed_intake(root)
+        p = Process(os.path.join(root, "process"))
+        p.enter_phase("-1")
+        p.enter_phase("0")
+        p.set_target("FULL", "EPY")
+        pj = os.path.join(root, "project.json")
+        with open(pj, encoding="utf-8") as f:
+            data = json.load(f)
+        data["acoustics"] = {"flaws": [{"f_hz": 150.0, "level_db": -9.0, "kind": "cabin_null", "action": "no_boost",
+                                        "why": "a null", "evidence": ["w-L_01 (sw)"], "channels": ["w-L"],
+                                        "at": "2026-01-01T00:00:00Z"}]}
+        with open(pj, "w", encoding="utf-8") as f:
+            json.dump(data, f)
+        path, whole = _cut_glossary(root)
+        rc, said, kept = _gate_run(p.dir, ["enter-phase", "1"])
+        last = (said.strip().splitlines() or [""])[-1]
+        assert rc == 1 and kept and p.load()["active_phase"] == "0", (rc, kept, last)
+        assert last.startswith(f"error: phase 1 is not entered: {path} is cut off inside a character") \
+            and "checkout HEAD -- glossary.json" in last, last
+        with open(path, "wb") as f:
+            f.write(whole)
+        rc, said, _kept = _gate_run(p.dir, ["enter-phase", "1"])
+        assert rc == 0 and p.load()["active_phase"] == "1", (rc, said[-300:])
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_capture_verbs_read_the_glossary_strictly():
+    """The capture verbs read the glossary as the method reads its files, strictly (#134, batch 4's re-review, Out of
+    Scope 6): a `glossary.json` that is there and cannot be read refuses them naming the file and its repair,
+    `error: <file> <reason> -- <repair>`, exit 1, nothing written. Read as no glossary, `capture-start --plan` said it
+    "needs the project's glossary" over one cut after phase 0 was entered; `capture-start` opened its round, its
+    titles placed by no codes; the close read the round against REW, and `capture-import` split its titles, with none.
+    The file whole again, each goes through. (`Glossary.for_project` stays lenient by default: a screen's read.)"""
+    import shutil
+    import tempfile
+    rew_api = _siblings().load("rew_api.py")
+    real = rew_api.get_measurements
+    top = tempfile.mkdtemp(prefix="autosound_capture_cut_glossary_")
+    try:
+        root = os.path.join(top, "p")
+        os.makedirs(root)
+        _seed_intake(root)
+        p = Process(os.path.join(root, "process"))
+        p.enter_phase("-1")
+        p.enter_phase("0")
+        path, whole = _cut_glossary(root)
+        failures = []
+
+        def refused(label, argv):
+            rc, said, kept = _gate_run(p.dir, argv)
+            last = (said.strip().splitlines() or [""])[-1]
+            if rc != 1 or not kept or not last.startswith(f"error: {path} is cut off inside a character") \
+                    or "checkout HEAD -- glossary.json" not in last or "needs the project's glossary" in said:
+                failures.append(f"{label}: rc {rc!r}, kept {kept}, said {said.strip()[-300:]!r}")
+        refused("capture-start --plan", ["capture-start", "55", "--plan"])
+        refused("capture-start", ["capture-start", "55", "w-L_55 (sw)"])
+        # A joint's title is split by the glossary's codes: with none, `w+m` read as a modifier no bind names.
+        refused("capture-import", ["capture-import", "55", "w-L_55 (sw)", "L w+m_55 (sw)", "--bind", "=v_001",
+                                   "--knob", "SubRC=4/4"])
+        with open(path, "wb") as f:
+            f.write(whole)
+        rc, said, _kept = _gate_run(p.dir, ["capture-start", "55", "--plan"])
+        if rc != 0 or not (p.load().get("capture") or {}).get("expected"):
+            failures.append(f"capture-start --plan over the whole file: rc {rc!r}, said {said[-300:]!r}")
+        # The close reads the open round against REW's list through the glossary (`reconcile_captures`).
+        rew_api.get_measurements = lambda: {"1": {"title": "w-L_55 (sw)"}}
+        _cut_glossary(root)
+        refused("capture-close", ["capture-close"])
+        if not p.load().get("capture") or p.load()["capture"].get("closed"):
+            failures.append("capture-close over the cut file closed the round")
+        assert not failures, "\n  ".join(["a capture verb over a glossary.json it cannot read:"] + failures)
+    finally:
+        rew_api.get_measurements = real
         shutil.rmtree(top, ignore_errors=True)
 
 
@@ -6297,7 +6402,8 @@ def _selftest():
                   _check_listing_never_read_as_rew, _check_ambiguous_capture, _check_close_swallows_only_rew,
                   _check_intake_gate_names_an_unreadable_project_json, _check_close_checks_stage_refusals,
                   _check_naming_load_error_named, _check_round_lookups_read_the_state_strictly,
-                  _check_intake_gate_names_an_unreadable_glossary, _check_plan_names_the_naming_load_error):
+                  _check_intake_gate_names_an_unreadable_glossary, _check_plan_names_the_naming_load_error,
+                  _check_phase1_gate_names_an_unreadable_glossary, _check_capture_verbs_read_the_glossary_strictly):
         try:
             check()
         except AssertionError as exc:

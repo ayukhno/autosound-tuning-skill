@@ -918,6 +918,14 @@ def check_project(project_dir, skip_rew=False):
     # `complete` — everything the method needs before phase 0 EXISTS and is valid. That is the
     #              gate's question, and only that one.
     missing = [f["file"] for f in files if not f["exists"] and f["file"] in GATE_REQUIRED]
+    # A `project.json` that is there and cannot be read holds the glossary when no standalone `glossary.json` does: of
+    # that glossary nothing is known, so it is not "not produced" (#134, batch 4's re-review, Out of Scope 3) -- the
+    # intake line counted it among what intake had not produced, and its row said "no glossary yet". Its file is named
+    # in `unreadable`; only what is absent outside it is missing.
+    if project_entry["exists"] and project_data is None \
+            and not os.path.lexists(os.path.join(project_dir, "glossary.json")):
+        glossary_entry["issues"] = ["not read -- project.json cannot be read, and the glossary is kept in it"]
+        missing = [m for m in missing if m != glossary_entry["file"]]
     # The ledger has no fixed row name — `check_ledgers` reports one row per preset directory, and
     # a project with no `state/` at all reports none. Absence of the row IS the missing ledger,
     # which a name-based check cannot see.
@@ -1252,8 +1260,13 @@ def ready_to_leave_phase0(report):
     """`--phase0-gate`'s answer (R27): phase 0 is finished when the flaw map has at least one row and every row stands
     on a measurement. The report's `map_ready` is the second half alone -- no row lacks evidence, which an empty map
     satisfies, the question `gaps` asks too -- and keeps that meaning in `--json`. `enter-phase 1` refuses an empty
-    map (`process._require_flaw_map`), and this gate passed one, exit 0."""
-    return flaw_rows(report) > 0 and bool(report.get("map_ready"))
+    map (`process._require_flaw_map`), and this gate passed one, exit 0.
+
+    Never while `unreadable` names a file (#134, batch 4's re-review I1): a `project.json` or a standalone
+    `glossary.json` that is there and cannot be read is what both gates' last lines name first, and this answer is the
+    exit code those lines agree with. A cut `glossary.json` beside a flaw map on measurements exited 0 under a last
+    line saying NOT READY; `enter-phase 1` refuses it through the intake check, which runs on every move forward."""
+    return not report.get("unreadable") and flaw_rows(report) > 0 and bool(report.get("map_ready"))
 
 
 def _verdict_line(report, gate=None):
@@ -2517,6 +2530,116 @@ def _check_cut_file_named_in_check():
         shutil.rmtree(d, ignore_errors=True)
 
 
+def _check_phase0_gate_exit_over_an_unreadable_glossary():
+    """`--phase0-gate` exits by the rule its last line states (#134, batch 4's re-review I1): a standalone
+    `glossary.json` that is there and cannot be read is named first by both gates' last lines (CONTRACT §3), and
+    `ready_to_leave_phase0` -- the gate's exit -- read the flaw rows alone, so the run exited 0 under `**NOT READY to
+    leave phase 0 — glossary.json cannot be read ...**`: the contradiction #136's audit I-28 removed. Over a flaw map
+    whose every row stands on a measurement it is exit 1 now, in text and `--json`; the file whole again, READY, exit
+    0."""
+    import contextlib
+    import io
+    import shutil
+    import tempfile
+    d = tempfile.mkdtemp(prefix="autosound_contract_phase0_glossary_")
+    try:
+        row = {"f_hz": 150.0, "level_db": -9.0, "kind": "cabin_null", "action": "no_boost", "why": "a null",
+               "evidence": ["w-L_01 (sw)"], "channels": ["w-L"], "at": "2026-01-01T00:00:00Z"}
+        with open(os.path.join(d, "project.json"), "w", encoding="utf-8") as fh:
+            json.dump({"schema_version": project.SCHEMA_VERSION, "acoustics": {"flaws": [row]},
+                       "glossary": {"schema_version": 1, "channels": [{"code": "w-L", "active": True}]}}, fh)
+        whole = json.dumps({"schema_version": 1, "channels": [{"code": "w-L", "active": True, "label": "Низ"}]},
+                           ensure_ascii=False).encode("utf-8")
+        path = os.path.join(d, "glossary.json")
+        failures = []
+        for label, raw, line, code in (
+                ("cut inside a character", whole[: whole.index("Низ".encode("utf-8")) + 1],
+                 "**NOT READY to leave phase 0 — glossary.json cannot be read: mend it first (its row above says "
+                 "how).**", 1),
+                ("whole", whole, "**READY to leave phase 0.**", 0)):
+            with open(path, "wb") as fh:
+                fh.write(raw)
+            report = check_project(d, skip_rew=True)
+            if ready_to_leave_phase0(report) is not bool(code == 0):
+                failures.append(f"{label}: ready_to_leave_phase0 {ready_to_leave_phase0(report)}, unreadable "
+                                f"{report.get('unreadable')}")
+            for extra in ([], ["--json"]):
+                out = io.StringIO()
+                with contextlib.redirect_stdout(out):
+                    rc = _main(["contract.py", "check", d, "--no-rew", "--phase0-gate"] + extra)
+                last = out.getvalue().rstrip("\n").splitlines()[-1]
+                if rc != code or (not extra and (last != line or last.startswith("**READY") is not (rc == 0))):
+                    failures.append(f"{label} {extra}: rc {rc}, last {last!r}")
+        assert not failures, "\n  ".join(["--phase0-gate over a glossary.json it cannot read:"] + failures)
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+
+
+def _check_intake_line_over_an_unreadable_project_json():
+    """Over a `project.json` that is there and cannot be read, the intake line says that file cannot be read and lists
+    as not produced only what is absent outside it (#134, batch 4's re-review, Out of Scope 3): the glossary inside
+    the file nobody could read was counted among what intake had not produced -- `missing` -- and its row said "no
+    glossary yet". With no standalone `glossary.json`, nothing is known of the glossary: it is not in `missing`, and
+    its row says it was not read. A standalone one is read as before, and a readable `project.json` with no glossary
+    still owes one."""
+    import shutil
+    import tempfile
+    d = tempfile.mkdtemp(prefix="autosound_contract_intake_cut_project_")
+    try:
+        whole = json.dumps({"schema_version": project.SCHEMA_VERSION,
+                            "glossary": {"schema_version": 1, "channels": [{"code": "w-L", "active": True}]}})
+        pj = os.path.join(d, "project.json")
+        with open(pj, "w", encoding="utf-8") as fh:
+            fh.write(whole[: len(whole) // 2])
+        failures = []
+        report = check_project(d, skip_rew=True)
+        row = next(f for f in report["files"] if f["file"].startswith("glossary.json"))
+        intake = [ln for ln in render_report(report, gate="intake").splitlines()
+                  if ln.startswith("**Not ready for phase 0**")]
+        if any(m.startswith("glossary.json") for m in report["missing"]) or not intake \
+                or "glossary" in intake[0] or "project.json cannot be read" not in intake[0] \
+                or "intake has not produced: dsp_profile.json" not in intake[0]:
+            failures.append(f"cut project.json: missing {report['missing']}, intake {intake[:1]}")
+        if "no glossary yet" in " ".join(row["issues"]) or "project.json cannot be read" not in " ".join(row["issues"]):
+            failures.append(f"cut project.json: the glossary's row {row}")
+        with open(os.path.join(d, "glossary.json"), "w", encoding="utf-8") as fh:
+            json.dump({"schema_version": 1, "channels": [{"code": "w-L", "active": True}]}, fh)
+        report = check_project(d, skip_rew=True)
+        row = next(f for f in report["files"] if f["file"].startswith("glossary.json"))
+        if row["exists"] is not True or row["valid"] is not True or row["issues"]:
+            failures.append(f"cut project.json, a standalone glossary.json: its row {row}")
+        os.remove(os.path.join(d, "glossary.json"))
+        with open(pj, "w", encoding="utf-8") as fh:
+            json.dump({"schema_version": project.SCHEMA_VERSION}, fh)
+        report = check_project(d, skip_rew=True)
+        if "glossary.json (or project.json.glossary)" not in report["missing"]:
+            failures.append(f"a readable project.json with no glossary: missing {report['missing']}")
+        assert not failures, "\n  ".join(["the intake line over a project.json it cannot read:"] + failures)
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+
+
+def _check_bom_glossary_is_a_glossary():
+    """A `glossary.json` saved with a UTF-8 BOM is a glossary in the report (#134, batch 4's re-review, Out of Scope 1):
+    the strict read passed it -- a BOM is an editor's marker -- and the lenient one behind the row read it as none, so
+    the row said "no glossary yet", `missing` listed it and the intake gate stayed shut over a valid file."""
+    import shutil
+    import tempfile
+    d = tempfile.mkdtemp(prefix="autosound_contract_bom_glossary_")
+    try:
+        pj = project.Project(d)
+        pj.save(pj.load())
+        with open(os.path.join(d, "glossary.json"), "wb") as fh:
+            fh.write(b"\xef\xbb\xbf" + json.dumps({"schema_version": 1, "channels": [{"code": "w-L"}]}).encode())
+        report = check_project(d, skip_rew=True)
+        row = next(f for f in report["files"] if f["file"].startswith("glossary.json"))
+        assert row["exists"] is True and row["valid"] is True and not row["issues"] \
+            and not any(m.startswith("glossary.json") for m in report["missing"]) and not report["unreadable"], \
+            (row, report["missing"], report["unreadable"])
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+
+
 def _selftest():
     os.environ["AUTOSOUND_NO_GH"] = "1"          # the history line is checked; GitHub is never reached from a test
     failures = []
@@ -2526,7 +2649,8 @@ def _selftest():
                   _check_encoding_survey_in_check, _check_repair_encoding_refusals,
                   _check_unreadable_profile_and_seals_reported, _check_version_verb, _check_version_shape,
                   _check_skill_version, _check_skill_sha, _check_glossary_read_strictly,
-                  _check_cut_file_named_in_check):
+                  _check_cut_file_named_in_check, _check_phase0_gate_exit_over_an_unreadable_glossary,
+                  _check_intake_line_over_an_unreadable_project_json, _check_bom_glossary_is_a_glossary):
         try:
             check()
         except AssertionError as exc:

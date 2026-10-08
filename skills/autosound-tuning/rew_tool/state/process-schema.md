@@ -228,13 +228,16 @@ appended line is fsynced (and the folder, when the append made the file), so it 
   vanished from the report entirely (TCC-022). Skipped and not-yet-taken looked identical
   before, so a tuner who decided a capture was unnecessary had no way to say so and the next
   session proposed it again. `skip_capture` raises without one.
-- **Captures belong to a ROUND, not to a version.** The ledger version names the config a
-  measurement was taken under; it cannot tell two passes at the same config apart, and "this
-  session's task" is what the Arbiter asks about. Opening a round while one is open closes the
-  first — a round nobody closed ended when the next one began. It closes once the new round has passed every refusal
-  (#134, H I-3): a refused `capture-start` (a `--plan` with no glossary, say) writes nothing, where it appended the
-  first round's `capture_round_closed` while the state kept it open; and `capture-import` checks every bind against
-  the ledger before its first round, so a bad one is refused with nothing imported.
+- **Captures belong to a ROUND, not to a version.** The ledger version names the config a measurement was taken under;
+  it cannot tell two passes at the same config apart, and "this session's task" is what the Arbiter asks about. Opening
+  a round while one is open closes the first — a round nobody closed ended when the next one began. It closes once the
+  new round has passed every refusal (#134, H I-3): a refused `capture-start` (a `--plan` with no glossary, say) writes
+  nothing, where it appended the first round's `capture_round_closed` while the state kept it open; and `capture-import`
+  checks every bind against the ledger before its first round, so a bad one is refused with nothing imported. The
+  capture verbs read the glossary strictly (batch 4's re-review, Out of Scope 6): `capture-start`, with `--plan` or not,
+  `capture-close`'s read against REW and `capture-import` refuse a `glossary.json` or a `project.json` that cannot be
+  read, `error: <file> <reason> -- <repair>`, exit 1, nothing written. Read as no glossary, `--plan` said it "needs the
+  project's glossary" over one cut off, and the others went on with no codes.
 - **Phases are the skill's, not the project's.** Only status and re-entry change. Phase 5 is
   explicitly cyclical, so `enter_phase` is not a one-way ratchet.
 - **State writes are atomic** (write-temp-then-rename, the folder fsynced after on POSIX). A torn write would
@@ -427,14 +430,16 @@ usage on stdout, exit 0.
 that raises must not become a wall"), on the damaged projects most of all.
 
 - **The intake gate** (leaving −1): a `contract.py` that cannot be loaded refuses with `phase N is not entered: the
-  intake check could not be loaded (<type>: <message>) -- the install is broken, not the project`; a check that
-  raises refuses with `phase N is not entered: the intake check raised <type>: <message>`; a file the check found
-  unreadable raises as itself, with its own repair, and a `project.json` that is there and cannot be read refuses as
-  itself too, `phase N is not entered: <file> exists and cannot be read: ...` (#134, F M-5: it said the glossary
-  inside it was not produced). So does a standalone `glossary.json`, `phase N is not entered: <file> <reason> --
-  <repair>` (batch 4's re-review N4): read as no glossary, it let the phase in beside `project.json`'s own glossary,
-  or was "not produced". Otherwise it still gates on `missing`; gating on `complete`, with a parity test against
-  `contract.py check --gate`, is J3b (W-11).
+  intake check could not be loaded (<type>: <message>) -- the install is broken, not the project`; a check that raises
+  refuses with `phase N is not entered: the intake check raised <type>: <message>`; a file the check found unreadable
+  raises as itself, with its own repair, and a `project.json` that is there and cannot be read refuses as itself too,
+  `phase N is not entered: <file> exists and cannot be read: ...` (#134, F M-5: it said the glossary inside it was not
+  produced). So does a standalone `glossary.json`, `phase N is not entered: <file> <reason> -- <repair>` (batch 4's
+  re-review N4): read as no glossary, it let the phase in beside `project.json`'s own glossary, or was "not produced".
+  Otherwise it still gates on `missing`; gating on `complete`, with a parity test against `contract.py check --gate`, is
+  J3b (W-11). The check runs on every move forward, not on leaving −1 alone: a `glossary.json` cut after phase 0 was
+  entered refuses `enter-phase 1` the same way, as `contract.py check --phase0-gate` now exits 1 over it (batch 4's
+  re-review I1: it exited 0 under its NOT READY line).
 - **The flaw-map gate** (leaving 0): a `project.json` that is there and cannot be read raises `Unreadable` with its
   repair (`git -C <project-dir> checkout HEAD -- project.json`, or `contract.py repair-encoding` for another code
   page). One holding an array stopped the gate with a traceback; a damaged one let the phase in with no map.

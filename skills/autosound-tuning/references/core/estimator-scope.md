@@ -116,14 +116,17 @@ answerable from the table below and should not cost a round trip.
 | `verify_prediction --entry` | point sweeps from the tripod, the complex response (v7 or REW impulse) | an RTA (no impulse: the arrival check has nothing to read; the pair check is refused without `--allow-rta`) | the entry control needs the same base as the prediction |
 | `ear_suspects` | an MMM or a sweep with peaks that clear the local trend | a fourth round (refused); a shelf (that is tone, not a suspect); a one-bin spike (the position) | three suspects × three rounds, then stop — more is over-fitting one afternoon |
 
-## 2a. The one refusal that withholds a NUMBER
+## 2a. The refusals that withhold a NUMBER
 
-Everything in §2 says where a tool is **silent**. There is exactly one place where the method
-**refuses**: `protective.should_de_embed(record, channel, baseline=True)` — a baseline solo
-whose protective filter was never recorded is refused rather than read as configured, because
-a joint-phase decision taken through an unrecorded filter is invalid.
+Everything in §2 says where a tool is **silent**. There are two places where the method **refuses**,
+both where a protective filter is taken out of a sweep: `protective.should_de_embed(record, channel,
+baseline=True)` — a baseline solo whose protective filter was never recorded is refused rather than
+read as configured, because a joint-phase decision taken through an unrecorded filter is invalid;
+and a recorded protective leg the method cannot model — a Chebyshev, `CH` — is refused in every
+caller, `--baseline` or not, rather than taken out as another family (#134, R52; the way on:
+`project-intake.md` §3).
 
-> Who signed that refusal, what cancelling it costs, and why a behaviour that acts ratified is
+> Who signed each refusal, what cancelling the first costs, and why a behaviour that acts ratified is
 > not ratified → `CONTRIBUTING.md` ([on GitHub](https://github.com/ayukhno/autosound-tuning-skill/blob/main/CONTRIBUTING.md); on disk it is in the repository root beside the skill — through the installed symlink resolve the canonical path, `..` does not lead there), "Maintainer notes"
 > (`autosound-hub#31`).
 

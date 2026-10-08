@@ -97,7 +97,15 @@ def migrate_snapshot(raw):
         for code, row in (out.get(tier) or {}).items():
             eq = row.get("eq")
             if isinstance(eq, list) and eq and isinstance(eq[0], str):
-                row["eq"] = [_state.eq_band_from_str(s) for s in eq]
+                try:
+                    row["eq"] = [_state.eq_band_from_str(s) for s in eq]
+                except ValueError as exc:
+                    # A band string 2.x wrote that names no frequency is the version's refusal, naming its row (#134,
+                    # batch 4's re-review M2); `import_current_state` puts the file in front. A bare `ValueError`
+                    # named no file, and the command line takes no `ValueError` for a refusal.
+                    raise _state.SnapshotError(f"{tier}.{code}.eq: {exc} -- give the band its frequency in Hz (e.g. "
+                                               f"`PK 1000 -3 Q2`) or remove it from that version, then run the import "
+                                               f"again") from exc
             renamed = {}
             for field in _state.MOVED_TO_PROJECT_JSON:
                 if field not in row:
@@ -310,7 +318,15 @@ def import_current_state(old_dir, new_dir, dry_run=False):
     # only the NEWEST snapshot per preset becomes a ledger in the new project.
     identity, newest = {}, {}
     for path in paths:
-        snap, found = migrate_snapshot(_read_json(path))
+        raw = _read_json(path)
+        try:
+            snap, found = migrate_snapshot(raw)
+        except Exception as exc:  # noqa: BLE001 -- matched by its attribute below; anything else still raises
+            # The version's own refusal -- an EQ band with no frequency, its way on with it -- names the version (#134,
+            # batch 4's re-review M2); a bug in the transform is raised as it is.
+            if not getattr(type(exc), "is_snapshot_error", False):
+                raise
+            raise _state.SnapshotError(f"{path}: {exc}; nothing was imported") from exc
         for code, fields in found.items():
             identity.setdefault(code, {}).update(fields)
         newest[os.path.basename(os.path.dirname(path))] = (path, snap)
@@ -348,6 +364,32 @@ def import_current_state(old_dir, new_dir, dry_run=False):
                                        f"nothing was imported") from exc
         report["snapshots"].append(f"{preset}/v_001.json (was {os.path.basename(path)})")
 
+    # The old profile is read and checked before the first write (#134, batch 4's re-review, Out of Scope 4): read
+    # after the new `project.json` and the ledger were written, a profile refused -- cut off, a newer method's, one
+    # holding a `project.json` -- left the new project half made, and its line did not say what had landed. It is read
+    # as the profile's own reader reads it (`load_profile`): a file there and unreadable is refused, a folder in its
+    # place too; no file is no profile.
+    old_profile = os.path.join(old_dir, "dsp_profile.json")
+    try:
+        profile = _dsp_profile.load_profile(old_profile)
+    except FileNotFoundError:
+        profile = None
+    if profile is not None:
+        if _looks_like_project_json(profile):
+            # `rename_profile_fields`' refusal, with its file and the way on (M2): a bare `ValueError` was a traceback.
+            raise io_.Unreadable(old_profile, "holds a project.json, not a DSP profile",
+                                 "put the DSP's profile there, or move that file aside (the import then carries no "
+                                 "profile, and intake asks for one), then run the import again")
+        renames = rename_profile_fields(profile)
+        if renames:
+            report["field_renames"] = renames
+        try:
+            _dsp_profile.validate_profile(profile)
+        except ValueError as exc:
+            report["warnings"].append(
+                f"dsp_profile.json NOT imported — it does not validate: {exc}")
+            profile = None
+
     if not dry_run:
         proj.save(data)
         for preset, (_path, snap) in sorted(newest.items()):
@@ -357,24 +399,12 @@ def import_current_state(old_dir, new_dir, dry_run=False):
             _write_json(os.path.join(preset_dir, "v_001.json"), snap)
             with open(os.path.join(preset_dir, "HEAD"), "w", encoding="utf-8") as handle:
                 handle.write("v_001\n")
+        if profile is not None:
+            _dsp_profile.save_profile(os.path.join(new_dir, "dsp_profile.json"), profile)
     report["project_rev"] = proj.load()["project_rev"] if not dry_run else 1
     report["files"].append("project.json")
-
-    old_profile = os.path.join(old_dir, "dsp_profile.json")
-    if os.path.isfile(old_profile):
-        profile = _read_json(old_profile)
-        renames = rename_profile_fields(profile)
-        if renames:
-            report["field_renames"] = renames
-        try:
-            _dsp_profile.validate_profile(profile)
-        except ValueError as exc:
-            report["warnings"].append(
-                f"dsp_profile.json NOT imported — it does not validate: {exc}")
-        else:
-            if not dry_run:
-                _dsp_profile.save_profile(os.path.join(new_dir, "dsp_profile.json"), profile)
-            report["files"].append("dsp_profile.json")
+    if profile is not None:
+        report["files"].append("dsp_profile.json")
 
     report["warnings"].append(
         "History stayed behind on purpose: the journal, the process state and older snapshots are "
@@ -438,16 +468,18 @@ def _main(argv=None):
         print("--into must name a DIFFERENT directory: the point is that the old one is left "
               "alone", file=sys.stderr)
         return 2
-    if not dry_run:
-        os.makedirs(new_dir, exist_ok=True)
+    # The new folder is made by the import's first write, once everything it needs is read (#134, batch 4's
+    # re-review, Out of Scope 4): made here, a refused import left an empty folder behind.
     try:
         report = import_current_state(project_dir, new_dir, dry_run=dry_run)
     except Exception as exc:  # noqa: BLE001 -- matched below; anything else still raises
         # A refusal of the import -- `--into` over a `project.json` a newer method wrote (`Project.save`'s words), one
-        # that cannot be read, a ledger version that cannot be read or does not pass this method's check -- is said in
-        # one line, exit 1 (#134, H 23, T m10). It ended in a traceback: nothing here caught it. Those three kinds
-        # alone (batch 4's re-review N2): any other `ValueError` -- a `float()` on a malformed field, say -- is a bug,
-        # and raises with its traceback, where it was printed `error: could not convert ...` with no file named.
+        # that cannot be read, a ledger version that cannot be read or does not pass this method's check, an EQ band in
+        # one that names no frequency, an old profile that cannot be read or holds a `project.json` -- is said in one
+        # line, exit 1 (#134, H 23, T m10; batch 4's re-review M2). It ended in a traceback: nothing here caught it.
+        # Those three kinds alone (batch 4's re-review N2): any other `ValueError` -- a `float()` on a malformed field,
+        # say -- is a bug, and raises with its traceback, where it was printed `error: could not convert ...` with no
+        # file named. Every refusal comes before the first write (Out of Scope 4), so nothing was written.
         if not (isinstance(exc, _project.ProjectError) or getattr(type(exc), "is_unreadable", False)
                 or getattr(type(exc), "is_snapshot_error", False)):
             raise
@@ -563,11 +595,119 @@ def _check_main_refuses_only_refusals():
         shutil.rmtree(new, ignore_errors=True)
 
 
+def _check_import_refusals_in_one_line():
+    """The import's two other deliberate refusals are one line, exit 1, each naming its file and the way on (#134, batch
+    4's re-review M2): an EQ band a 2.x version wrote that names no frequency (`state.eq_band_from_str`'s refusal,
+    reached through `migrate_snapshot`), and an old `dsp_profile.json` that holds a `project.json`
+    (`rename_profile_fields`' refusal). Once the command line took only the import's own refusals, both were bare
+    `ValueError`s, and both ended in a traceback naming no file. A bug's `ValueError` stays one
+    (`_check_main_refuses_only_refusals`)."""
+    import contextlib
+    import io
+    import shutil
+    import tempfile
+    old = tempfile.mkdtemp(prefix="autosound_migrate_m2_old_")
+    new = tempfile.mkdtemp(prefix="autosound_migrate_m2_new_")
+    try:
+        os.makedirs(os.path.join(old, "state", "SQ"))
+        version = os.path.join(old, "state", "SQ", "v_001.json")
+        row = {"helix_ch": "C", "hp": {"f": 70, "type": "BW", "slope": 12}, "lp": {"f": 270, "type": "BW", "slope": 12},
+               "gain_db": -7.8, "ta_ms": 5.38, "polarity": "NORM"}
+        profile = os.path.join(old, "dsp_profile.json")
+        failures = []
+        for label, eq, held, said in (
+                ("an EQ band with no frequency", ["PK"], None,
+                 f"error: {version}: channels.w-L.eq: could not parse a frequency from EQ band 'PK' -- give the band "
+                 f"its frequency in Hz (e.g. `PK 1000 -3 Q2`) or remove it from that version, then run the import "
+                 f"again; nothing was imported"),
+                ("a dsp_profile.json that holds a project.json", [], {"schema_version": 3, "channels": [], "car": {}},
+                 f"error: {profile} holds a project.json, not a DSP profile -- put the DSP's profile there, or move "
+                 f"that file aside (the import then carries no profile, and intake asks for one), then run the import "
+                 f"again")):
+            _write_json(version, {"preset": "SQ", "version": "v_001", "sample_rate": 96000,
+                                  "channels": {"w-L": dict(row, eq=eq)}})
+            if held is None:
+                if os.path.exists(profile):
+                    os.remove(profile)
+            else:
+                _write_json(profile, held)
+            for extra in (["--dry-run"], []):
+                out, err = io.StringIO(), io.StringIO()
+                try:
+                    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                        rc = _main([old, "--into", new] + extra)
+                except Exception as exc:  # noqa: BLE001 -- a traceback is the failure under test
+                    rc = f"raised {type(exc).__name__}: {exc}"
+                if (rc, out.getvalue(), err.getvalue()) != (1, "", said + "\n"):
+                    failures.append(f"{label} {extra}: rc {rc!r}, said {err.getvalue()[-400:]!r}")
+        assert not failures, "\n  ".join(["an import refusal:"] + failures)
+    finally:
+        shutil.rmtree(old, ignore_errors=True)
+        shutil.rmtree(new, ignore_errors=True)
+
+
+def _check_import_reads_before_it_writes():
+    """`migrate --into` writes nothing before everything it needs is read (#134, batch 4's re-review, Out of Scope 4):
+    it wrote the new `project.json` and the ledger, and read the old `dsp_profile.json` after them, so a profile it
+    refused -- cut off, a newer method's, one that holds a `project.json` -- left a project half made, and the refusal
+    did not say what had landed. Now each refuses with the new folder as it was: not even made, when it was not
+    there. A profile that reads is carried in, as before."""
+    import contextlib
+    import io
+    import json
+    import shutil
+    import tempfile
+    old = tempfile.mkdtemp(prefix="autosound_migrate_order_old_")
+    top = tempfile.mkdtemp(prefix="autosound_migrate_order_new_")
+    try:
+        os.makedirs(os.path.join(old, "state", "SQ"))
+        _write_json(os.path.join(old, "state", "SQ", "v_001.json"), {
+            "preset": "SQ", "version": "v_001", "sample_rate": 96000,
+            "channels": {"w-L": {"helix_ch": "C", "hp": {"f": 70, "type": "BW", "slope": 12},
+                                 "lp": {"f": 270, "type": "BW", "slope": 12}, "gain_db": -7.8, "ta_ms": 5.38,
+                                 "polarity": "NORM"}}})
+        profile = os.path.join(old, "dsp_profile.json")
+        good = {"dsp_profile": {"name": "Fixture", "vendor": "Fixture", "dsp_processing_rate_hz": 96000,
+                                "delay": {"step_ms": 0.01}, "polarity": {"scope": []},
+                                "groups": [{"id": "physical_outputs", "label": "Outputs", "max_count": 2,
+                                            "fields": ["hp", "lp", "gain_db", "ta_ms", "polarity"],
+                                            "crossover_filters": {"types": {"LR": {"orders_db_per_oct": [24]}}}}]}}
+        failures = []
+        for label, raw in (
+                ("cut off", json.dumps(good).encode()[:40]),
+                ("a newer method's", json.dumps(dict(good, schema_version=_dsp_profile.SCHEMA_VERSION + 1)).encode()),
+                ("a project.json", json.dumps({"schema_version": 3, "channels": [], "car": {}}).encode())):
+            with open(profile, "wb") as fh:
+                fh.write(raw)
+            new = os.path.join(top, label.replace(" ", "-").replace("'", ""))
+            out, err = io.StringIO(), io.StringIO()
+            try:
+                with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                    rc = _main([old, "--into", new])
+            except Exception as exc:  # noqa: BLE001 -- a traceback is a failure under test
+                rc = f"raised {type(exc).__name__}: {exc}"
+            if rc != 1 or not err.getvalue().startswith(f"error: {profile} ") or os.path.exists(new):
+                failures.append(f"{label}: rc {rc!r}, said {err.getvalue()[-300:]!r}, new folder "
+                                f"{sorted(os.listdir(new)) if os.path.isdir(new) else 'not made'}")
+        with open(profile, "w", encoding="utf-8") as fh:
+            json.dump(good, fh)
+        new = os.path.join(top, "whole")
+        with contextlib.redirect_stdout(io.StringIO()):
+            rc = _main([old, "--into", new])
+        if rc != 0 or sorted(os.listdir(new)) != ["dsp_profile.json", "project.json", "state"]:
+            failures.append(f"a profile that reads: rc {rc!r}, new folder {sorted(os.listdir(new))}")
+        assert not failures, "\n  ".join(["an import refused after it wrote:"] + failures)
+    finally:
+        shutil.rmtree(old, ignore_errors=True)
+        shutil.rmtree(top, ignore_errors=True)
+
+
 def _selftest():
     import tempfile
 
     failures = []
-    for check in (_check_import_refuses_newer_project, _check_main_refuses_only_refusals):
+    for check in (_check_import_refuses_newer_project, _check_main_refuses_only_refusals,
+                  _check_import_refusals_in_one_line, _check_import_reads_before_it_writes):
         try:
             check()
         except AssertionError as exc:
