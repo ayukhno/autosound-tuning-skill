@@ -107,7 +107,7 @@ You will need a laptop, a measurement microphone, a DSP processor in the car, an
 
 </details>
 
-How the run ended is in its exit code: `0` ready · `1` stopped — the method was not installed or changed · `2` a wrong option · `3` installed but not ready, the last lines naming what is missing and what to do.
+How the run ended is in its exit code: `0` ready · `1` stopped — the method was not installed or changed · `2` a wrong option to `install.sh`, or a bad `-Channel` or `-Plugin` to `install.ps1` (PowerShell itself refuses an option it does not know, with `1`) · `3` installed but not ready, the last lines naming what is missing and what to do.
 
 ### From installation to the car
 

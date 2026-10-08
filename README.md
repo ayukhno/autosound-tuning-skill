@@ -76,7 +76,7 @@ and on Windows, as two lines:
 $i = irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.1.2/install.ps1
 & ([scriptblock]::Create($i)) -WithOmp -GitHub
 ```
-**How it ended** is in the installer's exit code: `0` ready · `1` stopped — the method was not installed or changed · `2` a wrong option · `3` installed but not ready, its last lines naming what is missing and what to do.
+**How it ended** is in the installer's exit code: `0` ready · `1` stopped — the method was not installed or changed · `2` a wrong option to `install.sh`, or a bad `-Channel` or `-Plugin` to `install.ps1` (PowerShell itself refuses an option it does not know, with `1`) · `3` installed but not ready, its last lines naming what is missing and what to do.
 
 **Already in Claude Code?** The method also installs as a plugin:
 ```sh
