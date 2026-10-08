@@ -2255,6 +2255,96 @@ def _check_the_door_records_the_review():
     assert not failures, "\n  ".join(["the door's record of its review:"] + failures)
 
 
+def _check_a_fault_in_the_record_is_not_a_refusal():
+    """#143, R47: while the door records a review it was asked to (`--record`), only a refusal of the project's is taken
+    for one -- an error with `is_busy`, `is_unreadable` or `exit_code`, an `OSError`, or a `ProcessError` of the
+    `process.py` copy the door loaded itself -- and said with the line that records the review by hand; a refusal that
+    wrote the state already (`state_written`) offers no such line, which would put the step in twice. Anything else is a
+    fault of the code: its traceback, the same lines, a last line saying the review above stands, and exit 70 once the
+    audit trail has it -- the review was filed and printed before the record, so a 70 costs neither. A bug's
+    `ValueError` and another copy's `ProcessError` are faults: a `ValueError` passed for a refusal, its traceback
+    unsaid, and a `KeyError` ended 0. Through `main`, the API a stand-in that answers."""
+    process_mod = _siblings().load("state/process.py")
+    real_record = process_mod.Process.record_reviewer
+    top = tempfile.mkdtemp(prefix="autosound_ai_record_fault_")
+    failures = []
+
+    class ProcessError(ValueError):         # another copy's class of that name: not this copy's refusal
+        pass
+    cases = (   # label, what record_reviewer raises (None: it runs), env, exit, a line to run by hand, a traceback
+        ("an OSError", PermissionError(13, "Permission denied", "journal.jsonl"), {}, 0, True, False),
+        ("this copy's ProcessError", process_mod.ProcessError("refused: not now"), {}, 0, True, False),
+        ("the state written, its event not", process_mod._StateWithoutItsEvent(
+            "process-state.json is written, but its journal line is not: append this line ..."), {}, 0, False, False),
+        ("a bad lock wait (exit_code 2)", None, {"AUTOSOUND_LOCK_TIMEOUT_S": "soon"}, 0, True, False),
+        ("a KeyError", KeyError("boom"), {}, 70, True, True),
+        ("a bug's ValueError", ValueError("invalid literal for int() with base 10: 'x'"), {}, 70, True, True),
+        ("another copy's ProcessError", ProcessError("refused elsewhere"), {}, 70, True, True),
+    )
+
+    def audited(path):
+        if not os.path.isfile(path):
+            return 0
+        with open(path, encoding="utf-8") as fh:
+            return len(fh.read().splitlines())
+    try:
+        project = os.path.join(top, "car")
+        os.makedirs(os.path.join(project, "process"))
+        os.makedirs(os.path.join(project, "rew_analitic"))
+        with open(os.path.join(project, "project.json"), "w", encoding="utf-8") as fh:
+            fh.write("{}")
+        state = process_mod._empty_state()
+        state["active_phase"] = "1"
+        with open(os.path.join(project, "process", "process-state.json"), "w", encoding="utf-8") as fh:
+            json.dump(state, fh)
+        context = os.path.join(project, "rew_analitic", "autosound_context.md")
+        with open(context, "w", encoding="utf-8") as fh:
+            fh.write("# The car, in prose\n")
+        pkg = os.path.join(project, "proposal.md")
+        with open(pkg, "w", encoding="utf-8") as fh:
+            fh.write("Check the proposal.")
+        audit = os.path.join(top, "audit-trail.md")
+        with _DoorScene(CONTEXT=context, AUDIT_TRAIL=audit,
+                        call_gemini_api=lambda key, model, prompt, var=None: ("THE REVIEW", model)) as scene:
+            os.environ.update(AUTOSOUND_PROJECT_DIR=project, GEMINI_API_KEY="AQ." + "x" * 50)
+            for label, raised, env, code_wanted, hand_wanted, trace_wanted in cases:
+                def raising(self, *args, _exc=raised, **kwargs):
+                    raise _exc
+                process_mod.Process.record_reviewer = raising if raised is not None else real_record
+                os.environ.update(env)
+                logged = audited(audit)
+                try:
+                    code, out, err = scene.run("critic", pkg, "--via", "api", "--model", "gemini-3.1-pro", "--record")
+                finally:
+                    process_mod.Process.record_reviewer = real_record
+                    for name in env:
+                        os.environ.pop(name, None)
+                rel = next((ln.split("REVIEW_FILE: ", 1)[1].strip() for ln in err.splitlines() if "REVIEW_FILE: " in ln),
+                           "")
+                said = err.strip().splitlines()
+                found = []
+                if code != code_wanted:
+                    found.append(f"exit {code}, not {code_wanted}")
+                if "THE REVIEW" not in out or not rel or not os.path.isfile(os.path.join(project, rel)):
+                    found.append("the review was not printed and filed")
+                if audited(audit) != logged + 1:
+                    found.append(f"{audited(audit) - logged} audit line(s), not 1")
+                if not any(ln.startswith(">> Not recorded in the journal: ") for ln in said):
+                    found.append("no 'Not recorded' line")
+                if any("Запиши посилання: " in ln for ln in said) != hand_wanted:
+                    found.append("a line to run by hand" + (" missing" if hand_wanted else " offered"))
+                if ("Traceback (most recent call last)" in err) != trace_wanted:
+                    found.append("a traceback" + (" missing" if trace_wanted else " printed"))
+                if trace_wanted and not (said and said[-1].startswith(">> The review above stands")):
+                    found.append(f"the last line does not say the review stands: {said[-1:]!r}")
+                if found:
+                    failures.append(f"{label}: " + "; ".join(found) + f" -- {err.strip()[-240:]!r}")
+    finally:
+        process_mod.Process.record_reviewer = real_record
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["a fault while recording, against a refusal:"] + failures)
+
+
 def _check_an_omp_review_names_its_vendor():
     """#143, G1: a review through omp is recorded under the vendor its selector names -- the model's maker where the
     model's name says it, else omp's own provider -- never `provider_for`'s historical default, google, which a whole
@@ -2366,7 +2456,8 @@ def _selftest():
                   _check_private_writer_goes_through_the_move, _check_receipt_says_how_the_install_ended,
                   _check_the_machine_files_win_once, _check_the_ledger_head_rides_in_the_prompt,
                   _check_the_template_teaches_titles_that_resolve, _check_the_door_records_the_review,
-                  _check_an_omp_review_names_its_vendor, _check_the_contract_is_the_skills_own):
+                  _check_a_fault_in_the_record_is_not_a_refusal, _check_an_omp_review_names_its_vendor,
+                  _check_the_contract_is_the_skills_own):
         try:
             check()
         except AssertionError as exc:
@@ -3930,6 +4021,23 @@ def _record_review_step(project, vendor, model, rel, mode):
     return True
 
 
+class _RecordFault(Exception):
+    """A fault of the door's own code while it recorded a filed review (#143, R47) -- not a refusal of the project's.
+    `_persist_review` raises it once it has said everything: the traceback, the lines, that the review stands."""
+
+
+def _file_review(role, text, model, mode, pkg_file, vendor=None, record=False):
+    """The end of every answered review -- API, CLI, omp: filed (`_persist_review`), recorded when asked, logged in the
+    audit trail. A fault of the code in the record exits 70 (R47) after all three: the review is on disk and printed,
+    so a session that sees 70 loses nothing, and is told so."""
+    try:
+        _persist_review(role, text, model, mode, vendor=vendor, record=record)
+    except _RecordFault:
+        _log_audit(role, model, pkg_file)
+        sys.exit(70)
+    _log_audit(role, model, pkg_file)
+
+
 def _persist_review(role, text, model, mode, vendor=None, record=False):
     """Write the critique to `<project>/process/reviews/<ts>-<role>.md` and return its path (SCR-027).
 
@@ -3948,9 +4056,11 @@ def _persist_review(role, text, model, mode, vendor=None, record=False):
     printed `process.py <project>/process reviewer <vendor> ...`, placeholders left in. `vendor` is the provider's name
     as `process.py reviewer` takes it (`provider_for` of the model when not given). A review filed in one project while
     the ledger in its prompt was another's (`review_project_dir`) is not recorded: the line names where it was filed.
-    A refusal -- the lock held, a state that cannot be read -- is said, with that line, to run once the project can be
-    written; the review is returned all the same. An `ask` is no review step: the journal's `critic_called` is the
-    process's last reviewer (tcc#116), so nothing is recorded and nothing asked to be.
+    A refusal of the project's -- the lock held, a state that cannot be read -- is said, with that line, to run once the
+    project can be written (no line where the refusal wrote the state already, `state_written`); the review is returned
+    all the same. Anything else is a fault of this code (R47): its traceback, the lines, a last one saying the review
+    stands, then `_RecordFault`, which `_file_review` turns into exit 70. An `ask` is no review step: the journal's
+    `critic_called` is the process's last reviewer (tcc#116), so nothing is recorded and nothing asked to be.
 
     Returns a PROJECT-RELATIVE path: it goes into the journal, and an absolute path from one
     machine is noise on another.
@@ -3986,19 +4096,30 @@ def _persist_review(role, text, model, mode, vendor=None, record=False):
               "there by hand if it is that project's review:", file=sys.stderr)
         print(by_hand, file=sys.stderr)
         return rel
+    process_mod = None
     try:
+        process_mod = _siblings().load("state/process.py")
         recorded = _record_review_step(project, vendor, model, rel, mode)
-    except Exception as exc:  # noqa: BLE001 -- the review is filed and printed: its record is said, never the review lost
+    except Exception as exc:  # noqa: BLE001 -- sorted below: a refusal of the project's, or a fault of this code
+        # R47: a refusal is what the project's writers refuse with -- matched by attribute, or as an `OSError`, or as
+        # the `ProcessError` of the copy loaded here, the one that raised (never a class of the same name elsewhere).
+        own = getattr(process_mod, "ProcessError", None)
         refusal = (getattr(exc, "is_busy", False) or getattr(exc, "is_unreadable", False)
-                   or getattr(exc, "exit_code", None) is not None or isinstance(exc, (OSError, ValueError)))
+                   or getattr(exc, "exit_code", None) is not None or isinstance(exc, OSError)
+                   or (own is not None and isinstance(exc, own)))
         if not refusal:
-            # Not a refusal of the project's: a fault of the code, said whole -- and the review still returned.
             import traceback
             traceback.print_exc(file=sys.stderr)
-        why = str(exc) if refusal else f"{type(exc).__name__}: {exc}"
+        why = str(exc) if refusal else f"a fault of this code, not of the project -- {type(exc).__name__}: {exc}"
         print(f">> Not recorded in the journal: {why}", file=sys.stderr)
-        print(by_hand, file=sys.stderr)
-        return rel
+        if not getattr(exc, "state_written", False):
+            # A state written without its event says the one line to append; the hand line would add a second.
+            print(by_hand, file=sys.stderr)
+        if refusal:
+            return rel
+        print(f">> The review above stands: it is filed as {rel} and printed in full -- do not ask for it again",
+              file=sys.stderr)
+        raise _RecordFault(rel) from exc
     if recorded:
         print(f">> Recorded in the journal as the reviewer step (critic_called, {vendor} {model}): do not record it "
               "again", file=sys.stderr)
@@ -4197,8 +4318,7 @@ def review_through_omp(role, binary, model, prompt, pkg_file, role_var, record=F
         print(text)
         print(f"\n— [{role}: {model}]")
         print(">> REVIEW_ROUTE: omp", file=sys.stderr)
-        _persist_review(role, text, model, "omp", vendor=omp_vendor(model), record=record)
-        _log_audit(role, model, pkg_file)
+        _file_review(role, text, model, "omp", pkg_file, vendor=omp_vendor(model), record=record)
         return
     if kind == "bad_model":
         print(ModelChoiceNeeded(f"Модель `{model}` omp не знає: {error.strip()[:200]}", list_omp_models(binary),
@@ -4450,10 +4570,8 @@ def main():
             print(response_text)
             print(f"\n— [{role}: {got_model}]")
             print(">> REVIEW_ROUTE: api", file=sys.stderr)
-            _persist_review(role, response_text, got_model, "api", vendor=provider, record=record)
-            
-            # Логування в аудит
-            _log_audit(role, got_model, pkg_file)
+            # Filed, recorded when asked, logged in the audit trail; a fault of the code in the record exits 70.
+            _file_review(role, response_text, got_model, "api", pkg_file, vendor=provider, record=record)
             return
         except KeyError:
             print(f">> Невідомий провайдер {provider!r} — у режим CLI/буфера.", file=sys.stderr)
@@ -4498,8 +4616,7 @@ def main():
             print(text)
             print(f"\n— [{role}: {model}]")
             print(">> REVIEW_ROUTE: cli", file=sys.stderr)
-            _persist_review(role, text, model, "cli", vendor=provider, record=record)
-            _log_audit(role, model, pkg_file)
+            _file_review(role, text, model, "cli", pkg_file, vendor=provider, record=record)
             return
         if kind == "bad_model":
             # The CLI is alive and the NAME is what it refused: a choice, not a fall-through.
