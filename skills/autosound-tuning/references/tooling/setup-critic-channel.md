@@ -348,13 +348,18 @@ and stderr says `REVIEW_ROUTE: omp`.
 
 ## 5. Where the channel reads the project from (no cross-project leaks)
 
-`autosound_ai.py` injects the **Contract** (protocol) + your **project's `autosound_context.md`** as system framing, resolved **project-local FIRST**:
+`autosound_ai.py` frames a tuning task (`critic`, `advisor`) with three files, each from one place:
 ```
-$PWD/rew_analitic/data-contract-template.md   ← preferred
-$PWD/rew_analitic/autosound_context.md        ← preferred
+the Contract (protocol)   <skill>/assets/data-contract-template.md — the skill's own, always; a project copy is never read
+the LEDGER HEAD           <project>/state — read through state.py: the HEAD's id, slot, date, note and rows
+autosound_context.md      $PWD/rew_analitic/ first, then $PWD
    (fallback only: $AUTOSOUND_DIR — an OPTIONAL cross-project canon dir you set yourself; unset by default)
 ```
-So **launch Claude from the project directory** (CWD = the car you're tuning). `PROJECT_MIRROR` defaults to `$PWD/rew_analitic`.
+`<project>` is `$AUTOSOUND_PROJECT_DIR`, else the folder above `PROJECT_MIRROR` when that is `<dir>/rew_analitic`, else
+`$PWD`. The context is the prose view of the ledger, and the reviewer is told that where they disagree the machine
+files win. A copy of the contract in the project (the intake made one until v3.1.3) is named by `doctor` and
+`contract.py check` when it differs from the skill's — delete it. So **launch Claude from the project directory**
+(CWD = the car you're tuning). `PROJECT_MIRROR` defaults to `$PWD/rew_analitic`.
 
 > ⚠️ If the Critic ever cites a vehicle/history you don't recognise, it loaded a *different* project's context — fix the path here (or `PROJECT_MIRROR`), don't argue with the output.
 

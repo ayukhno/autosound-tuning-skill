@@ -242,9 +242,20 @@ AUTOSOUND_DIR = os.environ.get("AUTOSOUND_DIR", "")
 
 # Де живе сам скіл: <skill>/scripts/autosound_ai.py -> <skill>
 SKILL_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+#: The tuning contract's file name. It is the METHOD's, read from the skill's `assets/` alone (#143, I-5).
+CONTRACT_NAME = "data-contract-template.md"
+
 
 # Пошук файлів контракту та контексту
 def find_file(filename, fallback_dir=None):
+    """Where the door reads `filename` from: `rew_analitic/` (`PROJECT_MIRROR`), the working folder, `fallback_dir`
+    ($AUTOSOUND_DIR), the skill's `assets/`, in that order -- but the tuning contract from the skill alone (#143, I-5).
+    The intake used to copy the contract into `rew_analitic/`, and that copy was read first: a project kept the
+    protocol it was started with while the method moved on. `doctor` and `contract.py check` name a copy that differs
+    (`contract_copies_that_differ`)."""
+    if filename == CONTRACT_NAME:
+        skill_path = os.path.join(SKILL_DIR, "assets", filename)
+        return skill_path if os.path.isfile(skill_path) else None
     # Спочатку шукаємо локально в rew_analitic
     local_path = os.path.join(PROJECT_MIRROR, filename)
     if os.path.isfile(local_path):
@@ -258,18 +269,62 @@ def find_file(filename, fallback_dir=None):
         fallback_path = os.path.join(fallback_dir, filename)
         if os.path.isfile(fallback_path):
             return fallback_path
-    # І нарешті — у самому скілі. Контракт (`data-contract-template.md`) НАЛЕЖИТЬ методу, а не
-    # проєкту: він їде разом зі скілом в `assets/`. Доки цієї гілки не було, на чистій установці
-    # рецензент не міг знайти його НІКОЛИ — жодна тека проєкту його не має, бо ніхто його туди не
-    # копіює, — і критик коротко замикався на "not ready" незалежно від стану проєкту (user, на
-    # свіжій Windows, 2026-08-19). Ця гілка остання: копія в проєкті, якщо вона є, і далі важливіша.
+    # Last, the skill itself: what the method ships in `assets/`. Without this branch a fresh install found no contract
+    # anywhere -- no project folder held one -- and the critic stopped at "not ready" whatever the project's state
+    # (user, a fresh Windows, 2026-08-19); the contract is read from here alone now (above).
     skill_path = os.path.join(SKILL_DIR, "assets", filename)
     if os.path.isfile(skill_path):
         return skill_path
     return None
 
-CONTRACT = find_file("data-contract-template.md", AUTOSOUND_DIR or None)
+CONTRACT = find_file(CONTRACT_NAME, AUTOSOUND_DIR or None)
 CONTEXT = find_file("autosound_context.md", AUTOSOUND_DIR or None)
+
+
+def review_project_dir():
+    """The project a tuning review is about, whose ledger it is given (#143, I-2): `$AUTOSOUND_PROJECT_DIR`, else the
+    parent of `PROJECT_MIRROR` when that is `<dir>/rew_analitic` (TCC sets it so, and it is the default when the door
+    runs from the project), else the working folder."""
+    stated = os.environ.get("AUTOSOUND_PROJECT_DIR")
+    if stated:
+        return stated
+    mirror = os.path.abspath(PROJECT_MIRROR)
+    if os.path.basename(mirror) == "rew_analitic":
+        return os.path.dirname(mirror)
+    return CWD
+
+
+def _same_text(path, reference):
+    """True when the file at `path` holds `reference`'s text, line endings aside."""
+    texts = []
+    for p in (path, reference):
+        with open(p, "rb") as fh:
+            texts.append(fh.read().replace(b"\r\n", b"\n"))
+    return texts[0] == texts[1]
+
+
+def contract_copies_that_differ():
+    """Every copy of the tuning contract where the door read one before the skill's -- `rew_analitic/`
+    (`PROJECT_MIRROR`), the working folder, the project of `review_project_dir` and its `rew_analitic/` -- that is not
+    the skill's text (#143, I-5). None of them is read any more; one that differs reads like the protocol and is not
+    it. A copy that cannot be read is counted with them: it is not the skill's either, as far as anyone can tell."""
+    skill = os.path.join(SKILL_DIR, "assets", CONTRACT_NAME)
+    project = review_project_dir()
+    seen = {os.path.normcase(os.path.realpath(skill))}
+    found = []
+    for folder in (PROJECT_MIRROR, CWD, project, os.path.join(project, "rew_analitic")):
+        path = os.path.abspath(os.path.join(folder, CONTRACT_NAME))
+        key = os.path.normcase(os.path.realpath(path))
+        if key in seen or not os.path.isfile(path):
+            continue
+        seen.add(key)
+        try:
+            same = _same_text(path, skill)
+        except OSError:
+            same = False
+        if not same:
+            found.append(path)
+    return found
 
 if AUTOSOUND_DIR and os.path.isdir(AUTOSOUND_DIR):
     AUDIT_TRAIL = os.path.join(AUTOSOUND_DIR, "audit-trail.md")
@@ -988,6 +1043,19 @@ def omp_bin(via=None):
     if via == "omp":
         return shutil.which("omp") or "omp"
     return None
+
+
+def omp_vendor(selector):
+    """The vendor an omp selector (`provider/model`) names, for the journal's reviewer record (#143, G1): the model's
+    maker where the model's name says it (`provider_for`'s markers -- `google-antigravity/gemini-3.1-pro` is google's,
+    `google-antigravity/claude-opus-4` anthropic's), else omp's own provider, the part before `/`. `provider_for` reads
+    the whole selector and answers its historical default, google, for a name that says no maker -- and the record
+    exists to show the reviewer is ANOTHER vendor."""
+    provider, _, model = (selector or "").lower().rpartition("/")
+    for marker, vendor in _PROVIDER_BY_MARKER:
+        if marker in model:
+            return vendor
+    return provider or "unknown"
 
 
 def list_omp_models(binary="omp"):
@@ -1817,13 +1885,417 @@ def _check_receipt_says_how_the_install_ended():
     assert not failures, "\n  ".join(["the receipt's line, over how the install ended:"] + failures)
 
 
+class _DoorScene:
+    """The scene of a check that runs the door (#143): this machine's reviewer set aside -- no model, no key, no forced
+    CLI or route, the keystore off -- the clipboard a stub that copies nothing, the globals named in `values` set, and
+    every variable, global and `sys.argv` put back as it was afterwards. Nothing in it reaches a reviewer: a tuning
+    call goes `--via clipboard`, and `doctor` runs with no model, no CLI and no key."""
+
+    VARS = REVIEWER_MODEL_VARS + RETIRED_ADVISOR_VARS + VENDOR_KEYS + (
+        "AUTOSOUND_CRITIC_PROVIDER", "AUTOSOUND_CRITIC_BIN", "GEMINI_BIN", "AUTOSOUND_CRITIC_VIA",
+        "AUTOSOUND_PROJECT_DIR", "AUTOSOUND_REVIEW_RAW_DIR", "AUTOSOUND_LOCK_TIMEOUT_S", "AUTOSOUND_KEYSTORE")
+
+    def __init__(self, **values):
+        self.values = values
+
+    def __enter__(self):
+        self.env = {k: os.environ.pop(k, None) for k in self.VARS}
+        os.environ["AUTOSOUND_KEYSTORE"] = "off"
+        _KEYSTORE_CACHE.clear()
+        names = set(self.values) | {"copy_to_clipboard", "machine_lines", "shell_exports", "_engine_lines",
+                                    "list_cli_models"}
+        self.saved = {n: globals()[n] for n in names}
+        globals().update(self.values, copy_to_clipboard=lambda text: False)
+        self.argv, self.which = sys.argv, shutil.which
+        return self
+
+    def __exit__(self, *exc):
+        globals().update(self.saved)
+        sys.argv, shutil.which = self.argv, self.which
+        RUN_PICK.update(model=None, provider=None)
+        for k, v in self.env.items():
+            os.environ.pop(k, None)
+            if v is not None:
+                os.environ[k] = v
+        _KEYSTORE_CACHE.clear()
+        return False
+
+    def run(self, *argv):
+        """`main()` on `argv`: `(exit code, stdout, stderr)`."""
+        import contextlib
+        import io
+        sys.argv = ["autosound_ai.py", *argv]
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            try:
+                main()
+                code = 0
+            except SystemExit as stop:
+                code = stop.code
+        return code, out.getvalue(), err.getvalue()
+
+    def persist(self, *args, **kwargs):
+        """`_persist_review(*args, **kwargs)`: `(what it returned, stderr)` -- a raise is returned as its repr."""
+        import contextlib
+        import io
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            try:
+                got = _persist_review(*args, **kwargs)
+            except Exception as exc:  # noqa: BLE001 -- a raise is the check's finding
+                got = f"raised {exc!r}"
+        return got, err.getvalue()
+
+    def doctor(self):
+        """`run_doctor(smoke=False)`'s stdout on this machine with nothing of it asked: no machine lines, no shell
+        profile read, no engine, no CLI on PATH."""
+        import contextlib
+        import io
+        globals().update(machine_lines=lambda run=None: [], shell_exports=lambda: [], _engine_lines=lambda: [],
+                         list_cli_models=lambda: [])
+        shutil.which = lambda name, *a, **k: None
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            run_doctor(smoke=False)
+        return out.getvalue()
+
+
+def _check_the_machine_files_win_once():
+    """#143, I-2: the reviewer is told that the machine files win -- once, in the AUTOSOUND CONTEXT's header -- and
+    never that the prose is "the single source of truth", which `reviewer-tuning.txt:1` and that header told it while
+    the method's truth is the ledger (`data-contract-template.md` §1, SKILL.md's pre-session step 2). Assembled over the
+    contract the door sends, an empty context and an empty package, so only the door's own text can say either; `ask`,
+    no tuning task, carries neither."""
+    failures = []
+    contract = _read(CONTRACT) if CONTRACT else ""
+    for task in TUNING_TASKS:
+        prompt = compile_prompt(contract, "", "", task=task)
+        said = prompt.lower().count("the machine files win")
+        if said != 1:
+            failures.append(f"{task}: 'the machine files win' said {said} time(s), not once")
+        if "single source of truth" in prompt.lower():
+            failures.append(f"{task}: still told 'single source of truth'")
+        if "====== AUTOSOUND CONTEXT (prose view — the machine files win) ======" not in prompt:
+            failures.append(f"{task}: the CONTEXT's header is not 'prose view — the machine files win'")
+    ask = compile_prompt(contract, "", "", task="ask").lower()
+    for phrase in ("the machine files win", "single source of truth"):
+        if phrase in ask:
+            failures.append(f"ask: carries {phrase!r}")
+    assert not failures, "\n  ".join(["what the reviewer is told about the prose:"] + failures)
+
+
+def _check_the_ledger_head_rides_in_the_prompt():
+    """#143, I-2: a critic or an advisor prompt carries the LEDGER HEAD -- what is banked, read through `state.py` --
+    beside the CONTEXT, its prose view: no code gave the reviewer the ledger, and the package is the Generator's to
+    write. The HEAD's id, its slot, its note and date, and the rows the ledger's own render prints for it; a project
+    with no ledger says so; `ask` carries none. A ledger that cannot be read is said in the block, never a traceback,
+    and rows past 60 lines are cut with a line saying how many were left out. Read back from the package the clipboard
+    rung files: what the door would have sent."""
+    state_mod = _siblings().load("state/state.py")
+    top = tempfile.mkdtemp(prefix="autosound_ai_ledger_head_")
+    head_line = "====== LEDGER HEAD (the machine files: what is banked) ======"
+    failures = []
+
+    def said(call):
+        try:
+            return call()
+        except Exception as exc:  # noqa: BLE001 -- a raise is this check's finding
+            return f"raised {exc!r}"
+
+    def prompt_of(scene, task, project):
+        """What the door sends for `task` about `project`: the package its clipboard rung files there."""
+        os.environ["AUTOSOUND_PROJECT_DIR"] = project
+        pkg = os.path.join(project, "question.md")
+        with open(pkg, "w", encoding="utf-8") as fh:
+            fh.write("Check the proposal.")
+        code, _out, err = scene.run(task, pkg, "--via", "clipboard")
+        rel = next((ln.split("PACKAGE_FILE: ", 1)[1].strip() for ln in err.splitlines() if "PACKAGE_FILE: " in ln),
+                   None)
+        if code or not rel:
+            return f"(no package: exit {code}, {err.strip()[-300:]!r})"
+        with open(os.path.join(project, rel), encoding="utf-8") as fh:
+            return fh.read()
+
+    def block_of(prompt):
+        if head_line not in prompt:
+            return None
+        return prompt.split(head_line, 1)[1].split("\n======", 1)[0].strip()
+
+    try:
+        banked = os.path.join(top, "banked")
+        os.makedirs(os.path.join(banked, "rew_analitic"))
+        context = os.path.join(banked, "rew_analitic", "autosound_context.md")
+        with open(context, "w", encoding="utf-8") as fh:
+            fh.write("# The car, in prose\n")
+        history = state_mod.PresetHistory(os.path.join(banked, "state"), "SQ")
+        head = history.snapshot(state_mod._sample_state(), note="the crossovers the Arbiter agreed")
+        created = history.load(head)["created"]
+        bare = os.path.join(top, "bare")
+        os.makedirs(bare)
+        with _DoorScene(CONTEXT=context) as scene:
+            for task in TUNING_TASKS:
+                block = block_of(prompt_of(scene, task, banked))
+                if block is None:
+                    failures.append(f"{task}: no LEDGER HEAD block in the prompt")
+                    continue
+                for word in (head, "SQ", "the crossovers the Arbiter agreed", created, "| w-L |", "| VFL |"):
+                    if word not in block:
+                        failures.append(f"{task}: the block does not say {word!r}: {block[:300]!r}")
+            block = block_of(prompt_of(scene, "critic", bare))
+            if block != f"no ledger in {bare} yet":
+                failures.append(f"a project with no ledger: {block!r}")
+            if block_of(prompt_of(scene, "ask", banked)) is not None:
+                failures.append("ask carries a LEDGER HEAD")
+        # A ledger that cannot be read: said in the block, with what cannot be read.
+        broken = os.path.join(top, "broken")
+        os.makedirs(os.path.join(broken, "state"))
+        with open(os.path.join(broken, "state", "slots.json"), "w", encoding="utf-8") as fh:
+            fh.write("{ cut off")
+        got = said(lambda: ledger_head_block(broken))
+        if not isinstance(got, str) or got.startswith("raised") or "slots.json" not in got \
+                or "cannot be read" not in got:
+            failures.append(f"a ledger that cannot be read: {got!r}")
+        # Rows past 60 lines: the first 60, and a last line saying how many were left out.
+        wide = os.path.join(top, "wide")
+        state = state_mod._sample_state()
+        state["channels"] = {f"x{n:02d}": dict(state["channels"]["w-L"]) for n in range(70)}
+        wide_history = state_mod.PresetHistory(os.path.join(wide, "state"), "FULL")
+        wide_head = wide_history.snapshot(state, note="seventy rows")
+        sheet = wide_history.render(wide_head).splitlines()
+        rows = [ln for ln in sheet[next(i for i, ln in enumerate(sheet) if ln.startswith("| Channel")):] if ln.strip()]
+        got = said(lambda: ledger_head_block(wide))
+        lines = got.splitlines() if isinstance(got, str) else []
+        if not lines or got.startswith("raised") or lines[1:61] != rows[:60] \
+                or not re.search(rf"\b{len(rows) - 60} more line", lines[-1]) or len(lines) != 62:
+            failures.append(f"rows past 60 lines: {lines[:2] + ['...'] + lines[-2:]!r} ({len(lines)} lines, "
+                            f"the render's {len(rows)})")
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["the LEDGER HEAD in a review's prompt:"] + failures)
+
+
+def _check_the_template_teaches_titles_that_resolve():
+    """#143 (§5.1 rows 17, 18): the contract teaches Trace IDs the resolver takes -- every example on a Trace ID line,
+    the backticked title after "e.g.", parses with `naming.parse_name`, method included. It taught
+    `m-L_split_320Hz_LR4` and `<channel>_baseline`, both refused (`parse_name` gives None). And it says nothing of
+    rotating the roles, which its own "No role rotation" forbids: "rotate afterward" stood under it."""
+    naming = _siblings().load("naming.py")
+    text = _read(os.path.join(SKILL_DIR, "assets", "data-contract-template.md"))
+    failures, examples = [], []
+    for n, line in enumerate(text.splitlines(), 1):
+        if "Trace ID" in line and "e.g." in line:
+            m = re.search(r"e\.g\.\s*`([^`]+)`", line)
+            if m:
+                examples.append((n, m.group(1)))
+            else:
+                failures.append(f":{n}: a Trace ID line with no backticked title after 'e.g.': {line.strip()!r}")
+    if not examples:
+        failures.append("no Trace ID example found -- a check that reads nothing proves nothing")
+    for n, title in examples:
+        parsed = naming.parse_name(title)
+        if not parsed or not parsed.get("method"):
+            failures.append(f":{n}: `{title}` is no title the resolver takes ({naming.explain_name(title)[1]})")
+    if "rotate" in text.lower():
+        failures.append("the template still says 'rotate'")
+    assert not failures, "\n  ".join(["the contract's Trace IDs and roles:"] + failures)
+
+
+def _check_the_door_records_the_review():
+    """#143, G1: the door records the review it filed -- `critic_called` in the journal, through `Process.record_reviewer`
+    and its writer lock -- instead of printing `process.py ... reviewer <vendor> ...` for somebody to run, with
+    `<vendor>` left literal. Once per review file: a journal whose last `critic_called` already names the file (TCC's
+    `call_critic` records the call too) gets none added. A refusal -- the lock held, a state that cannot be read -- is
+    said, with the line to record it by hand, the vendor and the model filled in, and the review is still returned. An
+    `ask` is no review step (tcc#116): nothing recorded, nothing asked to be."""
+    process_mod = _siblings().load("state/process.py")
+    lock = _siblings().load("write_lock.py")
+    import threading
+    real_dt = globals()["datetime"]
+
+    class Frozen(real_dt):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2026, 10, 9, 1, 2, 3, tzinfo=tz)
+    top = tempfile.mkdtemp(prefix="autosound_ai_records_")
+    failures = []
+
+    def calls(project):
+        return process_mod.Process(os.path.join(project, "process")).events(kinds=(process_mod.EV_CRITIC_CALLED,))
+
+    try:
+        project = os.path.join(top, "car")
+        os.makedirs(os.path.join(project, "process"))
+        with open(os.path.join(project, "project.json"), "w", encoding="utf-8") as fh:
+            fh.write("{}")
+        state_path = os.path.join(project, "process", "process-state.json")
+        state = process_mod._empty_state()
+        state["active_phase"] = "1"
+        with open(state_path, "w", encoding="utf-8") as fh:
+            json.dump(state, fh)
+        stamp = "2026-10-09T01-02-03"
+        with _DoorScene() as scene:
+            os.environ["AUTOSOUND_PROJECT_DIR"] = project
+            globals()["datetime"] = Frozen
+            rel, err = scene.persist("critic", "the critique", "m", "api", vendor="gemini")
+            got = [(e.get("review"), e.get("vendor"), e.get("model"), e.get("mode")) for e in calls(project)]
+            if got != [(rel, "gemini", "m", "api")]:
+                failures.append(f"the first review: returned {rel!r}, the journal's critic_called {got!r}")
+            reviewer = process_mod.Process(os.path.join(project, "process")).load()["reviewer"] or {}
+            if (reviewer.get("phase"), reviewer.get("review")) != ("1", rel):
+                failures.append(f"the state's reviewer: {reviewer!r}")
+            if "<vendor>" in err or "process.py <project>/process reviewer" in err:
+                failures.append(f"recorded, and still asked to be recorded: {err[-300:]!r}")
+            # The same file a second time: nothing added.
+            try:
+                _record_review_step(project, "gemini", "m", rel, "api")
+            except Exception as exc:  # noqa: BLE001 -- a raise is this check's finding
+                failures.append(f"recording the same file again raised {exc!r}")
+            if len(calls(project)) != 1:
+                failures.append(f"the same file recorded twice: {len(calls(project))} critic_called")
+            # TCC recorded the call before the door could: the door adds none.
+            second = os.path.join("process", "reviews", f"{stamp}-critic-2.md")
+            process_mod.Process(os.path.join(project, "process")).record_reviewer("google", "m", review=second,
+                                                                                  mode="api")
+            rel2, err = scene.persist("critic", "the second critique", "m", "api", vendor="gemini")
+            named = [e for e in calls(project) if e.get("review") == second]
+            if rel2 != second or len(named) != 1 or len(calls(project)) != 2:
+                failures.append(f"a call the journal already holds: returned {rel2!r}, {len(named)} event(s) name it, "
+                                f"{len(calls(project))} in all")
+            # Refused -- the lock held by another writer; a state that cannot be read: said, the line to run by hand,
+            # and the review returned.
+            entered, release = threading.Event(), threading.Event()
+
+            def holder():
+                with lock.hold(project):
+                    entered.set()
+                    release.wait(30)
+            thread = threading.Thread(target=holder)
+            thread.start()
+            try:
+                entered.wait(30)
+                os.environ["AUTOSOUND_LOCK_TIMEOUT_S"] = "0"
+                busy, err_busy = scene.persist("critic", "under a held lock", "m", "api", vendor="gemini")
+            finally:
+                os.environ.pop("AUTOSOUND_LOCK_TIMEOUT_S", None)
+                release.set()
+                thread.join(30)
+            with open(state_path, "w", encoding="utf-8") as fh:
+                fh.write("{ cut off")
+            cut, err_cut = scene.persist("critic", "over a cut state", "m", "api", vendor="gemini")
+            with open(state_path, "w", encoding="utf-8") as fh:
+                json.dump(state, fh)
+            for label, back, words in (("busy", busy, err_busy), ("a state that cannot be read", cut, err_cut)):
+                if not (isinstance(back, str) and os.path.isfile(os.path.join(project, back))):
+                    failures.append(f"{label}: the review was not returned: {back!r}")
+                elif f"reviewer gemini m --review {back}" not in words:
+                    failures.append(f"{label}: no line to record it by hand: {words[-400:]!r}")
+            if len(calls(project)) != 2:
+                failures.append(f"a refused record wrote: {len(calls(project))} critic_called")
+            # `ask`: no review step.
+            asked, err = scene.persist("ask", "an answer", "m", "api", vendor="gemini")
+            if len(calls(project)) != 2 or "reviewer gemini" in err:
+                failures.append(f"ask: {len(calls(project))} critic_called, said {err[-300:]!r}")
+    finally:
+        globals()["datetime"] = real_dt
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["the door's record of its review:"] + failures)
+
+
+def _check_an_omp_review_names_its_vendor():
+    """#143, G1: a review through omp is recorded under the vendor its selector names -- the model's maker where the
+    model's name says it, else omp's own provider -- never `provider_for`'s historical default, google, which a whole
+    selector naming no maker gets. The record exists to show that the reviewer is ANOTHER vendor. omp is a stand-in
+    that answers; git, which the journal's header asks, runs."""
+    top = tempfile.mkdtemp(prefix="autosound_ai_omp_vendor_")
+    process_mod = _siblings().load("state/process.py")
+    real_run = subprocess.run
+    failures = []
+
+    def fake_run(cmd, *args, **kwargs):
+        if os.path.basename(str(cmd[0])).lower().startswith("omp"):
+            return subprocess.CompletedProcess(cmd, 0, "omp-pong\n", "")
+        return real_run(cmd, *args, **kwargs)
+    try:
+        project = os.path.join(top, "car")
+        os.makedirs(os.path.join(project, "rew_analitic"))
+        with open(os.path.join(project, "project.json"), "w", encoding="utf-8") as fh:
+            fh.write("{}")
+        context = os.path.join(project, "rew_analitic", "autosound_context.md")
+        with open(context, "w", encoding="utf-8") as fh:
+            fh.write("# The car, in prose\n")
+        pkg = os.path.join(project, "proposal.md")
+        with open(pkg, "w", encoding="utf-8") as fh:
+            fh.write("Check the proposal.")
+        with _DoorScene(CONTEXT=context, AUDIT_TRAIL=os.path.join(top, "audit-trail.md")) as scene:
+            os.environ["AUTOSOUND_PROJECT_DIR"] = project
+            subprocess.run = fake_run
+            for selector, vendor in (("openrouter/deepseek-r1", "openrouter"),
+                                     ("google-antigravity/claude-opus-4", "anthropic"),
+                                     ("google-antigravity/gemini-3.1-pro", "google")):
+                code, out, err = scene.run("critic", pkg, "--via", "omp", "--model", selector)
+                last = (process_mod.Process(os.path.join(project, "process")).events(
+                    kinds=(process_mod.EV_CRITIC_CALLED,)) or [{}])[-1]
+                got = (last.get("vendor"), last.get("model"), last.get("mode"))
+                if code or "omp-pong" not in out or got != (vendor, selector, "omp"):
+                    failures.append(f"{selector}: exit {code}, recorded {got!r}, {err.strip()[-200:]!r}")
+    finally:
+        subprocess.run = real_run
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["the vendor of a review through omp:"] + failures)
+
+
+def _check_the_contract_is_the_skills_own():
+    """#143, I-5: the reviewer gets the skill's contract, `assets/data-contract-template.md`, wherever the door runs.
+    The intake copied it into `rew_analitic/`, and that copy was read first: a project kept a contract the method had
+    moved past. The CONTEXT keeps its order (`rew_analitic/` first). `doctor` names a project copy that differs --
+    `! a project copy <path> differs from the skill's contract ...` -- as a warning that leaves its verdict; a copy
+    that is the skill's is not named."""
+    skill = os.path.join(SKILL_DIR, "assets", "data-contract-template.md")
+    top = tempfile.mkdtemp(prefix="autosound_ai_one_contract_")
+    failures = []
+    try:
+        project = os.path.join(top, "car")
+        mirror = os.path.join(project, "rew_analitic")
+        os.makedirs(mirror)
+        stale = os.path.join(mirror, "data-contract-template.md")
+        with open(stale, "w", encoding="utf-8") as fh:
+            fh.write("# Data Contract -- the copy the intake made last year\n")
+        same = os.path.join(project, "data-contract-template.md")
+        shutil.copyfile(skill, same)
+        for folder in (mirror, project):
+            with open(os.path.join(folder, "autosound_context.md"), "w", encoding="utf-8") as fh:
+                fh.write(f"# the context in {folder}\n")
+        context = os.path.join(mirror, "autosound_context.md")
+        with _DoorScene(PROJECT_MIRROR=mirror, CWD=project, CONTEXT=context) as scene:
+            got = find_file("data-contract-template.md", top)
+            if got != skill:
+                failures.append(f"the contract read from {got}, not the skill's")
+            got = find_file("autosound_context.md", None)
+            if got != context:
+                failures.append(f"the context read from {got}, not rew_analitic/ first")
+            out = scene.doctor()
+            line = (f"! a project copy {stale} differs from the skill's contract — the reviewer gets the skill's; "
+                    "delete the copy")
+            named = [ln for ln in out.splitlines() if ln.startswith("! a project copy")]
+            if named != [line]:
+                failures.append(f"the doctor named {named!r}")
+            if "УСПІШНО ✓" not in out.strip().splitlines()[-1]:
+                failures.append(f"the warning turned the doctor's verdict: {out.strip().splitlines()[-1]!r}")
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["one contract, the skill's:"] + failures)
+
+
 def _selftest():
     """Offline: a retired model becomes a CHOICE carrying the key's list (never a fall-through),
     the list is parsed from the API's shape, and a run with a key and no model stops on the list."""
     failures = []
     for check in (_check_review_names_unique, _check_step_aside_refused_remove,
                   _check_step_aside_names_the_answers_name, _check_engine_line_optional,
-                  _check_private_writer_goes_through_the_move, _check_receipt_says_how_the_install_ended):
+                  _check_private_writer_goes_through_the_move, _check_receipt_says_how_the_install_ended,
+                  _check_the_machine_files_win_once, _check_the_ledger_head_rides_in_the_prompt,
+                  _check_the_template_teaches_titles_that_resolve, _check_the_door_records_the_review,
+                  _check_an_omp_review_names_its_vendor, _check_the_contract_is_the_skills_own):
         try:
             check()
         except AssertionError as exc:
@@ -2670,7 +3142,9 @@ def _selftest():
           "sends the API id); the raw exchange is kept on request; --mode clipboard is a rung, not a failure; doctor names where a key and a forced "
           "CLI came from and this platform's config path, and its live call walks the round's ladder; --model "
           "beats every pin and names each one with its file and line, the provider follows the run's model unless "
-          "--provider says, an unknown --provider is refused")
+          "--provider says, an unknown --provider is refused; a tuning prompt says once that the machine files win "
+          "and carries the LEDGER HEAD, the contract is the skill's own and a differing project copy is named, the "
+          "contract's Trace IDs resolve, and the door records its review once, saying a refusal (#143)")
     return 0
 
 
@@ -3012,7 +3486,11 @@ def run_doctor(smoke=True, via=None):
     else:
         print("✗ Контракт data-contract-template.md НЕ ЗНАЙДЕНО!")
         ok = False
-        
+    for copy in contract_copies_that_differ():
+        # #143, I-5: a warning, not a failure -- the door reads the skill's contract whatever lies in the project.
+        print(f"! a project copy {copy} differs from the skill's contract — the reviewer gets the skill's; "
+              "delete the copy")
+
     if CONTEXT and os.path.isfile(CONTEXT):
         print(f"✓ Контекст знайдено: {CONTEXT}")
     else:
@@ -3349,7 +3827,25 @@ def _review_target(what="Рецензію"):
     return here
 
 
-def _persist_review(role, text, model, mode):
+def _record_review_step(project, vendor, model, rel, mode):
+    """Record the review filed at `rel` as the process's reviewer step (#143, G1): `critic_called` in the journal and
+    the state's `reviewer`, through `Process(<project>/process).record_reviewer` -- `state/process.py` loaded by its
+    path -- which takes the project's writer lock. The review call is over by then: no reviewer runs under the lock.
+
+    True when recorded; False when the journal's last `critic_called` names this file already -- TCC's `call_critic`
+    records the call it ran too. The look is not under the lock: the one other writer of this file's record (TCC)
+    learns its name from this run's own `REVIEW_FILE` line, after the run. A refusal raises as `record_reviewer`
+    raises it -- `is_busy`, `is_unreadable`, the lock's wait a usage error (`exit_code` 2), a `ProcessError`."""
+    process_mod = _siblings().load("state/process.py")
+    proc = process_mod.Process(os.path.join(project, "process"))
+    last = proc.events(kinds=(process_mod.EV_CRITIC_CALLED,))
+    if last and str(last[-1].get("review") or "").replace("\\", "/") == rel.replace("\\", "/"):
+        return False
+    proc.record_reviewer(vendor, model, review=rel, mode=mode)
+    return True
+
+
+def _persist_review(role, text, model, mode, vendor=None):
     """Write the critique to `<project>/process/reviews/<ts>-<role>.md` and return its path (SCR-027).
 
     The reasoning used to exist only in the chat stream, so a session rendered from disk showed
@@ -3359,6 +3855,14 @@ def _persist_review(role, text, model, mode):
     an answer brought back by hand is saved by the person under this name (hub TCC-014 ask 4).
     A second that already holds a review or a package of this role gives `<ts>-<role>-2.md`, `-3`, ...
     (`_free_base`): never written over another (#135).
+
+    A tuning review is then recorded as the process's reviewer step (#143, G1; `_record_review_step`): the door
+    printed `process.py <project>/process reviewer <vendor> ...` for somebody to run, `<vendor>` literal, so the record
+    depended on a model obeying. `vendor` is the provider's name as `process.py reviewer` takes it (`provider_for` of
+    the model when not given). A refusal -- the lock held, a state that cannot be read -- is said, with that line, its
+    vendor and model filled in, to run once the project can be written; the review is returned all the same. An `ask`
+    is no review step: the journal's `critic_called` is the process's last reviewer (tcc#116), so nothing is recorded
+    and nothing asked to be.
 
     Returns a PROJECT-RELATIVE path: it goes into the journal, and an absolute path from one
     machine is noise on another.
@@ -3380,8 +3884,28 @@ def _persist_review(role, text, model, mode):
     # Machine-readable twin of the line above: a front-end should not have to parse a sentence,
     # least of all one that is translated.
     print(f">> REVIEW_FILE: {rel}", file=sys.stderr)
-    print(f">> Запиши посилання: process.py <project>/process reviewer <vendor> {model} "
-          f"--review {rel}", file=sys.stderr)
+    if role not in TUNING_TASKS:
+        return rel
+    vendor = vendor or provider_for(model)
+    try:
+        recorded = _record_review_step(project, vendor, model, rel, mode)
+    except Exception as exc:  # noqa: BLE001 -- the review is filed and printed: its record is said, never the review lost
+        refusal = (getattr(exc, "is_busy", False) or getattr(exc, "is_unreadable", False)
+                   or getattr(exc, "exit_code", None) is not None or isinstance(exc, (OSError, ValueError)))
+        if not refusal:
+            # Not a refusal of the project's: a fault of the code, said whole -- and the review still returned.
+            import traceback
+            traceback.print_exc(file=sys.stderr)
+        why = str(exc) if refusal else f"{type(exc).__name__}: {exc}"
+        print(f">> Not recorded in the journal: {why}", file=sys.stderr)
+        print(f">> Запиши посилання: process.py <project>/process reviewer {vendor} {model} "
+              f"--review {rel}", file=sys.stderr)
+        return rel
+    if recorded:
+        print(f">> Recorded in the journal as the reviewer step (critic_called, {vendor} {model}): do not record it "
+              "again", file=sys.stderr)
+    else:
+        print(">> The journal already records this review (critic_called): nothing added", file=sys.stderr)
     return rel
 
 
@@ -3453,10 +3977,69 @@ def _read(path):
         return f.read().rstrip("\n")
 
 
-def compile_prompt(contract, context, package, memory="", trace="", task="critic"):
+#: How many lines of the ledger's own render ride in a review (#143): a HEAD of two tiers with an EQ on every row runs
+#: to tens of lines. Past this the block says how many it left out, and the command that prints them all.
+LEDGER_LINES_MAX = 60
+
+
+def ledger_head_block(project_dir=None):
+    """The LEDGER HEAD a tuning review is given (#143, I-2): what is banked, as the ledger says it -- the HEAD's id,
+    its slot, its date and note, and the rows `state.py`'s own render prints for that version, cut at
+    `LEDGER_LINES_MAX` lines with a last line saying how many were left out. Read through `state.py` (`_siblings()`,
+    `PresetHistory` on `<project>/state`), never parsed here. The project is `review_project_dir()`'s unless given.
+
+    The HEAD is the active slot's, or the only slot's. With several slots and none active the block names each slot's
+    version and shows no rows: which one the DSP holds is not on record, and a neighbour slot's numbers are what a
+    reviewer anchored on in issue #5. A ledger that cannot be read -- a file that is not JSON, not UTF-8, a newer
+    method's -- is said in the block, never a traceback; no ledger is `no ledger in <project> yet`."""
+    project_dir = project_dir or review_project_dir()
+    root = os.path.join(project_dir, "state")
+    if not os.path.isdir(root):
+        return f"no ledger in {project_dir} yet"
+    try:
+        state_mod = _siblings().load("state/state.py")
+        registry = state_mod.Registry(root)
+        slots = registry.list_presets()
+        if not slots:
+            return f"no ledger in {project_dir} yet"
+        active = registry.get_active()
+        if active not in slots and len(slots) > 1:
+            heads = ", ".join(f"{s} {state_mod.PresetHistory(root, s).head()}" for s in slots)
+            return (f"the ledger holds {len(slots)} slots -- {heads} -- and none is set active"
+                    + (f" (`{active}`, set active, holds no version)" if active else "")
+                    + ": which one the DSP holds is not on record, so no rows are shown "
+                      "(`state.py registry set-active <slot>` sets it)")
+        slot = active if active in slots else slots[0]
+        history = state_mod.PresetHistory(root, slot)
+        head = history.head()
+        snap = history.load(head)
+        try:
+            state_mod.validate(snap)
+        except ValueError as exc:
+            return f"HEAD {head} · slot {slot}: not a valid snapshot -- {exc}"
+        sheet = history.render(head).splitlines()
+    except Exception as exc:  # noqa: BLE001 -- matched below; anything else still raises
+        if not (getattr(exc, "is_unreadable", False) or getattr(exc, "is_snapshot_error", False)
+                or isinstance(exc, (OSError, ValueError))):
+            raise
+        return f"the ledger in {root} cannot be read: {exc}"
+    said = (f"HEAD {head} · slot {slot}" + (" (active)" if slot == active else "")
+            + f" · banked {snap.get('created') or '—'}" + (f" · note: {snap['note']}" if snap.get("note") else ""))
+    start = next((i for i, line in enumerate(sheet) if line.startswith("| Channel")), len(sheet))
+    rows = [line for line in sheet[start:] if line.strip()]
+    lines = [said] + rows[:LEDGER_LINES_MAX]
+    if len(rows) > LEDGER_LINES_MAX:
+        lines.append(f"... {len(rows) - LEDGER_LINES_MAX} more line(s) of the render left out: "
+                     f"python3 {os.path.abspath(state_mod.__file__)} --root {root} render {slot} {head}")
+    return "\n".join(lines)
+
+
+def compile_prompt(contract, context, package, memory="", trace="", task="critic", ledger=""):
     """The whole prompt, layer by layer.
 
-    A tuning task needs `contract` and `context`; `ask` takes `context` as background if given."""
+    A tuning task needs `contract` and `context`; `ask` takes `context` as background if given. `ledger` is the LEDGER
+    HEAD block (`ledger_head_block`), what is banked: a tuning task carries it before the CONTEXT, which is its prose
+    view -- where the two disagree the machine files win, and the reviewer is told so once (#143, I-2)."""
     parts = ["====== INTERACTION CONTRACT (how we work together — every task) ======",
              _read(REVIEWER_CONTRACT)]
     tuning = task in TUNING_TASKS
@@ -3464,8 +4047,10 @@ def compile_prompt(contract, context, package, memory="", trace="", task="critic
         parts.append(_read(REVIEWER_TUNING))
     parts.append(_read(reviewer_task_file(task)))
     if tuning:
-        parts += ["\n====== DATA CONTRACT (the tuning protocol) ======", contract,
-                  "\n====== AUTOSOUND CONTEXT (the single source of truth) ======", context]
+        parts += ["\n====== DATA CONTRACT (the tuning protocol) ======", contract]
+        if ledger:
+            parts += ["\n====== LEDGER HEAD (the machine files: what is banked) ======", ledger]
+        parts += ["\n====== AUTOSOUND CONTEXT (prose view — the machine files win) ======", context]
         if memory:
             parts += ["\n====== REVIEWER MEMORY (confirmed facts and open questions from earlier rounds) ======", memory]
         parts += ["\n====== GENERATOR PACKAGE (review this) ======", package]
@@ -3514,7 +4099,7 @@ def review_through_omp(role, binary, model, prompt, pkg_file, role_var):
         print(text)
         print(f"\n— [{role}: {model}]")
         print(">> REVIEW_ROUTE: omp", file=sys.stderr)
-        _persist_review(role, text, model, "omp")
+        _persist_review(role, text, model, "omp", vendor=omp_vendor(model))
         _log_audit(role, model, pkg_file)
         return
     if kind == "bad_model":
@@ -3619,7 +4204,10 @@ def main():
     # `ask` — просте питання (переклад, формулювання): не потребує ні того, ні іншого (skill#27).
     if tuning and (not CONTRACT or not os.path.isfile(CONTRACT)):
         _assets = os.path.join(SKILL_DIR, "assets")
-        print(f"Помилка: Не знайдено контракт data-contract-template.md — ні в '{PROJECT_MIRROR}', ні в проєкті, ні в AUTOSOUND_DIR, ні у скілі ('{_assets}').", file=sys.stderr)
+        # #143, I-5: the contract is the method's, read from the skill alone -- a copy in the project is not read.
+        print(f"Error: the tuning contract {CONTRACT_NAME} is not in the skill ('{_assets}'), the one place the "
+              "reviewer reads it from: this copy of the method is incomplete -- run the install line again.",
+              file=sys.stderr)
         sys.exit(1)
     if tuning and (not CONTEXT or not os.path.isfile(CONTEXT)):
         print(f"Помилка: Не знайдено контекст проекту autosound_context.md у '{PROJECT_MIRROR}' чи в AUTOSOUND_DIR.", file=sys.stderr)
@@ -3629,10 +4217,13 @@ def main():
         sys.exit(1)
 
     # Зчитування файлів
-    contract_content = context_content = ""
+    contract_content = context_content = ledger_block = ""
     if tuning:
         with open(CONTRACT, "r", encoding="utf-8") as f:
             contract_content = f.read()
+        # What is banked, beside the CONTEXT's prose: the machine files the method trusts (#143, I-2). Read before any
+        # reviewer is asked, so a ledger that cannot be read is said in the block, and costs no call.
+        ledger_block = ledger_head_block()
     if CONTEXT and os.path.isfile(CONTEXT):
         with open(CONTEXT, "r", encoding="utf-8") as f:
             context_content = f.read()
@@ -3649,7 +4240,7 @@ def main():
         with open(ADVISOR_MEMORY, "r", encoding="utf-8") as f:
             memory_content = f.read()
     compiled_prompt = compile_prompt(contract_content, context_content, pkg_content,
-                                     memory=memory_content, trace=trace_content, task=role)
+                                     memory=memory_content, trace=trace_content, task=role, ledger=ledger_block)
 
     # Where a refused model's replacement is named: the pin, or `--model` for a run that named its own (hub #226).
     role_var = "--model" if RUN_PICK["model"] else REVIEWER_MODEL_VARS[0]
@@ -3744,7 +4335,7 @@ def main():
             print(response_text)
             print(f"\n— [{role}: {got_model}]")
             print(">> REVIEW_ROUTE: api", file=sys.stderr)
-            _persist_review(role, response_text, got_model, "api")
+            _persist_review(role, response_text, got_model, "api", vendor=provider)
             
             # Логування в аудит
             _log_audit(role, got_model, pkg_file)
@@ -3792,7 +4383,7 @@ def main():
             print(text)
             print(f"\n— [{role}: {model}]")
             print(">> REVIEW_ROUTE: cli", file=sys.stderr)
-            _persist_review(role, text, model, "cli")
+            _persist_review(role, text, model, "cli", vendor=provider)
             _log_audit(role, model, pkg_file)
             return
         if kind == "bad_model":
@@ -3836,9 +4427,16 @@ def main():
     else:
         answer = (package_rel or os.path.join("process", "reviews", os.path.basename(package_path))).replace(
             "-package.md", ".md")
-    print(f"Коли відповідь буде: збережи її як {answer} у проекті і запиши:\n"
-          f"   process.py <project>/process reviewer <vendor> <model> --review {answer} --mode clipboard",
-          file=sys.stderr)
+    if tuning:
+        # The answer comes later, by hand, so its record is the person's to make (#143, G1): the reviewer this run
+        # would have asked, filled in -- `<vendor> <model>` only where no model was named.
+        who = f"{provider} {model}" if model else "<vendor> <model>"
+        print(f"Коли відповідь буде: збережи її як {answer} у проекті і запиши:\n"
+              f"   process.py <project>/process reviewer {who} --review {answer} --mode clipboard",
+              file=sys.stderr)
+    else:
+        # An `ask` is no review step (tcc#116): its answer is filed, never recorded as the process's reviewer.
+        print(f"Коли відповідь буде: збережи її як {answer} у проекті.", file=sys.stderr)
     print("=" * 50 + "\n", file=sys.stderr)
     if failures:
         sys.exit(4)

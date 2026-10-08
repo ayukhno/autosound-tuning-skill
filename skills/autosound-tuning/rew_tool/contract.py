@@ -436,6 +436,35 @@ def _lock_line(project_dir):
             "project on a local disk")
 
 
+#: The tuning contract the reviewer door reads -- the skill's own, from here alone (#143, I-5).
+SKILL_CONTRACT = os.path.join(os.path.dirname(_HERE), "assets", "data-contract-template.md")
+
+
+def contract_copy_warnings(project_dir):
+    """One warning per copy of the tuning contract in the project -- its folder or `rew_analitic/` -- whose text is not
+    the skill's, line endings aside (#143, I-5): the intake copied the contract into `rew_analitic/`, and the reviewer
+    door read that copy first, so a project kept the protocol it was started with. The door reads the skill's alone
+    now; a copy that differs reads like the protocol and is not it. `[{kind, file, warning}]`, never part of `ok`. A
+    copy that cannot be read is named with them: nothing shows it is the skill's."""
+    def text(path):
+        with open(path, "rb") as fh:
+            return fh.read().replace(b"\r\n", b"\n")
+    out = []
+    for rel in ("data-contract-template.md", "rew_analitic/data-contract-template.md"):
+        path = os.path.join(project_dir, *rel.split("/"))
+        if not os.path.isfile(path):
+            continue
+        try:
+            same = text(path) == text(SKILL_CONTRACT)
+        except OSError:
+            same = False
+        if not same:
+            out.append({"kind": "contract_copy", "file": rel,
+                        "warning": f"a project copy {rel} differs from the skill's contract — the reviewer gets the "
+                                   "skill's; delete the copy"})
+    return out
+
+
 def _line_layout(project_dir):
     """`"preset"`, `"project"`, or None (no ledger, or one caught half-way: `check_ledgers` names it)."""
     root = os.path.join(project_dir, "state")
@@ -1049,6 +1078,9 @@ def check_project(project_dir, skip_rew=False):
             # #141, R22: a folder the OS will not lock, where every write lands without the lock -- one line or None,
             # never a gate item.
             "lock": _lock_line(project_dir),
+            # #143, I-5: what the report warns of and `ok` never counts -- a project copy of the tuning contract that
+            # differs from the skill's.
+            "warnings": contract_copy_warnings(project_dir),
             "unsealed": _unsealed(project_dir),
             # S-042: ids in another notation, with the fix the session offers (not a gate item).
             "id_fix": (project.fix_ids(project_dir) if project.id_mismatches(project_data or {})
@@ -1513,6 +1545,8 @@ def render_report(report, gate=None):
                        f"`python3 rew_tool/state/apply.py {report['project_dir']} propose {row['file']}` (skill #74)")
     if cross.get("continue_head"):
         lines.append(f"- ⚠️ {cross['continue_head']['warning']} (S-084)")
+    for row in report.get("warnings") or []:
+        lines.append(f"- ⚠️ {row['warning']}")
     rew = cross["rew"]
     if rew.get("reachable"):
         if isinstance(rew.get("other_file"), dict) and rew["other_file"]:
@@ -2310,6 +2344,44 @@ def _check_check_names_a_folder_that_cannot_lock():
         lock._os_lock, lock.probe = real, real_probe
         shutil.rmtree(top, ignore_errors=True)
     assert not failures, "\n  ".join(["check and a folder that cannot lock:"] + failures)
+
+
+def _check_a_differing_contract_copy_is_a_warning():
+    """#143, I-5: `check` names a copy of the tuning contract in the project -- its folder or `rew_analitic/` -- that
+    differs from the skill's own, as a warning: the reviewer door reads the skill's alone, and the copy the intake once
+    made reads like the protocol while nothing reads it. `warnings` in `--json`, one `{kind, file, warning}` each, a
+    line in the text, never part of `ok`; a copy that is the skill's text, line endings aside, is not named."""
+    import shutil
+    import tempfile
+    skill = os.path.join(os.path.dirname(_HERE), "assets", "data-contract-template.md")
+    top = tempfile.mkdtemp(prefix="autosound_contract_copy_")
+    failures = []
+    try:
+        d = os.path.join(top, "car")
+        os.makedirs(os.path.join(d, "rew_analitic"))
+        before = check_project(d, skip_rew=True)
+        if before.get("warnings", "missing") != []:
+            failures.append(f"no copy: warnings {before.get('warnings', 'missing')!r}")
+        with open(skill, "rb") as fh:
+            text = fh.read()
+        with open(os.path.join(d, "data-contract-template.md"), "wb") as fh:     # the skill's text, in CRLF
+            fh.write(text.replace(b"\n", b"\r\n"))
+        with open(os.path.join(d, "rew_analitic", "data-contract-template.md"), "wb") as fh:
+            fh.write(b"# Data Contract -- the copy the intake made last year\n")
+        report = check_project(d, skip_rew=True)
+        want = [{"kind": "contract_copy", "file": "rew_analitic/data-contract-template.md",
+                 "warning": "a project copy rew_analitic/data-contract-template.md differs from the skill's contract "
+                            "— the reviewer gets the skill's; delete the copy"}]
+        if json.loads(json.dumps(report)).get("warnings", "missing") != want:
+            failures.append(f"warnings {report.get('warnings', 'missing')!r}")
+        if report.get("ok") is not before.get("ok") or report.get("ok") is not True:
+            failures.append(f"ok moved: {before.get('ok')!r} -> {report.get('ok')!r}")
+        shown = [ln for ln in render_report(report).splitlines() if "a project copy" in ln]
+        if shown != [f"- ⚠️ {want[0]['warning']}"]:
+            failures.append(f"its line in the report: {shown!r}")
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["check and a project copy of the contract:"] + failures)
 
 
 def _raised_or(call):
@@ -3140,7 +3212,8 @@ def _selftest():
                   _check_intake_line_over_an_unreadable_project_json, _check_bom_glossary_is_a_glossary,
                   _check_bom_project_json_one_verdict, _check_dangling_glossary_link_refused,
                   _check_repair_encoding_waits_for_the_lock, _check_a_missing_project_makes_nothing,
-                  _check_a_bad_timeout_is_a_usage_error, _check_check_names_a_folder_that_cannot_lock):
+                  _check_a_bad_timeout_is_a_usage_error, _check_check_names_a_folder_that_cannot_lock,
+                  _check_a_differing_contract_copy_is_a_warning):
         try:
             check()
         except AssertionError as exc:
@@ -3654,7 +3727,8 @@ def _selftest():
           f"project folder that is not there; check names a folder whose writer lock cannot be taken in one status "
           f"line -- one with a folder at the lock file's path as one every writer refuses -- and nothing where it "
           f"can, where another writer holds it, or where no lock file is yet, as write_lock.probe answers -- a probe "
-          f"that breaks said in that line, never a crash (#141). root={root}")
+          f"that breaks said in that line, never a crash (#141); a project copy of the tuning contract that differs "
+          f"from the skill's is a warning row, never part of ok (#143). root={root}")
     return 0
 
 

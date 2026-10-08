@@ -1,6 +1,7 @@
 # Data Contract — the "Generator ↔ Critic" protocol
 
-**Purpose:** the single rulebook for the interaction of two AIs (Generator + Critic) to tune car audio (REW + `<DSP>`).
+**Purpose:** the single rulebook for the interaction of two AIs (Generator + Critic) to tune car audio (REW + the car's DSP).
+The system's specifics — the car, the DSP, its channels — come from the AUTOSOUND CONTEXT and the LEDGER HEAD, not from this file.
 Loaded as a system prompt into **both** chats at the session start, together with `autosound_context.md`.
 
 > **This is the TUNING contract** — for the Critic and Advisor tasks. Under it, on every call, sits
@@ -8,7 +9,7 @@ Loaded as a system prompt into **both** chats at the session start, together wit
 > what they tune. A plain question (the `ask` task — a translation, a letter's wording) goes under
 > the interaction contract alone.
 
-> **This is a TEMPLATE** (bundled with the skill). When a project is created it's copied to `rew_analitic/data-contract-template.md`. Fill in the `<…>` placeholders for your system; the rest — the generic protocol, leave it as is.
+> **This contract is the skill's own** (`assets/data-contract-template.md`): the reviewer door reads it from the skill on every call. It is not copied into a project — a copy there is never read, and `doctor` and `contract.py check` name one that differs, to be deleted.
 
 **Version:** 1.0 · arbiter — the user
 
@@ -27,7 +28,7 @@ Loaded as a system prompt into **both** chats at the session start, together wit
 
 -----
 
-## 1. Single source of truth + dynamic state
+## 1. The machine files are the truth; the prose is a view of it
 
 - **The machine files are the truth; the prose is a view of it.** The system's actual state lives in
   the ledger `state/versions/v_NNN.json` (`state/<preset>/…` on a project still numbered per preset) (the hard parameters), `process/process-state.json` +
@@ -37,7 +38,7 @@ Loaded as a system prompt into **both** chats at the session start, together wit
   divergence out loud. `dsp-state-current` is a GENERATED sheet of the ledger, never hand-edited.
 - `autosound_context.md` (system, crossovers, history, known anomalies) — into both chats at the start.
 - **The current state rides in EVERY package**, not just at the session start.
-- Each iteration is bound to a **Trace ID** — the real measurement name in REW (e.g. `m-L_split_320Hz_LR4`). Without binding to a trace the proposal is invalid.
+- Each iteration is bound to a **Trace ID** — the capture's real title in REW, in the naming grammar `<code>_<N> (<method>)` (`naming-and-structure.md` §3; e.g. `w-L_1 (sw)`). Without binding to a trace the proposal is invalid.
 
 -----
 
@@ -59,7 +60,7 @@ Loaded as a system prompt into **both** chats at the session start, together wit
 
 ```
 [Iteration N/3]  Generator: <AI-A|AI-B>
-Trace ID: <the measurement's name in REW>
+Trace ID: <code>_<N> (<method>) — the capture's title in REW, as the grammar writes it
 
 Current state (delta): <what changed since the last step: filters / EQ / delays>
 
@@ -151,6 +152,6 @@ After each cycle — a short entry: Trace ID, the decision, the key objection, w
 
 ## Role assignment for the first real session
 
-- **Topic:** the session's first task (e.g. a baseline measurement or the very first diagnosed anomaly — fill it in for your case).
-- **Round 1:** Generator — AI-A, Critic — AI-B (rotate afterward).
-- **The first Trace ID:** set it at the first measurement (e.g. `<channel>_baseline`).
+- **Topic:** the session's first task (e.g. a baseline measurement or the very first diagnosed anomaly — the Generator names it in the first package).
+- **Round 1:** Generator — AI-A, Critic — AI-B; the seats hold for the session (§ No role rotation).
+- **The first Trace ID:** the first capture's title, `<code>_1 (<method>)` (e.g. `sw_1 (sw)`).
