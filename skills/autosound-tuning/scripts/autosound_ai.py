@@ -1707,12 +1707,52 @@ def _check_engine_line_optional():
     assert "не піде" not in said, said
 
 
+def _check_private_writer_goes_through_the_move():
+    """`_write_private` -- the reviewer's machine file, and a shell profile `key move-shell` rewrites with its
+    `.autosound-bak` -- replaces its file through `project_io`'s move (CONTRACT.md item 8; the final review's I-1),
+    judged by `project_io._moved_into_place`: with its move failing it raises and the file keeps its bytes, and watched,
+    the file is whole until its move. On POSIX the file is private from its first byte: a new one's key is fsynced in a
+    file already 0600. Written in place and made 0600 after, every check stayed green while the key was readable by
+    others for as long as it was being written."""
+    import stat
+    io_ = _project_io()
+    d = tempfile.mkdtemp(prefix="autosound_ai_moves_")
+    real_fsync = os.fsync
+    failures = []
+    try:
+        path, lines = os.path.join(d, "critic-env"), ["export GEMINI_API_KEY=" + "k" * 39]
+        _write_private(path, lines)
+        failures += io_._moved_into_place("the reviewer's machine file (_write_private)", path,
+                                          lambda: _write_private(path, lines))
+        if os.name != "nt":                      # Windows keeps no POSIX mode; the store there is DPAPI's
+            seen = []
+
+            def fsync(fd):                       # the file as it is when the key is all in it
+                st = os.fstat(fd)
+                if not stat.S_ISDIR(st.st_mode):
+                    seen.append(stat.S_IMODE(st.st_mode))
+                real_fsync(fd)
+            os.fsync = fsync
+            try:
+                _write_private(os.path.join(d, "new", "critic-env"), lines)
+            finally:
+                os.fsync = real_fsync
+            if seen != [0o600]:
+                failures.append(f"a new machine file: its key was fsynced in a file of mode {[oct(m) for m in seen]}, "
+                                f"not 0600 alone -- readable by others while it was written")
+    finally:
+        os.fsync = real_fsync
+        shutil.rmtree(d, ignore_errors=True)
+    assert not failures, "\n  ".join(["a writer item 8 lists does not go through the move:"] + failures)
+
+
 def _selftest():
     """Offline: a retired model becomes a CHOICE carrying the key's list (never a fall-through),
     the list is parsed from the API's shape, and a run with a key and no model stops on the list."""
     failures = []
     for check in (_check_review_names_unique, _check_step_aside_refused_remove,
-                  _check_step_aside_names_the_answers_name, _check_engine_line_optional):
+                  _check_step_aside_names_the_answers_name, _check_engine_line_optional,
+                  _check_private_writer_goes_through_the_move):
         try:
             check()
         except AssertionError as exc:

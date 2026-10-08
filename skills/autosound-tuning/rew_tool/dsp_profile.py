@@ -1851,13 +1851,43 @@ def _check_draft_left_repair_by_cause():
     assert not failures, "\n  ".join(["a draft left, said with another cause's repair:"] + failures)
 
 
+def _check_writers_go_through_the_move():
+    """CONTRACT.md item 8's writers in this module beside `save_profile` replace their files through `project_io`'s
+    move (the final review's I-1): `save_draft`, the interview's `dsp_profile.draft.json`, and `set_setting`, a machine
+    setting written into `dsp_profile.json` -- one of the five writers item 8 says wrote in place before W-8. Each is
+    judged by `project_io._moved_into_place`: with its move failing the writer raises and the file keeps its bytes, and
+    watched, the file is whole until its move and the move brings every byte. Either could go back to writing in place
+    with every check green, and a crash in that write would leave a torn profile the strict reader then refuses.
+    `save_profile` is held by `project_io`'s own check."""
+    import shutil
+    import tempfile
+    io_ = _project_io()
+    d = tempfile.mkdtemp(prefix="autosound_profile_moves_")
+    failures = []
+    try:
+        draft = {"dsp_profile": {"name": "M6V4", "vendor": "Musway", "groups": []}}
+        save_draft(d, draft)
+        failures += io_._moved_into_place("dsp_profile.draft.json (save_draft)", draft_path(d),
+                                          lambda: save_draft(d, draft))
+        with open(profile_path(d), "w", encoding="utf-8") as fh:
+            json.dump({"schema_version": SCHEMA_VERSION, "dsp_profile": {
+                "name": "x", "vendor": "v", "groups": [{"id": "physical_outputs", "label": "out", "fields": None}],
+                "channel_gain": {"range_db": [-30.0, 5.0], "step_options_db": [1.0, 0.5, 0.25, 0.1]}}}, fh)
+        failures += io_._moved_into_place("dsp_profile.json (set_setting)", profile_path(d),
+                                          lambda: set_setting(d, "channel_gain.step_db", "0.1"))
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+    assert not failures, "\n  ".join(["a writer item 8 lists does not go through the move:"] + failures)
+
+
 def _selftest():
     failures = []
     for check in (_check_loads_by_path, _check_bind_model_rate_binds_the_callers_dsp_math,
                   _check_draft_refuses_unreadable, _check_newer_profile_refused,
                   _check_bind_model_rate_refuses_unreadable, _check_bind_model_rate_reads_the_sheets_rule,
                   _check_writers_refuse_unreadable_profile, _check_library_skips_unreadable,
-                  _check_finalize_says_a_draft_left, _check_draft_left_repair_by_cause):
+                  _check_finalize_says_a_draft_left, _check_draft_left_repair_by_cause,
+                  _check_writers_go_through_the_move):
         try:
             check()
         except AssertionError as exc:

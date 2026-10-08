@@ -823,7 +823,34 @@ def _synthetic_ir(n, fs, t_peak_s, start_time_s, width_s=0.4e-3):
     return 0.3 * (pulse + ghost)
 
 
+def _check_write_v7_goes_through_the_move():
+    """`write_v7` replaces a Resonalyze impulse-response file through `project_io`'s move (CONTRACT.md item 8; the
+    final review's I-1), judged by `project_io._moved_into_place`: with its move failing it raises and the file keeps
+    its bytes, and watched, the file is whole until its move and the move brings every byte. It could go back to
+    writing in place with every check green, and the engine would then read a file cut short."""
+    import shutil
+    import tempfile
+    d = tempfile.mkdtemp(prefix="autosound_ir_moves_")
+    try:
+        fs, n = 48000, 1 << 12
+        start = -100.0 / fs
+        doc, _ = build_v7(_synthetic_ir(n, fs, 2e-3, start), fs, start, low_hz=20.0, high_hz=20000.0)
+        path = write_v7(doc, os.path.join(d, "w_L.json"))
+        failures = _project_io()._moved_into_place("a Resonalyze impulse-response file (write_v7)", path,
+                                                   lambda: write_v7(doc, path))
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+    assert not failures, "\n  ".join(["a writer item 8 lists does not go through the move:"] + failures)
+
+
 def _selftest():
+    failures = []
+    for check in (_check_write_v7_goes_through_the_move,):
+        try:
+            check()
+        except AssertionError as exc:
+            failures.append(f"{check.__name__}: {exc}")
+    assert not failures, "\n".join(failures)
     # One fact, one source: the round's record maps onto the manifest's --hpf shape, and the
     # three states stay distinct -- "bare" and "unknown" must never both come out as None-and-move-on.
     _rec = {"channels": {"m_L": {"hp": {"f": 100, "type": "LR", "slope": 24}}, "w_L": "OFF"}}

@@ -3327,6 +3327,66 @@ def _check_survey_names_a_cut_file():
         shutil.rmtree(root, ignore_errors=True)
 
 
+def _check_writers_go_through_the_move():
+    """CONTRACT.md item 8's writers in this module replace their files through `project_io`'s move (the final review's
+    I-1): `slots.json`, a version `repair-version` rewrites, the old layout's `HEAD` and `registry.json`, and the
+    journal `repair-encoding --set-aside` rewrites with the `<journal>.set-aside` it writes first. Each is judged by
+    `project_io._moved_into_place`: with its move failing the writer raises and the file keeps its bytes, and watched,
+    the file is whole until its move and the move brings every byte. Any of them could go back to writing in place --
+    the old layout's two were written so before W-8 -- with every check green; a crash in that write leaves the file
+    torn, and a reader meets half of it. The bank and the seals are held by `project_io`'s own check."""
+    import shutil
+    import tempfile
+    io_ = _project_io()
+    top = tempfile.mkdtemp(prefix="autosound_state_moves_")
+    failures = []
+    try:
+        # The per-project line: slots.json, and a version that says it is another one.
+        root = os.path.join(top, "project", "state")
+        h = PresetHistory(root, "SQ")
+        h.snapshot(_sample_state(), note="v1")
+        failures += io_._moved_into_place("state/slots.json (_write_slots)", os.path.join(root, SLOTS_FILE),
+                                          lambda: _write_slots(root, _read_slots(root)))
+        copied = h._path(h.snapshot(_sample_state(), note="v2"))
+        with open(copied, encoding="utf-8") as fh:
+            snap = json.load(fh)
+        snap["version"] = "v_001"                                # copied over v_002: it claims another's name
+        with open(copied, "w", encoding="utf-8") as fh:
+            json.dump(snap, fh, indent=2, sort_keys=True, ensure_ascii=False)
+        failures += io_._moved_into_place("a version repair-version rewrites", copied,
+                                          lambda: repair_version(root, "v_002"))
+        # The old, per-preset layout: a bank's HEAD and the registry.
+        old = os.path.join(top, "old", "state")
+        os.makedirs(os.path.join(old, "SQ"))
+        with open(os.path.join(old, "SQ", "v_001.json"), "w", encoding="utf-8") as fh:
+            json.dump(dict(_sample_state(), preset="SQ", version="v_001", schema_version=SCHEMA_VERSION), fh)
+        assert ledger_layout(old) == "preset", ledger_layout(old)
+        oh, reg = PresetHistory(old, "SQ"), Registry(old)
+        oh.place("v_001")
+        reg.set_active("SQ")
+        failures += io_._moved_into_place("the old layout's HEAD (_set_head)", oh._head_path(),
+                                          lambda: oh.place("v_001"))
+        failures += io_._moved_into_place("the old layout's registry.json (Registry._write)", reg._path(),
+                                          lambda: reg.set_active("SQ"))
+        # The journal --set-aside rewrites, and the set-aside file it writes first.
+        journal = os.path.join(top, "process", "journal.jsonl")
+        os.makedirs(os.path.dirname(journal))
+        good = json.dumps({"type": "user_decision", "question": "нова сесія"}, ensure_ascii=False).encode("utf-8")
+        glued = b'{"type": "user_decision", "question": "\xd0' + good    # cut inside a character, the next one glued
+
+        def damaged():
+            with open(journal, "wb") as fh:
+                fh.write(good + b"\n" + glued + b"\n" + good + b"\n")
+        damaged()
+        failures += io_._moved_into_place("the journal --set-aside rewrites", journal, lambda: set_aside([journal]))
+        damaged()
+        failures += io_._moved_into_place("the <journal>.set-aside it writes first", journal + ".set-aside",
+                                          lambda: set_aside([journal]))
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["a writer item 8 lists does not go through the move:"] + failures)
+
+
 def _selftest():
     failures = []
     for check in (_check_variant_delta_refused, _check_eq_refusals, _check_canonical_code_uses_the_loaded_naming,
@@ -3337,7 +3397,7 @@ def _selftest():
                   _check_newer_version_refused, _check_snapshot_error_from_another_copy,
                   _check_variant_delta_blames_no_good_delta, _check_variant_new_refuses_its_base_in_one_line,
                   _check_sheet_says_an_unreadable_profile, _check_sheet_says_a_rate_it_cannot_use,
-                  _check_survey_names_a_cut_file):
+                  _check_survey_names_a_cut_file, _check_writers_go_through_the_move):
         try:
             check()
         except AssertionError as exc:

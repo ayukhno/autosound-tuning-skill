@@ -415,6 +415,64 @@ def _read_bytes(path):
         return f.read()
 
 
+def _moved_into_place(label, path, call):
+    """For a writer's own selftest (CONTRACT.md item 8; the final review's I-1): `call` replaces `path`, a file that is
+    there, and must do it through this module's move -- the one way a reader never meets half of it.
+
+    Run twice. First with the move onto `path` failing, as a pulled disk or a Windows holder past the retries would:
+    the writer must raise, the file keep its bytes, and no temp of it be left. A move onto any other file goes through,
+    so a writer that writes another file first is judged on this one. Then watched, the move working: when the move
+    comes the file still holds its old bytes -- nothing was written into it first -- and the file moved over it holds
+    every byte it ends with. A writer gone back to writing in place does neither: it writes with its move failing, and
+    its file is never moved. Returns the failures, one line each, `label` first; empty when the writer holds."""
+    target = os.path.abspath(path)
+    folder, base = os.path.split(target)
+    real = os.replace
+    failures, moves = [], []
+
+    def failing(src, dst):
+        if os.path.abspath(dst) == target:
+            raise OSError(errno.EIO, "the move failed (a fault injected here)", dst)
+        return real(src, dst)
+
+    def watching(src, dst):
+        if os.path.abspath(dst) == target:
+            moves.append((_read_bytes(target), _read_bytes(src)))
+        return real(src, dst)
+
+    before, names = _read_bytes(target), set(os.listdir(folder))
+    os.replace = failing
+    try:
+        call()
+        raised = False
+    except Exception:  # noqa: BLE001 -- any refusal will do; the file and its folder are what is judged
+        raised = True
+    finally:
+        os.replace = real
+    if not raised:
+        failures.append(f"{label}: wrote with its move failing -- in place")
+    if _read_bytes(target) != before:
+        failures.append(f"{label}: with its move failing, the file's bytes changed")
+    left = sorted(n for n in set(os.listdir(folder)) - names if n.startswith(base + ".") and n.endswith(".tmp"))
+    if left:
+        failures.append(f"{label}: with its move failing, a temp was left: {left}")
+    before = _read_bytes(target)
+    os.replace = watching
+    try:
+        call()
+    except Exception as exc:  # noqa: BLE001 -- said as this writer's failure, beside the others
+        return failures + [f"{label}: with its move working, the write failed: {type(exc).__name__}: {exc}"]
+    finally:
+        os.replace = real
+    if not moves:
+        failures.append(f"{label}: the file was never moved into place -- written in place")
+    elif moves[0][0] != before:
+        failures.append(f"{label}: the file changed before its move -- a reader could meet half of it")
+    elif moves[-1][1] != _read_bytes(target):
+        failures.append(f"{label}: the file holds bytes its move did not bring -- written after the move")
+    return failures
+
+
 def _two_writers_worker(path, signals, me, rounds):
     """One writer of `_check_two_writers_one_reader`. At the top level, so that `spawn` finds it by name. It says it
     is up (`ready-<me>`) and waits for the reader's `go`: both writers start together, and the reader is reading."""
@@ -1010,9 +1068,11 @@ def _check_append_refused():
 def _check_every_writer_moves():
     """T I2: the writers CONTRACT.md item 8 names write through the move, as this module's own tests are -- not only
     that the module is atomic, but that `Project.save`, `Process._write`, the seals and `save_profile` use it. Each
-    replaces a file that is there while the move fails, as a pulled disk or a Windows holder past the retries would:
-    the writer must raise, the old file keep its bytes, and no temp be left. A writer that went back to writing in place
-    does not raise, and the old bytes are gone -- a crash in the middle of that write leaves the file torn."""
+    replaces a file that is there, judged by `_moved_into_place`: while the move fails, as a pulled disk or a Windows
+    holder past the retries would, the writer must raise, the old file keep its bytes, and no temp be left; watched,
+    the file is whole until its move. A writer that went back to writing in place does not raise, and the old bytes
+    are gone -- a crash in the middle of that write leaves the file torn. The rest of item 8's writers are held by
+    their own modules' selftests through the same judge."""
     sib = _siblings()
     project, process = sib.load("project.py"), sib.load("state/process.py")
     state, dsp_profile = sib.load("state/state.py"), sib.load("dsp_profile.py")
@@ -1020,27 +1080,8 @@ def _check_every_writer_moves():
     real = os.replace
     failures = []
 
-    def broken(src, dst):
-        raise OSError(5, "the move failed (a fault injected here)", dst)
-
     def judge(label, path, call):
-        folder = os.path.dirname(path)
-        before, names = _read_bytes(path), set(os.listdir(folder))
-        os.replace = broken
-        try:
-            call()
-            raised = None
-        except Exception as exc:  # noqa: BLE001 -- any refusal will do; the file and the folder are what is judged
-            raised = exc
-        finally:
-            os.replace = real
-        left = sorted(n for n in set(os.listdir(folder)) - names if n.endswith(".tmp"))
-        if raised is None:
-            failures.append(f"{label}: wrote with the move failing -- in place")
-        if _read_bytes(path) != before:
-            failures.append(f"{label}: the old file's bytes changed")
-        if left:
-            failures.append(f"{label}: a temp was left: {left}")
+        failures.extend(_moved_into_place(label, path, call))
     try:
         proj = project.Project(top)
         proj.save({"schema_version": 3, "channels": []})
