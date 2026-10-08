@@ -395,19 +395,26 @@ def import_current_state(old_dir, new_dir, dry_run=False):
             identity.setdefault(code, {}).update(fields)
         newest[os.path.basename(os.path.dirname(path))] = (path, snap)
 
-    # The new project's writer lock from the read of its `project.json` to the import's last write (#141, R14, R23): read
-    # before the hold, a change another writer made to that file meanwhile was written over by the import's save.
-    # Nothing slow runs under it -- files read, checked and written -- and a refusal before the first write makes
-    # nothing: the lock makes no project folder, and `.autosound/` in one that is there is the lock's own. A profile's
-    # stamp asks git, so that is asked first, with the lock still free, and the wait read: a bad one is exit 2 before
-    # anything. A dry run only reads, and takes no lock.
-    if not dry_run and os.path.lexists(os.path.join(old_dir, "dsp_profile.json")):
-        _dsp_profile._ready_to_hold()
-    if dry_run:
-        proj, profile = _import_into(old_dir, new_dir, identity, newest, report, dry_run)
+    # The import's refusals first, each on a read that holds nothing (#141, R27): the folder `--into` names may be no
+    # project at all -- a mistaken target -- and a hold taken before them left the lock's `.autosound/` there under every
+    # refusal. The read of the new folder's `project.json` here decides only whether to refuse.
+    proj = _project.Project(new_dir)
+    io_ = _project_io()
+    _facts_to_merge_into(proj, io_)
+    _check_versions(old_dir, newest, report)
+    profile = _old_profile(old_dir, report, io_)
+    if dry_run:                                      # a dry run only reads, and takes no lock
+        _merged(proj, io_, identity, newest, old_dir, report)
     else:
+        # Then the new project's writer lock, from a fresh read of its `project.json` to the import's last write (#141,
+        # R14, R23): the import's facts are merged into that file as it stands under the hold, so a change another
+        # writer made since the read above is not written over. Nothing slow runs under it -- files read, merged and
+        # written. A profile's stamp asks git, so that is asked first, with the lock still free, and the wait read: a
+        # bad one is exit 2 before anything.
+        if profile is not None:
+            _dsp_profile._ready_to_hold()
         with _project._hold(new_dir):
-            proj, profile = _import_into(old_dir, new_dir, identity, newest, report, dry_run)
+            _write_import(proj, new_dir, _merged(proj, io_, identity, newest, old_dir, report), newest, profile, io_)
     report["project_rev"] = proj.load()["project_rev"] if not dry_run else 1
     report["files"].append("project.json")
     if profile is not None:
@@ -419,20 +426,24 @@ def import_current_state(old_dir, new_dir, dry_run=False):
     return report
 
 
-def _import_into(old_dir, new_dir, identity, newest, report, dry_run):
-    """`import_current_state`'s read of the new folder's `project.json`, its checks and its writes, under the new
-    project's lock but in a dry run: `(the new project, the profile carried or None)`. Every refusal comes before the
-    first write."""
-    proj = _project.Project(new_dir)
+def _facts_to_merge_into(proj, io_):
+    """The new folder's `project.json` as it stands -- the empty project where there is none -- refused when a newer
+    method wrote it, before this copy's version is stamped over it, in `Project.save`'s words (#136, audit T-21):
+    stamped first, `save` saw v3 and wrote the newer file down."""
     data = proj.load()
-    # Facts a newer method wrote are refused before this copy's version is stamped over them, in `Project.save`'s words
-    # (#136, audit T-21): stamped first, `save` saw v3 and wrote the newer file down.
-    io_ = _project_io()
     newer = io_.newer_schema(data, _project.SCHEMA_VERSION)
     if newer is not None:
         raise _project.ProjectError(f"{proj.path}: the facts to write are schema v{newer} and this method writes "
                                     f"v{_project.SCHEMA_VERSION} -- writing them would write them down, so nothing "
                                     f"was written; {io_.UPDATE_THE_METHOD}")
+    return data
+
+
+def _merged(proj, io_, identity, newest, old_dir, report):
+    """The new folder's `project.json`, read again -- under the new project's lock, for a real import -- and refused
+    if a newer method wrote it since the first read, with the import's facts merged in: the identity the versions
+    carried, the channel summary, where it came from."""
+    data = _facts_to_merge_into(proj, io_)
     data["schema_version"] = _project.SCHEMA_VERSION
     report["identity_fields"] = fold_identity(data, identity)
     if not data.get("channel_summary"):
@@ -441,7 +452,12 @@ def _import_into(old_dir, new_dir, identity, newest, report, dry_run):
     # Where this came from, on the record. Not a flag anything BEHAVES on — the new project is a
     # new project — just the provenance a later reader will want.
     data.setdefault("imported_from", os.path.abspath(old_dir))
+    return data
 
+
+def _check_versions(old_dir, newest, report):
+    """Each version the import carries, stamped `v_001` and checked as this method checks a version, before a single
+    byte is written."""
     for preset, (path, snap) in sorted(newest.items()):
         snap["version"] = "v_001"
         snap["project_rev"] = 1
@@ -456,11 +472,14 @@ def _import_into(old_dir, new_dir, identity, newest, report, dry_run):
                                        f"nothing was imported") from exc
         report["snapshots"].append(f"{preset}/v_001.json (was {os.path.basename(path)})")
 
-    # The old profile is read and checked before the first write (#134, batch 4's re-review, Out of Scope 4): read
-    # after the new `project.json` and the ledger were written, a profile refused -- cut off, a newer method's, one
-    # holding a `project.json` -- left the new project half made, and its line did not say what had landed. It is read
-    # as the profile's own reader reads it (`load_profile`): a file there and unreadable is refused, a folder in its
-    # place too; no file is no profile.
+
+def _old_profile(old_dir, report, io_):
+    """The old project's DSP profile, read and checked before the first write: the profile to carry, or None (#134,
+    batch 4's re-review, Out of Scope 4). Read after the new `project.json` and the ledger were written, a profile
+    refused -- cut off, a newer method's, one holding a `project.json` -- left the new project half made, and its line
+    did not say what had landed. It is read as the profile's own reader reads it (`load_profile`): a file there and
+    unreadable is refused, a folder in its place too; no file is no profile, and one that does not validate is a
+    warning, not carried."""
     old_profile = os.path.join(old_dir, "dsp_profile.json")
     try:
         profile = _dsp_profile.load_profile(old_profile)
@@ -481,33 +500,35 @@ def _import_into(old_dir, new_dir, identity, newest, report, dry_run):
             report["warnings"].append(
                 f"dsp_profile.json NOT imported — it does not validate: {exc}")
             profile = None
+    return profile
 
-    if not dry_run:
-        # Every write of the import under the caller's one hold of the new project's writer lock (#141, R14) --
-        # `project.json`, the ledger written here, the profile -- each writer re-entering it. A busy lock is met at that
-        # hold, before the read and before any write, so its "nothing was written" is true -- for a busy lock only: a
-        # version's name taken after the look is refused once `project.json` has landed, and says so (`_into_refused`).
-        proj.save(data)
-        written = ["project.json"]
-        for preset, (_path, snap) in sorted(newest.items()):
-            preset_dir = os.path.join(new_dir, "state", preset)
-            os.makedirs(preset_dir, exist_ok=True)
-            snap["project_rev"] = proj.load()["project_rev"]
-            # Claimed by creating its file, never by writing over one, as a bank claims its number (CONTRACT.md item
-            # 8): `project_there` found no ledger, and a name taken since is the same refusal, saying what this run
-            # wrote. The text is the one `_write_json` wrote; `HEAD` is replaced whole, as a bank replaces it.
-            try:
-                io_.create_exclusive(os.path.join(preset_dir, "v_001.json"),
-                                     json.dumps(snap, indent=2, sort_keys=True, ensure_ascii=False))
-            except FileExistsError:
-                landed = (written[0] if len(written) == 1 else ", ".join(written[:-1]) + " and " + written[-1])
-                raise _into_refused(new_dir, [f"state/{preset}/v_001.json"],
-                                    landed=f"{landed} {'is' if len(written) == 1 else 'are'} written") from None
-            io_.atomic_write_text(os.path.join(preset_dir, "HEAD"), "v_001\n")
-            written += [f"state/{preset}/v_001.json", f"state/{preset}/HEAD"]
-        if profile is not None:
-            _dsp_profile.save_profile(os.path.join(new_dir, "dsp_profile.json"), profile)
-    return proj, profile
+
+def _write_import(proj, new_dir, data, newest, profile, io_):
+    """Every write of the import, under the caller's one hold of the new project's writer lock (#141, R14) --
+    `project.json` (`data`, merged under that hold), the ledger written here, the profile -- each writer re-entering it.
+    A busy lock is met at that hold, before the fresh read and before any write, so its "nothing was written" is true
+    -- for a busy lock only: a version's name taken after the look is refused once `project.json` has landed, and says
+    so (`_into_refused`)."""
+    proj.save(data)
+    written = ["project.json"]
+    for preset, (_path, snap) in sorted(newest.items()):
+        preset_dir = os.path.join(new_dir, "state", preset)
+        os.makedirs(preset_dir, exist_ok=True)
+        snap["project_rev"] = proj.load()["project_rev"]
+        # Claimed by creating its file, never by writing over one, as a bank claims its number (CONTRACT.md item
+        # 8): `project_there` found no ledger, and a name taken since is the same refusal, saying what this run
+        # wrote. The text is the one `_write_json` wrote; `HEAD` is replaced whole, as a bank replaces it.
+        try:
+            io_.create_exclusive(os.path.join(preset_dir, "v_001.json"),
+                                 json.dumps(snap, indent=2, sort_keys=True, ensure_ascii=False))
+        except FileExistsError:
+            landed = (written[0] if len(written) == 1 else ", ".join(written[:-1]) + " and " + written[-1])
+            raise _into_refused(new_dir, [f"state/{preset}/v_001.json"],
+                                landed=f"{landed} {'is' if len(written) == 1 else 'are'} written") from None
+        io_.atomic_write_text(os.path.join(preset_dir, "HEAD"), "v_001\n")
+        written += [f"state/{preset}/v_001.json", f"state/{preset}/HEAD"]
+    if profile is not None:
+        _dsp_profile.save_profile(os.path.join(new_dir, "dsp_profile.json"), profile)
 
 
 def render_report(report, dry_run=False):
@@ -602,9 +623,9 @@ def _main(argv=None):
 def _check_import_refuses_newer_project():
     """An import into a folder whose `project.json` a newer method wrote is refused before anything is stamped or
     written, in `Project.save`'s own words (#136, audit T-21): the import stamped v3 onto the loaded facts first, so
-    `save` saw v3 and wrote the newer file down. A dry run refuses it too, and the file keeps its bytes. The lock's own
-    `.autosound/` is left out of the folder's listing: the import reads `project.json` under the new project's lock
-    (#141, R23), so in a folder that is there the hold has made it, as any refused writer's hold does."""
+    `save` saw v3 and wrote the newer file down. A dry run refuses it too, and the file keeps its bytes -- the folder
+    holds that file alone, no lock's `.autosound/` either: the refusal is made before the new project's lock is taken
+    (#141, R27)."""
     import shutil
     import tempfile
     old = tempfile.mkdtemp(prefix="autosound_migrate_newer_old_")
@@ -627,8 +648,7 @@ def _check_import_refuses_newer_project():
             words = str(exc)
         else:
             raise AssertionError("Project.save wrote down facts a newer method wrote")
-        for dry_run in (True, False):              # the dry run first: it meets the folder as it was, and takes no lock
-            had = sorted(os.listdir(new))
+        for dry_run in (True, False):
             try:
                 import_current_state(old, new, dry_run=dry_run)
             except _project.ProjectError as exc:
@@ -637,8 +657,7 @@ def _check_import_refuses_newer_project():
                 raise AssertionError(f"dry_run={dry_run}: the import took a v{newer} project.json")
             with open(path, "rb") as fh:
                 assert fh.read() == raw, f"dry_run={dry_run}: project.json changed"
-            assert _listed(new) == ["project.json"], (dry_run, sorted(os.listdir(new)))
-            assert not dry_run or sorted(os.listdir(new)) == had, f"a dry run made {sorted(os.listdir(new))}"
+            assert sorted(os.listdir(new)) == ["project.json"], (dry_run, sorted(os.listdir(new)))
         # The command line says it in those words, one line, exit 1 (#134, H 23, T m10): `_main` caught nothing, and
         # the refusal ended in a `ProjectError` traceback.
         import contextlib
@@ -653,15 +672,10 @@ def _check_import_refuses_newer_project():
             assert rc == 1 and err.getvalue().strip() == f"error: {words}" and not out.getvalue(), \
                 (extra, rc, err.getvalue()[-300:])
             with open(path, "rb") as fh:
-                assert fh.read() == raw and _listed(new) == ["project.json"], (extra, "written")
+                assert fh.read() == raw and sorted(os.listdir(new)) == ["project.json"], (extra, "written")
     finally:
         shutil.rmtree(old, ignore_errors=True)
         shutil.rmtree(new, ignore_errors=True)
-
-
-def _listed(folder):
-    """The names in `folder` but the writer lock's own `.autosound/` (#141), sorted."""
-    return sorted(n for n in os.listdir(folder) if n != ".autosound")
 
 
 def _check_main_refuses_only_refusals():
@@ -933,18 +947,84 @@ def _check_into_waits_for_the_lock():
     assert not failures, "\n  ".join(["--into and the lock:"] + failures)
 
 
+def _check_into_an_existing_folder_refused_makes_nothing():
+    """`--into` a folder that is there, refused, makes nothing there -- not even the lock's `.autosound/` (#141, R27).
+    The folder may be no project at all, a mistaken target: the import's refusals are made on reads that hold nothing,
+    and the new project's lock is taken only once the import will write. The hold came before the read, and every
+    refusal under it left the lock's folder behind. Each refusal of a real import, over an empty folder and over one
+    holding a `project.json`: a `project.json` a newer method wrote, a version this method's check refuses, an old
+    profile cut off, an old profile that holds a `project.json`."""
+    import contextlib
+    import io
+    import shutil
+    import tempfile
+    old = tempfile.mkdtemp(prefix="autosound_migrate_existing_old_")
+    top = tempfile.mkdtemp(prefix="autosound_migrate_existing_new_")
+    failures = []
+    try:
+        version = os.path.join(old, "state", "SQ", "v_001.json")
+        profile = os.path.join(old, "dsp_profile.json")
+        os.makedirs(os.path.dirname(version))
+        row = {"helix_ch": "C", "hp": {"f": 70, "type": "BW", "slope": 12}, "lp": {"f": 270, "type": "BW", "slope": 12},
+               "gain_db": -7.8, "ta_ms": 5.38, "polarity": "NORM"}
+        cases = (("a project.json a newer method wrote", {}, None),
+                 ("a version this method's check refuses", {"gain_db": "loud"}, None),
+                 ("an old profile cut off", {}, b'{"dsp_profile": {"name": "Fixture", "gro'),
+                 ("an old profile that holds a project.json", {}, json.dumps(
+                     {"schema_version": 3, "channels": [], "car": {}}).encode("utf-8")))
+        n = 0
+        for label, change, profile_bytes in cases:
+            _write_json(version, {"preset": "SQ", "version": "v_001", "sample_rate": 96000,
+                                  "channels": {"w-L": dict(row, **change)}})
+            if os.path.exists(profile):
+                os.remove(profile)
+            if profile_bytes is not None:
+                with open(profile, "wb") as fh:
+                    fh.write(profile_bytes)
+            newer = label.startswith("a project.json a newer")
+            for holding in ((("project.json",),) if newer else ((), ("project.json",))):
+                n += 1
+                new = os.path.join(top, f"target-{n}")
+                os.makedirs(new)
+                if holding:
+                    _write_json(os.path.join(new, "project.json"),
+                                {"schema_version": _project.SCHEMA_VERSION + (1 if newer else 0), "project_rev": 7,
+                                 "channels": []})
+                listed, before = sorted(os.listdir(new)), _bytes_under(new)
+                out, err = io.StringIO(), io.StringIO()
+                try:
+                    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                        rc = _main([old, "--into", new])
+                except Exception as exc:  # noqa: BLE001 -- a traceback is a failure under test
+                    rc = f"raised {type(exc).__name__}: {exc}"
+                where = f"{label}, into a folder holding {list(holding) or 'nothing'}"
+                if rc != 1 or not err.getvalue().startswith("error: "):
+                    failures.append(f"{where}: rc {rc!r}, said {err.getvalue()[-200:]!r}")
+                if sorted(os.listdir(new)) != listed or _bytes_under(new) != before:
+                    failures.append(f"{where}: the folder holds {sorted(os.listdir(new))}, was {listed}")
+        assert not failures, "\n  ".join(["--into a folder that is there, refused:"] + failures)
+    finally:
+        shutil.rmtree(old, ignore_errors=True)
+        shutil.rmtree(top, ignore_errors=True)
+
+
 def _check_into_holds_from_its_read():
-    """`--into` a folder holding a `project.json` reads it under the new project's lock, and holds the lock to its last
-    write (#141, R23): another writer -- a thread, through the real lock -- that changes that `project.json` while the
-    import works waits until the import has written, and its change stays. The import read the file before its hold,
-    and saved what it had read over the change. The import still reads before it writes: a refusal makes nothing
-    (`_check_import_reads_before_it_writes`)."""
+    """`--into` a folder holding a `project.json` merges into it as it stands under the new project's lock, and holds the
+    lock to its last write (#141, R23, R27): a change another writer made to that `project.json` once the import's
+    refusals were read -- before the hold -- stays, and another writer -- a thread, through the real lock -- that
+    changes it while the import works under the hold waits until the import has written, and its change stays too. The
+    import read the file before its hold, and saved what it had read over the change. Its refusals are still read
+    first, holding nothing: a refusal makes nothing (`_check_into_an_existing_folder_refused_makes_nothing`)."""
     import shutil
     import tempfile
     import threading
     old = tempfile.mkdtemp(prefix="autosound_migrate_read_old_")
     top = tempfile.mkdtemp(prefix="autosound_migrate_read_new_")
-    real_fold, got, threads = fold_identity, [], []
+    real_fold, real_profile, got, threads = fold_identity, _old_profile, [], []
+
+    def before_the_hold(old_dir, report, io_):        # the refusals are read: another writer writes, the lock free
+        _project.Project(new).update(lambda d: d.update(before_hold=True))
+        return real_profile(old_dir, report, io_)
 
     def meanwhile():
         try:
@@ -965,20 +1045,22 @@ def _check_into_holds_from_its_read():
         new = os.path.join(top, "new")
         os.makedirs(new)
         _project.Project(new).save({"schema_version": _project.SCHEMA_VERSION, "channels": []})
-        globals()["fold_identity"] = folding
+        globals().update(fold_identity=folding, _old_profile=before_the_hold)
         try:
             rc, out, err = _project._run_cli(_main, [old, "--into", new])
         finally:
-            globals()["fold_identity"] = real_fold
+            globals().update(fold_identity=real_fold, _old_profile=real_profile)
         for t in threads:
             t.join(30)
         data = _project.Project(new).load()
         assert rc == 0, f"the import: rc {rc}, said {err.strip()[-200:]!r}"
         assert got == [None], f"the other writer: {got}"
+        assert data.get("before_hold") is True, \
+            "the import merged into a read made before its hold, over a change made since"
         assert data.get("meanwhile") is True, "the import wrote over another writer's change to project.json"
         assert data.get("imported_from") == os.path.abspath(old), f"the import did not land: {sorted(data)}"
     finally:
-        globals()["fold_identity"] = real_fold
+        globals().update(fold_identity=real_fold, _old_profile=real_profile)
         shutil.rmtree(old, ignore_errors=True)
         shutil.rmtree(top, ignore_errors=True)
 
@@ -1203,7 +1285,7 @@ def _selftest():
                   _check_import_refusals_in_one_line, _check_import_reads_before_it_writes,
                   _check_into_a_project_refused, _check_version_claimed_exclusively,
                   _check_bytes_under_leaves_the_lock_out, _check_into_waits_for_the_lock,
-                  _check_into_holds_from_its_read):
+                  _check_into_holds_from_its_read, _check_into_an_existing_folder_refused_makes_nothing):
         try:
             check()
         except AssertionError as exc:
@@ -1392,8 +1474,9 @@ def _selftest():
           f"validated, the settings sheet kept its Slot column, --dry-run wrote nothing, a re-run "
           f"into the project it made was refused with every byte kept; --into under another writer's lock "
           f"exits 75 with one busy line and nothing written, a bad AUTOSOUND_LOCK_TIMEOUT_S is exit 2 with the "
-          f"folder not made, and one hold covers the read of the new project.json and every write, another writer's "
-          f"change to it meanwhile kept (#141, R14, R23). root={root}")
+          f"folder not made; its refusals are read holding nothing, and make nothing in a folder that is there -- not "
+          f"the lock's .autosound/ either -- and then one hold covers a fresh read of the new project.json and every "
+          f"write, another writer's change to it kept (#141, R14, R23, R27). root={root}")
     return 0
 
 

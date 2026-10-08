@@ -168,6 +168,9 @@ One handshake per copy is enough (item 1); TCC asked for no number per output (Â
 none. A ledger version, once written, is not rewritten: `state/migrate.py --into` refuses a folder that holds a
 project's ledger (`state/` with a version, `slots.json`) or `dsp_profile.json`, naming each, before anything is written
 (`IntoRefused`, `is_into_refused` on its class; #134), and claims the `v_001.json` it imports by creating it (item 8).
+Every refusal of the import is made before it takes the new project's writer lock, so it makes nothing in the folder
+it names -- not the lock's `.autosound/` either (W-9, #141): that folder may be no project at all. Then, under the lock,
+it reads that folder's `project.json` again and merges into it as it stands.
 
 **A file a newer method wrote** (an int `schema_version` above 3) is refused, naming the file, both numbers and the
 way out: `<file> is schema v4; this method reads v3 -- update the method: /autosound-tuning:setup, the installer, or
