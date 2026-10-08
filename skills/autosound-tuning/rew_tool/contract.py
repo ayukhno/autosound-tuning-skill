@@ -408,6 +408,39 @@ def _repo_lines(project_dir):
         return []
 
 
+def _lock_line(project_dir):
+    """One status line when this project's writer lock cannot be taken in its folder (#141, R22) -- the OS refuses the
+    lock itself, as some network, cloud and VM shared folders do -- else None. There the method's writers write
+    WITHOUT the lock, each saying so in a `note:` line on stderr with exit 0, which a front end that drops stderr on
+    exit 0 never shows: `check`, which TCC runs at every launch, says it in its report.
+
+    Tried on the lock file as `write_lock` tries it, through its own call and its own reading of a refusal: taken and
+    let go at once, or refused. Another writer holding it is the lock working: no line. No lock file yet -- a project
+    no writer of this copy has written -- is not told either: `check` makes nothing, and the file comes with the first
+    write. Nor is a file that cannot be opened for writing: the writers say that one themselves (`Unwritable`)."""
+    lock = project._write_lock()
+    path = lock.lock_path(project_dir)
+    if not os.path.isfile(path):
+        return None
+    try:
+        fd = os.open(path, os.O_RDWR)       # no O_CREAT: nothing is made, and nothing in the file changes
+    except OSError:
+        return None
+    try:
+        try:
+            lock._os_lock(fd)
+        except OSError as exc:
+            if lock._held(exc):
+                return None
+            return (f"{os.path.abspath(project_dir)} cannot be locked ({exc.strerror or exc}): the method's writers write "
+                    "here without the project lock, each saying so in a note: line on stderr -- two writers at once "
+                    "can lose a change; run one at a time, or keep the project on a local disk")
+        lock._let_go(fd)
+        return None
+    finally:
+        os.close(fd)
+
+
 def _line_layout(project_dir):
     """`"preset"`, `"project"`, or None (no ledger, or one caught half-way: `check_ledgers` names it)."""
     root = os.path.join(project_dir, "state")
@@ -1018,6 +1051,9 @@ def check_project(project_dir, skip_rew=False):
             "line_layout": _line_layout(project_dir),
             # hub #199: history and backup, as one line each and never a gate item.
             "repo": _repo_lines(project_dir),
+            # #141, R22: a folder the OS will not lock, where every write lands without the lock -- one line or None,
+            # never a gate item.
+            "lock": _lock_line(project_dir),
             "unsealed": _unsealed(project_dir),
             # S-042: ids in another notation, with the fix the session offers (not a gate item).
             "id_fix": (project.fix_ids(project_dir) if project.id_mismatches(project_data or {})
@@ -1434,6 +1470,10 @@ def render_report(report, gate=None):
     for line in report.get("repo") or []:
         # hub #199: said at every start, so a project without history or backup is not a surprise at a dead disk.
         lines.append(f"**History and backup:** {line}. A remote is made only on the user's yes.")
+        lines.append("")
+    if report.get("lock"):
+        # #141, R22: the writers' own `note:` goes to stderr with exit 0, which a front end may never show.
+        lines.append(f"**Writer lock:** {report['lock']}.")
         lines.append("")
     if report.get("line_layout") == "preset":
         state_py = os.path.join(os.path.dirname(os.path.abspath(__file__)), "state", "state.py")
@@ -2197,6 +2237,61 @@ def _check_repair_encoding_waits_for_the_lock():
     finally:
         shutil.rmtree(top, ignore_errors=True)
     assert not failures, f"{len(failures)} run(s) under a held lock:\n  " + "\n  ".join(failures)
+
+
+def _check_check_names_a_folder_that_cannot_lock():
+    """`check` says, in one status line, when the project's writer lock cannot be taken in its folder (#141, R22): the
+    method's writers write there WITHOUT the lock, each saying so in a `note:` line on stderr with exit 0 -- which a
+    front end that drops stderr on exit 0 never shows. The report's `lock` is that line (JSON) and its text a
+    `**Writer lock:**` line; None, and no line, where the lock can be taken, where another writer holds it (the lock
+    working), and where there is no lock file yet to try -- `check` makes nothing, and that file comes with the first
+    write. Never part of `ok`. The OS's refusal is faked at the lock's own call."""
+    import errno
+    import shutil
+    import tempfile
+    lock = project._write_lock()
+    real = lock._os_lock
+    top = tempfile.mkdtemp(prefix="autosound_contract_lock_line_")
+    failures = []
+
+    def refuse(fd):
+        raise OSError(errno.ENOLCK, "No locks available")
+    try:
+        d = os.path.join(top, "car")
+        os.makedirs(d)
+        report = check_project(d, skip_rew=True)
+        if report.get("lock", "missing") is not None or os.path.exists(os.path.join(d, ".autosound")):
+            failures.append(f"no lock file yet: lock {report.get('lock', 'missing')!r}, made "
+                            f"{sorted(os.listdir(d))}")
+        with lock.hold(d):                               # a first write's hold: the lock file is there from now on
+            pass
+        report = check_project(d, skip_rew=True)
+        if report.get("lock", "missing") is not None or "**Writer lock:**" in render_report(report):
+            failures.append(f"a folder that locks: {report.get('lock', 'missing')!r}")
+        with project._held_elsewhere(d):
+            held = check_project(d, skip_rew=True).get("lock", "missing")
+        if held is not None:
+            failures.append(f"held by another writer: {held!r}")
+        lock._os_lock = refuse
+        try:
+            report = check_project(d, skip_rew=True)
+        finally:
+            lock._os_lock = real
+        line = report.get("lock")
+        want = (f"{os.path.abspath(d)} cannot be locked (No locks available): the method's writers write here without "
+                "the project lock, each saying so in a note: line on stderr -- two writers at once can lose a change; "
+                "run one at a time, or keep the project on a local disk")
+        if line != want:
+            failures.append(f"a folder that cannot lock: {line!r}")
+        shown = [ln for ln in render_report(report).splitlines() if ln.startswith("**Writer lock:**")]
+        if shown != [f"**Writer lock:** {want}."]:
+            failures.append(f"its line in the report: {shown}")
+        if json.loads(json.dumps(report)).get("lock") != want:
+            failures.append("not in the JSON")
+    finally:
+        lock._os_lock = real
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["check and a folder that cannot lock:"] + failures)
 
 
 def _check_a_bad_timeout_is_a_usage_error():
@@ -3019,7 +3114,7 @@ def _selftest():
                   _check_intake_line_over_an_unreadable_project_json, _check_bom_glossary_is_a_glossary,
                   _check_bom_project_json_one_verdict, _check_dangling_glossary_link_refused,
                   _check_repair_encoding_waits_for_the_lock, _check_a_missing_project_makes_nothing,
-                  _check_a_bad_timeout_is_a_usage_error):
+                  _check_a_bad_timeout_is_a_usage_error, _check_check_names_a_folder_that_cannot_lock):
         try:
             check()
         except AssertionError as exc:
@@ -3530,7 +3625,9 @@ def _selftest():
           f"it could not open, exit 1, rewriting nothing beside it and never calling the set UTF-8; --set-aside moves "
           f"the journal lines no code page reads, bytes kept, and the journal reads again (#134, R56); its rewrites "
           f"answer another writer's lock with 75 and a bad AUTOSOUND_LOCK_TIMEOUT_S with 2, and make nothing on a "
-          f"project folder that is not there (#141). root={root}")
+          f"project folder that is not there; check names a folder whose writer lock cannot be taken in one status "
+          f"line, and nothing where it can, where another writer holds it, or where no lock file is yet (#141). "
+          f"root={root}")
     return 0
 
 
