@@ -2179,7 +2179,8 @@ def _check_the_door_records_the_review():
             if calls(project) or why:
                 failures.append(f"without --record: {len(calls(project))} critic_called; {why or 'its line printed'}")
             else:
-                ran = subprocess.run([sys.executable] + argv[1:], capture_output=True, text=True, timeout=120)
+                ran = subprocess.run([sys.executable] + argv[1:], capture_output=True, text=True, encoding="utf-8",
+                                     errors="replace", timeout=120)
                 got = [(e.get("vendor"), e.get("model"), e.get("mode")) for e in calls(project, plain)]
                 if ran.returncode or got != [("gemini", "m", "api")]:
                     failures.append(f"the printed line, run: exit {ran.returncode}, recorded {got!r}, "
