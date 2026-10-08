@@ -20,7 +20,8 @@ and the writer says so on stderr, once per process for each folder: two writers 
 before this module. Only another writer's lock is "held": on Windows, `LockFileEx`'s ERROR_LOCK_VIOLATION alone -- a
 share that refuses the lock any other way (access denied, not supported) is a folder that cannot lock (R21). A folder
 where the lock cannot even be MADE -- one this user may not write -- is refused, `Unwritable` (exit 1), before
-anything is taken.
+anything is taken. `probe(project_dir)` tells, holding nothing and making nothing, which of these a project's folder is
+now -- free, held, one that cannot lock, or one with no lock file yet (R26): `contract.py check` reports it.
 
 TCC reads this file as TEXT, never imports it, for the line below (`core/project_lock.py` `locks_itself`): a copy
 that declares it locks itself. Today's TCC keeps its own serialisation as it is -- `process/.process-write.lock`, held
@@ -363,6 +364,35 @@ def held_here(project_dir):
     """Does this thread hold the project's writer lock now?"""
     entry = _entry(lock_path(project_dir), make=False)
     return entry is not None and entry.owner == threading.get_ident()
+
+
+def probe(project_dir):
+    """Can the project's writer lock be taken here? `(answer, why)` (#141, R26), what `contract.py check` reports:
+
+    * `("free", None)` -- the OS lock was taken, and let go at once;
+    * `("held", None)` -- another writer holds it: the lock working;
+    * `("cannot_lock", <the OS's reason>)` -- the OS refuses the lock itself: the writers write here WITHOUT it, each
+      saying so in a `note:` line;
+    * `("no_lock_file", None)` -- `<project>/.autosound/write.lock` is not there: no writer has made it yet, or the
+      project folder is not there. It is not tried, for it would have to be made.
+
+    The existing file is opened read-write, never created: nothing is made, nothing in it changes. The OS lock is tried
+    without waiting, as a hold tries it, and a refusal read as a hold reads it -- on Windows only ERROR_LOCK_VIOLATION
+    is held. No thread lock is taken, so this process's own hold reads as held too. Any other error -- the file there
+    and not to be opened -- is raised as it is."""
+    path = lock_path(project_dir)
+    if not os.path.isfile(path):
+        return "no_lock_file", None
+    fd = os.open(path, os.O_RDWR)
+    try:
+        try:
+            _os_lock(fd)
+        except OSError as exc:
+            return ("held", None) if _held(exc) else ("cannot_lock", exc.strerror or str(exc))
+        _let_go(fd)
+        return "free", None
+    finally:
+        os.close(fd)
 
 
 def busy_exit(exc, stream=None):
@@ -1001,6 +1031,76 @@ def _check_a_broken_check_shows_its_traceback():
     assert failures[1] == "failed: AssertionError: not so", f"the failed check said {failures[1]!r}"
 
 
+def _check_the_probe_answers():
+    """`probe(project_dir)` says whether the project's writer lock can be taken here (#141, R26) -- what `contract.py
+    check` asks, on every system TCC shows that check on, a Windows VM among them: `("no_lock_file", None)` where no
+    writer has made the lock file yet (a project folder that is not there too), and the probe makes nothing;
+    `("free", None)`, the lock taken and let go at once; `("held", None)` while another (spawned) process holds it;
+    `("cannot_lock", <the OS's reason>)` where the OS refuses the lock itself, faked at the call with the refusal this
+    system gives such a folder. It keeps nothing: after it the lock is free and the folder holds what it held."""
+    import multiprocessing
+    global _os_lock
+    real = _os_lock
+    top, signals = _scratch(), _scratch()
+    p, gone = os.path.join(top, "car"), os.path.join(top, "gone")
+    child = None
+    failures = []
+
+    def refuse(fd):
+        raise _refusal(errno.EACCES, 5) if _WINDOWS else _refusal(errno.ENOLCK)    # a share's refusal, never "held"
+    try:
+        os.makedirs(p)
+        for folder in (p, gone):
+            got = probe(folder)
+            if got != ("no_lock_file", None):
+                failures.append(f"no lock file yet ({os.path.basename(folder)}): {got!r}")
+        if os.listdir(top) != ["car"] or os.listdir(p):
+            failures.append(f"the probe made something: {sorted(os.listdir(top))}, {sorted(os.listdir(p))}")
+        _enter(p)                                          # a first write's hold: the lock file is there from now on
+        made = sorted(os.listdir(os.path.join(p, LOCK_DIR)))
+        got = probe(p)
+        if got != ("free", None):
+            failures.append(f"a free lock: {got!r}")
+        refused = _probe(p)
+        if refused is not None or sorted(os.listdir(os.path.join(p, LOCK_DIR))) != made:
+            failures.append(f"the probe kept something: the lock refused {refused!r}, the folder holds "
+                            f"{sorted(os.listdir(os.path.join(p, LOCK_DIR)))}")
+        child = multiprocessing.get_context("spawn").Process(target=_holder, args=(p, signals))
+        child.start()
+        deadline = time.monotonic() + 60
+        while not os.path.exists(os.path.join(signals, "held")):
+            assert time.monotonic() < deadline and child.is_alive(), f"the holder never held (exit {child.exitcode})"
+            time.sleep(0.002)
+        got = probe(p)
+        if got != ("held", None):
+            failures.append(f"held by another process: {got!r}")
+        with open(os.path.join(signals, "go"), "w", encoding="utf-8"):
+            pass
+        child.join(60)
+        _os_lock = refuse
+        try:
+            answer, why = probe(p)
+        finally:
+            _os_lock = real
+        said = os.strerror(errno.EACCES if _WINDOWS else errno.ENOLCK)
+        if (answer, why) != ("cannot_lock", said):
+            failures.append(f"a folder that cannot lock: {(answer, why)!r}, not ('cannot_lock', {said!r})")
+        if probe(p) != ("free", None):
+            failures.append(f"free again once the OS takes the lock: {probe(p)!r}")
+    finally:
+        _os_lock = real
+        with open(os.path.join(signals, "go"), "w", encoding="utf-8"):
+            pass
+        if child is not None:
+            child.join(60)
+            if child.is_alive():
+                child.terminate()
+                child.join(10)
+        _drop(top)
+        _drop(signals)
+    assert not failures, "\n  ".join(["the probe:"] + failures)
+
+
 def _run_checks(checks):
     """Each check run, every failure collected: (failures, {name: what it returned}). A check that fails says its
     message; one that BREAKS -- any error but an AssertionError -- says its traceback too, all that CI's Windows step
@@ -1025,7 +1125,8 @@ def _selftest():
         _check_busy_exit_says_one_line, _check_a_missing_project_is_not_made, _check_which_refusals_are_held,
         _check_a_share_refusing_the_lock_is_noted, _check_the_note_once_per_folder, _check_an_error_inside_lets_go,
         _check_one_deadline, _check_a_file_where_the_lock_folder_belongs, _check_refusals_are_no_oserror_or_valueerror,
-        _check_the_access_repair_fits_the_system, _check_a_broken_check_shows_its_traceback))
+        _check_the_access_repair_fits_the_system, _check_a_broken_check_shows_its_traceback,
+        _check_the_probe_answers))
     if failures:
         print("\n".join(failures))
         print(f"write_lock selftest FAILED -- {len(failures)} check(s)")
@@ -1056,7 +1157,8 @@ def _selftest():
           f"go; a file where the lock's folder belongs refused as Unwritable (EEXIST); "
           f"{'a project folder this user may not write refused as Unwritable, nothing taken or made; ' if unwritable else ''}"
           f"the access repair fits the system; the refusals are no OSError or ValueError; busy_exit says one line and "
-          f"returns 75; a check that breaks shows its traceback")
+          f"returns 75; a check that breaks shows its traceback; probe answers no_lock_file (making nothing), free, "
+          f"held by a spawned process and cannot_lock with the OS's reason, keeping nothing")
     return 0
 
 

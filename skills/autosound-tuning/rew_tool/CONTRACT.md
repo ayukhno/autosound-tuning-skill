@@ -119,8 +119,12 @@ says it was not read. A `glossary.json` with a UTF-8 BOM is a glossary. `encodin
 survey could not open; `encoding_cut` (`[{file, repair}]`) the files it found cut inside their last character, each
 with its restore -- no code page's, so never in `encoding_damaged`. `lock` (W-9, #141) is one line when the project's
 writer lock cannot be taken in its folder -- the OS refuses the lock itself, and the writers write there without it
-(item 8) -- else null; the text report says it as `**Writer lock:** <line>.` It is never part of `ok`, and it is null
-too where no writer has made the lock file yet: `check` makes nothing.
+(item 8) -- else null; the text report says it as `**Writer lock:** <line>.` It is never part of `ok`. It is
+`write_lock.probe`'s answer: the lock file tried as a hold tries it and let go at once, nothing made. So `check` says
+nothing until a writer has made the lock file there -- a new project on such a folder is named from the first `check`
+after its first write. A probe that fails -- the file there and not to be opened, any other error -- is said in that
+line, `<project>: whether the project's writer lock can be taken here could not be told (<type>: <why>)`, never a
+crash of `check`.
 
 ## 4. `deployment.py [<project>] [--json]` — not promised
 
