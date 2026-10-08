@@ -622,15 +622,36 @@ def ledger_layout(root):
     return "preset" if old else "project"
 
 
-def _read_slots(root):
-    path = os.path.join(root, SLOTS_FILE)
-    if not os.path.isfile(path):
-        return {"active": None, "slots": {}, "layout": LAYOUT_TAG}
+def _pointer_file(path):
+    """A ledger's pointer file -- `slots.json`, or an old layout's `registry.json` -- read, in the shape every reader
+    takes: an object whose `slots`, where it has them, is an object of objects, and whose `active` is a slot's name or
+    null. Anything else is a `SnapshotError` naming the file (#143's review): `[]`, or a slot written as a bare
+    string, was an `AttributeError` three frames down, out of every reader -- `head()`, `list_presets()`, the
+    reviewer's ledger block."""
     try:
         with open(path, encoding="utf-8") as fh:
             data = json.load(fh)
     except (OSError, ValueError) as exc:
         raise SnapshotError(f"{path}: cannot be read -- {exc}") from exc
+    if not isinstance(data, dict):
+        raise SnapshotError(f"{path}: not a JSON object but a {type(data).__name__} -- this method writes an object")
+    slots = data.get("slots", {})
+    if not isinstance(slots, dict):
+        raise SnapshotError(f"{path}: `slots` is {slots!r}, not an object of slots")
+    for name, entry in slots.items():
+        if not isinstance(entry, dict):
+            raise SnapshotError(f"{path}: the slot {name!r} is {entry!r}, not an object")
+    active = data.get("active")
+    if active is not None and not isinstance(active, str):
+        raise SnapshotError(f"{path}: `active` is {active!r}, not a slot's name")
+    return data
+
+
+def _read_slots(root):
+    path = os.path.join(root, SLOTS_FILE)
+    if not os.path.isfile(path):
+        return {"active": None, "slots": {}, "layout": LAYOUT_TAG}
+    data = _pointer_file(path)
     data.setdefault("slots", {})
     data.setdefault("active", None)
     return data
@@ -1621,8 +1642,7 @@ class Registry:
             return _read_slots(self.root)
         p = self._path()
         if os.path.exists(p):
-            with open(p, encoding="utf-8") as f:
-                return json.load(f)
+            return _pointer_file(p)       # the old layout's `registry.json`: refused as `slots.json` is (#143's review)
         return {"active": None, "slots": {}}
 
     def _write(self, reg):
@@ -3608,6 +3628,65 @@ def _check_ledger_writers_read_with_the_lock_held():
     assert not failures, "the ledger read with the project's lock free:\n  " + "\n  ".join(failures)
 
 
+def _check_a_pointer_file_of_another_shape_refused():
+    """A `slots.json`, or an old layout's `registry.json`, that is JSON of another shape -- `[]`, a slot written as a
+    bare string, `slots` that is a list, an `active` that names no slot -- is a `SnapshotError` naming the file (#143's
+    review): it was an `AttributeError` three frames down, out of every reader -- `head()`, `list_presets()`, the
+    reviewer's ledger block, which died before any reviewer was asked. An old layout's `registry.json` that is no JSON
+    at all is one too (it was a bare `JSONDecodeError`). The command line says it in one `error:` line, exit 1."""
+    import contextlib
+    import io
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_state_pointer_shape_")
+    failures = []
+
+    def refused(label, fn, path):
+        try:
+            fn()
+        except Exception as exc:  # noqa: BLE001 -- the kind is what is under test
+            if not getattr(exc, "is_snapshot_error", False) or not str(exc).startswith(path):
+                failures.append(f"{label}: {type(exc).__name__}: {exc}")
+            return
+        failures.append(f"{label}: went through")
+    try:
+        for n, (label, text) in enumerate((
+                ("slots.json is []", "[]"),
+                ("a slot that is a string", json.dumps({"active": None, "slots": {"SQ": "v_001"}, "layout": LAYOUT_TAG})),
+                ("slots that is a list", json.dumps({"active": None, "slots": ["SQ"], "layout": LAYOUT_TAG})),
+                ("an active that names no slot", json.dumps({"active": ["SQ"], "slots": {"SQ": {"version": "v_001"}},
+                                                             "layout": LAYOUT_TAG})))):
+            root = os.path.join(top, f"line-{n}", "state")
+            PresetHistory(root, "SQ").snapshot(_sample_state(), note="banked")
+            path = os.path.join(root, SLOTS_FILE)
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write(text)
+            refused(f"{label}: list_presets", lambda: Registry(root).list_presets(), path)
+            refused(f"{label}: head", lambda: PresetHistory(root, "SQ").head(), path)
+            refused(f"{label}: get_active", lambda: Registry(root).get_active(), path)
+        for n, (label, text) in enumerate((("registry.json is []", "[]"), ("registry.json cut", "{ cut"))):
+            root = os.path.join(top, f"old-{n}", "state")
+            os.makedirs(os.path.join(root, "SQ"))
+            with open(os.path.join(root, "SQ", "v_001.json"), "w", encoding="utf-8") as fh:
+                json.dump(dict(_sample_state(), preset="SQ", version="v_001", schema_version=SCHEMA_VERSION), fh)
+            path = os.path.join(root, "registry.json")
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write(text)
+            refused(f"{label}: get_active", lambda: Registry(root).get_active(), path)
+            out, err = io.StringIO(), io.StringIO()
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                try:
+                    code = _main(["--root", root, "registry", "render"])
+                except Exception as exc:  # noqa: BLE001 -- a traceback where a line belongs is the finding
+                    code = f"raised {type(exc).__name__}: {exc}"
+            said = err.getvalue().strip().splitlines()
+            if code != 1 or len(said) != 1 or not said[0].startswith(f"error: {path}"):
+                failures.append(f"{label}: registry render exit {code}, said {said}")
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "a ledger pointer file of another shape:\n  " + "\n  ".join(failures)
+
+
 def _selftest():
     failures = []
     for check in (_check_variant_delta_refused, _check_eq_refusals, _check_canonical_code_uses_the_loaded_naming,
@@ -3621,7 +3700,7 @@ def _selftest():
                   _check_survey_names_a_cut_file, _check_writers_go_through_the_move,
                   _check_a_held_lock_answers_75, _check_a_bad_timeout_is_a_usage_error,
                   _check_no_load_and_save_outside_update, _check_ledger_writers_read_with_the_lock_held,
-                  _check_the_repairs_name_their_project):
+                  _check_the_repairs_name_their_project, _check_a_pointer_file_of_another_shape_refused):
         try:
             check()
         except AssertionError as exc:

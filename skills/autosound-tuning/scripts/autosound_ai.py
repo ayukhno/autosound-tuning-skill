@@ -2049,15 +2049,17 @@ def _check_the_ledger_head_rides_in_the_prompt():
                 failures.append(f"a project with no ledger: {block!r}")
             if block_of(prompt_of(scene, "ask", banked)) is not None:
                 failures.append("ask carries a LEDGER HEAD")
-        # A ledger that cannot be read: said in the block, with what cannot be read.
+        # A ledger that cannot be read: said in the block, with what cannot be read -- a file cut off, and JSON of
+        # another shape (#143's review: `[]` and a slot written as a string were an AttributeError out of the door).
         broken = os.path.join(top, "broken")
         os.makedirs(os.path.join(broken, "state"))
-        with open(os.path.join(broken, "state", "slots.json"), "w", encoding="utf-8") as fh:
-            fh.write("{ cut off")
-        got = said(lambda: ledger_head_block(broken))
-        if not isinstance(got, str) or got.startswith("raised") or "slots.json" not in got \
-                or "cannot be read" not in got:
-            failures.append(f"a ledger that cannot be read: {got!r}")
+        for text in ("{ cut off", "[]", json.dumps({"active": None, "slots": {"SQ": "v_001"}})):
+            with open(os.path.join(broken, "state", "slots.json"), "w", encoding="utf-8") as fh:
+                fh.write(text)
+            got = said(lambda: ledger_head_block(broken))
+            if not isinstance(got, str) or got.startswith("raised") or "slots.json" not in got \
+                    or "cannot be read" not in got:
+                failures.append(f"a ledger that cannot be read ({text}): {got!r}")
         # Rows past 60 lines: the first 60, and a last line saying how many were left out.
         wide = os.path.join(top, "wide")
         state = state_mod._sample_state()
