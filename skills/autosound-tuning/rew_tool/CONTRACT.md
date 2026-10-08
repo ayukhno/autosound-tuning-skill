@@ -145,9 +145,11 @@ One handshake per copy is enough (item 1); TCC asked for no number per output (�
 
 ## 7. Files, their versions, and the read rule — guaranteed (W-8, #136)
 
-`project.json`, `process/process-state.json`, the ledger's `v_NNN.json` and `dsp_profile.json` carry
-`schema_version` 3 (`FORMAT_VERSION`); `glossary.json` carries 1; `process/journal.jsonl`, `state/slots.json` and
-`state/seals.json` carry none. A ledger version, once written, is not rewritten.
+`project.json`, `process/process-state.json`, the ledger's `v_NNN.json` and `dsp_profile.json` carry `schema_version` 3
+(`FORMAT_VERSION`); `glossary.json` carries 1; `process/journal.jsonl`, `state/slots.json` and `state/seals.json` carry
+none. A ledger version, once written, is not rewritten: `state/migrate.py --into` refuses a folder that holds a
+project's ledger (`state/` with a version, `slots.json`) or `dsp_profile.json`, naming each, before anything is written
+(`IntoRefused`, `is_into_refused` on its class; #134), and claims the `v_001.json` it imports by creating it (item 8).
 
 **A file a newer method wrote** (an int `schema_version` above 3) is refused, naming the file, both numbers and the
 way out: `<file> is schema v4; this method reads v3 -- update the method: /autosound-tuning:setup, the installer, or
@@ -232,11 +234,10 @@ ignores the mode). The files, each with the bytes its old writer wrote:
 
 - `project.json`, `process/process-state.json`, `state/slots.json`, `state/seals.json`;
 - `dsp_profile.json` and `dsp_profile.draft.json`;
-- the old (per-preset) layout's `registry.json` and `HEAD`;
+- the old (per-preset) layout's `registry.json` and `HEAD` (a bank's, and the one `state/migrate.py --into` writes);
 - a ledger version `state.py repair-version` or `repair-encoding` rewrites, and the `<file>.<codec>.orig` backup
   `repair-encoding` keeps (any project text file it repairs, the same way); the journal `repair-encoding
   --set-aside` rewrites, and the `<journal>.set-aside` it writes first (#134, R56);
-- the ledger version `state/migrate.py --into` imports;
 - the Resonalyze impulse-response files (`resonalyze_ir.write_v7`);
 - the reviewer's machine file and key store, and a shell profile `autosound_ai.py key move-shell` rewrites, with its
   `.autosound-bak`.
@@ -248,24 +249,25 @@ holds it ...; it is as it was`). A `*.tmp` beside a file is a crash's leftover, 
 two it names (neither is a temp name), and no `os.replace`, `os.rename` or `os.renames` but three named moves of whole
 files.
 
-Three of these files, by four writers, were written in place before W-8 and are replaced now: `dsp_profile.json`
-(`save_profile`, `set_setting`) and the old layout's `registry.json` and `HEAD`. So a symbolic or hard link at such a
-name becomes a regular file, the file's mode becomes the umask's default, a watcher sees the file replaced rather than
-changed, and on Windows a reader holding the file open makes the write fail after the retries, where the in-place
-write went through.
+Three of these files, by five writers, were written in place before W-8 and are replaced now: `dsp_profile.json`
+(`save_profile`, `set_setting`) and the old layout's `registry.json` and `HEAD` (a bank's, and `state/migrate.py
+--into`'s since #134). So a symbolic or hard link at such a name becomes a regular file, the file's mode becomes the
+umask's default, a watcher sees the file replaced rather than changed, and on Windows a reader holding the file open
+makes the write fail after the retries, where the in-place write went through.
 
 Two more writes go through `project_io.py`; neither replaces a file:
 
-- A new ledger version (`state.py`, `PresetHistory.snapshot`) is created, never written over (`create_exclusive`),
-  with the bytes its old writer wrote. Its text goes into a temp of its own as above, which is then linked to the
-  version's name; the link fails when the name is there. The temp is removed afterwards, best effort: one a remove
-  could not take (a Windows scanner holding it) stays as a `*.tmp` beside the version, a second link to it (a copy
-  where hard links are refused) that no lister reads. Two writers that pick one number cannot overwrite each other:
-  the second is told and takes the next number, and after 100 numbers taken under it gives up with `SnapshotError`,
-  naming the numbers it tried. A watcher of the versions folder sees the temp come and go and the version appear
-  whole. On a filesystem that refuses hard links (FAT, some network shares) the name is created exclusively and
-  written in place, so there a reader can meet a version mid-write for an instant. On POSIX the folder is fsynced
-  after the link (#134).
+- A new ledger version (`state.py`, `PresetHistory.snapshot`, and the `v_001.json` `state/migrate.py --into` imports,
+  #134) is created, never written over (`create_exclusive`), with the bytes its old writer wrote. Its text goes into a
+  temp of its own as above, which is then linked to the version's name; the link fails when the name is there. The temp
+  is removed afterwards, best effort: one a remove could not take (a Windows scanner holding it) stays as a `*.tmp`
+  beside the version, a second link to it (a copy where hard links are refused) that no lister reads. Two writers that
+  pick one number cannot overwrite each other: the second is told and takes the next number, and after 100 numbers taken
+  under it gives up with `SnapshotError`, naming the numbers it tried; the import takes no other number, and a
+  `v_001.json` there by then is its refusal (item 7), naming what it had written. A watcher of the versions folder sees
+  the temp come and go and the version appear whole. On a filesystem that refuses hard links (FAT, some network shares)
+  the name is created exclusively and written in place, so there a reader can meet a version mid-write for an instant.
+  On POSIX the folder is fsynced after the link (#134).
 - A line appended to `process/journal.jsonl` (`append_line`) has the old append's bytes, with one line ending before
   it when the file's last write was cut before its newline: the torn line stays one line a reader skips, and the
   event after it is read. That holds for a write cut inside a multi-byte character too: the method's readers decode
@@ -284,13 +286,13 @@ Two more writes go through `project_io.py`; neither replaces a file:
   an event goes with; an append refused after that write is said as what landed -- the state holds the change, the
   journal has no line for it -- with the line to append, exit 1.
 
-Every other write is still a plain one, in place. Among them: `state/apply.py`'s proposal deltas and sheets; the
-capture plans in `docs/plans/`; the review files in `process/reviews/` (each created under a name of its own since
-#135, `-2`, `-3`, ... when its second already holds one, so never over another file, but written in place); what
-`state.py migrate-line` rebuilds, and the `HEAD` that `migrate.py --into` writes; a fresh project's `CLAUDE.md` and
-`.gitignore`; and what the command lines export (`eq_export`, `sums_export`, the Resonalyze conversion's
-`manifest.json`, ...). `scripts/atomic-write-check.py` does not see these: it checks temp names and moves, not every
-write. The lock comes with J2b in W-9: which file, how long a writer waits, and the busy exit 75.
+Every other write is still a plain one, in place. Among them: `state/apply.py`'s proposal deltas and sheets; the capture
+plans in `docs/plans/`; the review files in `process/reviews/` (each created under a name of its own since #135, `-2`,
+`-3`, ... when its second already holds one, so never over another file, but written in place); what `state.py
+migrate-line` rebuilds; a fresh project's `CLAUDE.md` and `.gitignore`; and what the command lines export (`eq_export`,
+`sums_export`, the Resonalyze conversion's `manifest.json`, ...). `scripts/atomic-write-check.py` does not see these: it
+checks temp names and moves, not every write. The lock comes with J2b in W-9: which file, how long a writer waits, and
+the busy exit 75.
 
 ## 9. The modules TCC imports — guaranteed (names); `sys.path` partly planned (W-10, J1b)
 

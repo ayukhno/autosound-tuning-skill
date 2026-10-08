@@ -3346,7 +3346,8 @@ def _selftest():
                   _check_set_aside_what_no_page_reads, _check_banked_never_sealed,
                   _check_unreadable_seals_and_project_refused,
                   _check_newer_version_refused, _check_snapshot_error_from_another_copy,
-                  _check_variant_delta_blames_no_good_delta, _check_sheet_says_an_unreadable_profile,
+                  _check_variant_delta_blames_no_good_delta, _check_variant_new_refuses_its_base_in_one_line,
+                  _check_sheet_says_an_unreadable_profile, _check_sheet_says_a_rate_it_cannot_use,
                   _check_survey_names_a_cut_file):
         try:
             check()

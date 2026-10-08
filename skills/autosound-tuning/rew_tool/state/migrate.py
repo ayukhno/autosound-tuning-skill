@@ -23,17 +23,25 @@ What it does, per project:
 4. **Every machine file's `schema_version` -> 3**, the one number that now answers "which format
    is this project in" (`contract.py`'s `FORMAT_VERSION`).
 
-Idempotent: re-running moves no further fields, and refuses to write any file that does not
-validate afterwards — a migration that produces an invalid project is worse than one that stops.
+Into a new project, never over one: `--into` a folder that holds a project's ledger (`state/`
+with a version, `slots.json`) or `dsp_profile.json` is refused before anything is written, naming
+each -- a ledger version once written is never written over, so a re-run into the project an
+import made is refused too (#134). A `project.json` there alone is merged into, no value in it
+overwritten. And it refuses to write any file that does not validate afterwards — a migration
+that produces an invalid project is worse than one that stops.
 
 Usage:
-    python3 migrate.py <project-dir>              migrate one project in place
-    python3 migrate.py <project-dir> --dry-run    report what would change, write nothing
+    python3 migrate.py <old-project-dir> --into <new-project-dir>             import its current state
+    python3 migrate.py <old-project-dir> --into <new-project-dir> --dry-run   say what would move, write nothing
     python3 migrate.py selftest
+
+In place (`migrate.py <project-dir>` alone) is not offered: `_main` refuses it, exit 2, and names
+the import.
 """
 from __future__ import annotations
 
 import copy
+import json
 import os
 import sys
 
@@ -269,6 +277,56 @@ def _write_json(path, data):
     _project_io().atomic_write_json(path, data, indent=2, sort_keys=True, ensure_ascii=False)
 
 
+class IntoRefused(Exception):
+    """`--into` names a folder the import cannot make a new project in: it holds a project's ledger or DSP profile
+    already (#134, batch 4's re-review, the probe of `--into`). Neither an `OSError` nor a `ValueError`: the command
+    line matches `is_into_refused` on its class."""
+    is_into_refused = True
+
+
+def project_there(new_dir):
+    """What `new_dir` holds of a project that the import would write over, each named: `["state/SQ/ (2 versions)",
+    "state/slots.json", "dsp_profile.json", ...]`, empty when it holds none (#134, batch 4's re-review, the probe of
+    `--into`).
+
+    The ledger is any line of it: a folder under `state/` holding a version (the per-preset layout, the one the import
+    writes), the per-project `state/versions/` and `state/slots.json`; a version's name is read in any letter case. A
+    `dsp_profile.json` -- a file, a folder or a link -- is the project's profile, and a file standing where `state/`
+    belongs is no folder to write a ledger into. A `project.json` alone is not here: the import merges into it and
+    never overwrites a value (`fold_identity`)."""
+    found = []
+    root = os.path.join(new_dir, "state")
+    if os.path.isdir(root):
+        for name in sorted(os.listdir(root)):
+            path = os.path.join(root, name)
+            if name.startswith("."):
+                continue                        # a front end's scratch folder is no line, as `snapshot_paths` reads
+            if name == _state.SLOTS_FILE:
+                found.append(f"state/{name}")
+            elif os.path.isdir(path):
+                n = sum(1 for fn in os.listdir(path)
+                        if fn.lower().endswith(".json") and _state._VER_RE.match(fn[:-5].lower()))
+                if n or name == _state.VERSIONS_DIR:
+                    found.append(f"state/{name}/ ({n} version{'' if n == 1 else 's'})")
+    elif os.path.lexists(root):
+        found.append("state (a file, where the ledger's folder belongs)")
+    if os.path.lexists(os.path.join(new_dir, "dsp_profile.json")):
+        found.append("dsp_profile.json")
+    return found
+
+
+def _into_refused(new_dir, held, landed=None):
+    """The refusal of `--into` over a project that is there, naming what it holds and the way on; `landed` says what this
+    run wrote before a version's name turned out taken (the exclusive claim's backstop), where nothing else was."""
+    apply_py = os.path.join(_HERE, "apply.py")
+    wrote = f"{landed}, and no ledger version or profile was written over" if landed else "nothing was written"
+    return IntoRefused(
+        f"--into {new_dir} holds a project already: {', '.join(held)} -- the import makes a NEW project, and a ledger "
+        f"version or a profile once written is never written over; {wrote}. Import into a new, empty folder (--into "
+        f"<new folder>), or, to bring the 2.x values into this 3.0 project, bank them there with the method's own "
+        f"bank: python3 {apply_py} {new_dir} propose <delta.json>")
+
+
 def import_current_state(old_dir, new_dir, dry_run=False):
     """Carry a 2.x project's CURRENT state into a fresh 3.0 project. History stays behind.
 
@@ -288,7 +346,16 @@ def import_current_state(old_dir, new_dir, dry_run=False):
       properly instead of being waived.
     - **The old project is untouched.** It still opens in 2.x, which is where its history is
       readable. Nothing here can lose it, because nothing here writes to it.
+    - **The new project is new.** A folder that holds a project's ledger or DSP profile already is refused before
+      anything is read or written (`IntoRefused`, naming each; #134, batch 4's re-review): the import wrote its
+      `v_001.json` and `HEAD` over a ledger line the project had banked on, and its profile over the project's, and
+      said "imported". A re-run into the project an import made is refused the same way. A `project.json` alone is
+      merged into, never a value overwritten. The version is claimed by creating its file (`create_exclusive`); a
+      name taken by then is the same refusal, saying what this run had written.
     """
+    held = project_there(new_dir)
+    if held:
+        raise _into_refused(new_dir, held)
     report = {"project_dir": new_dir, "source": old_dir, "snapshots": [], "identity_fields": 0,
               "channel_summary": {}, "files": [], "warnings": [], "imported_from": old_dir}
     paths = snapshot_paths(old_dir)
@@ -392,13 +459,23 @@ def import_current_state(old_dir, new_dir, dry_run=False):
 
     if not dry_run:
         proj.save(data)
+        written = ["project.json"]
         for preset, (_path, snap) in sorted(newest.items()):
             preset_dir = os.path.join(new_dir, "state", preset)
             os.makedirs(preset_dir, exist_ok=True)
             snap["project_rev"] = proj.load()["project_rev"]
-            _write_json(os.path.join(preset_dir, "v_001.json"), snap)
-            with open(os.path.join(preset_dir, "HEAD"), "w", encoding="utf-8") as handle:
-                handle.write("v_001\n")
+            # Claimed by creating its file, never by writing over one, as a bank claims its number (CONTRACT.md item 8):
+            # `project_there` found no ledger, and a name taken since is the same refusal, saying what this run wrote.
+            # The text is the one `_write_json` wrote; `HEAD` is replaced whole, as a bank replaces it.
+            try:
+                io_.create_exclusive(os.path.join(preset_dir, "v_001.json"),
+                                     json.dumps(snap, indent=2, sort_keys=True, ensure_ascii=False))
+            except FileExistsError:
+                landed = (written[0] if len(written) == 1 else ", ".join(written[:-1]) + " and " + written[-1])
+                raise _into_refused(new_dir, [f"state/{preset}/v_001.json"],
+                                    landed=f"{landed} {'is' if len(written) == 1 else 'are'} written") from None
+            io_.atomic_write_text(os.path.join(preset_dir, "HEAD"), "v_001\n")
+            written += [f"state/{preset}/v_001.json", f"state/{preset}/HEAD"]
         if profile is not None:
             _dsp_profile.save_profile(os.path.join(new_dir, "dsp_profile.json"), profile)
     report["project_rev"] = proj.load()["project_rev"] if not dry_run else 1
@@ -477,11 +554,13 @@ def _main(argv=None):
         # that cannot be read, a ledger version that cannot be read or does not pass this method's check, an EQ band in
         # one that names no frequency, an old profile that cannot be read or holds a `project.json` -- is said in one
         # line, exit 1 (#134, H 23, T m10; batch 4's re-review M2). It ended in a traceback: nothing here caught it.
-        # Those three kinds alone (batch 4's re-review N2): any other `ValueError` -- a `float()` on a malformed field,
-        # say -- is a bug, and raises with its traceback, where it was printed `error: could not convert ...` with no
-        # file named. Every refusal comes before the first write (Out of Scope 4), so nothing was written.
+        # Those kinds alone (batch 4's re-review N2), and `--into` a folder that holds a project's ledger or profile
+        # (`IntoRefused`, the re-review's probe of `--into`): any other `ValueError` -- a `float()` on a malformed
+        # field, say -- is a bug, and raises with its traceback, where it was printed `error: could not convert ...`
+        # with no file named. Every refusal comes before the first write (Out of Scope 4), so nothing was written --
+        # but a version's name taken after the look, which says what this run had written.
         if not (isinstance(exc, _project.ProjectError) or getattr(type(exc), "is_unreadable", False)
-                or getattr(type(exc), "is_snapshot_error", False)):
+                or getattr(type(exc), "is_snapshot_error", False) or getattr(type(exc), "is_into_refused", False)):
             raise
         print(f"error: {exc}", file=sys.stderr)
         return 1
@@ -702,12 +781,219 @@ def _check_import_reads_before_it_writes():
         shutil.rmtree(top, ignore_errors=True)
 
 
+def _two_x(old, preset="SQ", gain=-7.8):
+    """A 2.x project at `old`: one version of `preset` (EQ as a string, `helix_ch`) and a 2.x profile (`TwoX`, the
+    legacy rate key) -- what the re-review's probe of `--into` imports."""
+    os.makedirs(os.path.join(old, "state", preset))
+    _write_json(os.path.join(old, "state", preset, "v_001.json"), {
+        "preset": preset, "version": "v_001", "sample_rate": 96000,
+        "channels": {"w-L": {"helix_ch": "C", "hp": {"f": 70, "type": "BW", "slope": 12},
+                             "lp": {"f": 270, "type": "BW", "slope": 12}, "gain_db": gain, "ta_ms": 5.38,
+                             "polarity": "NORM", "eq": ["PK 1000 -3 Q2"]}}})
+    _write_json(os.path.join(old, "dsp_profile.json"), {"dsp_profile": {
+        "name": "TwoX", "vendor": "TwoX", "sample_rate_hz": 48000, "delay": {"step_ms": 0.01},
+        "polarity": {"scope": []}, "groups": [{"id": "physical_outputs", "label": "Outputs", "max_count": 2,
+                                               "fields": ["hp", "lp", "gain_db", "ta_ms", "polarity"],
+                                               "crossover_filters": {"types": {"BW": {"orders_db_per_oct": [12]}}}}]}})
+
+
+def _bytes_under(top):
+    """`{relative path: bytes}` of every file under `top` -- nothing written is every byte of it the same."""
+    out = {}
+    for folder, _dirs, names in os.walk(top):
+        for name in names:
+            path = os.path.join(folder, name)
+            with open(path, "rb") as fh:
+                out[os.path.relpath(path, top).replace(os.sep, "/")] = fh.read()
+    return out
+
+
+def _check_into_a_project_refused():
+    """`migrate --into` a folder that holds a project's ledger or DSP profile is refused before anything is written,
+    in one line naming each and the way on, exit 1, with `--dry-run` too; every byte of the folder stays as it was
+    (#134, batch 4's re-review, the probe of `--into`, cases A-D). It wrote its `state/<preset>/v_001.json` and `HEAD`
+    there -- over the version an earlier import banked (sealed or not), with the slot moved off the version banked
+    after it -- and the 2.x profile over the project's, beside a per-project line nothing can read with them, and said
+    "imported", exit 0. A folder with a `project.json` alone, or empty, still imports, as before."""
+    import contextlib
+    import io
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_migrate_into_")
+
+    def three(gain):
+        return {"preset": "SQ", "sample_rate": 96000, "channels": {"w-L": {
+            "hp": {"f": 80, "type": "LR", "slope": 24}, "lp": {"f": 300, "type": "LR", "slope": 24}, "gain_db": gain,
+            "ta_ms": 1.25, "polarity": "NORM", "eq": []}}}
+
+    def run(old, new, extra=()):
+        out, err = io.StringIO(), io.StringIO()
+        try:
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                rc = _main([old, "--into", new] + list(extra))
+        except Exception as exc:  # noqa: BLE001 -- a traceback is a failure under test
+            rc = f"raised {type(exc).__name__}: {exc}"
+        return rc, out.getvalue(), err.getvalue()
+
+    def native(tgt, banks, profile):
+        pj = _project.Project(tgt)
+        pj.save(pj.load())
+        h = _state.PresetHistory(os.path.join(tgt, "state"), "SQ", project_dir=tgt)
+        for gain in banks:
+            h.snapshot(three(gain), note="a 3.0 bank")
+        if profile:
+            _dsp_profile.save_profile(os.path.join(tgt, "dsp_profile.json"), {"dsp_profile": {
+                "name": "Target3", "vendor": "Target3", "dsp_processing_rate_hz": 96000, "groups": [
+                    {"id": "physical_outputs", "label": "Outputs", "fields": ["hp", "lp", "gain_db"]}]}})
+
+    def imported(tgt, old, seal=False):
+        assert run(old, tgt)[0] == 0, "the first import into a new folder"
+        if seal:
+            _state.seal_all(os.path.join(tgt, "state"))
+        else:
+            _state.PresetHistory(os.path.join(tgt, "state"), "SQ", project_dir=tgt).snapshot(three(-4.5), note="3.0")
+
+    def other_case(tgt):
+        pj = _project.Project(tgt)
+        pj.save(pj.load())
+        os.makedirs(os.path.join(tgt, "state", "SQ"))
+        with open(os.path.join(tgt, "state", "SQ", "V_001.JSON"), "w", encoding="utf-8") as fh:
+            json.dump(three(-2.0), fh)
+
+    try:
+        failures = []
+        old = os.path.join(top, "old")
+        _two_x(old)
+        old_versions = os.path.join(top, "old-versions")
+        _two_x(old_versions, preset="versions")
+        for label, source, make, named in (
+                ("A: a per-project line and a profile", old, lambda t: native(t, (-3.0, -4.5), True),
+                 ["state/slots.json", "state/versions/ (2 versions)", "dsp_profile.json"]),
+                ("B: the line an import made, a version banked on it", old, lambda t: imported(t, old),
+                 ["state/SQ/ (2 versions)", "dsp_profile.json"]),
+                ("C: the line an import made, sealed", old, lambda t: imported(t, old, seal=True),
+                 ["state/SQ/ (1 version)", "dsp_profile.json"]),
+                ("D: a per-project line, the 2.x preset named versions", old_versions,
+                 lambda t: native(t, (-3.0,), False), ["state/slots.json", "state/versions/ (1 version)"]),
+                ("a profile alone", old, lambda t: native(t, (), True), ["dsp_profile.json"]),
+                ("a version named in another letter case", old, other_case, ["state/SQ/ (1 version)"])):
+            tgt = os.path.join(top, label.split(":")[0].replace(" ", "-"))
+            make(tgt)
+            before = _bytes_under(tgt)
+            for extra in (["--dry-run"], []):
+                rc, out, err = run(source, tgt, extra)
+                line = err.strip()
+                want = f"error: --into {tgt} holds a project already: {', '.join(named)} -- "
+                if (rc, out) != (1, "") or "\n" in line or not line.startswith(want) \
+                        or "nothing was written" not in line or "new, empty folder" not in line \
+                        or f"{os.path.join(_HERE, 'apply.py')} {tgt} propose" not in line:
+                    failures.append(f"{label} {extra}: rc {rc!r}, stdout {len(out)} chars, said {line[-500:]!r}")
+                after = _bytes_under(tgt)
+                if after != before:
+                    failures.append(f"{label} {extra}: changed "
+                                    f"{sorted(k for k in set(after) | set(before) if after.get(k) != before.get(k))}")
+        for label, make in (("a project.json alone", lambda t: _project.Project(t).save(_project.Project(t).load())),
+                            ("an empty folder", os.makedirs)):
+            tgt = os.path.join(top, label.replace(" ", "-").replace(".", "-"))
+            make(tgt)
+            rc, out, err = run(old, tgt)
+            head = os.path.join(tgt, "state", "SQ", "HEAD")
+            if rc != 0 or "imported: 1" not in out or sorted(_bytes_under(tgt)) != [
+                    "dsp_profile.json", "project.json", "state/SQ/HEAD", "state/SQ/v_001.json"] \
+                    or open(head, encoding="utf-8").read() != "v_001\n":
+                failures.append(f"{label}: rc {rc!r}, said {(out + err)[-300:]!r}, files {sorted(_bytes_under(tgt))}")
+        assert not failures, "\n  ".join(["--into a folder that holds a project:"] + failures)
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_version_claimed_exclusively():
+    """The import claims each `v_001.json` by creating it (`project_io.create_exclusive`), as a bank claims its number,
+    and replaces `HEAD` whole (#134, batch 4's re-review, the probe of `--into`): both were written over whatever stood
+    at that name, the version through an atomic replace that never asked, `HEAD` in place. A name taken after
+    `project_there` looked -- a writer in between -- is the same refusal, one line, exit 1, naming the file and what
+    this run had written; the version there keeps every byte, and nothing after it is written. A `HEAD` whose write
+    fails leaves no `HEAD` and no temp beside it. The version's bytes are the ones `_write_json` wrote."""
+    import contextlib
+    import io
+    import shutil
+    import tempfile
+    global project_there
+    real_look, io_ = project_there, _project_io()
+    real_replace = io_._replace
+    top = tempfile.mkdtemp(prefix="autosound_migrate_claim_")
+    try:
+        old = os.path.join(top, "old")
+        _two_x(old)
+        failures = []
+        # A writer between the look and the claim: the look is made to see nothing, and the name is taken.
+        tgt = os.path.join(top, "raced")
+        os.makedirs(os.path.join(tgt, "state", "SQ"))
+        version = os.path.join(tgt, "state", "SQ", "v_001.json")
+        with open(version, "wb") as fh:
+            fh.write(b'{"banked": "by another writer"}')
+        project_there = lambda new_dir: []  # noqa: E731 -- the look that missed it
+        out, err = io.StringIO(), io.StringIO()
+        try:
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                rc = _main([old, "--into", tgt])
+        except Exception as exc:  # noqa: BLE001 -- a traceback is a failure under test
+            rc = f"raised {type(exc).__name__}: {exc}"
+        finally:
+            project_there = real_look
+        line = err.getvalue().strip()
+        want = (f"error: --into {tgt} holds a project already: state/SQ/v_001.json -- the import makes a NEW project, "
+                f"and a ledger version or a profile once written is never written over; project.json is written, and "
+                f"no ledger version or profile was written over. Import into a new, empty folder")
+        if rc != 1 or out.getvalue() or "\n" in line or not line.startswith(want):
+            failures.append(f"a name taken after the look: rc {rc!r}, said {line[-400:]!r}")
+        if sorted(_bytes_under(tgt)) != ["project.json", "state/SQ/v_001.json"] \
+                or _bytes_under(tgt)["state/SQ/v_001.json"] != b'{"banked": "by another writer"}':
+            failures.append(f"a name taken after the look: the folder holds {sorted(_bytes_under(tgt))}")
+        # A HEAD whose replace fails: none is left, and no temp beside the version.
+        tgt = os.path.join(top, "head-refused")
+
+        def replace(src, dst):
+            if os.path.basename(dst) == "HEAD":
+                raise OSError(5, "Input/output error (made to fail)")
+            return real_replace(src, dst)
+        io_._replace = replace
+        try:
+            import_current_state(old, tgt)
+        except OSError:
+            pass
+        else:
+            failures.append("a HEAD whose replace fails: the import went on")
+        finally:
+            io_._replace = real_replace
+        if sorted(os.listdir(os.path.join(tgt, "state", "SQ"))) != ["v_001.json"]:
+            failures.append(f"a HEAD whose replace fails: state/SQ/ holds {sorted(os.listdir(os.path.join(tgt, 'state', 'SQ')))}")
+        # The version's bytes are `_write_json`'s.
+        tgt = os.path.join(top, "fresh")
+        with contextlib.redirect_stdout(io.StringIO()):
+            assert _main([old, "--into", tgt]) == 0, "a fresh import"
+        version = os.path.join(tgt, "state", "SQ", "v_001.json")
+        with open(version, "rb") as fh:
+            claimed = fh.read()
+        again = os.path.join(top, "again.json")
+        _write_json(again, json.loads(claimed.decode("utf-8")))
+        with open(again, "rb") as fh:
+            if fh.read() != claimed:
+                failures.append("the claimed version's bytes are not the ones _write_json writes")
+        assert not failures, "\n  ".join(["the import's claim of a version:"] + failures)
+    finally:
+        project_there = real_look
+        io_._replace = real_replace
+        shutil.rmtree(top, ignore_errors=True)
+
+
 def _selftest():
     import tempfile
 
     failures = []
     for check in (_check_import_refuses_newer_project, _check_main_refuses_only_refusals,
-                  _check_import_refusals_in_one_line, _check_import_reads_before_it_writes):
+                  _check_import_refusals_in_one_line, _check_import_reads_before_it_writes,
+                  _check_into_a_project_refused, _check_version_claimed_exclusively):
         try:
             check()
         except AssertionError as exc:
@@ -856,15 +1142,19 @@ def _selftest():
     sheet = hist.render("v_001")
     assert "| w-L | C |" in sheet, sheet
 
-    # Re-running into the SAME new project is safe: nothing further moves, and the ledger content
-    # does not change (only project_rev, because saving project.json is a write and the counter
-    # counts writes).
-    snap_before = hist.load("v_001")
-    again = import_current_state(root, new_root)
-    after = hist.load("v_001")
-    assert {k: v for k, v in after.items() if k != "project_rev"} == {
-        k: v for k, v in snap_before.items() if k != "project_rev"}, after
-    assert again["identity_fields"] == 0, again
+    # Re-running into the SAME new project is refused before anything is written (#134, batch 4's
+    # re-review): it wrote the import's v_001.json and HEAD over the line again -- a version
+    # banked on it since went out of the slot -- and the old profile over the project's, and said
+    # "imported". Every byte of the project stays as it was.
+    kept = _bytes_under(new_root)
+    try:
+        import_current_state(root, new_root)
+    except Exception as exc:  # noqa: BLE001 -- the kind is what is under test
+        assert getattr(type(exc), "is_into_refused", False), repr(exc)
+        assert "state/SQ_Jazzi/ (1 version), dsp_profile.json -- " in str(exc), str(exc)
+    else:
+        raise AssertionError("a re-run into the project an import made was not refused")
+    assert _bytes_under(new_root) == kept, "the refused re-run wrote something"
 
     # ...and importing into the source itself is refused: the point is that the old one is left
     # alone, and a caller who conflates them has misunderstood the whole shape.
@@ -890,7 +1180,7 @@ def _selftest():
           f"newest snapshot winning and intake's own answer left intact, tag_value became a "
           f"hardware control, the current state landed as v_001 at project_rev={report['project_rev']} and "
           f"validated, the settings sheet kept its Slot column, --dry-run wrote nothing, a re-run "
-          f"moved no further fields. root={root}")
+          f"into the project it made was refused with every byte kept. root={root}")
     return 0
 
 
