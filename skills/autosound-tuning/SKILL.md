@@ -69,7 +69,8 @@ Arbiter, 2026-09-22): the language the front-end was started in — TCC's, or th
 `--lang`. A front-end's report of it wins; else `project.json`'s `language.reply`, where it is
 recorded — `python3 rew_tool/project.py <project> language` says which and where from, and
 `contract.py check` prints it above everything else. Nothing recorded and no interface to read →
-**ask**, and record the answer (`intake.save(<project>, 'project.language', '<code>')`). The
+**ask**, and record the answer (`intake.save(<project>, 'project.language', '<code>')`) and the
+ruling (`process.py <project>/process decision "dialogue language" "<code>" -1.1`). The
 **user's** own language (`language.user`, optional) is recorded and switches nothing. The **input**
 language — whatever the person happened to type — changes nothing either: on a Windows VM with no Ukrainian layout he
 typed English while the tune stayed Ukrainian, and a session that takes its language from the last

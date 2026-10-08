@@ -36,8 +36,9 @@ numbers did not change, so a `project-intake.md §3` or `§4` pointer still land
 >
 > ```bash
 > # The RULING is recorded the moment it is made, so nobody asks again; the STEP closes
-> # against the artefact that carries it (`autosound_context.md`, written in `phase_-1_intake.md` §5).
+> # against the artefact that carries it: `project.json`, whose `language.reply` `intake.save` wrote.
 > python3 rew_tool/state/process.py <project>/process decision "dialogue language" "uk" -1.1
+> python3 rew_tool/state/process.py <project>/process done -1.1 "project.json"
 >
 > # The reviewer channel is closed by an ANSWER, not by a setting. One live check, recorded,
 > # and the step closes on the doctor's exit code:

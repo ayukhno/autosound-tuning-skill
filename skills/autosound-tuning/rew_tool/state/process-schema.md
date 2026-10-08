@@ -262,7 +262,7 @@ from state.process import Process
 p = Process(f"{project}/process")
 p.enter_phase("2")
 p.add_step("2.3", "target-match (SQ-Comp-Ref)")
-p.add_step("-1.2", "Закрити відкриті поля",         # name gets ": a, b, c +N" composed from covers
+p.add_step("-1.1", "Закрити відкриті поля",         # name gets ": a, b, c +N" composed from covers
            covers=["project.json:sources.sweep_input", "project.json:amps.front.gain_db"])
 p.start_attempt("2.3")
 p.finish_step("2.3", ["m-L_10 (sw)", "v_007"])     # raises without evidence

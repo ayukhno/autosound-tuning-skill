@@ -612,9 +612,13 @@ CHEAT_ROUTE = "where a ✗ goes"
 #: a pointer lands when its word starts its step's name here. Each name stands on its step's opening line in
 #: `virtual-first.md`, and the rule holds it there, so a renumber cannot leave the table behind unseen. The opening
 #: lines cite their neighbours as well (1.3 "without the wishes", 1.4 "BEFORE the delays", 1.5 "with the coarse
-#: EQ", 2.3 "the second"), so a pointer is held to its step's name, not to whatever its step's line says.
+#: EQ", 2.3 "the second"), so a pointer is held to its step's name, not to whatever its step's line says. −1.2 and
+#: −1.5 are named before anything points at them: the new DSP moved from −1.2 to −1.5 when the reviewer channel took
+#: −1.2 (the code's ids, `intake.py`), and a pointer left on the old number is named with the step its word starts.
 STEP_NAMES = {
+    "-1.2": "reviewer channel",
     "-1.3": "protective filters",
+    "-1.5": "new DSP",
     "1.2": "wishes",
     "1.3": "crossovers",
     "1.4": "coarse EQ",
@@ -1019,6 +1023,8 @@ def _check_one_path_banner():
 #: 2.3 "the second"), a phase-0 step, and the words a number that is no pointer meets there ("order", "project", "dB").
 _IDS_HOME = ("# V\n\n### Phase −1\n"
              "- **−1.1** log Phase −1; run the intake.\n"
+             "- **−1.2** *the reviewer channel*: one live `doctor` run, recorded.\n"
+             "- **−1.5** *new DSP* (only if not in the knowledge base): a profile.\n"
              "- **−1.3** channels → the glossary; **protective filters** for the capture.\n\n"
              "### Phase 0\n"
              "- **0.7** mark the protectives on the round; the `.mdat` into the project; finish the passport.\n\n"
@@ -1083,8 +1089,8 @@ def _check_step_ids():
         # (a) one id, two steps -- the second 1.7 the renumber left; a U+2212 minus and an ASCII one are one id
         twice = rule_step_ids(_ids_tree(tmp, home=_IDS_HOME.replace("- **1.8**", "- **1.7**") + "- **-1.1** again.\n"))
         assert sum("again (first at line" in c for c in twice) == 2, twice
-        assert any(":19: step 1.7 again (first at line 18)" in c for c in twice), twice
-        assert any(":27: step -1.1 again (first at line 4)" in c for c in twice), twice
+        assert any(":21: step 1.7 again (first at line 20)" in c for c in twice), twice
+        assert any(":29: step -1.1 again (first at line 4)" in c for c in twice), twice
         # (b) a pointer whose word is another step's name -- 1.3's own paragraph says "joints", citing 1.5 --, and a
         # whole name (`joint` is not `joints`); one with no such step; an article read through; a file outside the
         # four places is not read
@@ -1170,13 +1176,23 @@ def _check_step_names_held():
         swapped = _IDS_HOME.replace("- **1.5** **joints", "- **1.x** **joints").replace(
             "- **1.6** **levels", "- **1.5** **levels").replace("- **1.x**", "- **1.6**")
         parted = rule_step_ids(_ids_tree(tmp, home=swapped))
-        assert any(":17: step 1.5's opening line does not say 'joints'" in c for c in parted), parted
-        assert any(":16: step 1.6's opening line does not say 'levels'" in c for c in parted), parted
+        assert any(":19: step 1.5's opening line does not say 'joints'" in c for c in parted), parted
+        assert any(":18: step 1.6's opening line does not say 'levels'" in c for c in parted), parted
         no_sheet = _IDS_HOME.replace("- **2.4** **preset to disk**: the settings sheet.\n", "")
         gone = rule_step_ids(_ids_tree(tmp, home=no_sheet))
         assert len(gone) == 1 and "has no step 2.4" in gone[0] and "'sheet'" in gone[0], gone
     said = _step_ids_said("0.7 mark")
     assert len(said) == 1 and "step 0.7 has no name" in said[0], said
+
+
+def _check_step_ids_reviewer_before_new_dsp():
+    """Rule 13 (#138, row 20): −1.2 is the reviewer channel and the new DSP moved to −1.5 (the code's ids,
+    `intake.py`), so a pointer left on the old number is named with the step its word starts."""
+    said = _step_ids_said("−1.2 new DSP")
+    assert len(said) == 1 and "'−1.2 new'" in said[0] and "step -1.2 is 'reviewer channel'" in said[0] \
+        and "'new DSP' is step -1.5" in said[0], said
+    said = _step_ids_said("−1.5 reviewer channel")
+    assert len(said) == 1 and "step -1.5 is 'new DSP'" in said[0] and "'reviewer channel' is step -1.2" in said[0], said
 
 
 def _check_no_capture_start_literal():
@@ -1382,7 +1398,7 @@ def _selftest() -> int:
                       _check_step_ids, _check_step_ids_off_by_one, _check_step_ids_wishes_on_crossovers,
                       _check_step_ids_delays_on_coarse_eq, _check_step_ids_second_on_review,
                       _check_step_ids_after_a_slash, _check_step_ids_read_as_written, _check_step_names_held,
-                      _check_no_capture_start_literal):
+                      _check_step_ids_reviewer_before_new_dsp, _check_no_capture_start_literal):
             try:
                 check()
             except AssertionError as exc:
@@ -1411,7 +1427,8 @@ def _selftest() -> int:
           "without the sentence that the tools read arrivals; a phase file that opens 'If Phase −1 chose', a "
           "banner copy edited alone and all four banners deleted at once are each named; a step id held by two "
           "steps, a pointer whose word does not start its step's name (one step off, a neighbour its step's opening "
-          "line cites, after a slash, behind a capital article) or whose step does not exist (1.10 too), a name table "
+          "line cites, after a slash, behind a capital article, left on the id a renumber gave another step) or whose "
+          "step does not exist (1.10 too), a name table "
           "parted from the steps, a route by a bare number (one ending its sentence too) and a translation routing "
           "a row elsewhere are each named, while a value, a unit, a version, a section, a range, a word no step is "
           "named by and a heading's number are not pointers; a phase file opening a capture round at series 1 "
