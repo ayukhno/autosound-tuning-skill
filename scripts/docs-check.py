@@ -67,9 +67,9 @@ Rules:
     step after the number (`1.5 joints`): no id is two steps there; a pointer `<id> <word>` in `SKILL.md`, the
     phase and core files and the English listening cheat sheet lands on the step whose name the word starts --
     `STEP_NAMES`, a table held to each step's opening line, since those lines cite their neighbours too; the cheat
-    sheet routes every ✗ that way, never by a bare number; and its translations route each row to the same ids. A
-    renumber left the routes on the old numbers, and a listening ✗ re-opened the crossover choice instead of the
-    joint delay.
+    sheet routes every ✗ that way, never by a bare number; and its translations carry every row of it, in its order
+    and no other, each routed to the same ids. A renumber left the routes on the old numbers, and a listening ✗
+    re-opened the crossover choice instead of the joint delay.
 
 14. **`no-capture-start-literal`** (#138, I-7). A capture round is opened by one recipe, `capture-session-sheet.md`'s
     Block 0 (`enter-phase 0` → `naming.py next-series` → `capture-start <N> --plan`), and the phase files point to
@@ -737,8 +737,8 @@ def rule_step_ids(root: str) -> list[str]:
     `STEP_NAMES` gives it; the table is held to `virtual-first.md`, each name on its step's opening line, and a
     word another step's name starts is named as that step's (a word counts as a pointer's when it stands on some
     step's opening line, so `1.5 dB` is not one); (c) every route cell of the English cheat sheet names its steps
-    that way, never a bare number; (d) each translated cheat sheet routes every row to the same ids as the English
-    one.
+    that way, never a bare number; (d) each translated cheat sheet carries the English rows -- every one, in the
+    English order, and no other -- and routes each to the same ids as the English one.
     """
     text = _read(root, STEP_HOME)
     if text is None:
@@ -805,6 +805,20 @@ def rule_step_ids(root: str) -> list[str]:
         if rows is None:
             bad.append(f"{rel}: no table with a '{CHEAT_ROUTE}' column — its routes cannot be held to the English")
             continue
+        # The rows first, as ids in order: a row the translation drops was never compared below, and its reader had
+        # no row, and no route, for that characteristic (the final review's errors I4).
+        order = [cid for _, cid, _ in rows]
+        missing = [cid for cid in routes if cid not in order]
+        extra = [(n, cid) for n, cid, _ in rows if cid not in routes]
+        for cid in missing:
+            bad.append(f"{rel}: no row for {cid}, which the English routes to {', '.join(routes[cid]) or 'no step'} "
+                       f"— a reader of this translation has no row, and no route, for that characteristic")
+        for n, cid in extra:
+            bad.append(f"{rel}:{n}: {cid} is no row of the English sheet — a translation carries the English rows "
+                       f"and no other")
+        if not missing and not extra and order != list(routes):
+            bad.append(f"{rel}: its rows run {', '.join(order)}, the English {', '.join(routes)} — a translation "
+                       f"keeps the English order, row for row")
         for n, cid, cell in rows:
             if cid in routes and _ids_in(cell) != routes[cid]:
                 bad.append(f"{rel}:{n}: {cid} routes to {', '.join(_ids_in(cell)) or 'no step'}, the English to "
@@ -1047,10 +1061,13 @@ _IDS_HEADER = "| id | label | where a ✗ goes |\n|---|---|---|\n"
 _IDS_SHEET = ("# L\n\n`route` is the step a ✗ goes to (desk 1.5 joints, 1.6 levels; 3.3 fine EQ over MMM; "
               "−1.3 protective filters).\n\n" + _IDS_HEADER +
               "| c01 | centre | L/R level, arrival, polarity (desk 1.5 joints / 1.6 levels) |\n"
+              "| c04 | balance | a broad tilt against the MMM target (3.3 fine EQ) |\n"
               "| c16 | dynamics | not EQ; the protection filters (−1.3 protective filters) |\n"
               "| c17 | +6 dB | the LOUDER verdict (EMMA Judge Book 2024 §4.5) |\n")
 _IDS_UK = ("# Л\n\n" + _IDS_HEADER + "| c01 | центр | рівні L/R, час, полярність (стіл 1.5 стики / 1.6 рівні) |\n"
-           "| c16 | динаміка | не EQ; захисні фільтри (-1.3 захисні фільтри) |\n")
+           "| c04 | баланс | широкий нахил проти цілі MMM (3.3 тонкий EQ) |\n"
+           "| c16 | динаміка | не EQ; захисні фільтри (-1.3 захисні фільтри) |\n"
+           "| c17 | +6 дБ | ГУЧНІШИЙ вердикт (EMMA Judge Book 2024 §4.5) |\n")
 #: Numbers in running text that are no pointers -- each held by one exclusion, which the fixture above makes matter:
 #: a unit, a word that names no step, a word the stop list takes out, the inside of a range.
 _IDS_NOT_POINTERS = ("Not pointers: a +1.2 PK, Q 0.7 all-pass, 1.5 dB, v3.1 levels, §0.5 step 3, 2.8.3 levels, the "
@@ -1193,6 +1210,22 @@ def _check_step_ids_reviewer_before_new_dsp():
         and "'new DSP' is step -1.5" in said[0], said
     said = _step_ids_said("−1.5 reviewer channel")
     assert len(said) == 1 and "step -1.5 is 'new DSP'" in said[0] and "'reviewer channel' is step -1.2" in said[0], said
+
+
+def _check_step_ids_translation_keeps_every_row():
+    """Rule 13 (d) (#138, the final review's errors I4): a translated cheat sheet carries every English row, in the
+    English order, and no other -- a row it drops leaves its reader no row, and no route, for that characteristic,
+    and (d) compared only the rows a translation has."""
+    rows = _IDS_UK.splitlines(keepends=True)
+    with _scratch() as tmp:
+        dropped = rule_step_ids(_ids_tree(tmp, uk="".join(r for r in rows if not r.startswith("| c04 |"))))
+        assert len(dropped) == 1 and "uk.md: no row for c04, which the English routes to 3.3" in dropped[0], dropped
+        added = rule_step_ids(_ids_tree(tmp, uk=_IDS_UK + "| c99 | зайвий | стик (1.5 стики) |\n"))
+        assert len(added) == 1 and "uk.md:9: c99 is no row of the English sheet" in added[0], added
+        c16, c17 = (next(r for r in rows if r.startswith(f"| {cid} |")) for cid in ("c16", "c17"))
+        swapped = rule_step_ids(_ids_tree(tmp, uk=_IDS_UK.replace(c16 + c17, c17 + c16)))
+        assert len(swapped) == 1 and "uk.md: its rows run c01, c04, c17, c16, the English c01, c04, c16, c17" \
+            in swapped[0], swapped
 
 
 def _check_no_capture_start_literal():
@@ -1398,7 +1431,8 @@ def _selftest() -> int:
                       _check_step_ids, _check_step_ids_off_by_one, _check_step_ids_wishes_on_crossovers,
                       _check_step_ids_delays_on_coarse_eq, _check_step_ids_second_on_review,
                       _check_step_ids_after_a_slash, _check_step_ids_read_as_written, _check_step_names_held,
-                      _check_step_ids_reviewer_before_new_dsp, _check_no_capture_start_literal):
+                      _check_step_ids_reviewer_before_new_dsp, _check_step_ids_translation_keeps_every_row,
+                      _check_no_capture_start_literal):
             try:
                 check()
             except AssertionError as exc:
@@ -1430,7 +1464,7 @@ def _selftest() -> int:
           "line cites, after a slash, behind a capital article, left on the id a renumber gave another step) or whose "
           "step does not exist (1.10 too), a name table "
           "parted from the steps, a route by a bare number (one ending its sentence too) and a translation routing "
-          "a row elsewhere are each named, while a value, a unit, a version, a section, a range, a word no step is "
+          "a row elsewhere, or dropping, adding or reordering one, are each named, while a value, a unit, a version, a section, a range, a word no step is "
           "named by and a heading's number are not pointers; a phase file opening a capture round at series 1 "
           "is named, on a code line, in a bullet, in a pointer and wrapped, while the series the project gives, "
           "another number and a file outside the phases folder are not; the rules' checks report every failure in "
