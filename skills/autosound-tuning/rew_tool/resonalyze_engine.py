@@ -138,7 +138,10 @@ def method_is_checkout():
 
 
 def pin():
-    """The fork commit the skill records for `vendor/Resonalyze`, and the one checked out there (None when absent)."""
+    """The fork commit the skill records for `vendor/Resonalyze`, and the one checked out there (None when absent).
+    None and None in a plugin copy (#142): `git -C REPO` there answers for whatever repository is above it."""
+    if not method_is_checkout():
+        return {"recorded": None, "checked_out": None}
     r = subprocess.run(["git", "-C", REPO, "ls-tree", "HEAD", "vendor/Resonalyze"], capture_output=True, text=True, encoding="utf-8", errors="replace")
     recorded = r.stdout.split()[2] if r.returncode == 0 and len(r.stdout.split()) >= 3 else None
     checked = None
@@ -327,7 +330,10 @@ def _write_mark(mark):
 
 
 def _checkout_tag():
-    """The tag this checkout sits on exactly, or None (a branch, a dirty tree, no git)."""
+    """The tag this checkout sits on exactly, or None (a branch, a dirty tree, no git -- or a plugin copy, where
+    `git -C REPO` answers for whatever repository is above it, #142)."""
+    if not method_is_checkout():
+        return None
     try:
         r = subprocess.run(["git", "-C", REPO, "describe", "--tags", "--exact-match"], capture_output=True, text=True,
                            encoding="utf-8", errors="replace", timeout=10)
@@ -2483,8 +2489,9 @@ def _check_a_plugin_copy_has_no_sdk_route():
     """#142 (SFH 9): in a plugin copy -- no `.git` at the method's root -- the .NET SDK is no route to an engine: the
     doctor said it had one there, and `build()` ran `git -C REPO submodule update`, which in a copy with no `.git`
     answers for whatever repository is above it. With the SDK found and nothing prebuilt: `engine_status` absent, naming
-    the plugin copy; `build()` and `engine_command()` refuse without running git. A `.git` folder (a clone) or file (a
-    submodule) is a checkout, and the SDK route is there. Nothing is built or fetched: `subprocess` is a recorder here."""
+    the plugin copy; `build()` and `engine_command()` refuse without running git, and `pin()` and `_checkout_tag()`
+    answer None without it. A `.git` folder (a clone) or file (a submodule) is a checkout, and the SDK route is there.
+    Nothing is built or fetched: `subprocess` is a recorder here."""
     import types
     root = tempfile.mkdtemp(prefix="autosound_engine_plugin_")
     calls = []
@@ -2507,6 +2514,11 @@ def _check_a_plugin_copy_has_no_sdk_route():
         assert not ok and "plugin copy" in why and not calls, f"build() in a plugin copy: {ok}, {why!r}, ran {calls}"
         command, how = engine_command()
         assert command is None and "plugin copy" in how and not calls, (command, how, calls)
+        # ...nor do the pin and the tag a copy sits on ask `git -C REPO` there (the re-review): it answers for whatever
+        # repository is above a plugin copy.
+        got_pin, got_tag = pin(), _checkout_tag()
+        assert got_pin == {"recorded": None, "checked_out": None} and got_tag is None and not calls, \
+            f"pin() {got_pin}, _checkout_tag() {got_tag!r} in a plugin copy -- ran {calls}"
         for layout in ("folder", "file"):
             git_at = os.path.join(root, ".git")
             if layout == "folder":
