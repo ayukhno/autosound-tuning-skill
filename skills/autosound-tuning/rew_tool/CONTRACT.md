@@ -131,9 +131,11 @@ and takes the lock. A probe that fails -- the file there and not to be opened, a
 error -- is said in that line, `<project>: whether the project's writer lock can be taken here could not be told
 (<type>: <why>)`, never a crash of `check`. `warnings` (W-9, #143) is a list, `[]` when there is nothing to warn of,
 of `{kind, file, warning}`, never part of `ok`; the text report gives each as a `- ⚠️ <warning>` line among the
-cross-file checks. One kind today, `contract_copy`: a copy of the tuning contract in the project folder or
+cross-file checks. Two kinds: `contract_copy`, a copy of the tuning contract in the project folder or
 `rew_analitic/` whose text, line endings aside, is not the skill's -- `a project copy <file> differs from the skill's
-contract — the reviewer gets the skill's; delete the copy` (the reviewer door reads the skill's alone).
+contract — the reviewer gets the skill's; delete the copy` (the reviewer door reads the skill's alone); and
+`changelog_moved`, a `tuning-changelog` read from `rew_analitic/` because the project root, its home, has none -- the
+line `handoff` gives, `` `tuning-changelog` is read from <file>: its home is the project root — move it to <root>/<name> ``.
 
 ## 4. `deployment.py [<project>] [--json]` — not promised
 

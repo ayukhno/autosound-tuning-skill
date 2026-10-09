@@ -465,6 +465,17 @@ def contract_copy_warnings(project_dir):
     return out
 
 
+def changelog_moved_warnings(project_dir):
+    """`[{kind: "changelog_moved", file, warning}]` when the `tuning-changelog` read -- its ▶️ CONTINUE block is this
+    report's `continue_head` -- is an older project's in `rew_analitic/`, not the project root's (#143, I-21): the line
+    `handoff` gives (`process.changelog_moved`). [] otherwise; never part of `ok`."""
+    moved = _load_vendored("process").changelog_moved(project_dir)
+    if not moved:
+        return []
+    return [{"kind": "changelog_moved", "file": os.path.relpath(moved["file"], project_dir).replace(os.sep, "/"),
+             "warning": moved["warning"]}]
+
+
 def _line_layout(project_dir):
     """`"preset"`, `"project"`, or None (no ledger, or one caught half-way: `check_ledgers` names it)."""
     root = os.path.join(project_dir, "state")
@@ -1079,8 +1090,8 @@ def check_project(project_dir, skip_rew=False):
             # never a gate item.
             "lock": _lock_line(project_dir),
             # #143, I-5: what the report warns of and `ok` never counts -- a project copy of the tuning contract that
-            # differs from the skill's.
-            "warnings": contract_copy_warnings(project_dir),
+            # differs from the skill's; I-21: a `tuning-changelog` read from `rew_analitic/`, not the project root.
+            "warnings": contract_copy_warnings(project_dir) + changelog_moved_warnings(project_dir),
             "unsealed": _unsealed(project_dir),
             # S-042: ids in another notation, with the fix the session offers (not a gate item).
             "id_fix": (project.fix_ids(project_dir) if project.id_mismatches(project_data or {})
@@ -2384,6 +2395,45 @@ def _check_a_differing_contract_copy_is_a_warning():
     assert not failures, "\n  ".join(["check and a project copy of the contract:"] + failures)
 
 
+def _check_a_moved_changelog_is_a_warning():
+    """#143, I-21 (fix 3): `check` reads the ▶️ CONTINUE block of a `tuning-changelog` an older project keeps in
+    `rew_analitic/` -- its home is the project root -- and says so: a `warnings` row of kind `changelog_moved`, the
+    file and the line `handoff` gives, a `- ⚠️` line in the text, never part of `ok`. It read the copy silently. A
+    changelog at the root gives no such row."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_contract_changelog_")
+    failures = []
+    try:
+        d = os.path.join(top, "car")
+        os.makedirs(os.path.join(d, "rew_analitic"))
+        before = check_project(d, skip_rew=True)
+        old = os.path.join(d, "rew_analitic", "tuning-changelog.md")
+        with open(old, "w", encoding="utf-8") as fh:
+            fh.write("# Tuning changelog\n\n## ▶️ CONTINUE\n- next: the A/B\n")
+        report = check_project(d, skip_rew=True)
+        said = _load_vendored("process").changelog_moved(d)
+        want = [{"kind": "changelog_moved", "file": "rew_analitic/tuning-changelog.md",
+                 "warning": (said or {}).get("warning")}]
+        rows = [r for r in json.loads(json.dumps(report)).get("warnings", []) if r.get("kind") == "changelog_moved"]
+        if not said or old not in said["warning"] or rows != want:
+            failures.append(f"only in rew_analitic/: rows {rows!r}, process says {said!r}")
+        if report.get("ok") is not before.get("ok"):
+            failures.append(f"ok moved: {before.get('ok')!r} -> {report.get('ok')!r}")
+        shown = [ln for ln in render_report(report).splitlines() if old in ln]
+        if not said or shown != [f"- ⚠️ {said['warning']}"]:
+            failures.append(f"its line in the report: {shown!r}")
+        os.remove(old)
+        with open(os.path.join(d, "tuning-changelog.md"), "w", encoding="utf-8") as fh:
+            fh.write("# Tuning changelog\n\n## ▶️ CONTINUE\n- next: the A/B\n")
+        rows = [r for r in check_project(d, skip_rew=True).get("warnings", []) if r.get("kind") == "changelog_moved"]
+        if rows:
+            failures.append(f"at the root: rows {rows!r}")
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["check and a changelog in rew_analitic/:"] + failures)
+
+
 def _raised_or(call):
     """`call()`'s result, or the exception it raised: a check reads which it got."""
     try:
@@ -3213,7 +3263,7 @@ def _selftest():
                   _check_bom_project_json_one_verdict, _check_dangling_glossary_link_refused,
                   _check_repair_encoding_waits_for_the_lock, _check_a_missing_project_makes_nothing,
                   _check_a_bad_timeout_is_a_usage_error, _check_check_names_a_folder_that_cannot_lock,
-                  _check_a_differing_contract_copy_is_a_warning):
+                  _check_a_differing_contract_copy_is_a_warning, _check_a_moved_changelog_is_a_warning):
         try:
             check()
         except AssertionError as exc:

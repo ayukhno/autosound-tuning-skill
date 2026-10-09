@@ -698,6 +698,41 @@ def _changelog_path(project_dir):
     return None, False
 
 
+def changelog_moved(project_dir):
+    """`{file, warning}` when the `tuning-changelog` read is an older project's in `rew_analitic/` -- the project root,
+    its home, has none -- else None (#143, I-21). One sentence for `handoff` and `contract.py check` alike."""
+    path, moved = _changelog_path(project_dir)
+    if not moved:
+        return None
+    return {"file": path, "warning": f"`tuning-changelog` is read from {path}: its home is the project root — move it "
+                                     f"to {os.path.join(project_dir, os.path.basename(path))}"}
+
+
+def changelog_copies_that_differ(project_dir):
+    """Every `tuning-changelog` in `rew_analitic/` beside the root's, the one read, whose text is not the root's, line
+    endings aside (#143, I-21): the old `phase_3_control.md` sent the changelog there, so the live one may be the copy
+    nothing reads. One that cannot be read is counted with them. [] when the root holds none."""
+    path, moved = _changelog_path(project_dir)
+    if path is None or moved:
+        return []
+
+    def text(p):
+        with open(p, "rb") as fh:
+            return fh.read().replace(b"\r\n", b"\n")
+    out = []
+    for name in ("tuning-changelog.md", "tuning-changelog"):
+        copy = os.path.join(project_dir, "rew_analitic", name)
+        if not os.path.isfile(copy):
+            continue
+        try:
+            same = text(copy) == text(path)
+        except OSError:
+            same = False
+        if not same:
+            out.append(copy)
+    return out
+
+
 def _changelog_read(project_dir):
     """`(path, text, why, mend)` for `tuning-changelog` (`_changelog_path`'s): its text, or why it cannot be read --
     `cannot be opened (...)`, `is not UTF-8` -- and what mends that, with the text None; `(None, None, None, None)` when
@@ -3007,13 +3042,16 @@ class Process:
                 "the next session reads beside the machine files, and the one a person opens first")
         drift = continue_head_drift(self.project_dir) if changelog else None
         warnings = [drift["warning"]] if drift else []
-        # Its home is the project root (#143, I-21): one in `rew_analitic/` is read, and the move is named; none at all
-        # is said -- not missing: a project that keeps no prose changelog fails no check it never opted into.
-        if _changelog_path(self.project_dir)[1]:
-            warnings.insert(0, f"`tuning-changelog` is read from {log_path}: its home is the project root — move it to "
-                               f"{os.path.join(self.project_dir, os.path.basename(log_path))}")
+        # Its home is the project root (#143, I-21): one in `rew_analitic/` is read, and the move is named; a copy there
+        # beside the root's that differs is named too; none at all is said -- not missing: a project that keeps no prose
+        # changelog fails no check it never opted into.
+        moved = changelog_moved(self.project_dir)
+        if moved:
+            warnings.insert(0, moved["warning"])
         elif log_path is None:
             warnings.append(f"no tuning-changelog at {self.project_dir}: the ▶️ CONTINUE block lives there")
+        warnings += [f"a copy {copy} differs from `tuning-changelog` at the root, {log_path}, the one read — merge "
+                     "what it adds there and delete the copy" for copy in changelog_copies_that_differ(self.project_dir)]
         resume = None
         if not missing:
             keep = ""
@@ -6233,15 +6271,52 @@ def _check_handoff_reads_the_changelog_at_the_root():
         got = p.handoff()
         if len(got["warnings"]) != 2 or not any("HEAD v_009" in w for w in got["warnings"]):
             failures.append(f"a copy's stale HEAD, unread: {got['warnings']!r}")
-        # The root's wins: its block is the one read, and nothing is said of the copy.
+        # The root's wins: its block is the one read, the copy's stale HEAD is not (the copy itself:
+        # `_check_handoff_names_a_changelog_copy_that_differs`).
         with open(home, "w", encoding="utf-8") as fh:
             fh.write("## ▶️ CONTINUE\n- HEAD: v_001 (FULL)\n")
         got = p.handoff()
-        if got["ok"] is not True or got["warnings"] != []:
+        if got["ok"] is not True or any("v_009" in w for w in got["warnings"]):
             failures.append(f"the root's beside a stale copy: ok {got['ok']}, warnings {got['warnings']!r}")
     finally:
         shutil.rmtree(top, ignore_errors=True)
     assert not failures, "\n  ".join(["tuning-changelog's home, the project root:"] + failures)
+
+
+def _check_handoff_names_a_changelog_copy_that_differs():
+    """#143, I-21 (fix 4): with the root's `tuning-changelog` read, a copy in `rew_analitic/` whose text differs is
+    named in `handoff`'s `warnings` -- the copy, the root's, merge and delete -- as the door names a context copy; a
+    copy with the root's text is not, and `ok` never moves. The old `phase_3_control.md` sent the changelog to
+    `rew_analitic/`, so the live one may be the copy nothing read."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_process_changelog_copy_")
+    failures = []
+    try:
+        root = tempfile.mkdtemp(dir=top)
+        _seed_intake(root)
+        p = Process(os.path.join(root, "process"))
+        p.enter_phase("-1")
+        p.enter_phase("0")
+        home = os.path.join(p.project_dir, "tuning-changelog.md")
+        copy = os.path.join(p.project_dir, "rew_analitic", "tuning-changelog.md")
+        os.makedirs(os.path.dirname(copy))
+        with open(home, "w", encoding="utf-8") as fh:
+            fh.write("## ▶️ CONTINUE\n- HEAD: v_001 (FULL)\n")
+        with open(copy, "w", encoding="utf-8") as fh:
+            fh.write("## ▶️ CONTINUE\n- HEAD: v_001 (FULL)\n- the live notes, kept here by the old rule\n")
+        got = p.handoff()
+        said = [w for w in got["warnings"] if copy in w]
+        if got["ok"] is not True or len(got["warnings"]) != 1 or len(said) != 1 or home not in said[0]:
+            failures.append(f"a copy that differs: ok {got['ok']}, warnings {got['warnings']!r}")
+        with open(copy, "wb") as fh:                         # the root's text, in CRLF
+            fh.write(b"## \xe2\x96\xb6\xef\xb8\x8f CONTINUE\r\n- HEAD: v_001 (FULL)\r\n")
+        got = p.handoff()
+        if got["ok"] is not True or got["warnings"] != []:
+            failures.append(f"a copy with the root's text: ok {got['ok']}, warnings {got['warnings']!r}")
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["a changelog copy beside the root's:"] + failures)
 
 
 def _check_superseded_not_taken():
@@ -7994,7 +8069,7 @@ def _selftest():
                   _check_flag_values_as_they_stand, _check_autocorrected_dashes, _check_too_few_arguments,
                   _check_value_flag_last, _check_help_writes_nothing, _check_usage_before_the_read,
                   _check_handoff_says_an_unreadable_changelog, _check_handoff_reads_the_changelog_at_the_root,
-                  _check_superseded_not_taken,
+                  _check_handoff_names_a_changelog_copy_that_differs, _check_superseded_not_taken,
                   _check_check_never_invents_taken, _check_close_says_what_rew_did,
                   _check_listing_never_read_as_rew, _check_ambiguous_capture, _check_close_swallows_only_rew,
                   _check_intake_gate_names_an_unreadable_project_json, _check_close_checks_stage_refusals,

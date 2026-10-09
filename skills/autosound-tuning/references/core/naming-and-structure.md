@@ -127,7 +127,7 @@ A tune is worth months of work; its artifacts must survive a disk loss. Standard
 ├── glossary.json          optional standalone form of project.json's `glossary` key
 ├── autosound_context.md, preference-profile.md, tuning-changelog, audit-trail.md, skill-inbox.md
 │                          — prose, here and nowhere else (an older project's copy in rew_analitic/
-│                            is read only while this folder has none, and named to be moved here)
+│                            is still read, and named to be moved here)
 ├── process/
 │   ├── process-state.json    current phase + plan slice
 │   └── journal.jsonl          append-only process history
