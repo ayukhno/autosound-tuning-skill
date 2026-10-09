@@ -21,7 +21,9 @@ once, and every door calls it:
 TCC runs this from its vendored skill (as new as TCC). The installers run the copy inside the tag they are about
 to check out (`git show FETCH_HEAD:<this file>`), so a clone that predates this script is not in the way.
 
-stdlib only, py3.9+. Exit codes: 0 done · 2 usage · 3 refused (a dirty clone, a signature, a failed step).
+stdlib only, py3.9+. Exit codes: 0 done · 2 usage · 3 refused (a dirty clone, a signature, a failed step; for
+verify-copy, a copy that is not as its author signed it) · 4 verify-copy only: the copy could not be checked here (no
+network, git failed) -- nothing was judged (#142).
 """
 from __future__ import annotations
 
@@ -59,7 +61,16 @@ _TAG_RE = re.compile(r"v([0-9]+)\.([0-9]+)\.([0-9]+)")
 
 
 class Refused(Exception):
-    """A step that must not go ahead, with the sentence that says why and what to do."""
+    """A step that must not go ahead, with the sentence that says why and what to do. `exit_code` is the command line's
+    answer -- read as an attribute, never matched by class (a caller may hold another copy of this module)."""
+    exit_code = 3
+
+
+class CannotCheck(Refused):
+    """verify-copy could not check the copy at all -- no network, git failed -- so nothing was judged: exit 4, apart
+    from 3, a copy that is not as its author signed it (#142). The two shared 3 and one sentence, and the installers
+    sent a person who was offline to reinstall a good plugin."""
+    exit_code = 4
 
 
 def run(cmd, cwd=None, env=None, timeout=120, stdin=subprocess.DEVNULL):
@@ -143,9 +154,20 @@ def verify_tag(clone, tag, principal=None, key=None, signed_from=None, env=None)
 
 
 # ── a copy with no .git: the plugin install (W-6 #120, #121) ─────────────────────────────────────
-#: Where a plugin version, once verified and set up, is written down -- one `vX.Y.Z` per line. The plugin's
-#: SessionStart hook (`hooks/session-start.sh`) reads the same file to decide whether to offer the setup.
-PLUGIN_READY = os.path.join(os.path.expanduser("~"), ".config", "autosound", "plugin-ready")
+def ready_file(env=None, nt=None):
+    """Where a plugin version, once verified and set up, is written down -- one `vX.Y.Z` per line. The plugin's
+    SessionStart hook (`hooks/session-start.sh`) reads `$HOME/.config/autosound/plugin-ready`, so this is the same
+    file: on Windows the hook runs in Git Bash, whose $HOME is %HOME% when that is set and %USERPROFILE% otherwise,
+    while Python's `~` there is %USERPROFILE% alone -- with a %HOME% of its own, the two named two files and the set-up
+    note never went away (#142)."""
+    env = os.environ if env is None else env
+    nt = (os.name == "nt") if nt is None else nt
+    home = (env.get("HOME") or env.get("USERPROFILE")) if nt else env.get("HOME")
+    return os.path.join(home or os.path.expanduser("~"), ".config", "autosound", "plugin-ready")
+
+
+#: The ready file for this process's environment, as it stood at import; `plugin_ready` asks `ready_file()` each call.
+PLUGIN_READY = ready_file()
 #: What is in a plugin copy that is not the release's: Claude Code's own markers, and what running the tools leaves.
 _COPY_NOISE_FILES = (".in_use", ".orphaned_at", ".DS_Store")
 #: `.in_use` is a FOLDER on Windows, one file per process holding the plugin (`.in_use/4368`, the W-6 candidate run on
@@ -214,20 +236,21 @@ def verify_copy(root, repo=None, tag=None):
     if not is_release_tag(tag):
         raise Refused(f"{root}: no release version in .claude-plugin/plugin.json ({version!r}), so no tag to check "
                       f"this copy against")
+    # Could not check (git, the network) is CannotCheck, exit 4; not as signed (a signature, a file) is Refused, 3.
     with tempfile.TemporaryDirectory(prefix="autosound_verify_") as bare:
         rc, _, err = run(["git", "init", "--quiet", "--bare", bare])
         if rc != 0:
-            raise Refused(f"git is needed to check this copy, and `git init` failed: {err.strip()}")
+            raise CannotCheck(f"git is needed to check this copy, and `git init` failed: {err.strip()}")
         rc, _, err = git(bare, "fetch", "--quiet", "--depth", "1", repo or SKILL_REPO,
                          f"+refs/tags/{tag}:refs/tags/{tag}", timeout=300)
         if rc != 0:
-            raise Refused(f"could not fetch {tag} to check this copy against (no network?): {err.strip()}")
+            raise CannotCheck(f"could not fetch {tag} to check this copy against (no network?): {err.strip()}")
         ok, said = verify_tag(bare, tag)
         if not ok:
             raise Refused(said)
         rc, out, err = git(bare, "ls-tree", "-r", "-z", "--full-tree", f"refs/tags/{tag}^{{commit}}")
         if rc != 0:
-            raise Refused(f"could not list {tag}: {err.strip()}")
+            raise CannotCheck(f"could not list {tag}: {err.strip()}")
     expected = {}
     for entry in out.split("\0"):
         if "\t" not in entry:
@@ -261,7 +284,7 @@ def plugin_ready(root, path=None):
     version = copy_version(os.path.abspath(root))
     if tag_key(f"v{version}") is None:
         raise Refused(f"{root}: no release version in .claude-plugin/plugin.json ({version!r})")
-    path = path or PLUGIN_READY
+    path = path or ready_file()
     try:
         with open(path, encoding="utf-8") as fh:
             have = [line.strip() for line in fh if line.strip()]
@@ -388,7 +411,12 @@ def send_patch(path, version, files, poster=None):
 
 def update_clone(clone=CLONE, tag=None, repo=None):
     """Move the clone to `tag` (default: the newest release): fetched into refs/tags so `describe` names it (#92),
-    signature verified (#99), checked out. A clone with local changes is refused, naming `keep-local`."""
+    signature verified (#99), checked out. A clone with local changes is refused, naming `keep-local`.
+
+    An update that does not land leaves refs/tags as it found them (R48, #142): the tag its fetch wrote is deleted
+    again, or -- a local tag of that name was there before, and the fetch's `+` overwrote it -- given its old value back.
+    A refused tag stayed, "nothing was changed" was not true of refs/tags, and `describe` could name it. `--no-tags`:
+    the one tag asked for, not every tag git would bring along on the same commit -- a refused one's siblings."""
     files = changed_files(clone)
     if files:
         raise Refused(f"{clone} has local changes ({', '.join(files[:5])}{' …' if len(files) > 5 else ''}); "
@@ -397,16 +425,24 @@ def update_clone(clone=CLONE, tag=None, repo=None):
     tag = tag or newest_tag(repo or SKILL_REPO)
     if not tag:
         raise Refused("the newest release could not be asked for (no network?); nothing was changed")
-    rc, _, err = git(clone, "fetch", "--quiet", "--depth", "1", repo or "origin", f"+refs/tags/{tag}:refs/tags/{tag}",
+    ref = f"refs/tags/{tag}"
+    rc, had, _ = git(clone, "rev-parse", "--verify", "--quiet", ref)
+    had = had.strip() if rc == 0 else ""
+    rc, _, err = git(clone, "fetch", "--quiet", "--no-tags", "--depth", "1", repo or "origin", f"+{ref}:{ref}",
                      timeout=300)
     if rc != 0:
         raise Refused(f"could not fetch {tag}: {err.strip()}; nothing was changed")
+
+    def put_back():
+        rc, _, err = git(clone, "update-ref", ref, had) if had else git(clone, "update-ref", "-d", ref)
+        return "" if rc == 0 else f" ({ref} could not be put back as it was: {err.strip()})"
+
     ok, said = verify_tag(clone, tag)
     if not ok:
-        raise Refused(said + "; nothing was changed")
-    rc, _, err = git(clone, "-c", "advice.detachedHead=false", "checkout", "--quiet", f"refs/tags/{tag}^{{commit}}")
+        raise Refused(said + "; nothing was changed" + put_back())
+    rc, _, err = git(clone, "-c", "advice.detachedHead=false", "checkout", "--quiet", f"{ref}^{{commit}}")
     if rc != 0:
-        raise Refused(f"could not check out {tag}: {err.strip()}")
+        raise Refused(f"could not check out {tag}: {err.strip()}" + put_back())
     # The tag asked for, not `describe`: a release lands on its candidate's commit, so `beta-…-rc2` and the release
     # can name one commit, and `describe` picks between them by tagger date -- in the selftest's fixture, within one
     # second, by chance (W-5: the suite named v3.0.66 once).
@@ -783,11 +819,14 @@ def main(argv=None):
         else:
             got = update_libs()
     except Refused as exc:
+        # The code by the exception's own attribute (#142): 4 for a copy that could not be checked at all, 3 otherwise.
+        code = getattr(exc, "exit_code", 3)
+        word = "could not check" if code == 4 else "refused"
         if args.json:
-            print(json.dumps({"ok": False, "refused": str(exc)}, ensure_ascii=False))
+            print(json.dumps({"ok": False, "refused": str(exc), "exit_code": code}, ensure_ascii=False))
         else:
-            print(f"refused: {exc}", file=sys.stderr)
-        return 3
+            print(f"{word}: {exc}", file=sys.stderr)
+        return code
     if args.json:
         print(json.dumps(got, ensure_ascii=False, indent=1))
         return 0 if _ok(args.cmd, got) else 3
@@ -834,15 +873,26 @@ def _ok(cmd, got):
 #: way or another; none of them is the author's signature. A fake `gpg.program` stands in for gpg: no real one runs,
 #: and no keyring is touched. Bytes, so a script keeps its "\n" line ends on Windows.
 _SIGN_ONLY_HELPER = b"#!/bin/sh\necho 'helper: sign-only (try -Y sign)' >&2\nexit 1\n"
-_FAKE_GPG = (b"#!/bin/sh\n"
-             b"cat >/dev/null\n"
-             b"echo '[GNUPG:] NEWSIG'\n"
-             b"echo '[GNUPG:] GOODSIG 0123456789ABCDEF Mallory <m@example.org>'\n"
-             b"echo '[GNUPG:] VALIDSIG 0123456789ABCDEF0123456789ABCDEF01234567 2026-10-08 0 0 0 0 0 1 0 "
-             b"0123456789ABCDEF0123456789ABCDEF01234567'\n"
-             b"echo '[GNUPG:] TRUST_ULTIMATE 0 pgp'\n"
-             b"echo 'gpg: Good signature from \"Mallory <m@example.org>\" [ultimate]' >&2\n"
-             b"exit 0\n")
+
+
+def _fake_gpg(uid):
+    """A `gpg.program` that calls any OpenPGP signature good, from a key whose user id is `uid` -- printed after gpg's
+    own `gpg: ` prefix. Runs no real gpg."""
+    return (b"#!/bin/sh\n"
+            b"cat >/dev/null\n"
+            b"echo '[GNUPG:] NEWSIG'\n"
+            + f"echo '[GNUPG:] GOODSIG 0123456789ABCDEF {uid}'\n".encode("utf-8")
+            + b"echo '[GNUPG:] VALIDSIG 0123456789ABCDEF0123456789ABCDEF01234567 2026-10-08 0 0 0 0 0 1 0 "
+              b"0123456789ABCDEF0123456789ABCDEF01234567'\n"
+              b"echo '[GNUPG:] TRUST_ULTIMATE 0 pgp'\n"
+            + f"echo 'gpg: Good signature from \"{uid}\" [ultimate]' >&2\n".encode("utf-8")
+            + b"exit 0\n")
+
+
+_FAKE_GPG = _fake_gpg("Mallory <m@example.org>")
+#: #142 (PTA 4): a user id that IS the author's sentence (the selftest's principal is `author`): only a test held to the
+#: start of a line refuses it -- gpg prints it inside its own line.
+_FORGED_UID = 'Good "git" signature for author with ED25519 key SHA256:forged'
 _STUB_GIT = (b"#!/bin/sh\n"
              b"for a in \"$@\"; do\n"
              b"  if [ \"$a\" = verify-tag ]; then echo 'Good signature from \"anyone\"' >&2; exit 0; fi\n"
@@ -876,12 +926,14 @@ def _signature_fixture(tmp, env, anchor, author_key):
     sh("git", "-C", repo, "-c", "gpg.format=ssh", "-c", f"user.signingkey={author_key}.pub", "tag", "-s", "v3.0.64",
        "-m", "signed")
     for name, body in (("pgp-message", _PGP_SIGNED_MESSAGE), ("sign-only.sh", _SIGN_ONLY_HELPER),
-                       ("fake-gpg.sh", _FAKE_GPG), (os.path.join("stub-git", "git"), _STUB_GIT)):
+                       ("fake-gpg.sh", _FAKE_GPG), ("forged-gpg.sh", _fake_gpg(_FORGED_UID)),
+                       (os.path.join("stub-git", "git"), _STUB_GIT)):
         with open(os.path.join(base, name), "wb") as fh:
             fh.write(body)
         os.chmod(os.path.join(base, name), 0o755)
     sh("git", "-C", repo, "tag", "-a", "v3.0.67", "-F", os.path.join(base, "pgp-message"))
-    configs = {"hostile": ('[gpg "ssh"]', "sign-only.sh"), "pgp": ("[gpg]", "fake-gpg.sh")}
+    configs = {"hostile": ('[gpg "ssh"]', "sign-only.sh"), "pgp": ("[gpg]", "fake-gpg.sh"),
+               "forged": ("[gpg]", "forged-gpg.sh")}
     for name, (section, program) in configs.items():
         program = os.path.join(base, program).replace(os.sep, "/")   # forward slashes: a config's "\" escapes
         with open(os.path.join(base, name + ".gitconfig"), "wb") as fh:
@@ -890,7 +942,7 @@ def _signature_fixture(tmp, env, anchor, author_key):
         fh.write(b"[gpg]\n\tminTrustLevel = ultimate\n")
     return {"repo": repo, "env": env, "anchor": anchor, "stub_dir": stub_dir,
             "hostile": os.path.join(base, "hostile.gitconfig"), "pgp": os.path.join(base, "pgp.gitconfig"),
-            "ultimate": os.path.join(base, "ultimate.gitconfig")}
+            "forged": os.path.join(base, "forged.gitconfig"), "ultimate": os.path.join(base, "ultimate.gitconfig")}
 
 
 def _check_a_signing_helper_is_not_asked(fx):
@@ -906,13 +958,17 @@ def _check_an_openpgp_good_is_not_the_authors(fx):
     never ran is refused the same way, and would pass unseen while the person's real gpg ran."""
     ok, said = verify_tag(fx["repo"], "v3.0.67", env=dict(fx["env"], GIT_CONFIG_GLOBAL=fx["pgp"]), **fx["anchor"])
     assert not ok and "does not check out" in said and "Mallory" in said, said
+    # #142 (PTA 4): the author's own sentence as the key's user id -- inside gpg's line, never at the start of one.
+    ok, said = verify_tag(fx["repo"], "v3.0.67", env=dict(fx["env"], GIT_CONFIG_GLOBAL=fx["forged"]), **fx["anchor"])
+    assert not ok and "does not check out" in said and "SHA256:forged" in said, said
 
 
 def _check_a_git_that_says_good_is_not_believed(fx):
     """A `git` first on PATH that says "Good signature from" of any tag, with exit 0, is not the author's sentence.
-    POSIX only: on Windows a child is found on the parent's PATH, and a shell script is no program to it."""
+    POSIX only: on Windows a child is found on the parent's PATH, and a shell script is no program to it -- "skipped",
+    which the OK line then says (#142)."""
     if os.name == "nt":
-        return
+        return "skipped"
     path = fx["stub_dir"] + os.pathsep + fx["env"].get("PATH", os.defpath)
     ok, said = verify_tag(fx["repo"], "v3.0.64", env=dict(fx["env"], PATH=path), **fx["anchor"])
     assert not ok and "does not check out" in said, said
@@ -967,20 +1023,25 @@ def _check_plugin_ready_writes_its_line_byte_for_byte(tmp):
     assert got == b"v3.1.2\n", f"the ready file holds {got!r}, want b'v3.1.2\\n'"
 
 
-def _check_the_hook_is_silent_once_set_up(tmp):
+def _check_the_hook_is_silent_once_set_up(tmp, hook=None, repo_root=None):
     """The SessionStart hook reads what `plugin_ready` writes (T-39, #142): the note while this version is not set up,
     nothing once `plugin_ready` has written it down, and nothing for a checkout -- `.git` a file in a submodule (TCC
     vendors the skill as one, hub #238), a folder in a clone. Wherever a bash runs it, Git for Windows' on Windows: the
-    platform whose line ending kept the note on is the one it was never run on."""
-    if not os.path.isfile(_HOOK):
+    platform whose line ending kept the note on is the one it was never run on. Skipped only for the skill folder alone,
+    with no repository root around it (`.claude-plugin/plugin.json` two folders up): where that root is, a hook that is
+    not there is a failure (#142) -- it was a skip, and the check could not fail."""
+    hook = hook or _HOOK
+    repo_root = repo_root or os.path.normpath(os.path.join(SKILL_DIR, "..", ".."))
+    if not os.path.isfile(os.path.join(repo_root, ".claude-plugin", "plugin.json")):
         return                    # the skill folder alone, without the repository's root: the hook is not shipped here
+    assert os.path.isfile(hook), f"the repository's root is here ({repo_root}) and its SessionStart hook is not: {hook}"
     bash = _a_bash()
     assert bash, "no bash to run the SessionStart hook with -- on Windows, Git for Windows' own, beside git"
     home = os.path.join(tmp, "hook-home")
     root = _plugin_root(os.path.join(tmp, "hook-plugin"), "3.1.2")
 
     def note():
-        r = subprocess.run([bash, _HOOK], env=dict(os.environ, HOME=home, CLAUDE_PLUGIN_ROOT=root),
+        r = subprocess.run([bash, hook], env=dict(os.environ, HOME=home, CLAUDE_PLUGIN_ROOT=root),
                            capture_output=True, text=True, timeout=30)
         assert r.returncode == 0, f"the hook exited {r.returncode}: {r.stderr.strip()[-200:]}"
         return r.stdout
@@ -996,6 +1057,135 @@ def _check_the_hook_is_silent_once_set_up(tmp):
     os.remove(os.path.join(root, ".git"))
     os.makedirs(os.path.join(root, ".git"))
     assert note() == "", "a clone is a checkout"
+
+
+def _check_a_missing_hook_fails_the_hook_check(tmp):
+    """#142 (SFH 10): the hook check above, given a repository root without its hook, FAILS -- it returned, and a hook
+    that went missing passed every run."""
+    fake_root = os.path.join(tmp, "root-without-hook")
+    _plugin_root(fake_root, "3.1.2")
+    try:
+        _check_the_hook_is_silent_once_set_up(tmp, hook=os.path.join(fake_root, "hooks", "session-start.sh"),
+                                              repo_root=fake_root)
+    except AssertionError as exc:
+        assert "SessionStart hook is not" in str(exc), exc
+        return
+    raise AssertionError("a repository root whose hooks/session-start.sh is gone passed the hook check")
+
+
+def _check_the_ready_file_is_where_the_hook_looks(tmp):
+    """#142 (SFH 10): `plugin_ready` and the hook name one file. The hook reads `$HOME/.config/autosound/plugin-ready`,
+    and on Windows Git Bash's $HOME is %HOME% when that is set -- Python's `~` there is %USERPROFILE% alone, so with a
+    %HOME% of its own the two were two files. Asked of `ready_file` for Windows and POSIX, then live: a HOME that is not
+    USERPROFILE, `plugin_ready` with no path, and the hook run with that HOME is silent."""
+    on_nt = ready_file({"HOME": os.path.join("h", "home"), "USERPROFILE": os.path.join("u", "profile")}, nt=True)
+    assert on_nt == os.path.join("h", "home", ".config", "autosound", "plugin-ready"), on_nt
+    no_home = ready_file({"USERPROFILE": os.path.join("u", "profile")}, nt=True)
+    assert no_home == os.path.join("u", "profile", ".config", "autosound", "plugin-ready"), no_home
+    posix = ready_file({"HOME": os.path.join("h", "home")}, nt=False)
+    assert posix == os.path.join("h", "home", ".config", "autosound", "plugin-ready"), posix
+    bash = _a_bash()
+    if not os.path.isfile(_HOOK) or not bash:
+        return                    # no hook beside this skill, or no bash: the live half is the hook check's ground
+    home, profile = os.path.join(tmp, "ready-home"), os.path.join(tmp, "ready-profile")
+    root = _plugin_root(os.path.join(tmp, "ready-plugin"), "3.1.4")
+    saved = {name: os.environ.get(name) for name in ("HOME", "USERPROFILE")}
+    try:
+        os.environ.update(HOME=home, USERPROFILE=profile)
+        written = plugin_ready(root)["file"]
+    finally:
+        for name, value in saved.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
+    r = subprocess.run([bash, _HOOK], env=dict(os.environ, HOME=home, USERPROFILE=profile, CLAUDE_PLUGIN_ROOT=root),
+                       capture_output=True, text=True, timeout=30)
+    assert r.returncode == 0 and r.stdout == "", (f"plugin_ready wrote {written}, and the hook run with HOME={home} "
+                                                  f"still says: {r.stdout[:120]!r}")
+
+
+def _check_a_refused_update_leaves_the_tags_as_they_were(fx):
+    """R48 (#142): an update refused for its signature leaves refs/tags as it found them -- the tag it fetched deleted
+    again, and a local tag of that name, which the fetch's `+` overwrote, given its own value back -- and HEAD where it
+    was. Asked of the refs and HEAD's commit, never of `describe`: v3.0.64, v3.0.65 and v3.0.66 name one commit, and
+    `describe` picks between them by tagger date (the Windows CI flake, 37858572763)."""
+    base = os.path.join(fx["tmp"], "r48")
+    origin, clone = os.path.join(base, "origin"), os.path.join(base, "clone")
+    os.makedirs(origin)
+    env = fx["env"]
+
+    def sh(*cmd):
+        rc, out, err = run(list(cmd), env=env)
+        assert rc == 0, (cmd, out, err)
+        return out.strip()
+
+    sh("git", "init", "-q", origin)
+    with open(os.path.join(origin, "a.txt"), "w", encoding="utf-8") as fh:
+        fh.write("one\n")
+    sh("git", "-C", origin, "add", "a.txt")
+    sh("git", "-C", origin, "commit", "-q", "-m", "one")
+    sh("git", "-C", origin, "-c", "gpg.format=ssh", "-c", f"user.signingkey={fx['author_key']}.pub", "tag", "-s",
+       "v3.0.64", "-m", "signed")
+    for name in ("v3.0.65", "v3.0.66"):
+        sh("git", "-C", origin, "tag", "-a", name, "-m", "unsigned, on the same commit")
+    sh("git", "init", "-q", clone)
+    sh("git", "-C", clone, "remote", "add", "origin", "file://" + origin)
+    global SIGNING_PRINCIPAL, SIGNING_KEY
+    saved = SIGNING_PRINCIPAL, SIGNING_KEY
+    SIGNING_PRINCIPAL, SIGNING_KEY = fx["anchor"]["principal"], fx["anchor"]["key"]
+    try:
+        update_clone(clone, "v3.0.64", repo="file://" + origin)
+        at = sh("git", "-C", clone, "rev-parse", "HEAD")
+
+        def tag_at(name):
+            return git(clone, "rev-parse", "--verify", "--quiet", f"refs/tags/{name}")[1].strip()
+
+        assert tag_at("v3.0.65") == "", "the update to v3.0.64 brought v3.0.65 along: it fetches the tag asked for alone"
+        try:
+            update_clone(clone, "v3.0.65", repo="file://" + origin)
+            raise AssertionError("v3.0.65, unsigned, was checked out")
+        except Refused as exc:
+            assert "does not check out" in str(exc), exc
+        assert sh("git", "-C", clone, "rev-parse", "HEAD") == at and tag_at("v3.0.65") == "", \
+            f"after the refusal HEAD is {sh('git', '-C', clone, 'rev-parse', 'HEAD')[:12]} and v3.0.65 is " \
+            f"{tag_at('v3.0.65')[:12] or 'absent'} -- want HEAD {at[:12]} and no v3.0.65"
+        sh("git", "-C", clone, "tag", "v3.0.66", at)               # a local v3.0.66 of its own, lightweight
+        own = tag_at("v3.0.66")
+        try:
+            update_clone(clone, "v3.0.66", repo="file://" + origin)
+            raise AssertionError("v3.0.66, unsigned, was checked out")
+        except Refused as exc:
+            assert "does not check out" in str(exc), exc
+        assert tag_at("v3.0.66") == own and sh("git", "-C", clone, "rev-parse", "HEAD") == at, \
+            f"after the refusal v3.0.66 is {tag_at('v3.0.66')[:12]}, want its own {own[:12]} back"
+    finally:
+        SIGNING_PRINCIPAL, SIGNING_KEY = saved
+
+
+def _check_verify_copy_says_which_way_it_failed(fx):
+    """#142 (SFH 6): `verify-copy` answers 4 for a copy it could not check -- the release did not answer -- and 3 for one
+    that is not as its author signed it. The two shared 3, so the installers sent a person who was offline to
+    reinstall a good plugin. Through `main`, its exit code, the release's repository the module's SKILL_REPO."""
+    import contextlib
+    import io
+    good = fx["plugin_copy"]("v3.0.70")
+    with open(os.path.join(good, "a.txt"), "a", encoding="utf-8") as fh:
+        fh.write("changed\n")
+    saved = SKILL_REPO
+    said = io.StringIO()
+    try:
+        answers = {}
+        for what, repo in (("offline", "file://" + os.path.join(fx["tmp"], "no-such-release")),
+                           ("changed", "file://" + fx["origin"])):
+            globals()["SKILL_REPO"] = repo
+            with contextlib.redirect_stderr(said), contextlib.redirect_stdout(said):
+                answers[what] = main(["verify-copy", "--root", good, "--tag", "v3.0.70"])
+    finally:
+        globals()["SKILL_REPO"] = saved
+    assert answers == {"offline": 4, "changed": 3}, f"verify-copy answered {answers}, want offline 4 and changed 3 -- " \
+                                                    f"said {said.getvalue()[-300:]!r}"
+    assert "could not check: could not fetch v3.0.70" in said.getvalue(), said.getvalue()[-300:]
 
 
 def _selftest():
@@ -1075,11 +1265,12 @@ def _selftest_in(tmp):
     # handing git its `env` -- and then the OpenPGP check would give a PGP block to the person's own gpg, which finds
     # only this process's temporary GNUPGHOME (above), on Windows too, where this check returns at once.
     fx = _signature_fixture(tmp, env, anchor, os.path.join(tmp, "author"))
-    failures = []
+    failures, skipped = [], []
     for check in (_check_a_git_that_says_good_is_not_believed, _check_a_signing_helper_is_not_asked,
                   _check_an_openpgp_good_is_not_the_authors, _check_a_min_trust_level_is_not_the_persons):
         try:
-            check(fx)
+            if check(fx) == "skipped":
+                skipped.append(check)
         except AssertionError as exc:
             failures.append(f"{check.__name__}: {exc}")
             if check is _check_a_git_that_says_good_is_not_believed:
@@ -1124,12 +1315,17 @@ def _selftest_in(tmp):
         # The update: the tag lands in refs/tags, so `describe` names it (#92); the signature is checked (#99).
         moved = update_clone(clone, "v3.0.64", repo="file://" + origin)
         assert moved["to"] == "v3.0.64" and "signature good" in moved["signature"], moved
+        # A refused update leaves HEAD and refs/tags as they were (R48, #142) -- asked of HEAD's commit and the tag,
+        # not of `describe`, which picks among v3.0.64/65/66 on one commit by tagger date (Windows CI 37858572763).
+        landed = git(clone, "rev-parse", "HEAD")[1].strip()
         for bad in ("v3.0.65", "v3.0.66"):
             try:
                 update_clone(clone, bad, repo="file://" + origin)
                 raise AssertionError(f"{bad} must not be checked out")
             except Refused as exc:
-                assert "does not check out" in str(exc) and describe(clone) == "v3.0.64", (exc, describe(clone))
+                left = git(clone, "rev-parse", "--verify", "--quiet", f"refs/tags/{bad}")[1].strip()
+                assert "does not check out" in str(exc) and git(clone, "rev-parse", "HEAD")[1].strip() == landed \
+                    and not left, (exc, landed, left)
 
         # W-6 #121: a plugin copy (no .git) against its signed tag, file by file. Two more releases in the origin:
         # v3.0.70 signed by the author, v3.0.71 unsigned, each naming itself in .claude-plugin/plugin.json.
@@ -1200,12 +1396,24 @@ def _selftest_in(tmp):
         for _ in range(2):
             assert plugin_ready(plugin_copy("v3.0.70"), path=ready)["version"] == "v3.0.70"
         assert open(ready, encoding="utf-8").read() == "v3.0.70\n", "one line per version, written once"
+        # #142: verify-copy's two ways to fail, and a refused update's refs/tags (R48).
+        fx2 = {"tmp": tmp, "env": env, "anchor": anchor, "author_key": os.path.join(tmp, "author"), "origin": origin,
+               "plugin_copy": plugin_copy}
+        failures = []
+        for check in (_check_verify_copy_says_which_way_it_failed, _check_a_refused_update_leaves_the_tags_as_they_were):
+            try:
+                check(fx2)
+            except AssertionError as exc:
+                failures.append(f"{check.__name__}: {exc}")
+        assert not failures, "\n".join(failures)
     finally:
         SIGNING_PRINCIPAL, SIGNING_KEY = saved
     # T-39 (#142): the ready file byte for byte, and the SessionStart hook that reads it -- on every platform a bash
-    # runs, Windows' Git Bash included (the hook's checks, POSIX only until now, are in the second).
+    # runs, Windows' Git Bash included (the hook's checks, POSIX only until now, are in the second); a hook gone missing
+    # fails that check, and the ready file is the one the hook reads, whatever HOME and USERPROFILE say.
     failures = []
-    for check in (_check_plugin_ready_writes_its_line_byte_for_byte, _check_the_hook_is_silent_once_set_up):
+    for check in (_check_plugin_ready_writes_its_line_byte_for_byte, _check_the_hook_is_silent_once_set_up,
+                  _check_a_missing_hook_fails_the_hook_check, _check_the_ready_file_is_where_the_hook_looks):
         try:
             check(tmp)
         except AssertionError as exc:
@@ -1291,14 +1499,18 @@ def _selftest_in(tmp):
     got = update_libs("py", "r.txt", runner=lambda cmd, timeout=None: (0, "False\n", ""))
     assert got["ok"] and "--upgrade" in got["command"] and "--user" in got["command"], got
     shutil.rmtree(tmp, ignore_errors=True)
+    # The OK line names only what ran (#142): on Windows the stand-in git is a shell script no child can start.
+    good_says = ("a git that says Good" if _check_a_git_that_says_good_is_not_believed not in skipped
+                 else "a git that says Good: NOT checked here, Windows starts no shell script")
     print("selftest[upkeep] OK -- a signed tag passes, an unsigned or foreign-signed one is refused, one before "
           f"{SIGNED_FROM} predates signing, the developer's switch says so; only the author's SSH signature is good, "
-          "whatever the git config says (a signing helper, an OpenPGP Good, a git that says Good, a minimum trust "
-          "level); local changes "
+          f"whatever the git config says (a signing helper, an OpenPGP Good, the author's sentence as an OpenPGP user "
+          f"id, {good_says}, a minimum trust level); local changes "
           "(new files too) become a "
           "patch that brings them back, sent only when asked, and only then is the clone reset; the update lands "
-          "the tag in refs/tags and refuses a dirty clone or a bad signature; the ready file is one line, \\n-ended, "
-          "and the SessionStart hook is silent once it is written; "
+          "the tag in refs/tags and refuses a dirty clone or a bad signature, leaving HEAD and refs/tags as they were; "
+          "verify-copy answers 4 for a copy it could not check and 3 for one not as signed; the ready file is one "
+          "line, \\n-ended, where the hook looks, and the SessionStart hook is silent once it is written; "
           + ("each tool is updated the way it was installed and a missing one is not added; " if tools_here else "")
           + "pip is asked to upgrade with the installers' flags")
     return 0
