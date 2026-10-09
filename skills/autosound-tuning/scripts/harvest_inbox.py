@@ -97,29 +97,34 @@ def _moved(project, path):
            f"{os.path.join(project, os.path.basename(path))}"
 
 
-def _inbox(project):
-    """`(path, warnings)`: the project root's `skill-inbox.md`, else an older project's in `rew_analitic/` with the
-    line naming the move; `(None, [])` when there is neither."""
+def _inboxes(project):
+    """`(paths, warnings)`: the project root's `skill-inbox.md`, then an older project's in `rew_analitic/` with the
+    line naming the move -- both, when both are there: an older project's root inbox is often the intake's rules header
+    alone, its lessons in the copy, and reading the root's only came back empty."""
+    paths, warnings = [], []
     for folder in (project, os.path.join(project, OLD_HOME)):
         path = os.path.join(folder, INBOX)
         if os.path.isfile(path):
-            return path, ([] if folder == project else [_moved(project, path)])
-    return None, []
+            paths.append(path)
+            if folder != project:
+                warnings.append(_moved(project, path))
+    return paths, warnings
 
 
 def _changelogs(project):
-    """`(paths, warnings)`: every `tuning-changelog*` at the project root; with none there, those an older project
-    keeps in `rew_analitic/`, each with the line naming the move."""
+    """`(paths, warnings)`: every `tuning-changelog*` at the project root, then those an older project keeps in
+    `rew_analitic/`, each of these with the line naming the move."""
+    paths, warnings = [], []
     for folder in (project, os.path.join(project, OLD_HOME)):
         try:
             names = sorted(n for n in os.listdir(folder)
                            if n.startswith(CHANGELOG_GLOB) and os.path.isfile(os.path.join(folder, n)))
         except OSError:
             continue
-        if names:
-            paths = [os.path.join(folder, n) for n in names]
-            return paths, ([] if folder == project else [_moved(project, p) for p in paths])
-    return [], []
+        paths += [os.path.join(folder, n) for n in names]
+        if folder != project:
+            warnings += [_moved(project, os.path.join(folder, n)) for n in names]
+    return paths, warnings
 
 
 def lessons(project):
@@ -144,10 +149,14 @@ def personal_hits(text):
 
 def build(project, skill_version="unknown"):
     """The package as text, plus what a reader must look at before sending it."""
-    inbox_path, warnings = _inbox(project)
-    inbox_text = _read(inbox_path) if inbox_path else None
+    inbox_paths, warnings = _inboxes(project)
+    texts = [text for text in (_read(path) for path in inbox_paths) if text is not None]
     warnings = warnings + _changelogs(project)[1]
-    sections = inbox_sections(inbox_text)
+    # Both inboxes add up, the root's first: a heading in both carries both bodies.
+    sections = {}
+    for text in texts:
+        for name, body in inbox_sections(text).items():
+            sections[name] = f"{sections[name]}\n\n{body}" if name in sections else body
     found_lessons = lessons(project)
     body = [f"# Feedback: <car/body> · <DSP> · <date> · skill {skill_version}", ""]
     for name in SECTIONS:
@@ -160,7 +169,7 @@ def build(project, skill_version="unknown"):
         body += [f"- {line}" for line in found_lessons] + [""]
     text = "\n".join(body)
     return text, {
-        "inbox_found": inbox_text is not None,
+        "inbox_found": bool(texts),
         "sections_with_content": sorted(sections),
         "lessons": found_lessons,
         "personal": personal_hits(text),
@@ -272,16 +281,51 @@ def _check_the_old_home_is_read_and_said():
                 failures.append(f"{name}: no one line naming {old} and {home}: {said!r}")
         if len(said) != 2 or report.get("warnings") != [ln[len("warning: "):] for ln in said]:
             failures.append(f"the warnings: said {said!r}, the report's {report.get('warnings')!r}")
-        both = _project(top, "both", inbox_in="", changelog_in="")
-        io.open(os.path.join(both, "rew_analitic", "skill-inbox.md"), "w", encoding="utf-8").write(
-            "## What worked\nTHE OLD COPY\n")
-        code, out, err = _run([both, "--json"])
-        report = json.loads(out) if code == 0 else {}
-        if code != 0 or "THE OLD COPY" in report.get("package", "THE OLD COPY") or report.get("warnings") != []:
-            failures.append(f"the root's beside a copy: exit {code}, {report or out!r}, said {err.strip()!r}")
     finally:
         shutil.rmtree(top, ignore_errors=True)
     assert not failures, "\n  ".join(["the old home, rew_analitic/:"] + failures)
+
+
+def _check_both_inboxes_are_harvested():
+    """#143, I-21 (fix 2): where both folders hold an inbox or a changelog, both are harvested -- the root's first,
+    then the `rew_analitic/` copy with its move warning; sections and `Lesson:` lines add up. The root's won silently,
+    and an older project's harvest came back empty: its root inbox is the intake's rules header, its lessons are in
+    `rew_analitic/skill-inbox.md`."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="harvest_inbox_both_")
+    failures = []
+    try:
+        proj = _project(top, "car")
+        old = os.path.join(proj, "rew_analitic")
+        io.open(os.path.join(proj, "skill-inbox.md"), "w", encoding="utf-8").write(
+            "# Skill inbox\n\nRules: one line per lesson, 📚 and why.\n\n## What worked\n\n## DSP/hardware quirks\n")
+        io.open(os.path.join(old, "skill-inbox.md"), "w", encoding="utf-8").write(
+            "# Skill inbox\n\n## What worked\nTHE OLD LESSON: LR24 at 80 Hz held the joint.\n")
+        io.open(os.path.join(proj, "tuning-changelog.md"), "w", encoding="utf-8").write("- Lesson: the root's\n")
+        io.open(os.path.join(old, "tuning-changelog.md"), "w", encoding="utf-8").write("- Lesson: the copy's\n")
+        code, out, err = _run([proj, "--json"])
+        report = json.loads(out) if code == 0 else {}
+        if code != 0 or "THE OLD LESSON" not in report.get("package", "") \
+                or report.get("lessons") != ["the root's", "the copy's"]:
+            failures.append(f"the old layout: exit {code}, {report or out!r}")
+        said = [ln for ln in err.splitlines() if ln.startswith("warning: ")]
+        for name in ("skill-inbox.md", "tuning-changelog.md"):
+            if len([ln for ln in said if os.path.join(old, name) in ln and os.path.join(proj, name) in ln]) != 1:
+                failures.append(f"{name}: no one line naming the copy and its home: {said!r}")
+        if len(said) != 2:
+            failures.append(f"{len(said)} warning line(s), not 2: {said!r}")
+        # Both with something to say under one heading: the root's first, then the copy's.
+        io.open(os.path.join(proj, "skill-inbox.md"), "w", encoding="utf-8").write(
+            "## What worked\nTHE ROOT'S LESSON\n")
+        code, out, err = _run([proj, "--json"])
+        package = json.loads(out).get("package", "") if code == 0 else ""
+        at = [package.find(s) for s in ("THE ROOT'S LESSON", "THE OLD LESSON")]
+        if code != 0 or -1 in at or at != sorted(at) or package.count("## What worked") != 1:
+            failures.append(f"one heading in both: exit {code}, {package!r}")
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["both folders:"] + failures)
 
 
 def _check_no_inbox_names_the_root():
@@ -306,7 +350,8 @@ def _selftest():
     import shutil
     import tempfile
     failures = []
-    for check in (_check_the_inbox_at_the_root, _check_the_old_home_is_read_and_said, _check_no_inbox_names_the_root):
+    for check in (_check_the_inbox_at_the_root, _check_the_old_home_is_read_and_said, _check_both_inboxes_are_harvested,
+                  _check_no_inbox_names_the_root):
         try:
             check()
         except AssertionError as exc:
@@ -358,8 +403,9 @@ def _selftest():
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("selftest OK — inbox sections and changelog `Lesson:` lines land in the fixed package "
-          "shape, read at the project root (an older project's in rew_analitic/ with a warning naming "
-          "the move), a missing inbox is refused rather than answered with an empty package, and an "
+          "shape, read at the project root and, added after them, an older project's in rew_analitic/ "
+          "with a warning naming the move, a missing inbox is refused rather than answered with an empty "
+          "package, and an "
           "an API KEY in any of the four shapes, an e-mail, a home path and a phone are NAMED "
           "while ordinary tuning numbers are not — a key that leaves the machine once has left "
           "it for good")
