@@ -155,6 +155,12 @@ MISSING=""
 #: Set by `stop` and `finish` as they end the run (#142): `going_ahead`'s EXIT trap leaves an exit that came through
 #: them as it is, and makes any other one a stop.
 ENDED=""
+#: What the method's step left as it was, when it did (#142): a link that is not this script's, or anything else at
+#: ~/.claude/skills/autosound-tuning. The receipt's method_ref says that, not a tag this run never installed.
+METHOD_LEFT=""
+#: `read_tags`' answer: the tag names a remote listed, or -- when none could be read -- why, in git's own last line.
+TAGS_READ=""
+TAGS_WHY=""
 # Saved before anything is installed: the uv step exports ~/.local/bin into THIS script's PATH so
 # the rest of the run can call what it just installed. That made the summary print "✓
 # autosound-tcc installed" to somebody whose own shell could not find it, because the check was
@@ -235,9 +241,11 @@ while [ $# -gt 0 ]; do
     --dry-run)     DRY_RUN=1 ;;
     --plugin)      WANT_PLUGIN=1 ;;
     --yes|-y)      ASSUME_YES=1 ;;
-    --skill-ref)   SKILL_REF="${2:-}"; shift ;;
-    --channel)     CHANNEL="${2:-}"; shift ;;
-    --tcc-ref)     TCC_REF="${2:-}"; shift ;;
+    # An option that takes a value, given none, is a usage error (#142): `shift` past the end under `set -e` ended the
+    # run 1 with no line at all.
+    --skill-ref)   [ $# -ge 2 ] || { echo "$1 needs a value (try --help)" >&2; exit 2; }; SKILL_REF="$2"; shift ;;
+    --channel)     [ $# -ge 2 ] || { echo "$1 needs a value (try --help)" >&2; exit 2; }; CHANNEL="$2"; shift ;;
+    --tcc-ref)     [ $# -ge 2 ] || { echo "$1 needs a value (try --help)" >&2; exit 2; }; TCC_REF="$2"; shift ;;
     --help|-h)     usage; exit 0 ;;
     *) echo "unknown option: $1 (try --help)" >&2; exit 2 ;;
   esac
@@ -397,12 +405,17 @@ json_str() {  # json_str <text>
 # exchanges, because nothing on the machine said which installer had run -- an old bookmarked URL installs old logic
 # while the method itself updates to the newest tag. `doctor` reads it back. Its fields, in their order, are
 # install.ps1's; JSON from python3 when one runs, and built here when none does -- the engine's line is a tool's own
-# words. Written by `stop` and `finish`, never in a dry run; a receipt that cannot be written stops nothing.
+# words. Written by `stop` and `finish`, never in a dry run; a receipt that cannot be written stops nothing, and says so
+# once, naming the file and why (#142): kept quiet, `doctor` read an earlier run's receipt as this one's.
 write_receipt() {  # write_receipt ready|"not ready"|stopped
   [ "${DRY_RUN:-0}" = 1 ] && return 0
   _wr_status="$1"; _wr_ver=""; _wr_json=""
   _wr_dir="${XDG_DATA_HOME:-$HOME/.local/share}/autosound"
-  mkdir -p "$_wr_dir" 2>/dev/null || return 0
+  _wr_file="$_wr_dir/install-receipt.json"
+  if ! _wr_err="$(mkdir -p "$_wr_dir" 2>&1)"; then
+    warn "the receipt was not written ($(pretty "$_wr_file")): ${_wr_err##*: }"
+    return 0
+  fi
   _wr_sha="$( (shasum -a 256 "$0" 2>/dev/null || sha256sum "$0" 2>/dev/null) | awk '{print $1}')" || _wr_sha=""
   if usable python3; then
     _wr_ver="$(python3 -c 'import sys; print("%d.%d.%d" % sys.version_info[:3])' 2>/dev/null)" || _wr_ver=""
@@ -412,7 +425,7 @@ write_receipt() {  # write_receipt ready|"not ready"|stopped
   else
     _wr_python="no python3"
   fi
-  set -- install.sh "$_wr_sha" "${SKILL_REF:-}" "${MODE:-}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+  set -- install.sh "$_wr_sha" "${METHOD_LEFT:-${SKILL_REF:-}}" "${MODE:-}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
          "$(uname -s)-$(uname -m)" "${ENGINE_DID:-not reached}" "${INSTALLER_VERSION:-}" "$_wr_status" \
          "${MISSING:-}" "$_wr_python"
   if [ -n "$_wr_ver" ]; then
@@ -437,13 +450,15 @@ print(json.dumps(receipt))' "$@" 2>/dev/null)" || _wr_json=""
       "$(json_str "$5")" "$(json_str "$6")" "$(json_str "$7")" "$(json_str "$8")" "$(json_str "$9")" "$_wr_list" \
       "$(json_str "${11}")")"
   fi
-  printf '%s\n' "$_wr_json" 2>/dev/null >"$_wr_dir/install-receipt.json" || true
+  if ! _wr_err="$( { printf '%s\n' "$_wr_json" > "$_wr_file"; } 2>&1 )"; then
+    warn "the receipt was not written ($(pretty "$_wr_file")): ${_wr_err##*: }"
+  fi
   return 0
 }
 
-# A stop: each line said, the receipt written as `stopped`, and the run ends with <code> -- 1, the method not installed
-# or not changed. Inside $(...) (pick_method_ref's) the receipt is written from the subshell; the caller carries the
-# code out.
+# A stop: each line said, the receipt written as `stopped`, and the run ends with <code> -- 1, stopped before the end
+# (R43): a refusal or an error, what was done before it stays, and these lines say what. Inside $(...)
+# (pick_method_ref's) the receipt is written from the subshell; the caller carries the code out.
 stop() {  # stop <code> <line> [<line>...]
   _st_code="$1"; shift
   for _st_line in "$@"; do warn "$_st_line"; done
@@ -486,7 +501,13 @@ finish() {
         warn "$_fi_one is not importable by $(command -v python3 2>/dev/null || echo python3) -- the libraries' step" \
              "above says why; install it for that python3, then run this again" ;;
       "the method")
-        warn "no tuning method at $(pretty "$SKILL_HOME") -- the method's step above says why; run this again" ;;
+        # A link that is not this script's, to nothing (#142): what to remove -- run again, it is left again.
+        if [ -L "$SKILL_HOME" ] && [ ! -e "$SKILL_HOME" ]; then
+          warn "$(pretty "$SKILL_HOME") is a link to $(readlink "$SKILL_HOME"), which is not there, and this installer" \
+               "leaves a link it did not make -- remove that link, and the next run of this installer makes its own"
+        else
+          warn "no tuning method at $(pretty "$SKILL_HOME") -- the method's step above says why; run this again"
+        fi ;;
       "the method (2.x line)")
         warn "$(pretty "$SKILL_HOME") is the 2.x line, which TCC cannot drive -- move it aside, then run this again" ;;
       "the beta copy")
@@ -521,15 +542,17 @@ consent() {
 
 # From here the run is going ahead (#142). The receipt says `stopped` until `stop` or `finish` writes how the run
 # ended: an end neither reaches -- a failure under `set -e`, Ctrl-C, a kill -- leaves no earlier run's `ready` standing.
-# Bash 3.2 runs no EXIT trap on Ctrl-C; the receipt written here says `stopped` all the same.
+# Ctrl-C at the terminal goes to the whole group, and bash 3.2 runs the EXIT trap for it too (a child stopped by it
+# hands the trap 130); a kill runs no trap at all -- the receipt written here says `stopped` all the same.
 going_ahead() {
   write_receipt stopped
   trap unplanned_end EXIT
 }
 # going_ahead's EXIT trap: an end that came through neither `stop` nor `finish` is a stop, 1 -- a failing command's own
 # code is not the table's 2 or 3. Whatever $? says: under bash 3.2 an unbound variable (`set -u`) reaches this trap as
-# 0, and without it the run would end 0, ready; a signal reaches it as 0 there too, and the run still ends by the
-# signal (130, 143) -- the receipt says `stopped` either way. The line names a code only when there is one.
+# 0, and without it the run would end 0, ready. A signal reaches it as 130 when a Ctrl-C stopped a child, and as 0 when
+# it was sent to this shell alone (a SIGTERM), and the run still ends by the signal -- the receipt says `stopped`
+# either way. The line names a code only when there is one.
 unplanned_end() {
   _ue_rc=$?
   [ -n "${ENDED:-}" ] && return 0
@@ -1059,16 +1082,16 @@ verify_tag() {  # verify_tag <dir> <ref> [<first signed tag> <whose>]
   # A git that cannot check is not a bad signature (TCC's `_CANNOT_CHECK`) -- git's own sentences, whole, never a
   # word of them: a bare "-Y" matched a signing helper's text and blamed git's age. Before 2.34 git does not know
   # gpg.format=ssh; from 2.34 it names an ssh-keygen older than OpenSSH 8.2 (which has no -Y) in a sentence of its
-  # own; with no ssh-keygen it cannot run one ("spawn" in Git for Windows). Refused all the same.
-  case "$_vt_said" in
-    *"unsupported value for gpg.format"*|*"ssh-keygen -Y find-principals/verify"*|*"illegal option -- Y"*|\
-    *"unknown option -- Y"*|*"cannot run ssh-keygen"*|*"cannot spawn ssh-keygen"*)
-      warn "the signature of $_vt_ref could not be checked here -- it is not installed:"
-      printf '%s\n' "$_vt_said" | tail -2 | sed 's/^/      /' >&2
-      warn "this git ($(git --version 2>/dev/null)) or its ssh-keygen may be too old to check one:" \
-           "git 2.34 or newer, with OpenSSH 8.2 or newer, is needed"
-      return 1 ;;
-  esac
+  # own; with no ssh-keygen it cannot run one ("spawn" in Git for Windows). Refused all the same. Each at the START of a
+  # line, after git's own prefix (#142): a signer's OpenPGP user id is printed inside gpg's line, and one that read
+  # "cannot run ssh-keygen" made a forged tag read as a machine that cannot check.
+  if printf '%s\n' "$_vt_said" | grep -Eq '^((error|fatal): (unsupported value for gpg\.format|ssh-keygen -Y find-principals/verify|cannot (run|spawn) ssh-keygen)|(ssh-keygen: )?(illegal|unknown) option -- Y)'; then
+    warn "the signature of $_vt_ref could not be checked here -- it is not installed:"
+    printf '%s\n' "$_vt_said" | tail -2 | sed 's/^/      /' >&2
+    warn "this git ($(git --version 2>/dev/null)) or its ssh-keygen may be too old to check one:" \
+         "git 2.34 or newer, with OpenSSH 8.2 or newer, is needed"
+    return 1
+  fi
   warn "the signature of $_vt_ref does not check out -- it is not installed:"
   printf '%s\n' "$_vt_said" | tail -2 | sed 's/^/      /' >&2
   warn "a release of $_vt_whose is signed by its author; this one is not, or not by that key."
@@ -1115,6 +1138,15 @@ head_is() {  # head_is <dir> <rev>
   [ -n "$_hi_at" ] && [ "$_hi_at" = "$(git -C "$1" rev-parse --verify --quiet "$2" 2>/dev/null)" ]
 }
 
+# An update that does not land leaves refs/tags as it found them (R48, #142): the tag its fetch wrote into <dir> is
+# deleted again -- or, when a local tag of that name was there before, given its old value back (the fetch's `+`
+# overwrote it). "Nothing was changed" is then true of the tags too, and `describe` cannot name a refused tag.
+put_tag_back() {  # put_tag_back <dir> <refs/tags/name, or ""> <its value before the fetch, or "">
+  if [ "$DRY_RUN" = 1 ] || [ -z "$2" ]; then return 0; fi
+  if [ -n "$3" ]; then git -C "$1" update-ref "$2" "$3" 2>/dev/null; else git -C "$1" update-ref -d "$2" 2>/dev/null; fi \
+    || warn "$2 could not be put back as it was in $(pretty "$1")"
+}
+
 # Put a checkout of the method at <dir> on <ref>: move it when it is already a checkout, make one
 # when there is none. ONE function for both copies -- the terminal's and the beta channel's
 # (autosound-hub #145) -- so a lesson learned on one cannot miss the other. <what> names the copy
@@ -1127,20 +1159,32 @@ head_is() {  # head_is <dir> <rev>
 # FETCH_HEAD. Against the COMMIT (`^{commit}`): an annotated tag, every release, is a tag object that HEAD never equals.
 #   0 = done; 1 = nothing was fetched or kept -- no new copy was made (the fetch failed, or something that is not a
 # checkout is at <dir>), or an update was not made and the copy is where it was (its fetch failed, or its local changes
-# could not be kept: a warning once, and the run ended "Installed." on the old version -- R32, #142); 2 = <ref>'s
-# signature did not check out, nothing of it checked out; 3 = HEAD was not <ref> after the checkout: a new copy is
-# removed, an update put back.
+# could not be kept: a warning once, and the run ended "Installed." on the old version -- R32, #142 -- or what changed
+# in it could not be read); 2 = <ref>'s signature did not check out, nothing of it checked out; 3 = HEAD was not <ref>
+# after the checkout: a new copy is removed, an update put back. An update that does not land leaves refs/tags as it
+# found them (`put_tag_back`, R48). `--no-tags`: the one tag asked for, not every tag git would bring along on the
+# same commit -- a refused one's siblings among them.
 checkout_method() {
   _co_dir="$1"; _co_ref="$2"; _co_what="$3"
-  _co_spec="$_co_ref"; _co_want="FETCH_HEAD^{commit}"
+  _co_spec="$_co_ref"; _co_want="FETCH_HEAD^{commit}"; _co_tag=""
   if is_release_tag "$_co_ref"; then
     _co_spec="+refs/tags/$_co_ref:refs/tags/$_co_ref"; _co_want="refs/tags/$_co_ref^{commit}"
+    _co_tag="refs/tags/$_co_ref"
   fi
   if [ -d "$_co_dir/.git" ]; then
+    # A dry run on a Mac without Apple's tools has no git to ask: /usr/bin/git there opens Apple's window (#142).
+    if [ "$DRY_RUN" = 1 ] && ! usable git; then
+      say "  would fetch $_co_ref into $(pretty "$_co_dir"), check it, and check it out (no git yet)"
+      return 0
+    fi
+    _co_had=""
+    if [ -n "$_co_tag" ]; then
+      _co_had="$(git -C "$_co_dir" rev-parse --verify --quiet "$_co_tag" 2>/dev/null)" || _co_had=""
+    fi
     # CHECKED, both of them. Unchecked, a network blip or a moved ref left the method sitting on
     # the previous version while this script printed "updating to <ref>" and carried on -- the one
     # failure mode where the user is told the opposite of what happened (HUB-042).
-    if ! run git -C "$_co_dir" fetch --quiet --depth 1 origin "$_co_spec"; then
+    if ! run git -C "$_co_dir" fetch --quiet --no-tags --depth 1 origin "$_co_spec"; then
       warn "could not fetch $_co_ref for $_co_what -- it is STILL at" \
            "$(git -C "$_co_dir" describe --tags --always 2>/dev/null || echo unknown)."
       warn "check the network, then re-run this script; nothing was changed."
@@ -1148,16 +1192,36 @@ checkout_method() {
     fi
     # What was fetched is checked before anything of it runs or is checked out (skill #99), and a clone with
     # local changes is kept as a patch rather than refused with the wrong reason (skill #91).
-    verify_tag "$_co_dir" "$_co_ref" || return 2
-    if [ -n "$(git -C "$_co_dir" status --porcelain --untracked-files=all 2>/dev/null)" ]; then
-      keep_local "$_co_dir" "$_co_what" || return 1
+    if ! verify_tag "$_co_dir" "$_co_ref"; then put_tag_back "$_co_dir" "$_co_tag" "$_co_had"; return 2; fi
+    # What changed in the copy, read WITH its exit code (#142): a status that fails -- a broken submodule says "not a
+    # git repository" -- read as a clean tree, and the forced put-back below then dropped a hand edit the checkout had
+    # refused to overwrite. A status that cannot be read is a stop: nothing of the copy is touched.
+    _co_st=0; _co_changed="$(git -C "$_co_dir" status --porcelain --untracked-files=all 2>/dev/null)" || _co_st=$?
+    if [ "$_co_st" != 0 ]; then
+      warn "could not read what changed in $_co_what: git status failed (exit $_co_st) -- nothing was changed:"
+      { git -C "$_co_dir" status --porcelain --untracked-files=all 2>&1 >/dev/null | tail -2 | sed 's/^/      /' >&2; } \
+        || true
+      put_tag_back "$_co_dir" "$_co_tag" "$_co_had"
+      return 1
+    fi
+    # The put-back may force only over a tree it has seen clean: read empty here, or read again empty once the local
+    # changes were kept and the copy reset.
+    _co_force="--force"
+    if [ -n "$_co_changed" ]; then
+      keep_local "$_co_dir" "$_co_what" || { put_tag_back "$_co_dir" "$_co_tag" "$_co_had"; return 1; }
+      _co_force=""
+      if _co_now="$(git -C "$_co_dir" status --porcelain --untracked-files=all 2>/dev/null)" && [ -z "$_co_now" ]; then
+        _co_force="--force"
+      fi
     fi
     _co_was="$(git -C "$_co_dir" rev-parse --verify --quiet HEAD 2>/dev/null)" || _co_was=""
     run git -c advice.detachedHead=false -C "$_co_dir" checkout --quiet "$_co_want" || true
     if [ "$DRY_RUN" = 1 ] || head_is "$_co_dir" "$_co_want"; then return 0; fi
-    # Put back: the tree was clean before this checkout (local changes are kept above first), so --force drops only
-    # what a checkout that broke off left behind.
-    [ -z "$_co_was" ] || git -c advice.detachedHead=false -C "$_co_dir" checkout --quiet --force "$_co_was" || true
+    # Put back: over a tree seen clean before this checkout, --force drops only what a checkout that broke off left
+    # behind; over any other, the put-back is not forced.
+    [ -z "$_co_was" ] || git -c advice.detachedHead=false -C "$_co_dir" checkout --quiet ${_co_force:+"$_co_force"} \
+      "$_co_was" || true
+    put_tag_back "$_co_dir" "$_co_tag" "$_co_had"
     warn "the update did not take: HEAD was not $_co_ref after the checkout; $_co_what is back at" \
          "$(git -C "$_co_dir" describe --tags --always 2>/dev/null || echo unknown)."
     return 3
@@ -1166,13 +1230,14 @@ checkout_method() {
     say "  would fetch $_co_ref into $(pretty "$_co_dir"), check it, and check it out"
     return 0
   fi
-  # Made here, so removed here when it fails -- never a folder that was at that path before: `git clone` refused one.
+  # Made here, so removed here when it fails -- an empty folder already at that path too, which holds nothing to lose
+  # (`git clone` takes an empty one as well); one with anything in it is not touched.
   if [ -e "$_co_dir" ] && { [ ! -d "$_co_dir" ] || [ -n "$(ls -A "$_co_dir" 2>/dev/null)" ]; }; then
     warn "$(pretty "$_co_dir") is there, and is not a checkout -- move it aside, then run this again"
     return 1
   fi
   if ! git init --quiet "$_co_dir" || ! git -C "$_co_dir" remote add origin "$SKILL_REPO" \
-     || ! git -C "$_co_dir" fetch --quiet --depth 1 origin "$_co_spec"; then
+     || ! git -C "$_co_dir" fetch --quiet --no-tags --depth 1 origin "$_co_spec"; then
     rm -rf "$_co_dir"; return 1
   fi
   # Checked before anything of it is checked out (skill #99), and removed when it fails: nothing unverified stays.
@@ -1184,11 +1249,32 @@ checkout_method() {
   return 3
 }
 
+# The tags <repo> lists for <glob>..., one name per line in TAGS_READ; 1, with TAGS_WHY saying why, when none could be
+# read (#142): git's own last line -- a proxy's certificate, a host that does not resolve -- which every stop and
+# refusal over an unreadable list carries; it said "no network?" over a network that had answered. Or "no git yet":
+# on a Mac without Apple's tools /usr/bin/git is a shim that opens Apple's window, so it is not run (a dry run gets this
+# far). The one reader of a release tag list in this script; the app's "moved" check is the other ls-remote.
+read_tags() {  # read_tags <repo> <glob>...
+  TAGS_READ=""; TAGS_WHY=""
+  if ! usable git; then TAGS_WHY="no git yet"; return 1; fi
+  _rt_repo="$1"; shift
+  _rt_rc=0; _rt_said="$(git ls-remote --tags --refs "$_rt_repo" "$@" 2>&1)" || _rt_rc=$?
+  if [ "$_rt_rc" != 0 ]; then
+    TAGS_WHY="$(printf '%s\n' "$_rt_said" | grep -v 'refs/tags/' | grep . | tail -1)" || TAGS_WHY=""
+    TAGS_WHY="${TAGS_WHY:-git ls-remote ended $_rt_rc and said nothing -- no network?}"
+    return 1
+  fi
+  TAGS_READ="$(printf '%s\n' "$_rt_said" | grep 'refs/tags/' | awk -F/ '{print $NF}')" || TAGS_READ=""
+  return 0
+}
+
 # The method's version (T-37, #142): the name given with --skill-ref, or the newest release tag. A release goes on to
 # its signature; any other name -- a branch, a sha -- is installed as it stands, and said. When no release tag can be
 # read and none was named, nothing is installed: an empty `ls-remote` (no network, a proxy) installed an unchecked
-# `main`, and moved a copy already verified onto it. The ref is all that goes to stdout -- the caller takes it with
-# $(...) -- and installer-consistency.py runs this with a `git` that has no network.
+# `main`, and moved a copy already verified onto it. A dry run changes nothing, so there an unreadable list is said and
+# the run goes on (#142): it stopped a dry run on a Mac without the developer tools, blaming the network. The ref is all
+# that goes to stdout -- the caller takes it with $(...) -- and installer-consistency.py runs this with a `git` that
+# has no network.
 pick_method_ref() {  # pick_method_ref <the --skill-ref name, or "">
   if [ -n "$1" ]; then
     is_release_tag "$1" || warn "$1 is not a release: it is installed UNSIGNED, unchecked"
@@ -1196,13 +1282,19 @@ pick_method_ref() {  # pick_method_ref <the --skill-ref name, or "">
     return 0
   fi
   # Release-shaped tags only (skill #108): `sort -V` put a `v3.x` above every release.
-  _pm_ref="$(git ls-remote --tags --refs "$SKILL_REPO" "$SKILL_TAG_GLOB" 2>/dev/null \
-      | awk -F/ '{print $NF}' | newest_on_channel)" || _pm_ref=""
-  if [ -z "$_pm_ref" ]; then
-    _pm_why="could not read the method's release tags (no network?) -- nothing was installed or changed for the method;"
-    stop 1 "$_pm_why run again when GitHub answers, or name a tag with --skill-ref"
+  _pm_ref=""
+  if read_tags "$SKILL_REPO" "$SKILL_TAG_GLOB"; then
+    _pm_ref="$(printf '%s\n' "$TAGS_READ" | newest_on_channel)" || _pm_ref=""
+    [ -n "$_pm_ref" ] || TAGS_WHY="the remote lists no $SKILL_TAG_GLOB release"
   fi
-  printf '%s\n' "$_pm_ref"
+  if [ -n "$_pm_ref" ]; then printf '%s\n' "$_pm_ref"; return 0; fi
+  if [ "${DRY_RUN:-0}" = 1 ]; then
+    warn "would install the newest $SKILL_TAG_GLOB release (not readable here: $TAGS_WHY)"
+    printf '%s\n' "$SKILL_TAG_GLOB"
+    return 0
+  fi
+  _pm_why="could not read the method's release tags ($TAGS_WHY) -- nothing was installed or changed for the method;"
+  stop 1 "$_pm_why run again when GitHub answers, or name a tag with --skill-ref"
 }
 
 step "The tuning method"
@@ -1215,10 +1307,16 @@ if [ -n "$PLUGIN_ROOT" ]; then
     say "  would check it against its signed release: python3 upkeep.py verify-copy --root $(pretty "$PLUGIN_ROOT")"
   elif ! usable python3; then
     stop 1 "stopped: python3 is needed to check this plugin copy against its signed release, and it does not run here"
-  elif python3 "$SKILL_HOME/scripts/upkeep.py" verify-copy --root "$PLUGIN_ROOT"; then
-    :
   else
-    stop 1 "stopped: this plugin copy is not $SKILL_REF as its author signed it -- see above; nothing was installed"
+    # verify-copy's 4 is a copy that could not be checked here -- no network, git failed -- and its 3 one that is not
+    # as signed (#142): they shared 3 and one sentence, which sent a person offline to reinstall a good plugin.
+    _vc_rc=0; python3 "$SKILL_HOME/scripts/upkeep.py" verify-copy --root "$PLUGIN_ROOT" || _vc_rc=$?
+    if [ "$_vc_rc" = 4 ]; then
+      stop 1 "stopped: this plugin copy could not be checked against its signed release here -- see above (no network?);" \
+             "nothing was installed; run this again when GitHub answers"
+    elif [ "$_vc_rc" != 0 ]; then
+      stop 1 "stopped: this plugin copy is not $SKILL_REF as its author signed it -- see above; nothing was installed"
+    fi
   fi
 else
   # The newest 3.x tag unless one is named. Asked for by name rather than "main": main is where
@@ -1237,13 +1335,20 @@ if [ -L "$SKILL_HOME" ]; then
   target="$(cd "$(dirname "$SKILL_HOME")" && readlink "$SKILL_HOME")"
   case "$target" in "$SKILL_SRC"/*) ours=1 ;; esac
 fi
+# What is left as it was goes into the receipt's method_ref (#142): it named the tag picked, which this run never put
+# there.
 if [ -L "$SKILL_HOME" ] && [ "$ours" = 0 ]; then
   # Somebody's own working tree, wired up on purpose. Leave it, say so, move on.
   warn "$SKILL_HOME is a symlink to $(readlink "$SKILL_HOME")"
   warn "left exactly as it is — that is somebody's checkout, not this script's to replace"
-elif [ -d "$SKILL_HOME" ] && [ ! -L "$SKILL_HOME" ]; then
-  warn "$SKILL_HOME is a real directory this script did not create — left alone."
+  METHOD_LEFT="left as it was: a link to $(readlink "$SKILL_HOME"), not this installer's"
+elif [ -e "$SKILL_HOME" ] && [ ! -L "$SKILL_HOME" ]; then
+  # Anything else there -- a folder, or a file (#142: a file was `rm -f`'d by the update below) -- is not this script's,
+  # as install.ps1 has it.
+  _left="file"; [ -d "$SKILL_HOME" ] && _left="real directory"
+  warn "$SKILL_HOME is a $_left this script did not create — left alone."
   warn "move it aside and re-run if you want this script to manage it."
+  METHOD_LEFT="left as it was: a $_left this installer did not make"
 elif [ -d "$SKILL_SRC/.git" ]; then
   say "  already installed — updating to $SKILL_REF"
   _co_rc=0; checkout_method "$SKILL_SRC" "$SKILL_REF" "the method" || _co_rc=$?
@@ -1281,10 +1386,13 @@ fi
 # checks. A failure here is no stop -- the terminal's method above is already in place -- but the copy the channel was
 # asked for is not this run's candidate, so it counts as missing (R38, #142): the run ends 3, not 0.
 if [ "$CHANNEL" = "beta" ]; then
-  SKILL_BETA_REF="$(git ls-remote --tags --refs "$SKILL_REPO" "$SKILL_TAG_GLOB" "$SKILL_BETA_GLOB" 2>/dev/null \
-      | awk -F/ '{print $NF}' | newest_on_channel)" || SKILL_BETA_REF=""
+  SKILL_BETA_REF=""
+  if read_tags "$SKILL_REPO" "$SKILL_TAG_GLOB" "$SKILL_BETA_GLOB"; then
+    SKILL_BETA_REF="$(printf '%s\n' "$TAGS_READ" | newest_on_channel)" || SKILL_BETA_REF=""
+    [ -n "$SKILL_BETA_REF" ] || TAGS_WHY="the remote lists no release or candidate"
+  fi
   if [ -z "$SKILL_BETA_REF" ]; then
-    warn "could not read the method's candidates -- the beta channel's copy was left as it is"
+    warn "could not read the method's candidates ($TAGS_WHY) -- the beta channel's copy was left as it is"
     missing "the beta copy"
   else
     say "  beta channel: $SKILL_BETA_REF in $(pretty "$SKILL_BETA_SRC") -- only an app that asks for beta runs it"
@@ -1368,7 +1476,12 @@ method_is_checkout() { [ -z "${PLUGIN_ROOT:-}" ] || [ -e "$PLUGIN_ROOT/.git" ]; 
 ENGINE_DID=""
 if [ "$WANT_ENGINE" = 0 ]; then
   ENGINE_DID="not fetched: --no-engine"
-  say "  --no-engine: not fetched. It builds from the .NET SDK on first use, or later with"
+  # A plugin copy is no checkout the SDK builds from (T-40): there only the fetch gives an engine (#142).
+  if method_is_checkout; then
+    say "  --no-engine: not fetched. It builds from the .NET SDK on first use, or later with"
+  else
+    say "  --no-engine: not fetched. A plugin copy cannot build one; Phase 1's desk step waits for it, or later with"
+  fi
   say "    python3 $(pretty "$ENGINE_PY") fetch-binary --tag $SKILL_REF"
 elif [ "$WANT_ENGINE" = "auto" ] && method_is_checkout && have_dotnet && [ "$DRY_RUN" = 0 ] && usable python3 \
      && [ -f "$ENGINE_PY" ]; then
@@ -1508,14 +1621,19 @@ if [ "$MODE" = "tcc" ]; then
   # The two ways of getting the app have to agree, or "update" and "install" mean different
   # things on the same machine (SCR-054).
   TCC_REF_HOW=""
-  if [ -z "$TCC_REF" ] && [ "$CHANNEL" = "beta" ]; then
-    TCC_REF="$(git ls-remote --tags --refs "$TCC_REPO" "$TCC_TAG_GLOB" "$TCC_BETA_GLOB" 2>/dev/null \
-        | awk -F/ '{print $NF}' | newest_on_channel)" || TCC_REF=""
-    TCC_REF_HOW=" (beta channel)"
-  elif [ -z "$TCC_REF" ]; then
-    # Release-shaped tags only, as the method's (skill #108).
-    TCC_REF="$(git ls-remote --tags --refs "$TCC_REPO" "$TCC_TAG_GLOB" 2>/dev/null \
-        | awk -F/ '{print $NF}' | newest_on_channel)" || TCC_REF=""
+  if [ -z "$TCC_REF" ]; then
+    _tcc_read=0
+    if [ "$CHANNEL" = "beta" ]; then
+      TCC_REF_HOW=" (beta channel)"
+      read_tags "$TCC_REPO" "$TCC_TAG_GLOB" "$TCC_BETA_GLOB" && _tcc_read=1
+    else
+      # Release-shaped tags only, as the method's (skill #108).
+      read_tags "$TCC_REPO" "$TCC_TAG_GLOB" && _tcc_read=1
+    fi
+    if [ "$_tcc_read" = 1 ]; then
+      TCC_REF="$(printf '%s\n' "$TAGS_READ" | newest_on_channel)" || TCC_REF=""
+      [ -n "$TCC_REF" ] || TAGS_WHY="the remote lists no release"
+    fi
   fi
   if [ -n "$TCC_REF" ]; then
     TCC_SPEC="autosound-tcc[gui,claude] @ git+${TCC_REPO}@${TCC_REF}"
@@ -1526,7 +1644,7 @@ if [ "$MODE" = "tcc" ]; then
   else
     # No tag could be read -- no network, a proxy: the app is not installed (T-37, #142). Its default branch was, with
     # nothing checked. The method goes on without it, and the checks below count the app as missing.
-    TCC_REFUSED="could not read the app's release tags (no network?) -- run again when GitHub answers, or name a tag with --tcc-ref"
+    TCC_REFUSED="could not read the app's release tags ($TAGS_WHY) -- run again when GitHub answers, or name a tag with --tcc-ref"
   fi
   if [ -z "$TCC_REFUSED" ] && [ -n "$TCC_SHA" ] && ! tcc_tag_still_at "$TCC_REF" "$TCC_SHA"; then
     TCC_REFUSED="$TCC_REF changed after its signature was checked, or the server did not answer"
@@ -1553,6 +1671,8 @@ if [ "$MODE" = "tcc" ]; then
   else
     warn "the app did not install — see above. The method alone still works; re-run this later"
     warn "to add the app."
+    # Recorded (#142): the checks below read an app from an earlier run as this run's, and the run ended 0, ready.
+    TCC_REFUSED="its install did not finish -- uv's lines above say why"
   fi
 
   if on_mac; then
@@ -1786,9 +1906,13 @@ if [ "$CHANNEL" = "beta" ] && [ "$DRY_RUN" = 0 ]; then
 fi
 if [ "$MODE" = "tcc" ] && [ "$DRY_RUN" = 0 ]; then
   if [ -n "$TCC_REFUSED" ]; then
-    # Before the ✓ lines: an app from an earlier run would read as this run's.
-    _kept=""; { [ -d "$APP" ] || find_bin autosound-tcc >/dev/null; } && _kept=" -- the one already here is left as it was"
-    warn "Autosound TCC was not installed: $TCC_REFUSED$_kept"
+    # Before the ✓ lines: an app from an earlier run would read as this run's -- refused, unreadable, or its install
+    # failed (#142), install.ps1's line for an app that was here before.
+    if [ -d "$APP" ] || find_bin autosound-tcc >/dev/null; then
+      warn "Autosound TCC was here before and was not upgraded this time: $TCC_REFUSED -- it is left as it was"
+    else
+      warn "Autosound TCC was not installed: $TCC_REFUSED"
+    fi
     missing TCC
   elif on_mac && [ -d "$APP" ]; then
     _where="in ~/Applications"; [ -L "$DESKTOP_LINK" ] && _where="$_where, and on your Desktop"

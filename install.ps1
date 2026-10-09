@@ -112,9 +112,11 @@ function Stop-Installer {
 function Write-Receipt {
     param([string]$Status)
     if ($DryRun) { return }
+    $file = "install-receipt.json"
     try {
         $rd = Join-Path $env:LOCALAPPDATA "autosound"
-        New-Item -ItemType Directory -Force -Path $rd | Out-Null
+        $file = Join-Path $rd "install-receipt.json"
+        New-Item -ItemType Directory -Force -Path $rd -ErrorAction Stop | Out-Null
         $sha = ""
         if ($PSCommandPath) { $sha = (Get-FileHash -Algorithm SHA256 $PSCommandPath).Hash.ToLower() }
         $py = Join-Path $LocalBin "python3.exe"
@@ -126,18 +128,27 @@ function Write-Receipt {
             $python = if ($ver) { "$py $ver" } else { "$py does not run" }
         }
         $engine = if ($EngineDid) { $EngineDid } else { "not reached" }
-        $receipt = [ordered]@{ installer = "install.ps1"; installer_sha256 = $sha; method_ref = "$SkillRef";
+        # What the method's step left as it was, when it did (#142) -- not a tag this run never installed.
+        $ref = if ($MethodLeft) { $MethodLeft } else { "$SkillRef" }
+        $receipt = [ordered]@{ installer = "install.ps1"; installer_sha256 = $sha; method_ref = $ref;
                                mode = "$Mode"; at = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ");
                                platform = "Windows-$env:PROCESSOR_ARCHITECTURE"; engine = $engine;
                                installer_version = $InstallerVersion; status = $Status;
                                missing = [string[]]@($script:Missing); python = $python }
-        $receipt | ConvertTo-Json -Compress | Set-Content -Encoding UTF8 (Join-Path $rd "install-receipt.json")
-    } catch { $null = $_ }
+        $receipt | ConvertTo-Json -Compress | Set-Content -Encoding UTF8 -ErrorAction Stop $file
+    } catch {
+        # Said once, the file and why (#142): kept quiet, `doctor` read an earlier run's receipt as this one's. -ErrorAction
+        # Stop above: Set-Content's error is not a terminating one, and passed this catch by. It stops nothing.
+        Warn "the receipt was not written ($(Pretty $file)): $($_.Exception.Message)"
+    }
 }
 # What the run leaves not ready, by short names (#142) -- install.sh's MISSING. Each check that finds a part not ready
 # says why and adds it with Add-Missing, which names a part once; the end reads this list and nothing else. $script:
 # wherever it is read or written, as $script:SignatureRefused is.
 $script:Missing = @()
+# What the method's step left as it was, when it did (#142): a link that is not this script's, or anything else at the
+# link's place. The receipt's method_ref says that -- install.sh's METHOD_LEFT.
+$MethodLeft = ""
 function Add-Missing {
     param([string]$Name)
     if ($script:Missing -notcontains $Name) { $script:Missing += $Name }
@@ -336,12 +347,16 @@ function Select-NewestOnChannel {
 # Paths on screen with the profile as `~`: a person reads "~\.zshrc" as a place; the same path
 # spelled out from C:\Users reads as a warning.
 function Pretty { param($p) if ($p -and $p.StartsWith($HOME)) { "~" + $p.Substring($HOME.Length) } else { $p } }
+# A native command that could not start -- not there, not a program -- sets no exit code (#142): the code is cleared
+# first, and only one that was set, and is 0, is a success; it read the 0 set beforehand, and a python3 that could not
+# start "installed" the libraries. Every `Run` whose answer is read runs a native command; the uninstaller's, which run
+# cmdlets, send their answer to Out-Null.
 function Run {
     param([scriptblock]$Block, [string]$Label)
     if ($DryRun) { Say "would run: $Label"; return $true }
-    $global:LASTEXITCODE = 0
-    & $Block
-    return ($LASTEXITCODE -eq 0 -or $null -eq $LASTEXITCODE)
+    $global:LASTEXITCODE = $null
+    try { & $Block } catch { Warn "$Label did not run: $($_.Exception.Message)"; return $false }
+    return ($null -ne $LASTEXITCODE -and $LASTEXITCODE -eq 0)
 }
 # A probe of a native command whose stderr is part of the answer -- `gh auth status` when nobody
 # is signed in, `python3 -c "import numpy"` when it is missing -- must not paint a red
@@ -352,10 +367,11 @@ function Test-Quiet {
     param([scriptblock]$Block)
     $prev = $ErrorActionPreference
     $ErrorActionPreference = "SilentlyContinue"
-    $global:LASTEXITCODE = 0
-    try { & $Block 2>&1 | Out-Null } catch { $null = $_ }
+    # As in Run (#142): a command that could not start is no answer of 0 -- it set no exit code at all.
+    $global:LASTEXITCODE = $null
+    try { & $Block 2>&1 | Out-Null } catch { $ErrorActionPreference = $prev; return $false }
     $ErrorActionPreference = $prev
-    return ($LASTEXITCODE -eq 0)
+    return ($null -ne $LASTEXITCODE -and $LASTEXITCODE -eq 0)
 }
 # The upstream one-liners (`irm <url> | iex`) run in a CHILD PowerShell, never in this one: two of
 # them end with `exit` on failure and one with `throw`, and inside our process an `exit` in their
@@ -1007,8 +1023,10 @@ function Test-TagSignature {
     # Case-sensitive (-cmatch; -match is not), as install.sh's grep and case are.
     $good = '(?m)^Good "git" signature for ' + [regex]::Escape($SkillSigningPrincipal) + ' with '
     if ($rc -eq 0 -and $said -cmatch $good) { Say "OK   $Ref is signed by $Whose's author"; return $true }
-    # A git that cannot check is not a bad signature -- git's own sentences, whole, as install.sh reads them.
-    if ($said -cmatch 'unsupported value for gpg\.format|ssh-keygen -Y find-principals/verify|illegal option -- Y|unknown option -- Y|cannot run ssh-keygen|cannot spawn ssh-keygen') {
+    # A git that cannot check is not a bad signature -- git's own sentences, whole, as install.sh reads them: each at
+    # the START of a line, after git's own prefix (#142). A signer's OpenPGP user id is printed inside gpg's line, and
+    # one that read "cannot run ssh-keygen" made a forged tag read as a machine that cannot check.
+    if ($said -cmatch '(?m)^(?:(?:error|fatal): (?:unsupported value for gpg\.format|ssh-keygen -Y find-principals/verify|cannot (?:run|spawn) ssh-keygen)|(?:ssh-keygen: )?(?:illegal|unknown) option -- Y)') {
         Warn "the signature of $Ref could not be checked here -- it is not installed:"
         $out | Select-Object -Last 2 | ForEach-Object { Write-Host "      $_" }
         Warn "this git ($(& git --version 2>$null)) or its ssh-keygen may be too old to check one: git 2.34 or newer, with OpenSSH 8.2 or newer, is needed"
@@ -1109,6 +1127,17 @@ function Test-HeadIs {
     return [bool]($at -and $at -eq $want)
 }
 
+# An update that does not land leaves refs/tags as it found them (R48, #142): the tag its fetch wrote into $Dir is
+# deleted again -- or, when a local tag of that name was there before, given its old value back (the fetch's `+`
+# overwrote it). The mirror of put_tag_back in install.sh.
+function Restore-Tag {
+    param([string]$Dir, [string]$TagRef, [string]$Had)
+    if ($DryRun -or -not $TagRef) { return }
+    $global:LASTEXITCODE = $null
+    if ($Had) { & git -C $Dir update-ref $TagRef $Had 2>&1 | Out-Null } else { & git -C $Dir update-ref -d $TagRef 2>&1 | Out-Null }
+    if ($LASTEXITCODE -ne 0) { Warn "$TagRef could not be put back as it was in $(Pretty $Dir)" }
+}
+
 # $script:SignatureRefused tells the caller that a copy was refused for its signature, not for the network, and
 # $script:NotTheTag that HEAD was not $Ref after its checkout: a new copy is removed, an update put back.
 $script:SignatureRefused = $false
@@ -1116,17 +1145,22 @@ $script:NotTheTag = $false
 # A copy is the tag it checked (T-45, #142) -- see checkout_method in install.sh. A release is fetched INTO refs/tags
 # and checked out from there, and HEAD is held to that tag's commit; any other name (a branch, a sha, named with
 # -SkillRef and installed UNSIGNED) is fetched by name and checked out from FETCH_HEAD. `${Ref}`, braced: "$Ref:refs"
-# would read as a scoped variable.
+# would read as a scoped variable. An update that does not land leaves refs/tags as it found them (Restore-Tag, R48),
+# and `--no-tags` fetches the one tag asked for, not every tag on the same commit -- a refused one's siblings among them.
 function Sync-MethodCheckout {
     param([string]$Dir, [string]$Ref, [string]$What)
-    $spec = $Ref; $want = 'FETCH_HEAD^{commit}'
-    if (Test-ReleaseTag $Ref) { $spec = "+refs/tags/${Ref}:refs/tags/${Ref}"; $want = "refs/tags/${Ref}^{commit}" }
+    $spec = $Ref; $want = 'FETCH_HEAD^{commit}'; $tagRef = ""
+    if (Test-ReleaseTag $Ref) { $spec = "+refs/tags/${Ref}:refs/tags/${Ref}"; $want = "refs/tags/${Ref}^{commit}"; $tagRef = "refs/tags/${Ref}" }
     if (Test-Path (Join-Path $Dir ".git")) {
+        # A dry run on Windows without Git has no git to ask (#142).
+        if ($DryRun -and -not (Have git)) { Say "would fetch $Ref into $(Pretty $Dir), check it, and check it out (no git yet)"; return $true }
+        $had = ""
+        if ($tagRef) { $had = "$(& git -C $Dir rev-parse --verify --quiet $tagRef 2>$null)".Trim() }
         # CHECKED, both of them, and the mirror of install.sh. Unchecked, a network blip or a
         # moved ref left the method on the previous version while this script printed
         # "updating to <ref>" and carried on -- the one failure mode where the user is told the
         # opposite of what happened (HUB-042).
-        $fetched  = Run { & git -C $Dir fetch --quiet --depth 1 origin $spec } "git fetch $Ref"
+        $fetched  = Run { & git -C $Dir fetch --quiet --no-tags --depth 1 origin $spec } "git fetch $Ref"
         if (-not $fetched) {
             Warn "could not fetch $Ref for $What -- it is STILL at $(& git -C $Dir describe --tags --always 2>$null)."
             Warn "check the network, then run this script again; nothing was changed."
@@ -1134,22 +1168,47 @@ function Sync-MethodCheckout {
         }
         # What was fetched is checked before anything of it runs or is checked out (skill #99), and local
         # changes are kept as a patch rather than refused with the wrong reason (skill #91).
-        if (-not (Test-TagSignature $Dir $Ref)) { $script:SignatureRefused = $true; return $false }
-        if (@(& git -C $Dir status --porcelain --untracked-files=all 2>$null).Count -gt 0) {
-            if (-not (Save-LocalChanges $Dir $What)) { return $false }
+        if (-not (Test-TagSignature $Dir $Ref)) { Restore-Tag $Dir $tagRef $had; $script:SignatureRefused = $true; return $false }
+        # What changed in the copy, read WITH its exit code (#142): a status that fails -- a broken submodule says "not a
+        # git repository" -- read as a clean tree, and the forced put-back below then dropped a hand edit the checkout
+        # had refused to overwrite. A status that cannot be read is a stop: nothing of the copy is touched. Under
+        # "Continue", as in Test-TagSignature: git says why on stderr.
+        $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+        $global:LASTEXITCODE = $null
+        $status = @(& git -C $Dir status --porcelain --untracked-files=all 2>&1)
+        $statusRc = $LASTEXITCODE
+        $ErrorActionPreference = $prev
+        $changed = @($status | Where-Object { $_ -isnot [System.Management.Automation.ErrorRecord] })
+        if ($statusRc -ne 0) {
+            Warn "could not read what changed in $What -- git status failed (code $statusRc); nothing was changed:"
+            $status | Where-Object { $_ -is [System.Management.Automation.ErrorRecord] } | Select-Object -Last 2 | ForEach-Object { Write-Host "      $_" }
+            Restore-Tag $Dir $tagRef $had
+            return $false
+        }
+        # The put-back may force only over a tree it has seen clean: read empty here, or read again empty once the
+        # local changes were kept and the copy reset.
+        $force = @("--force")
+        if ($changed.Count -gt 0) {
+            if (-not (Save-LocalChanges $Dir $What)) { Restore-Tag $Dir $tagRef $had; return $false }
+            $force = @()
+            $global:LASTEXITCODE = $null
+            $again = @(& git -C $Dir status --porcelain --untracked-files=all 2>$null)
+            if ($LASTEXITCODE -eq 0 -and $again.Count -eq 0) { $force = @("--force") }
         }
         $was = "$(& git -C $Dir rev-parse --verify --quiet HEAD 2>$null)".Trim()
         Run { & git -c advice.detachedHead=false -C $Dir checkout --quiet $want } "git checkout $want" | Out-Null
         if ($DryRun -or (Test-HeadIs $Dir $want)) { return $true }
-        # Put back: the tree was clean before this checkout (local changes are kept above first), so --force drops
-        # only what a checkout that broke off left behind.
-        if ($was) { & git -c advice.detachedHead=false -C $Dir checkout --quiet --force $was 2>&1 | Out-Null }
+        # Put back: over a tree seen clean before this checkout, --force drops only what a checkout that broke off left
+        # behind; over any other, the put-back is not forced.
+        if ($was) { & git -c advice.detachedHead=false -C $Dir checkout --quiet @force $was 2>&1 | Out-Null }
+        Restore-Tag $Dir $tagRef $had
         Warn "the update did not take: HEAD was not $Ref after the checkout; $What is back at $(& git -C $Dir describe --tags --always 2>$null)."
         $script:NotTheTag = $true
         return $false
     }
     if ($DryRun) { Say "would fetch $Ref into $(Pretty $Dir), check it, and check it out"; return $true }
-    # Made here, so removed here when it fails -- never a folder that was at that path before: `git clone` refused one.
+    # Made here, so removed here when it fails -- an empty folder already at that path too, which holds nothing to lose
+    # (`git clone` takes an empty one as well); one with anything in it is not touched.
     if ((Test-Path $Dir) -and @(Get-ChildItem -LiteralPath $Dir -Force -ErrorAction SilentlyContinue).Count -gt 0) {
         Warn "$(Pretty $Dir) is there, and is not a checkout -- move it aside, then run this again"
         return $false
@@ -1159,7 +1218,7 @@ function Sync-MethodCheckout {
     $global:LASTEXITCODE = 0
     $said = @(& git init --quiet $Dir 2>&1)
     if ($LASTEXITCODE -eq 0) { $said = @(& git -C $Dir remote add origin $SkillRepo 2>&1) }
-    if ($LASTEXITCODE -eq 0) { $said = @(& git -C $Dir fetch --quiet --depth 1 origin $spec 2>&1) }
+    if ($LASTEXITCODE -eq 0) { $said = @(& git -C $Dir fetch --quiet --no-tags --depth 1 origin $spec 2>&1) }
     $rc = $LASTEXITCODE
     $ErrorActionPreference = $prev
     if ($rc -ne 0) {
@@ -1183,25 +1242,50 @@ function Sync-MethodCheckout {
     return $false
 }
 
+# The tags $Repo lists for $Globs, names only; nothing, with $script:TagsWhy saying why, when none could be read (#142):
+# git's own last line -- a proxy's certificate, a host that does not resolve -- which every stop and refusal over an
+# unreadable list carries; they said "no network?" over a network that had answered. Or "no git yet": a dry run on
+# Windows without Git gets this far. The one reader of a release tag list here; Test-TccTagStillAt's ls-remote is the
+# app's "moved" check. install.sh's read_tags.
+$script:TagsWhy = ""
+function Read-ReleaseTags {
+    param([string]$Repo, [string[]]$Globs)
+    $script:TagsWhy = ""
+    if (-not (Have git)) { $script:TagsWhy = "no git yet"; return @() }
+    # Under "Continue", as in Test-TagSignature: git says why on stderr, which 5.1 drops at SilentlyContinue.
+    $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    $global:LASTEXITCODE = $null
+    $out = @(& git ls-remote --tags --refs $Repo @Globs 2>&1 | ForEach-Object { "$_" })
+    $rc = $LASTEXITCODE
+    $ErrorActionPreference = $prev
+    if ($rc -ne 0) {
+        $why = @($out | Where-Object { $_ -notmatch 'refs/tags/' -and $_.Trim() }) | Select-Object -Last 1
+        $script:TagsWhy = if ($why) { "$why".Trim() } else { "git ls-remote ended $rc and said nothing -- no network?" }
+        return @()
+    }
+    return @($out | Where-Object { $_ -match 'refs/tags/' } | ForEach-Object { ($_ -split "/")[-1] })
+}
+
 # The method's version (T-37, #142) -- the mirror of pick_method_ref in install.sh: the name given with -SkillRef (a
 # name that is not a release is said UNSIGNED), or the newest release tag; $null when none could be read, and the
-# caller stops -- an empty ls-remote installed an unchecked `main`. The stop itself is the caller's: Stop-Installer's
-# `return` ends the script only from its top level.
+# caller stops -- an empty ls-remote installed an unchecked `main`. A dry run changes nothing, so there an unreadable
+# list is said and the run goes on (#142): it stopped a dry run on Windows without Git, blaming the network. The stop
+# itself is the caller's: Stop-Installer's `return` ends the script only from its top level.
 function Select-MethodRef {
     param([string]$Given)
     if ($Given) {
         if (-not (Test-ReleaseTag $Given)) { Warn "$Given is not a release: it is installed UNSIGNED, unchecked" }
         return $Given
     }
-    $tags = @()
-    if (Have git) {
-        # Release-shaped tags only (skill #108): a `v3.x` sorted above every release and installed unchecked.
-        $tags = @((& git ls-remote --tags --refs $SkillRepo $SkillTagGlob 2>$null) |
-                  ForEach-Object { ($_ -split "/")[-1] } |
-                  Where-Object { Test-ReleaseTag $_ } |
-                  Sort-Object { [version]($_ -replace '^v', '') })
-    }
+    # Release-shaped tags only (skill #108): a `v3.x` sorted above every release and installed unchecked.
+    $tags = @(@(Read-ReleaseTags $SkillRepo @($SkillTagGlob)) | Where-Object { Test-ReleaseTag $_ } |
+              Sort-Object { [version]($_ -replace '^v', '') })
     if ($tags.Count -gt 0) { return $tags[-1] }
+    if (-not $script:TagsWhy) { $script:TagsWhy = "the remote lists no $SkillTagGlob release" }
+    if ($DryRun) {
+        Warn "would install the newest $SkillTagGlob release (not readable here: $($script:TagsWhy))"
+        return $SkillTagGlob
+    }
     return $null
 }
 
@@ -1217,7 +1301,13 @@ if ($PluginRoot) {
         Warn "stopped: python3 is needed to check this plugin copy against its signed release, and there is none"
         Stop-Installer 1; return
     } else {
+        # verify-copy's 4 is a copy that could not be checked here -- no network, git failed -- and its 3 one that is not
+        # as signed (#142): they shared 3 and one sentence, which sent a person offline to reinstall a good plugin.
         & $Py3 (Join-Path $SkillHome "scripts\upkeep.py") verify-copy --root $PluginRoot
+        if ($LASTEXITCODE -eq 4) {
+            Warn "stopped: this plugin copy could not be checked against its signed release here -- see above (no network?); nothing was installed; run this again when GitHub answers"
+            Stop-Installer 1; return
+        }
         if ($LASTEXITCODE -ne 0) {
             Warn "stopped: this plugin copy is not $SkillRef as its author signed it -- see above; nothing was installed"
             Stop-Installer 1; return
@@ -1230,7 +1320,7 @@ if ($PluginRoot) {
 # #145). A candidate goes into its own copy, below.
 $SkillRef = Select-MethodRef $SkillRef
 if (-not $SkillRef) {
-    Warn "could not read the method's release tags (no network?) -- nothing was installed or changed for the method; run again when GitHub answers, or name a tag with -SkillRef"
+    Warn "could not read the method's release tags ($($script:TagsWhy)) -- nothing was installed or changed for the method; run again when GitHub answers, or name a tag with -SkillRef"
     Stop-Installer 1; return
 }
 Say "version $SkillRef"
@@ -1243,13 +1333,17 @@ $isOurs = $false
 if ($entry) {
     $isLink = $entry.LinkType -in @("SymbolicLink", "Junction")
     if ($isLink -and $entry.Target -and (($entry.Target -join "") -like "$SkillSrc*")) { $isOurs = $true }
+    # What is left as it was goes into the receipt's method_ref (#142): it named the tag picked, never put there.
     if ($isLink -and -not $isOurs) {
         $gone = if (Test-Path $SkillHome) { "" } else { ", which is not there" }
         Warn "$SkillHome points at $($entry.Target)$gone -- left exactly as it is."
         Warn "that is somebody's checkout, not this script's to replace."
+        $MethodLeft = "left as it was: a link to $($entry.Target), not this installer's"
     } elseif (-not $isLink) {
-        Warn "$SkillHome is a real directory this script did not create -- left alone."
+        $kind = if ($entry.PSIsContainer) { "real directory" } else { "file" }
+        Warn "$SkillHome is a $kind this script did not create -- left alone."
         Warn "move it aside and re-run if you want this script to manage it."
+        $MethodLeft = "left as it was: a $kind this installer did not make"
     }
 }
 if ((-not $linkExists) -or $isOurs) {
@@ -1311,13 +1405,13 @@ if ((-not $linkExists) -or $isOurs) {
 # run's candidate, so it counts as missing (R38, #142): the run ends 3, not 0. install.sh's beta block.
 if ($Channel -eq "beta") {
     $betaRef = $null
-    if (Have git) {
-        $names   = @((& git ls-remote --tags --refs $SkillRepo $SkillTagGlob $SkillBetaGlob 2>$null) |
-                     ForEach-Object { ($_ -split "/")[-1] })
+    $names = @(Read-ReleaseTags $SkillRepo @($SkillTagGlob, $SkillBetaGlob))
+    if (-not $script:TagsWhy) {
         $betaRef = Select-NewestOnChannel $names
+        if (-not $betaRef) { $script:TagsWhy = "the remote lists no release or candidate" }
     }
     if (-not $betaRef) {
-        Warn "could not read the method's candidates -- the beta channel's copy was left as it is"
+        Warn "could not read the method's candidates ($($script:TagsWhy)) -- the beta channel's copy was left as it is"
         Add-Missing "the beta copy"
     } else {
         Say "beta channel: $betaRef in $(Pretty $SkillBetaSrc) -- only an app that asks for beta runs it"
@@ -1380,7 +1474,9 @@ $MethodIsCheckout = -not ($PluginRoot -and -not (Test-Path (Join-Path $PluginRoo
 $EngineDid = "not reached"
 if ($WantEngine -eq "0") {
     $EngineDid = "not fetched: -NoEngine"
-    Say "-NoEngine: not fetched. It builds from the .NET SDK on first use, or later with"
+    # A plugin copy is no checkout the SDK builds from (T-40): there only the fetch gives an engine (#142).
+    if ($MethodIsCheckout) { Say "-NoEngine: not fetched. It builds from the .NET SDK on first use, or later with" }
+    else { Say "-NoEngine: not fetched. A plugin copy cannot build one; Phase 1's desk step waits for it, or later with" }
     Say "  `"$Py3`" `"$EnginePy`" fetch-binary --tag $SkillRef"
 } elseif ($WantEngine -eq "auto" -and $MethodIsCheckout -and $HaveDotnet -and -not $DryRun -and (Test-Path $Py3) -and (Test-Path $EnginePy)) {
     # The Arbiter, 2026-09-23: the engine is installed WITH the skill and checked -- built now, not on first use.
@@ -1482,22 +1578,18 @@ if ($Mode -eq "tcc") {
         # ways of getting the app have to agree (SCR-054).
         $tccHow = ""
         if (-not $TccRef) {
-            $tccTags = @()
-            if (Get-Command git -ErrorAction SilentlyContinue) {
-                if ($Channel -eq "beta") {
-                    $names  = @((& git ls-remote --tags --refs $TccRepo $TccTagGlob $TccBetaGlob 2>$null) |
-                                ForEach-Object { ($_ -split "/")[-1] })
-                    $newest = Select-NewestOnChannel $names
-                    if ($newest) { $tccTags = @($newest) }
-                    $tccHow = " (beta channel)"
-                } else {
-                    $tccTags = @((& git ls-remote --tags --refs $TccRepo $TccTagGlob 2>$null) |
-                                 ForEach-Object { ($_ -split "/")[-1] } |
-                                 Where-Object { Test-ReleaseTag $_ } |
-                                 Sort-Object { [version]($_ -replace '^v', '') })
+            $globs = @($TccTagGlob)
+            if ($Channel -eq "beta") { $globs = @($TccTagGlob, $TccBetaGlob); $tccHow = " (beta channel)" }
+            $names = @(Read-ReleaseTags $TccRepo $globs)
+            if (-not $script:TagsWhy) {
+                if ($Channel -eq "beta") { $TccRef = Select-NewestOnChannel $names }
+                else {
+                    # Release-shaped tags only, as the method's (skill #108).
+                    $tccTags = @($names | Where-Object { Test-ReleaseTag $_ } | Sort-Object { [version]($_ -replace '^v', '') })
+                    if ($tccTags.Count -gt 0) { $TccRef = $tccTags[-1] }
                 }
+                if (-not $TccRef) { $script:TagsWhy = "the remote lists no release" }
             }
-            if ($tccTags.Count -gt 0) { $TccRef = $tccTags[-1] }
         }
         if ($TccRef) {
             $TccSpec = "autosound-tcc[gui,claude] @ git+$TccRepo@$TccRef"
@@ -1508,7 +1600,7 @@ if ($Mode -eq "tcc") {
         } else {
             # No tag could be read -- no network, no git: the app is not installed (T-37, #142). Its default branch was,
             # with nothing checked. The method goes on without it, and the checks below count the app as missing.
-            $TccRefused = "could not read the app's release tags (no network?) -- run again when GitHub answers, or name a tag with -TccRef"
+            $TccRefused = "could not read the app's release tags ($($script:TagsWhy)) -- run again when GitHub answers, or name a tag with -TccRef"
         }
         if (-not $TccRefused -and $script:TccSha -and -not (Test-TccTagStillAt $TccRef $script:TccSha)) {
             $TccRefused = "$TccRef changed after its signature was checked, or the server did not answer"
@@ -1778,8 +1870,10 @@ if ($Channel -eq "beta" -and -not $DryRun) {
 }
 if ($Mode -eq "tcc" -and -not $DryRun) {
     if ($TccRefused) {
-        $kept = if ($HaveTcc) { " -- the one already here is left as it was" } else { "" }
-        Warn "Autosound TCC was not installed: $TccRefused$kept"; Add-Missing "TCC"
+        # Refused or unreadable over an app from before: install.sh's line for it, the one below for a failed upgrade.
+        if ($HaveTcc) { Warn "Autosound TCC was here before and was not upgraded this time: $TccRefused -- it is left as it was" }
+        else { Warn "Autosound TCC was not installed: $TccRefused" }
+        Add-Missing "TCC"
     }
     elseif ($TccExe -and (Test-Path $DesktopLnk)) { Say "OK   Autosound TCC -- on your Desktop and in the Start Menu" }
     elseif ($TccExe) { Say "OK   Autosound TCC -- the command:  autosound-tcc" }
@@ -1995,7 +2089,15 @@ else {
             "python3 in a new window" {
                 Warn "python3 in a new window is not $(Pretty $Py3) -- run this again, or switch python3 off in Settings > Apps > Advanced app settings > App execution aliases"
             }
-            "the method" { Warn "no tuning method at $(Pretty $SkillHome) -- the method's step above says why; run this again" }
+            "the method" {
+                # A link that is not this script's, to nothing (#142): what to remove -- run again, it is left again.
+                $e = Get-Item $SkillHome -Force -ErrorAction SilentlyContinue
+                if ($e -and $e.LinkType -and -not (Test-Path $SkillHome)) {
+                    Warn "$(Pretty $SkillHome) is a link to $($e.Target), which is not there, and this installer leaves a link it did not make -- remove that link, and the next run of this installer makes its own"
+                } else {
+                    Warn "no tuning method at $(Pretty $SkillHome) -- the method's step above says why; run this again"
+                }
+            }
             "the method (2.x line)" {
                 Warn "$(Pretty $SkillHome) is the 2.x line, which TCC cannot drive -- move it aside, then run this again"
             }
