@@ -129,6 +129,14 @@ def find_dotnet():
     return None
 
 
+def method_is_checkout():
+    """True when this copy of the method is a git checkout -- `.git` at its root, a folder in a clone or a file in a
+    submodule -- which the .NET SDK builds the wrapper from (`git submodule update` fetches the fork). A plugin copy
+    (what `/plugin install` leaves) is none: there the SDK has nothing to build from, and `git -C REPO` would answer for
+    whatever repository is above the copy (#142). The installers' `method_is_checkout` / `$MethodIsCheckout`."""
+    return os.path.exists(os.path.join(REPO, ".git"))
+
+
 def pin():
     """The fork commit the skill records for `vendor/Resonalyze`, and the one checked out there (None when absent)."""
     r = subprocess.run(["git", "-C", REPO, "ls-tree", "HEAD", "vendor/Resonalyze"], capture_output=True, text=True, encoding="utf-8", errors="replace")
@@ -196,9 +204,15 @@ def engine_status():
     if os.path.isfile(DLL):
         return dict(out, present=True, how=f"the wrapper built in this checkout: {DLL}")
     dotnet = find_dotnet()
-    if dotnet:
+    # The SDK is a route only from a checkout (#142): a plugin copy with the SDK installed was said to have an engine,
+    # which its first run then tried to build with a `git submodule update` it cannot run.
+    if dotnet and method_is_checkout():
         return dict(out, present=True,
                     how=f"the .NET SDK ({dotnet}) — the wrapper is built on first use, not now")
+    if dotnet:
+        out["how"] = (f"absent: no prebuilt engine in {out['installed_dir']}, and this copy is no git checkout (a "
+                      f"plugin copy) for the .NET SDK ({dotnet}) to build one from -- fetch-binary installs one")
+        return out
     out["how"] = (f"absent: no prebuilt engine in {out['installed_dir']}, and no .NET SDK to build "
                   "one (dotnet on PATH or ~/.dotnet/dotnet)")
     return out
@@ -257,22 +271,28 @@ def engine_command(dotnet=None):
         return None, f"{ENGINE_ENV} names {named}, which is not an executable file"
     prebuilt = os.path.join(installed_dir(), _exe_name())
     stale = prebuilt_mismatch()
+    # The SDK builds only from a checkout (#142): a plugin copy has no SDK route, whatever is installed.
+    checkout = method_is_checkout()
     if os.path.isfile(prebuilt) and os.access(prebuilt, os.X_OK):
         if not stale:
             return [prebuilt], f"the prebuilt engine {prebuilt}"
-        dotnet = dotnet or find_dotnet()
+        dotnet = (dotnet or find_dotnet()) if checkout else None
         if not dotnet:
             # No SDK to build this checkout's wrapper: the old one runs, and says so (S-022).
             return [prebuilt], (f"the prebuilt engine {prebuilt} -- NOT this checkout's wrapper: {stale}; its results "
                                 f"come from that wrapper. `fetch-binary --tag <this checkout's tag>` or the .NET SDK "
                                 f"gives this one")
-    dotnet = dotnet or find_dotnet()
+    dotnet = (dotnet or find_dotnet()) if checkout else None
     if dotnet:
         if not os.path.isfile(DLL) or stale:
             ok, msg = build(dotnet=dotnet)
             if not ok:
                 return None, msg
         return [dotnet, DLL], f"the wrapper built here ({DLL})"
+    if not checkout:
+        return None, (f"no engine: no prebuilt one in {installed_dir()} (install-binary --from <zip>), and this copy is "
+                      "no git checkout (a plugin copy) the .NET SDK could build one from -- fetch-binary --tag <this "
+                      "copy's tag> installs the prebuilt engine")
     return None, (f"no engine: no prebuilt one in {installed_dir()} (install-binary --from <zip>), and no .NET SDK to "
                   "build one (dotnet on PATH or ~/.dotnet/dotnet)")
 
@@ -418,6 +438,11 @@ def build(fetch=True, dotnet=None):
     if not os.path.isfile(os.path.join(SUBMODULE, "dsp", "Resonalyze.Dsp.csproj")):
         if not fetch:
             return False, "vendor/Resonalyze is not checked out -- git submodule update --init --checkout vendor/Resonalyze"
+        # Never from a plugin copy (#142): it has no `.git`, and `git -C REPO` would run in whatever repository is above
+        # it -- the person's home folder, if that is one.
+        if not method_is_checkout():
+            return False, ("vendor/Resonalyze is not here, and this copy is no git checkout (a plugin copy) to fetch it "
+                           "into -- fetch-binary --tag <this copy's tag> installs the prebuilt engine instead")
         r = subprocess.run(["git", "-C", REPO, "submodule", "update", "--init", "--checkout", "vendor/Resonalyze"],
                            capture_output=True, text=True, encoding="utf-8", errors="replace")
         if r.returncode != 0:
@@ -2454,9 +2479,74 @@ def _check_fetch_binary_answers_in_four_codes():
     assert not failures, "fetch-binary's answers:\n  " + "\n  ".join(failures)
 
 
+def _check_a_plugin_copy_has_no_sdk_route():
+    """#142 (SFH 9): in a plugin copy -- no `.git` at the method's root -- the .NET SDK is no route to an engine: the
+    doctor said it had one there, and `build()` ran `git -C REPO submodule update`, which in a copy with no `.git`
+    answers for whatever repository is above it. With the SDK found and nothing prebuilt: `engine_status` absent, naming
+    the plugin copy; `build()` and `engine_command()` refuse without running git. A `.git` folder (a clone) or file (a
+    submodule) is a checkout, and the SDK route is there. Nothing is built or fetched: `subprocess` is a recorder here."""
+    import types
+    root = tempfile.mkdtemp(prefix="autosound_engine_plugin_")
+    calls = []
+
+    def recorder(cmd, **kw):
+        calls.append(cmd)
+        raise AssertionError(f"a subprocess ran: {cmd}")
+
+    names = ("REPO", "SUBMODULE", "DLL", "installed_dir", "find_dotnet", "subprocess")
+    real = {key: globals()[key] for key in names}
+    saved_env = os.environ.pop(ENGINE_ENV, None)
+    try:
+        globals().update(REPO=root, SUBMODULE=os.path.join(root, "vendor", "Resonalyze"),
+                         DLL=os.path.join(root, "bin", "ResonalyzeEngine.dll"),
+                         installed_dir=lambda: os.path.join(root, "engines"),
+                         find_dotnet=lambda: "/x/dotnet", subprocess=types.SimpleNamespace(run=recorder))
+        st = engine_status()
+        assert st["present"] is False and "plugin copy" in st["how"], f"a plugin copy with the SDK: {st}"
+        ok, why = build(dotnet="/x/dotnet")
+        assert not ok and "plugin copy" in why and not calls, f"build() in a plugin copy: {ok}, {why!r}, ran {calls}"
+        command, how = engine_command()
+        assert command is None and "plugin copy" in how and not calls, (command, how, calls)
+        for layout in ("folder", "file"):
+            git_at = os.path.join(root, ".git")
+            if layout == "folder":
+                os.makedirs(git_at)
+            else:
+                shutil.rmtree(git_at, ignore_errors=True)
+                with open(git_at, "w", encoding="utf-8") as fh:
+                    fh.write("gitdir: ../.git/modules/skill\n")
+            st = engine_status()
+            assert st["present"] is True and "the .NET SDK (/x/dotnet)" in st["how"], f"a checkout ({layout}): {st}"
+    finally:
+        globals().update(real)
+        if saved_env is not None:
+            os.environ[ENGINE_ENV] = saved_env
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def _check_an_archive_that_times_out_is_unreachable():
+    """#142 (PTA 7): `SHA256SUMS` answers and the archive it lists does not -- a time-out, not a 404 -- is no answer
+    (5), which a later run may get; a 404 there is `absent` (4). Through `fetch_binary`'s own `get` and FETCH_EXIT."""
+    name = archive_name()
+    sums = f"{'0' * 64}  ./{name}\n".encode("utf-8")
+    real = globals()["installed_dir"]
+    home = tempfile.mkdtemp(prefix="autosound_engine_timeout_")
+    try:
+        globals()["installed_dir"] = lambda: os.path.join(home, "engines")
+        for why, want in (("timed out", "unreachable"), ("HTTP 404", "absent")):
+            got = fetch_binary("v9.9.9", get=lambda url, timeout=None, why=why: (sums, None) if url.endswith(SUMS_NAME)
+                               else (None, why))
+            assert got["status"] == want and FETCH_EXIT[got["status"]] == {"unreachable": 5, "absent": 4}[want], \
+                f"the archive answering {why!r}: {got}"
+    finally:
+        globals()["installed_dir"] = real
+        shutil.rmtree(home, ignore_errors=True)
+
+
 def _selftest():
     failures = []
-    for check in (_check_chebyshev_solo_refused_on_the_front, _check_fetch_binary_answers_in_four_codes):
+    for check in (_check_chebyshev_solo_refused_on_the_front, _check_fetch_binary_answers_in_four_codes,
+                  _check_a_plugin_copy_has_no_sdk_route, _check_an_archive_that_times_out_is_unreachable):
         try:
             check()
         except AssertionError as exc:
