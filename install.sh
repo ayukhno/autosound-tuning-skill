@@ -514,8 +514,11 @@ finish() {
         warn "no beta channel copy on this run's candidate at $(pretty "$SKILL_BETA_SRC") -- an app asking for beta" \
              "runs an older one, or nothing; the beta block above says why; run this again" ;;
       TCC)
-        warn "the app was not installed${TCC_REFUSED:+: $TCC_REFUSED} -- the app's block above says why; the method" \
-             "is installed and works without it" ;;
+        # One reason -- the refusal's, or the block's -- and "not upgraded" when an app from before stays (#142).
+        _fi_tcc="the app was not installed"
+        [ -z "${TCC_KEPT:-}" ] || _fi_tcc="the app was not upgraded -- the one from before is left as it was"
+        _fi_why="${TCC_REFUSED:-}"; [ -n "$_fi_why" ] || _fi_why="the app's block above says why"
+        warn "$_fi_tcc: $_fi_why; the method is installed and works without it" ;;
       "Claude Code")
         warn "Claude Code is not installed; nothing can run a session without it -- when the network is back:" \
              " curl -fsSL https://claude.ai/install.sh | sh" ;;
@@ -543,7 +546,8 @@ consent() {
 # From here the run is going ahead (#142). The receipt says `stopped` until `stop` or `finish` writes how the run
 # ended: an end neither reaches -- a failure under `set -e`, Ctrl-C, a kill -- leaves no earlier run's `ready` standing.
 # Ctrl-C at the terminal goes to the whole group, and bash 3.2 runs the EXIT trap for it too (a child stopped by it
-# hands the trap 130); a kill runs no trap at all -- the receipt written here says `stopped` all the same.
+# hands the trap 130); a plain `kill` (SIGTERM) runs it as well, with $? = 0, and the run ends 143; only SIGKILL runs
+# no trap at all -- the receipt written here says `stopped` all the same.
 going_ahead() {
   write_receipt stopped
   trap unplanned_end EXIT
@@ -1634,6 +1638,12 @@ if [ "$MODE" = "tcc" ]; then
       TCC_REF="$(printf '%s\n' "$TAGS_READ" | newest_on_channel)" || TCC_REF=""
       [ -n "$TCC_REF" ] || TAGS_WHY="the remote lists no release"
     fi
+    # A dry run changes nothing, so an unreadable list stops nothing (#142): what a real run would install, as the
+    # method's step says it -- it said "could not read the app's release tags (no git yet) -- run again".
+    if [ -z "$TCC_REF" ] && [ "$DRY_RUN" = 1 ]; then
+      warn "would install the newest app release (not readable here: $TAGS_WHY)"
+      TCC_REF="$TCC_TAG_GLOB"
+    fi
   fi
   if [ -n "$TCC_REF" ]; then
     TCC_SPEC="autosound-tcc[gui,claude] @ git+${TCC_REPO}@${TCC_REF}"
@@ -1904,6 +1914,9 @@ if [ "$CHANNEL" = "beta" ] && [ "$DRY_RUN" = 0 ]; then
     say "  ✓ the beta channel's copy, $(git -C "$SKILL_BETA_SRC" describe --tags --always 2>/dev/null || echo '?') — for the app; the terminal stays on $(git -C "$SKILL_SRC" describe --tags --always 2>/dev/null || echo '?')"
   fi
 fi
+# An app from an earlier run, still here (#142): when this run leaves the app out, the end says it was not upgraded.
+TCC_KEPT=""
+if [ "$DRY_RUN" = 0 ] && { [ -d "$APP" ] || find_bin autosound-tcc >/dev/null; }; then TCC_KEPT=1; fi
 if [ "$MODE" = "tcc" ] && [ "$DRY_RUN" = 0 ]; then
   if [ -n "$TCC_REFUSED" ]; then
     # Before the ✓ lines: an app from an earlier run would read as this run's -- refused, unreadable, or its install

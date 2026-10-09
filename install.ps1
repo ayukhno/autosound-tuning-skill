@@ -118,7 +118,16 @@ function Write-Receipt {
         $file = Join-Path $rd "install-receipt.json"
         New-Item -ItemType Directory -Force -Path $rd -ErrorAction Stop | Out-Null
         $sha = ""
-        if ($PSCommandPath) { $sha = (Get-FileHash -Algorithm SHA256 $PSCommandPath).Hash.ToLower() }
+        # .NET's SHA256, not Get-FileHash (R50, #142): Get-FileHash comes from a script module, which a Windows PowerShell
+        # started under PowerShell 7's PSModulePath cannot load -- and its error cost the whole receipt. Its own guard: a
+        # hash that fails costs the hash, not the receipt.
+        if ($PSCommandPath) {
+            try {
+                $hasher = [System.Security.Cryptography.SHA256]::Create()
+                try { $sha = -join ($hasher.ComputeHash([System.IO.File]::ReadAllBytes($PSCommandPath)) | ForEach-Object { $_.ToString("x2") }) }
+                finally { $hasher.Dispose() }
+            } catch { $sha = "" }
+        }
         $py = Join-Path $LocalBin "python3.exe"
         $python = "no python3"
         if (Test-Path $py) {
@@ -1014,7 +1023,8 @@ function Test-TagSignature {
     # program's stderr records at SilentlyContinue BEFORE `2>&1` can merge them, and git says both "Good" and every
     # reason on stderr -- the VM refused beta-v3.0.64-rc1 with no reason printed at all (2026-09-29).
     $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
-    $global:LASTEXITCODE = 0
+    # $null, not 0 (#142): a git that could not start sets no code, and must not read as one that said yes.
+    $global:LASTEXITCODE = $null
     $out = @(& git -C $Dir -c gpg.format=ssh -c gpg.ssh.program=ssh-keygen -c gpg.minTrustLevel=fully -c "gpg.ssh.allowedSignersFile=$signers" verify-tag $Ref 2>&1)
     $rc = $LASTEXITCODE
     $ErrorActionPreference = $prev
@@ -1051,7 +1061,7 @@ function Test-TccTag {
     New-Item -ItemType Directory -Force -Path $repo | Out-Null
     # Under "Continue", as in Test-TagSignature: git says every reason on stderr.
     $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
-    $global:LASTEXITCODE = 0
+    $global:LASTEXITCODE = $null
     $said = @(& git init --quiet --bare $repo 2>&1)
     if ($LASTEXITCODE -eq 0) {
         $said = @(& git -C $repo fetch --quiet --no-tags --depth 1 $TccRepo "+refs/tags/${Ref}:refs/tags/${Ref}" 2>&1)
@@ -1215,7 +1225,7 @@ function Sync-MethodCheckout {
     }
     # Under "Continue", as in Test-TccTag: git says every reason on stderr.
     $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
-    $global:LASTEXITCODE = 0
+    $global:LASTEXITCODE = $null
     $said = @(& git init --quiet $Dir 2>&1)
     if ($LASTEXITCODE -eq 0) { $said = @(& git -C $Dir remote add origin $SkillRepo 2>&1) }
     if ($LASTEXITCODE -eq 0) { $said = @(& git -C $Dir fetch --quiet --no-tags --depth 1 origin $spec 2>&1) }
@@ -1589,6 +1599,12 @@ if ($Mode -eq "tcc") {
                     if ($tccTags.Count -gt 0) { $TccRef = $tccTags[-1] }
                 }
                 if (-not $TccRef) { $script:TagsWhy = "the remote lists no release" }
+            }
+            # A dry run changes nothing, so an unreadable list stops nothing (#142): what a real run would install, as the
+            # method's step says it -- it said "could not read the app's release tags (no git yet) -- run again".
+            if (-not $TccRef -and $DryRun) {
+                Warn "would install the newest app release (not readable here: $($script:TagsWhy))"
+                $TccRef = $TccTagGlob
             }
         }
         if ($TccRef) {
@@ -2105,7 +2121,10 @@ else {
                 Warn "no beta channel copy on this run's candidate at $(Pretty $SkillBetaSrc) -- an app asking for beta runs an older one, or nothing; the beta block above says why; run this again"
             }
             "TCC" {
-                Warn "the app was not installed$(if ($TccRefused) { ": $TccRefused" }) -- the app's block above says why; the method is installed and works without it"
+                # One reason -- the refusal's, or the block's -- and "not upgraded" when an app from before stays (#142).
+                $why = if ($TccRefused) { $TccRefused } else { "the app's block above says why" }
+                if ($HaveTcc -and -not $TccExe) { Warn "the app was not upgraded -- the one from before is left as it was: $why; the method is installed and works without it" }
+                else { Warn "the app was not installed: $why; the method is installed and works without it" }
             }
             "Claude Code" {
                 Warn "Claude Code is not installed; nothing can run a session without it -- when the network is back:  irm https://claude.ai/install.ps1 | iex"
