@@ -155,6 +155,9 @@ class Seeded:
     problem: Optional[str] = None
     #: What `project_repo.init` said: the project is a git repository with a first commit, or why not (hub #199).
     repo: Optional[str] = None
+    #: Prose read from the source's `rew_analitic/` because its root, the file's home, had none (#143, I-21) -- as
+    #: `rew_analitic/<name>`; each is written at the new project's root.
+    from_rew_analitic: list = field(default_factory=list)
 
 
 def _read_project(source):
@@ -509,8 +512,10 @@ def seed(source, target, *, include_findings=False, copy_profile=True, note=DEFA
 
     marker = note.format(source=name, when=when)
     for prose_name in PROSE_FILES:
-        prose = os.path.join(source, prose_name)
-        if not os.path.isfile(prose):
+        # Its home is the project root; an older source keeps it in `rew_analitic/` (#143, I-21), read and said.
+        home, old = os.path.join(source, prose_name), os.path.join(source, "rew_analitic", prose_name)
+        prose = home if os.path.isfile(home) else old if os.path.isfile(old) else None
+        if prose is None:
             continue
         try:
             with open(prose, encoding="utf-8") as f:
@@ -520,6 +525,8 @@ def seed(source, target, *, include_findings=False, copy_profile=True, note=DEFA
         with open(os.path.join(target, prose_name), "w", encoding="utf-8") as f:
             f.write(_mark(text, marker))
         result.written.append(prose_name)
+        if prose == old:
+            result.from_rew_analitic.append(f"rew_analitic/{prose_name}")
 
     channels = seeded.get("channels")
     amps = seeded.get("amps")
@@ -608,6 +615,9 @@ def main(argv=None):
     else:
         print(f"seeded {args.target} from {args.source}")
         print(f"  wrote     {', '.join(result.written)}")
+        for rel in result.from_rew_analitic:
+            print(f"  read      {os.path.join(args.source, *rel.split('/'))} — the source keeps it in rew_analitic/; "
+                  f"its home is the project root, where the new project has it")
         if result.repo:
             print(f"  history   {result.repo}")
         print(f"  carried   {result.channels} channels · {result.amps} amps"
@@ -750,13 +760,51 @@ def _check_a_seed_makes_its_new_folder():
             assert made == [], f"under a parent this user may not write: made {made}"
 
 
+def _check_a_context_in_rew_analitic_travels():
+    """#143, I-21 (fix 8): Copy car reads the source's context at its root, its home, and -- an older project's -- from
+    its `rew_analitic/` when the root has none, and says so: `from_rew_analitic` names it, the command line prints a
+    line, and the copy lands at the new project's root. It read the root alone, and such a source's context did not
+    travel. The source is only read; a root context wins, and nothing is said."""
+    import contextlib
+    import io
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmp:
+        src = _source_project(os.path.join(tmp, "old-car"))
+        old = os.path.join(src, "rew_analitic", "autosound_context.md")
+        os.makedirs(os.path.dirname(old))
+        with open(os.path.join(src, "autosound_context.md"), encoding="utf-8") as fh:
+            text = fh.read()
+        os.remove(os.path.join(src, "autosound_context.md"))
+        with open(old, "w", encoding="utf-8") as fh:
+            fh.write(text)
+        out = seed(src, os.path.join(tmp, "new-car"), today=date(2026, 10, 9))
+        landed = os.path.join(tmp, "new-car", "autosound_context.md")
+        assert out.ok and "autosound_context.md" in out.written and os.path.isfile(landed), (out.ok, out.written)
+        with open(landed, encoding="utf-8") as fh:
+            assert "Two doors, treated." in fh.read()
+        assert getattr(out, "from_rew_analitic", None) == ["rew_analitic/autosound_context.md"], vars(out)
+        assert not os.path.exists(os.path.join(tmp, "new-car", "rew_analitic", "autosound_context.md"))
+        with open(old, encoding="utf-8") as fh:
+            assert fh.read() == text, "the source was written"
+        said = io.StringIO()
+        with contextlib.redirect_stdout(said):
+            rc = main([src, os.path.join(tmp, "cli-car")])
+        lines = [ln for ln in said.getvalue().splitlines() if old in ln]
+        assert rc == 0 and len(lines) == 1 and "project root" in lines[0], said.getvalue()
+        with open(os.path.join(src, "autosound_context.md"), "w", encoding="utf-8") as fh:
+            fh.write("# The root's\n")
+        out = seed(src, os.path.join(tmp, "root-car"), today=date(2026, 10, 9))
+        with open(os.path.join(tmp, "root-car", "autosound_context.md"), encoding="utf-8") as fh:
+            assert "# The root's" in fh.read() and out.from_rew_analitic == [], vars(out)
+
+
 def _selftest():
     os.environ["AUTOSOUND_NO_GH"] = "1"          # a seed makes a repository; the test never reaches GitHub
     import tempfile
 
     failures = []
     for check in (_check_a_held_lock_said_in_the_result, _check_a_seed_makes_its_new_folder,
-                  _check_a_bad_wait_is_a_usage_error):
+                  _check_a_bad_wait_is_a_usage_error, _check_a_context_in_rew_analitic_travels):
         try:
             check()
         except AssertionError as exc:
