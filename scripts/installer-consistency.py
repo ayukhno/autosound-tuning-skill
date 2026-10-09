@@ -1129,7 +1129,12 @@ APP_CASES = (("installed now", ("v1.1.2",), 0, True, True, 0, False, "", "tcc", 
              ("its install failed, none here before", ("v1.1.2",), 0, True, True, 1, False, "TCC", "tcc",
               ("Autosound TCC was not installed",)),
              ("uv does not install", ("v1.1.2",), 0, True, False, 0, False, "TCC", "terminal",
-              ("uv did not install",)))
+              ("uv did not install",)),
+             # A dry run with no git yet (the re-review): what a real run would install, as the method's step says it --
+             # it said "could not read the app's release tags (no git yet) -- run again when GitHub answers".
+             ("a dry run with no git yet", None, 0, True, True, 0, False, "", "tcc",
+              ("would install the newest app release (not readable here: no git yet)",), True,
+              ("run again when GitHub answers", "could not read the app's release tags", "the app is not installed")))
 #: The stand-ins the app's block meets: a `uv` that lists the app, installs it into $LOCAL_BIN or fails as $STUB_UV_RC
 #: says; and a `curl` that never reaches the network -- what it hands `sh` ends uv's own installer with 7.
 STUB_UV = (b"#!/bin/sh\n"
@@ -1168,8 +1173,9 @@ def app_problems(sh, ps1):
         return [f"{why} -- install.sh's app block cannot be run, and unrun is not agreed"]
     tmp = tempfile.mkdtemp(prefix="autosound_app_")
     try:
-        for i, (case, offered, ls_rc, signed, have_uv, uv_rc, before, want_missing, want_mode, words) \
+        for i, (case, offered, ls_rc, signed, have_uv, uv_rc, before, want_missing, want_mode, words, *dry_never) \
                 in enumerate(APP_CASES):
+            dry, never = dry_never if dry_never else (False, ())
             home = Path(tmp, f"case-{i}")
             stub = home / "stub"
             stub.mkdir(parents=True)
@@ -1185,11 +1191,12 @@ def app_problems(sh, ps1):
                       + ('check_tcc_tag() { TCC_SHA=""; return 0; }\n' if signed
                          else 'check_tcc_tag() { TCC_SHA=""; return 1; }\n')
                       + 'tcc_tag_still_at() { return 0; }\n'
+                      + ('usable() { return 1; }\n' if dry else '')
                       + f'export PATH="$(cd "{stub.as_posix()}" && pwd):/usr/bin:/bin"\n'
                       + f'LOCAL_BIN="{(home / "bin").as_posix()}"; export LOCAL_BIN\n'
                       + f'MANIFEST="{(home / "manifest").as_posix()}"\nAPP="{(home / "no.app").as_posix()}"\n'
                       + f'DESKTOP_LINK="{(home / "no-link").as_posix()}"\n'
-                      + 'MODE=tcc\nCHANNEL=stable\nTCC_REF=""\nDRY_RUN=0\nMISSING=""\nUV_VERSION=0.12.10\n'
+                      + f'MODE=tcc\nCHANNEL=stable\nTCC_REF=""\nDRY_RUN={1 if dry else 0}\nMISSING=""\nUV_VERSION=0.12.10\n'
                       + 'TCC_REPO="https://github.com/ayukhno/autosound-tcc"\nTCC_TAG_GLOB="v*"\nTCC_BETA_GLOB="beta-v*"\n'
                       + block.group(0) + check.group(0)
                       + 'printf "MISSING=[%s] MODE=[%s]\\n" "$MISSING" "$MODE"\n')
@@ -1205,7 +1212,10 @@ def app_problems(sh, ps1):
                 wrong.append(f"ends with {got.group(0) if got else 'no MISSING line'}, want MISSING=[{want_missing}] "
                              f"MODE=[{want_mode}]")
             wrong += [f"never says {w!r}" for w in words if w not in said]
+            wrong += [f"says {w!r}" for w in never if w in said]
             calls = (home / "calls").read_text(encoding="utf-8") if (home / "calls").exists() else ""
+            if dry and "git " in calls:
+                wrong.append(f"a dry run with no git yet ran git: {calls!r}")
             if "curl" in calls and "astral.sh" not in calls:
                 wrong.append(f"curl was asked for something other than uv's installer: {calls!r}")
             if wrong:
@@ -1225,7 +1235,14 @@ def app_problems(sh, ps1):
               f"install.sh has three `missing TCC` (no uv; refused, unreadable or not upgraded; not installed), "
               f"not {len(sh_sites)}"),
              ("TCC_REFUSED=\"its install did not finish -- uv's lines above say why\"" in sh,
-              "install.sh records a failed install of the app as TCC_REFUSED"))
+              "install.sh records a failed install of the app as TCC_REFUSED"),
+             # The re-review: a dry run that cannot read the app's tags says what a real run would install (install.ps1,
+             # read; install.sh's is the dry-run case above), and the end knows an app from before stays (TCC_KEPT,
+             # outside both blocks run here).
+             ('Warn "would install the newest app release (not readable here: $($script:TagsWhy))"' in ps1,
+              "install.ps1's app block says what a dry run would install when the app's tags cannot be read"),
+             ('if [ "$DRY_RUN" = 0 ] && { [ -d "$APP" ] || find_bin autosound-tcc >/dev/null; }; then TCC_KEPT=1; fi'
+              in sh, "install.sh notes an app from before (TCC_KEPT) for the end's line"))
     out += [f"{what} -- does not hold (#142)" for holds, what in reads if not holds]
     return out
 
@@ -1349,6 +1366,13 @@ def ps1_native_problems(ps1):
         if lacking:
             out.append(f"install.ps1 {name}: a native command that could not start reads as one that ran -- want "
                        + "; ".join(lacking) + " (#142)")
+    # ...and the git calls of the signature check and of a new copy (the re-review): a code that was set, never the 0
+    # set beforehand -- a git that could not start read as one that said yes.
+    for name in ("Test-TagSignature", "Test-TccTag", "Sync-MethodCheckout"):
+        fn = re.search(rf"^function {name} \{{\n.*?^\}}$", ps1, re.M | re.S)
+        if not fn or "$global:LASTEXITCODE = 0" in fn.group(0):
+            out.append(f"install.ps1 {name}: sets $global:LASTEXITCODE = 0 before a git call -- a git that could not "
+                       f"start then reads as one that answered 0; want $null (#142)")
     return out
 
 
@@ -1356,6 +1380,15 @@ def find_powershell(which=shutil.which):
     """Windows PowerShell 5.1 where it is (what install.cmd runs, and every Windows ships), else PowerShell 7, else
     None -- the author's Mac has neither; GitHub's Windows runners have both."""
     return which("powershell") or which("pwsh")
+
+
+def powershell_env(environ=None):
+    """The environment a PowerShell this check starts gets: this process's, without PSModulePath (R50, #142). A CI step
+    runs under PowerShell 7, whose PSModulePath names its own modules; Windows PowerShell 5.1 started with it cannot
+    load its own (`Get-FileHash` was "not recognized"), and builds the right one itself when the variable is not set.
+    Compared without case: Windows' names are."""
+    environ = os.environ if environ is None else environ
+    return {k: v for k, v in environ.items() if k.upper() != "PSMODULEPATH"}
 
 
 #: The functions of install.ps1 that its end and its probes need, cut out as they stand.
@@ -1403,7 +1436,7 @@ def ps1_run_problems(ps1):
                 '$script:Missing = @()\n')
         script.write_bytes((head + "\n".join(cut) + "\n" + body).encode("utf-8"))
         r = subprocess.run([shell, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", str(script)],
-                           capture_output=True, timeout=120)
+                           capture_output=True, timeout=120, env=powershell_env())
         said = (r.stdout + r.stderr).decode("utf-8", "replace")
         receipt_path = appdata / "autosound" / "install-receipt.json"
         try:
@@ -1577,6 +1610,20 @@ def exit_contract_problems(sh, ps1):
                         "as it was -- want $MethodLeft, set twice (a link not ours, anything else there)")
     if "which is not there, and this installer leaves a link it did not make -- remove that link" not in ps1:
         ps_wrong.append("the end does not name a dangling link not ours as the thing to remove")
+    # R50 (#142): the installer's hash from .NET, under its own guard -- Get-FileHash comes from a script module that a
+    # Windows PowerShell under PowerShell 7's PSModulePath cannot load, and its error cost the whole receipt (CI
+    # 37866508892: the receipt never written, "The term 'Get-FileHash' is not recognized").
+    write_code = "\n".join(ln for ln in (write_fn.group(0) if write_fn else "").splitlines()
+                           if not ln.lstrip().startswith("#"))
+    if not write_fn or "Get-FileHash" in write_code \
+            or "$hasher = [System.Security.Cryptography.SHA256]::Create()" not in write_fn.group(0) \
+            or '} catch { $sha = "" }' not in write_fn.group(0):
+        ps_wrong.append("Write-Receipt's installer_sha256 is not .NET's SHA256 under its own guard -- a module that does "
+                        "not load costs the whole receipt (R50)")
+    # The end's line for the app (#142): one reason, and "not upgraded" when an app from before stays.
+    if 'if ($HaveTcc -and -not $TccExe) { Warn "the app was not upgraded -- the one from before is left as it was: $why; ' \
+            'the method is installed and works without it" }' not in ps1:
+        ps_wrong.append("the end's line for the app glues two reasons, or says \"not installed\" over an app from before")
     if ps_wrong:
         out.append("install.ps1's end is not the exit contract: " + "; ".join(ps_wrong) + " (#142)")
 
@@ -1694,6 +1741,18 @@ def exit_contract_problems(sh, ps1):
               ("Installed, NOT ready: scipy", "the receipt was not written", "install-receipt.json")
               + (("Is a directory",) if os.name != "nt" else ()), (), None, None, 0,
               lambda data: (data / "autosound" / "install-receipt.json").mkdir(parents=True)))
+    # The end's line for the app (#142, the re-review): one reason -- the refusal's, or the block's -- and "not upgraded"
+    # when an app from before stays; it glued "... uv's lines above say why -- the app's block above says why".
+    failed = 'TCC_REFUSED="its install did not finish -- uv\'s lines above say why"\n'
+    cases += (("the-app-not-upgraded", go + failed + "TCC_KEPT=1\nmissing TCC\nfinish\n", "python3", "0", False, 3,
+               ("the app was not upgraded -- the one from before is left as it was: its install did not finish -- uv's "
+                "lines above say why; the method is installed",), ("the app's block above says why",), "not ready",
+               ["TCC"], 0),
+              ("the-app-not-installed", go + failed + "missing TCC\nfinish\n", "python3", "0", False, 3,
+               ("the app was not installed: its install did not finish -- uv's lines above say why; the method",),
+               ("the app's block above says why", "not upgraded"), "not ready", ["TCC"], 0),
+              ("the-app-left-out-unsaid", go + "missing TCC\nfinish\n", "python3", "0", False, 3,
+               ("the app was not installed: the app's block above says why; the method",), (), "not ready", ["TCC"], 0))
     # #142 (SFH 7): a foreign link to nothing is what to remove -- "run this again" made it again, and again. A link,
     # so POSIX only: Git Bash's `ln -s` copies.
     if os.name != "nt":
