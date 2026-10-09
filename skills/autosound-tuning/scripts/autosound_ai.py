@@ -250,33 +250,36 @@ CONTRACT_NAME = "data-contract-template.md"
 
 
 # Пошук файлів контракту та контексту
+def search_folders(fallback_dir=None):
+    """Where the door looks for a project file, in order, each folder once (#143, I-21): the project root
+    (`review_project_dir`), `PROJECT_MIRROR`, the root's own `rew_analitic/`, `fallback_dir` ($AUTOSOUND_DIR), the
+    skill's `assets/`. The working folder only as the root: it came second, so TCC's reviewer probe (its cwd the real
+    project, its project and mirror a scratch folder) read the real project's context, and a mirror set to a project
+    from another car's folder read that car's. The skill's `assets/` last: without it a fresh install found no contract
+    anywhere -- no project folder held one -- and the critic stopped at "not ready" (a fresh Windows, 2026-08-19)."""
+    root = review_project_dir()
+    out = []
+    for folder in (root, PROJECT_MIRROR, os.path.join(root, "rew_analitic"), fallback_dir,
+                   os.path.join(SKILL_DIR, "assets")):
+        if folder and os.path.abspath(folder) not in {os.path.abspath(f) for f in out}:
+            out.append(folder)
+    return out
+
+
 def find_file(filename, fallback_dir=None):
-    """Where the door reads `filename` from: the project root (`review_project_dir`), the working folder,
-    `rew_analitic/` (`PROJECT_MIRROR`, then the project's own), `fallback_dir` ($AUTOSOUND_DIR), the skill's `assets/`,
-    in that order -- but the tuning contract from the skill alone (#143, I-5). The intake used to copy the contract into
-    `rew_analitic/`, and that copy was read first: a project kept the protocol it was started with while the method
-    moved on. `doctor` and `contract.py check` name a copy that differs (`contract_copies_that_differ`). The context's
-    home is the project root (#143, I-21): it was read from `rew_analitic/` first; an older project's copy there is read
-    only when the root has none, and said (`context_move_line`)."""
+    """Where the door reads `filename` from: the first of `search_folders` that holds it -- but the tuning contract from
+    the skill's `assets/` alone (#143, I-5). The intake used to copy the contract into `rew_analitic/`, and that copy was
+    read first: a project kept the protocol it was started with while the method moved on. `doctor` and `contract.py
+    check` name a copy that differs (`contract_copies_that_differ`). The context's home is the project root (#143,
+    I-21): it was read from `rew_analitic/` first; an older project's copy there is read only when the root has none,
+    and said (`context_move_line`)."""
     if filename == CONTRACT_NAME:
         skill_path = os.path.join(SKILL_DIR, "assets", filename)
         return skill_path if os.path.isfile(skill_path) else None
-    root = review_project_dir()
-    for folder in (root, CWD, PROJECT_MIRROR, os.path.join(root, "rew_analitic")):
+    for folder in search_folders(fallback_dir):
         path = os.path.join(folder, filename)
         if os.path.isfile(path):
             return path
-    # Потім у fallback ($AUTOSOUND_DIR, якщо заданий)
-    if fallback_dir:
-        fallback_path = os.path.join(fallback_dir, filename)
-        if os.path.isfile(fallback_path):
-            return fallback_path
-    # Last, the skill itself: what the method ships in `assets/`. Without this branch a fresh install found no contract
-    # anywhere -- no project folder held one -- and the critic stopped at "not ready" whatever the project's state
-    # (user, a fresh Windows, 2026-08-19); the contract is read from here alone now (above).
-    skill_path = os.path.join(SKILL_DIR, "assets", filename)
-    if os.path.isfile(skill_path):
-        return skill_path
     return None
 
 def review_project_dir():
@@ -2611,6 +2614,72 @@ def _check_the_context_is_the_roots():
     assert not failures, "\n  ".join(["the context's home, the project root:"] + failures)
 
 
+def _check_another_folders_context_is_never_read():
+    """#143, I-21 (fix 1): the context is read from the project root, then `PROJECT_MIRROR`, then the root's own
+    `rew_analitic/` -- the working folder only as the root. The working folder came second, so (a) TCC's reviewer probe
+    -- the cwd the real project, `AUTOSOUND_PROJECT_DIR` a scratch folder, `PROJECT_MIRROR` its `rew_analitic/` with a
+    stub -- sent the REAL project's context into the probe, and named the stub as a copy that differs; and (b) the
+    documented `PROJECT_MIRROR=/abs/project/rew_analitic` run from another car's folder read that car's context while
+    the ledger and the trail were the project's. And a context found nowhere names every place searched, in order."""
+    top = tempfile.mkdtemp(prefix="autosound_ai_other_context_")
+    failures = []
+
+    def write(path, text):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(text)
+    try:
+        real, scratch, other = (os.path.join(top, n) for n in ("real-car", "probe-scratch", "other-car"))
+        write(os.path.join(real, "project.json"), "{}")
+        write(os.path.join(real, "autosound_context.md"), "# THE REAL CAR\n")
+        stub = os.path.join(scratch, "rew_analitic", "autosound_context.md")
+        write(stub, "# THE PROBE'S STUB\n")
+        pkg = os.path.join(scratch, "reviewer-probe.md")
+        write(pkg, "Reply with one line.")
+        # (a) TCC's probe: the stub is read, the cwd's never, and no copy is said to differ.
+        with _DoorScene(CWD=real, PROJECT_MIRROR=os.path.dirname(stub), CONTEXT=None) as scene:
+            os.environ["AUTOSOUND_PROJECT_DIR"] = scratch
+            globals()["CONTEXT"] = find_file(CONTEXT_NAME, None)
+            code, _out, err = scene.run("ask", pkg, "--via", "clipboard")
+            rel = next((ln.split("PACKAGE_FILE: ", 1)[1].strip() for ln in err.splitlines() if "PACKAGE_FILE: " in ln),
+                       None)
+            sent = ""
+            if rel:
+                with open(os.path.join(scratch, rel), encoding="utf-8") as fh:
+                    sent = fh.read()
+            if CONTEXT != stub or code or "THE PROBE'S STUB" not in sent or "THE REAL CAR" in sent \
+                    or "differs" in err:
+                failures.append(f"TCC's probe: read {CONTEXT}, exit {code}, the stub sent {'THE PROBE' in sent}, the "
+                                f"real car's sent {'THE REAL CAR' in sent}, said {err.strip()[-300:]!r}")
+        # (b) the documented mirror, run from another car's folder: the project's context, never that car's.
+        project = os.path.join(top, "car")
+        write(os.path.join(project, "project.json"), "{}")
+        write(os.path.join(other, "project.json"), "{}")
+        write(os.path.join(other, "autosound_context.md"), "# ANOTHER CAR\n")
+        mirror = os.path.join(project, "rew_analitic")
+        os.makedirs(mirror)
+        for where, want in (("the root's", os.path.join(project, "autosound_context.md")),
+                            ("the mirror's", os.path.join(mirror, "autosound_context.md")), ("none", None)):
+            if want:
+                write(want, f"# the project's context, {where}\n")
+            with _DoorScene(CWD=other, PROJECT_MIRROR=mirror):
+                got = find_file(CONTEXT_NAME, None)
+            if got != want:
+                failures.append(f"the documented mirror from another car, {where}: read {got}")
+            if want:
+                os.remove(want)
+        # Found nowhere: the refusal names every place searched, in the order searched.
+        with _DoorScene(CWD=other, PROJECT_MIRROR=mirror, CONTEXT=None) as scene:
+            code, _out, err = scene.run("critic", pkg, "--via", "clipboard")
+            places = [project, mirror, os.path.join(SKILL_DIR, "assets")]
+            at = [err.find(f"'{p}'") for p in places]
+            if code != 1 or -1 in at or at != sorted(at) or f"'{other}'" in err:
+                failures.append(f"found nowhere: exit {code}, said {err.strip()[-400:]!r}")
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["another folder's context:"] + failures)
+
+
 def _check_the_audit_trail_is_the_projects():
     """#143, I-21: a review's line in the audit trail lands at `<project>/audit-trail.md` -- the project the review is
     about, `review_project_dir`'s -- where it landed in `rew_analitic/`. A folder that is no project gets none, as it
@@ -2682,7 +2751,8 @@ def _selftest():
                   _check_the_template_teaches_titles_that_resolve, _check_the_door_records_the_review,
                   _check_the_clipboard_line_runs, _check_a_fault_in_the_record_is_not_a_refusal,
                   _check_an_omp_review_names_its_vendor, _check_the_contract_is_the_skills_own,
-                  _check_the_context_is_the_roots, _check_the_audit_trail_is_the_projects):
+                  _check_the_context_is_the_roots, _check_another_folders_context_is_never_read,
+                  _check_the_audit_trail_is_the_projects):
         try:
             check()
         except AssertionError as exc:
@@ -4703,8 +4773,8 @@ def main():
               file=sys.stderr)
         sys.exit(1)
     if tuning and (not CONTEXT or not os.path.isfile(CONTEXT)):
-        print(f"Помилка: Не знайдено контекст проекту autosound_context.md у '{review_project_dir()}' (ні в "
-              f"'{PROJECT_MIRROR}', ні в AUTOSOUND_DIR).", file=sys.stderr)
+        print("Помилка: Не знайдено контекст проекту autosound_context.md — шукали в "
+              + ", ".join(f"'{folder}'" for folder in search_folders(AUTOSOUND_DIR or None)) + ".", file=sys.stderr)
         # `critic` and `advisor` are tuning and need the project; a plain question or a translation does not
         # (skill #85: a session used `advisor` for a translation and borrowed a context file to get past this).
         print("  Просте питання чи переклад -- `ask`: йому проект не потрібен.", file=sys.stderr)
