@@ -191,6 +191,13 @@ jobs:
             echo "::error::install.sh ended READY (exit 0) on an externally managed /usr/bin/python3 -- pip took the libraries anyway, and this job expects 3: installed, NOT ready"
             exit 1
           fi
+          # A stop over the method's tag list is GitHub not answering the runner (#142): the installer said so and
+          # stopped, as it should -- a network blip, not a break of the exit contract. Said as that, with its line.
+          if [ "$rc" = 1 ] && grep "could not read the method's release tags" "$log" >/dev/null; then
+            echo "::error::GitHub did not answer the runner: install.sh stopped (exit 1) because it could not read the method's release tags -- a network blip, not the exit contract; run the job again. Its line:"
+            grep "could not read the method's release tags" "$log" | tail -n 1
+            exit 1
+          fi
           if [ "$rc" != 3 ]; then
             echo "::error::install.sh ended with exit $rc, not 3 (installed, NOT ready)"
             exit 1

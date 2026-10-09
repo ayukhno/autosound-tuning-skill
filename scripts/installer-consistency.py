@@ -105,19 +105,51 @@ TAG_RULE_CASES = (("v3.1.2", True), ("beta-v3.1.3-rc1", True), ("v3.1.2-x", Fals
 #: T-37 (#142): the tags a stand-in `ls-remote` offers the method's pick, and the one it must install on stable.
 SELECTION_TAGS = ("v3.0.9", "v3.1.10", "v3.1.2", "beta-v3.1.3-rc1", "v3.1.2-x", "v03.1.1")
 #: ...and the stand-in: a `git` with no network. `ls-remote` prints a ref line for each name in the file $STUB_TAGS
-#: names (none when it is unset), or -- $STUB_RC not 0 -- git's own words for a remote it cannot reach, with that exit.
-#: Any other subcommand is not this test's to answer. Bytes, so the script keeps its "\n" line ends on Windows.
+#: names (none when it is unset), or -- $STUB_RC not 0 -- git's own words for a remote it cannot reach ($STUB_SAYS, or
+#: a host that does not resolve), with that exit. `--version` answers, as `usable git` asks it; any other subcommand is
+#: not this test's to answer. Every call is written down in $STUB_LOG when that is set. Bytes, so the script keeps its
+#: "\n" line ends on Windows.
 NO_NETWORK_GIT = (b"#!/bin/sh\n"
+                  b"[ -z \"${STUB_LOG:-}\" ] || printf 'git %s\\n' \"$*\" >> \"$STUB_LOG\"\n"
+                  b"[ \"$1\" = --version ] && { echo 'git version 2.99.0 (a stand-in)'; exit 0; }\n"
                   b"[ \"$1\" = ls-remote ] || { echo \"stub git: $1 is not asked here\" >&2; exit 99; }\n"
                   b"if [ \"${STUB_RC:-0}\" != 0 ]; then\n"
-                  b"  echo \"fatal: unable to access 'https://github.com/ayukhno/autosound-tuning-skill.git/': "
-                  b"Could not resolve host: github.com\" >&2\n"
+                  b"  echo \"${STUB_SAYS:-fatal: unable to access 'https://github.com/ayukhno/autosound-tuning-skill.git/': "
+                  b"Could not resolve host: github.com}\" >&2\n"
                   b"  exit \"$STUB_RC\"\n"
                   b"fi\n"
                   b"[ -n \"${STUB_TAGS:-}\" ] || exit 0\n"
                   b"while IFS= read -r t; do\n"
                   b"  printf '0123456789abcdef0123456789abcdef01234567\\trefs/tags/%s\\n' \"$t\"\n"
                   b"done < \"$STUB_TAGS\"\n")
+#: SFH's TLS-inspecting proxy (#142): git's own last line, which a stop over an unreadable tag list must carry -- it
+#: said "no network?" over a network that answered with a certificate nobody trusts.
+SSL_SAYS = ("fatal: unable to access 'https://github.com/ayukhno/autosound-tuning-skill.git/': SSL certificate problem: "
+            "self-signed certificate in certificate chain")
+#: #142 (SFH 1): a `git` whose `status` fails -- a copy with a broken submodule says "fatal: not a git repository" there
+#: -- and which is the real git, named in $REAL_GIT, for everything else. A failed status read as a clean tree, and the
+#: forced put-back then dropped a hand edit the update had refused to overwrite.
+STATUS_FAILS_GIT = (b"#!/bin/sh\n"
+                    b"for a in \"$@\"; do\n"
+                    b"  if [ \"$a\" = status ]; then\n"
+                    b"    echo 'fatal: not a git repository: vendor/Resonalyze/../../.git/modules/vendor/Resonalyze' >&2\n"
+                    b"    exit 128\n"
+                    b"  fi\n"
+                    b"done\n"
+                    b"exec \"$REAL_GIT\" \"$@\"\n")
+#: The deferred T7 pair (#142): a checkout that breaks off half way -- a tracked file changed, HEAD where it was -- and
+#: the put-back's `checkout --force`, which goes to the real git: what it promises, a copy back where it was and clean,
+#: is then seen, where NO_CHECKOUT_GIT made the put-back a no-op as well.
+BROKEN_CHECKOUT_GIT = (b"#!/bin/sh\n"
+                       b"dir=''; prev=''; co=0; force=0\n"
+                       b"for a in \"$@\"; do\n"
+                       b"  [ \"$prev\" = -C ] && dir=\"$a\"\n"
+                       b"  [ \"$a\" = checkout ] && co=1\n"
+                       b"  [ \"$a\" = --force ] && force=1\n"
+                       b"  prev=\"$a\"\n"
+                       b"done\n"
+                       b"if [ \"$co\" = 1 ] && [ \"$force\" = 0 ]; then printf 'half\\n' >> \"$dir/a\"; exit 0; fi\n"
+                       b"exec \"$REAL_GIT\" \"$@\"\n")
 #: T-45 (#142): a `git` whose `checkout` answers 0 and does nothing -- a checkout that did not land. Everything else is
 #: the real git, which the script names in $REAL_GIT before this folder goes first on PATH.
 NO_CHECKOUT_GIT = (b"#!/bin/sh\n"
@@ -267,15 +299,29 @@ SIGNING_FUNCTIONS = ("is_release_tag", "settled_by_name", "verify_tag", "check_t
 #: way or another; none of them is the author's signature. A fake `gpg.program` stands in for gpg: no real one runs,
 #: and no keyring is touched. Bytes, so a script keeps its "\n" line ends on Windows.
 SIGN_ONLY_HELPER = b"#!/bin/sh\necho 'helper: sign-only (try -Y sign)' >&2\nexit 1\n"
-FAKE_GPG = (b"#!/bin/sh\n"
+
+
+def fake_gpg(uid):
+    """A `gpg.program` that calls any OpenPGP signature good, from a key whose user id is `uid` -- the signer's own
+    words, which gpg prints after its `gpg: ` prefix. Runs no real gpg; bytes, so it keeps "\\n" on Windows."""
+    return (b"#!/bin/sh\n"
             b"cat >/dev/null\n"
             b"echo '[GNUPG:] NEWSIG'\n"
-            b"echo '[GNUPG:] GOODSIG 0123456789ABCDEF Mallory <m@example.org>'\n"
-            b"echo '[GNUPG:] VALIDSIG 0123456789ABCDEF0123456789ABCDEF01234567 2026-10-08 0 0 0 0 0 1 0 "
-            b"0123456789ABCDEF0123456789ABCDEF01234567'\n"
-            b"echo '[GNUPG:] TRUST_ULTIMATE 0 pgp'\n"
-            b"echo 'gpg: Good signature from \"Mallory <m@example.org>\" [ultimate]' >&2\n"
-            b"exit 0\n")
+            + f"echo '[GNUPG:] GOODSIG 0123456789ABCDEF {uid}'\n".encode("utf-8")
+            + b"echo '[GNUPG:] VALIDSIG 0123456789ABCDEF0123456789ABCDEF01234567 2026-10-08 0 0 0 0 0 1 0 "
+              b"0123456789ABCDEF0123456789ABCDEF01234567'\n"
+              b"echo '[GNUPG:] TRUST_ULTIMATE 0 pgp'\n"
+            + f"echo 'gpg: Good signature from \"{uid}\" [ultimate]' >&2\n".encode("utf-8")
+            + b"exit 0\n")
+
+
+FAKE_GPG = fake_gpg("Mallory <m@example.org>")
+#: #142 (PTA 4): a user id that IS the author's sentence -- gpg prints it inside its own line, so only a test held to
+#: the start of a line refuses it; one that searched anywhere installed a tag the author never signed.
+FORGED_UID = 'Good "git" signature for author with ED25519 key SHA256:forged'
+#: ...and one that is git's "cannot check" sentence (the deferred T6 item): searched anywhere, it made a forged tag read
+#: as a machine that cannot check -- still refused, but worded "could not be checked". git's own lines start the line.
+CANNOT_CHECK_UID = "error: cannot run ssh-keygen: No such file or directory"
 STUB_GIT = (b"#!/bin/sh\n"
             b"for a in \"$@\"; do\n"
             b"  if [ \"$a\" = verify-tag ]; then echo 'Good signature from \"anyone\"' >&2; exit 0; fi\n"
@@ -355,12 +401,17 @@ def signing_problems(sh):
         stub_dir.mkdir()
         old_dir.mkdir()
         for path, body in ((Path(tmp, "sign-only.sh"), SIGN_ONLY_HELPER), (Path(tmp, "fake-gpg.sh"), FAKE_GPG),
+                           (Path(tmp, "forged-gpg.sh"), fake_gpg(FORGED_UID)),
+                           (Path(tmp, "cannot-check-gpg.sh"), fake_gpg(CANNOT_CHECK_UID)),
                            (stub_dir / "git", STUB_GIT), (old_dir / "ssh-keygen", OLD_SSH_KEYGEN)):
             path.write_bytes(body)
             path.chmod(0o755)
         hostile, pgp = Path(tmp, "hostile.gitconfig"), Path(tmp, "pgp.gitconfig")
         hostile.write_bytes(f'[gpg "ssh"]\n\tprogram = {Path(tmp, "sign-only.sh").as_posix()}\n'.encode("utf-8"))
         pgp.write_bytes(f'[gpg]\n\tprogram = {Path(tmp, "fake-gpg.sh").as_posix()}\n'.encode("utf-8"))
+        forged, cannot = Path(tmp, "forged.gitconfig"), Path(tmp, "cannot-check.gitconfig")
+        forged.write_bytes(f'[gpg]\n\tprogram = {Path(tmp, "forged-gpg.sh").as_posix()}\n'.encode("utf-8"))
+        cannot.write_bytes(f'[gpg]\n\tprogram = {Path(tmp, "cannot-check-gpg.sh").as_posix()}\n'.encode("utf-8"))
         ultimate = Path(tmp, "ultimate.gitconfig")
         ultimate.write_bytes(b"[gpg]\n\tminTrustLevel = ultimate\n")
     except (OSError, RuntimeError) as exc:
@@ -410,12 +461,22 @@ def signing_problems(sh):
                  (os.devnull, stub_dir, "v3.0.64", 1, ("does not check out",), "a git on PATH that says Good"),
                  (os.devnull, old_dir, "v3.0.64", 1, ("could not be checked here", "find-principals/verify"),
                   "an ssh-keygen with no -Y"),
-                 (ultimate, None, "v3.0.64", 0, ("signed by the skill's author",), "gpg.minTrustLevel=ultimate"))
+                 (ultimate, None, "v3.0.64", 0, ("signed by the skill's author",), "gpg.minTrustLevel=ultimate"),
+                 # #142 (PTA 4): the author's sentence as an OpenPGP user id, inside gpg's own line -- refused only by a
+                 # test held to the start of a line; and git's "cannot run ssh-keygen" the same way (T6), which must
+                 # not make a forged tag read as a machine that cannot check.
+                 (forged, None, "v3.0.67", 1, ("does not check out", f'Good signature from "{FORGED_UID}'),
+                  "a gpg.program whose user id is the author's sentence"),
+                 (cannot, None, "v3.0.67", 1, ("does not check out", f'Good signature from "{CANNOT_CHECK_UID}'),
+                  "a gpg.program whose user id is git's cannot-check sentence"))
     for config, first_on_path, ref, want_rc, want_texts, what in t35_cases:
         rc, said = run(f'verify_tag "{repo_posix}" "{ref}" 2>&1\n', config=config, first_on_path=first_on_path)
-        if rc != want_rc or any(text not in said for text in want_texts):
+        never = ("could not be checked here",) if config is cannot else ()
+        if rc != want_rc or any(text not in said for text in want_texts) or any(text in said for text in never):
             out.append(f"install.sh verify_tag {ref} under {what}: exit {rc}, want {want_rc} and "
-                       f"{' + '.join(repr(t) for t in want_texts)} -- said {said.strip()[-200:]!r}")
+                       f"{' + '.join(repr(t) for t in want_texts)}"
+                       + (f", never {' + '.join(repr(t) for t in never)}" if never else "")
+                       + f" -- said {said.strip()[-200:]!r}")
     # The app's tags, through check_tcc_tag: (ref, the switch, a dry run, exit, words, the commit it hands on).
     tcc_cases = (("v0.1.45", "", "0", 0, "v0.1.45 is signed by TCC's author", commit),
                  ("v0.1.46", "", "0", 1, "does not check out", ""),
@@ -466,6 +527,16 @@ def ps1_stop_problems(ps1):
     return out
 
 
+def utf8_locales():
+    """The en_US UTF-8 locale this machine lists (`locale -a`; glibc spells it `en_US.utf8`), or () -- none, or no
+    `locale` at all (Windows)."""
+    try:
+        listed = subprocess.run(["locale", "-a"], capture_output=True, text=True, timeout=20).stdout.split()
+    except (OSError, subprocess.SubprocessError):
+        return ()
+    return tuple(name for name in ("en_US.UTF-8", "en_US.utf8") if name in listed)[:1]
+
+
 def tag_rule_problems(sh, ps1):
     """T-45 (#142): TAG_RULE_CASES answered alike by the three spellings of "is a release tag"; [] when they are.
 
@@ -486,9 +557,14 @@ def tag_rule_problems(sh, ps1):
     else:
         script = functions + "".join(f"if is_release_tag {bash_literal(name)}; then echo '{i} yes'; "
                                      f"else echo '{i} no'; fi\n" for i, name in enumerate(names))
-        r = subprocess.run([bash, "-s"], input=script.encode("utf-8"), capture_output=True)
-        got = dict(line.split() for line in r.stdout.decode("utf-8", "replace").splitlines() if " " in line)
-        answers["install.sh"] = [got.get(str(i)) == "yes" if str(i) in got else None for i in range(len(names))]
+        # ...and again in a UTF-8 locale where the machine has one (the deferred T7 item, #142): glibc reads a range such
+        # as [0-9] by the locale's collation, which is what the rule's own `LC_ALL=C` is there for -- macOS reads code
+        # points, and the selftests' Ubuntu runs C.UTF-8, so the guard was pinned nowhere a collation could differ.
+        for where, env in (("install.sh", None),) + tuple(
+                (f"install.sh under LC_ALL={loc}", dict(os.environ, LC_ALL=loc)) for loc in utf8_locales()):
+            r = subprocess.run([bash, "-s"], input=script.encode("utf-8"), capture_output=True, env=env)
+            got = dict(line.split() for line in r.stdout.decode("utf-8", "replace").splitlines() if " " in line)
+            answers[where] = [got.get(str(i)) == "yes" if str(i) in got else None for i in range(len(names))]
     try:
         spec = importlib.util.spec_from_file_location("autosound_upkeep_rule", UPKEEP)
         upkeep = importlib.util.module_from_spec(spec)
@@ -528,9 +604,9 @@ def selection_problems(sh, ps1):
     import json
     import tempfile
     # The stop is `stop` (#142): it writes the receipt, here into a temp XDG_DATA_HOME, under the call's own `set -u`.
-    functions, missing = cut_functions(sh, ("say", "warn", "have", "on_mac", "runs_ok", "usable", "json_str",
-                                            "write_receipt", "stop", "is_release_tag", "newest_on_channel",
-                                            "pick_method_ref"))
+    functions, missing = cut_functions(sh, ("say", "warn", "pretty", "have", "on_mac", "runs_ok", "usable",
+                                            "json_str", "write_receipt", "stop", "is_release_tag",
+                                            "newest_on_channel", "read_tags", "pick_method_ref"))
     if missing:
         return [f"install.sh: no `{name}() {{ ... }}` -- the method's tag pick cannot be run" for name in missing]
     bash, why = find_bash()
@@ -538,24 +614,42 @@ def selection_problems(sh, ps1):
         return [f"{why} -- install.sh's tag pick cannot be run, and unrun is not agreed"]
     out = []
     tmp = tempfile.mkdtemp(prefix="autosound_pick_")
+    unreadable = ("could not read the method's release tags", "nothing was installed")
     try:
         stub_dir, tags = Path(tmp, "stub-git"), Path(tmp, "tags")
         stub_dir.mkdir()
         (stub_dir / "git").write_bytes(NO_NETWORK_GIT)
         (stub_dir / "git").chmod(0o755)
         tags.write_bytes("".join(t + "\n" for t in SELECTION_TAGS).encode("utf-8"))
-        cases = (("", None, 0, 1, None, ("could not read the method's release tags", "nothing was installed"), ()),
-                 ("", None, 128, 1, None, ("could not read the method's release tags", "nothing was installed"), ()),
-                 ("main", None, 0, 0, "main", ("UNSIGNED",), ()),
-                 ("v3.0.33", None, 128, 0, "v3.0.33", (), ("UNSIGNED",)),
-                 ("", tags, 0, 0, "v3.1.10", (), ("UNSIGNED",)))
-        for i, (given, offered, stub_rc, want_rc, want_ref, words, not_words) in enumerate(cases):
+        # (--skill-ref, offered tags, ls-remote's exit, what git says, a dry run, no git yet, exit, the ref, words,
+        # never). #142 (SFH 5): git's own last line goes into the stop -- a proxy's certificate is not "no network?".
+        # #142 (SFH 4): a dry run changes nothing, so an unreadable list stops nothing: it says what a real run would
+        # install and why it cannot say which; with no git yet -- a Mac without Apple's tools, whose /usr/bin/git is a
+        # shim that opens Apple's window -- no git is run at all (the stand-in writes down every call).
+        cases = (("", None, 0, None, "0", False, 1, None, unreadable, ()),
+                 ("", None, 128, None, "0", False, 1, None, unreadable + ("Could not resolve host: github.com",), ()),
+                 ("", None, 128, SSL_SAYS, "0", False, 1, None, unreadable + ("SSL certificate problem: self-signed",),
+                  ("no network?",)),
+                 ("main", None, 0, None, "0", False, 0, "main", ("UNSIGNED",), ()),
+                 ("v3.0.33", None, 128, None, "0", False, 0, "v3.0.33", (), ("UNSIGNED",)),
+                 ("", tags, 0, None, "0", False, 0, "v3.1.10", (), ("UNSIGNED",)),
+                 ("", None, 128, SSL_SAYS, "1", False, 0, "v3.*",
+                  ("would install the newest v3.* release (not readable here: ", "SSL certificate problem"),
+                  ("could not read the method's release tags",)),
+                 ("", None, 0, None, "1", True, 0, "v3.*",
+                  ("would install the newest v3.* release (not readable here: no git yet)",),
+                  ("no network?", "could not read the method's release tags")))
+        for i, (given, offered, stub_rc, says, dry, nogit, want_rc, want_ref, words, not_words) in enumerate(cases):
             script = (f'set -euo pipefail\nexport PATH="$(cd "{stub_dir.as_posix()}" && pwd)":"/usr/bin:$PATH"\n'
                       'SKILL_REPO="https://github.com/ayukhno/autosound-tuning-skill.git"\nSKILL_TAG_GLOB="v3.*"\n'
-                      + functions + f'ref="$(pick_method_ref "{given}")" || exit $?\nprintf "REF=[%s]\\n" "$ref"\n')
-            data = Path(tmp, f"data-{i}")
+                      f'DRY_RUN={dry}\n' + functions + ("usable() { return 1; }\n" if nogit else "")
+                      + f'ref="$(pick_method_ref "{given}")" || exit $?\nprintf "REF=[%s]\\n" "$ref"\n')
+            data, calls = Path(tmp, f"data-{i}"), Path(tmp, f"git-calls-{i}")
             env = dict(os.environ, STUB_RC=str(stub_rc), STUB_TAGS=offered.as_posix() if offered else "",
-                       HOME=tmp, XDG_DATA_HOME=str(data))
+                       HOME=tmp, XDG_DATA_HOME=str(data), STUB_LOG=calls.as_posix())
+            env.pop("STUB_SAYS", None)
+            if says:
+                env["STUB_SAYS"] = says
             r = subprocess.run([bash, "-s"], input=script.encode("utf-8"), capture_output=True, env=env)
             got_out = r.stdout.decode("utf-8", "replace")
             got_err = r.stderr.decode("utf-8", "replace")
@@ -566,29 +660,34 @@ def selection_problems(sh, ps1):
             except ValueError as exc:
                 status = f"unreadable ({exc})"
             want_status = "stopped" if want_rc == 1 else None
+            ran_git = calls.read_text(encoding="utf-8").strip() if calls.exists() else ""
             if (r.returncode != want_rc or got_out != want_out or any(w not in got_err for w in words)
-                    or any(w in got_err for w in not_words) or status != want_status):
+                    or any(w in got_err for w in not_words) or status != want_status or (nogit and ran_git)):
                 out.append(f"install.sh pick_method_ref {given or '(no --skill-ref)'}"
-                           f"{' with ' + ' '.join(SELECTION_TAGS) if offered else ''}, ls-remote exit {stub_rc}: "
+                           f"{' with ' + ' '.join(SELECTION_TAGS) if offered else ''}, ls-remote exit {stub_rc}"
+                           f"{', a dry run' if dry == '1' else ''}{' with no git yet' if nogit else ''}: "
                            f"exit {r.returncode}, stdout {got_out.strip()!r}, receipt {status!r}, want {want_rc} and "
                            f"{want_out.strip()!r}"
                            + (f" saying {' + '.join(map(repr, words))}" if words else "")
                            + (f" and never {' + '.join(map(repr, not_words))}" if not_words else "")
                            + (f", a receipt saying {want_status!r} (#142)" if want_status else ", no receipt")
-                           + f" -- stderr {got_err.strip()[-200:]!r} (T-37)")
+                           + (f", and no git run -- it ran {ran_git!r}" if nogit else "")
+                           + f" -- stderr {got_err.strip()[-220:]!r} (T-37)")
     except OSError as exc:
         out.append(f"the tag pick's fixtures could not be made ({exc}) -- unrun is not agreed")
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
-    stop_ps1 = ("could not read the method's release tags (no network?) -- nothing was installed or changed for the "
-                "method; run again when GitHub answers, or name a tag with -SkillRef")
+    stop_ps1 = ("could not read the method's release tags ($($script:TagsWhy)) -- nothing was installed or changed for "
+                "the method; run again when GitHub answers, or name a tag with -SkillRef")
     read = (("install.sh", 'SKILL_REF="$(pick_method_ref "$SKILL_REF")" || stop $?', True),
             ("install.sh", 'SKILL_REF="main"', False),
-            ("install.sh", "could not read the app's release tags (no network?)", True),
+            ("install.sh", "could not read the app's release tags ($TAGS_WHY)", True),
+            ("install.sh", "could not read the method's candidates ($TAGS_WHY)", True),
             ("install.ps1", "$SkillRef = Select-MethodRef $SkillRef", True),
             ("install.ps1", stop_ps1, True),
             ("install.ps1", '$SkillRef = "main"', False),
-            ("install.ps1", "could not read the app's release tags (no network?)", True))
+            ("install.ps1", "could not read the app's release tags ($($script:TagsWhy))", True),
+            ("install.ps1", "could not read the method's candidates ($($script:TagsWhy))", True))
     texts = {"install.sh": sh, "install.ps1": ps1}
     wrong = [f"{where} {'lacks' if must else 'still has'} {needle!r}" for where, needle, must in read
              if (needle in texts[where]) != must]
@@ -600,6 +699,21 @@ def selection_problems(sh, ps1):
     if not pick_ps1 or not re.search(r"return \$null\s*\}\Z", pick_ps1.group(0)) or re.search(r"[\"']main[\"']",
                                                                                                pick_ps1.group(0)):
         wrong.append("install.ps1 Select-MethodRef does not end in `return $null`, or names `main` itself")
+    # #142 (SFH 4, 5): one reader of the tag lists in install.ps1, which keeps git's last line and says "no git yet"
+    # without running a git that is not there; a dry run's unreadable list is said, not a stop.
+    read_fn = re.search(r"^function Read-ReleaseTags \{.*?^\}", ps1, re.M | re.S)
+    if not read_fn or '"no git yet"' not in read_fn.group(0) or "$script:TagsWhy" not in read_fn.group(0) \
+            or "if (-not (Have git))" not in read_fn.group(0):
+        wrong.append("install.ps1 has no Read-ReleaseTags that names git's own line, and \"no git yet\" without git")
+    if not pick_ps1 or "would install the newest $SkillTagGlob release (not readable here: $($script:TagsWhy))" \
+            not in pick_ps1.group(0) or "if ($DryRun)" not in pick_ps1.group(0):
+        wrong.append("install.ps1 Select-MethodRef stops a dry run over a tag list it cannot read")
+    if len(re.findall(r"& git ls-remote", ps1)) != 2:
+        wrong.append(f"install.ps1 reads a tag list {len(re.findall(r'& git ls-remote', ps1))} ways -- one, "
+                     f"Read-ReleaseTags, plus the app's moved check")
+    sh_reads = [ln for ln in sh.splitlines() if "$(git ls-remote " in ln and not ln.lstrip().startswith("#")]
+    if len(sh_reads) != 2:
+        wrong.append(f"install.sh reads a tag list {len(sh_reads)} ways -- one, read_tags, plus the app's moved check")
     if wrong:
         out.append("the installers still have a way to an unchecked `main` or default branch: " + "; ".join(wrong)
                    + " (T-37)")
@@ -620,8 +734,9 @@ def checkout_problems(sh, ps1):
     which both installers' update paths stop on, as on a failed new copy (#142, R32). install.ps1's mirror is READ.
     """
     import tempfile
-    functions, missing = cut_functions(sh, ("say", "warn", "pretty", "run", "is_release_tag", "settled_by_name",
-                                            "verify_tag", "keep_local", "head_is", "checkout_method"))
+    functions, missing = cut_functions(sh, ("say", "warn", "pretty", "run", "have", "on_mac", "runs_ok", "usable",
+                                            "is_release_tag", "settled_by_name", "verify_tag", "keep_local", "head_is",
+                                            "put_tag_back", "checkout_method"))
     if missing:
         return [f"install.sh: no `{name}() {{ ... }}` -- the method's checkout cannot be run" for name in missing]
     bash, why = find_bash()
@@ -656,13 +771,23 @@ def checkout_problems(sh, ps1):
         Path(origin, "a").write_text("a\nb\n")
         git("-C", origin, "commit", "-q", "-am", "b")
         git(*signed, "v3.0.67", "-m", "signed")
+        # A sibling on the update's commit: git brings any tag on a fetched commit along unless told `--no-tags` (R48).
+        git("-C", origin, "tag", "-a", "v3.0.71", "-m", "unsigned, beside v3.0.67")
         first, later = git("-C", origin, "rev-parse", "v3.0.64^{commit}"), git("-C", origin, "rev-parse", "HEAD")
         git("-C", origin, "update-ref", "refs/heads/v3.0.64", later)
         git("-C", origin, "update-ref", "refs/heads/main", later)
-        stub_dir = Path(tmp, "no-checkout")
-        stub_dir.mkdir()
-        (stub_dir / "git").write_bytes(NO_CHECKOUT_GIT)
-        (stub_dir / "git").chmod(0o755)
+        # R48 (#142): two unsigned tags on a third commit, which no fetch of an earlier step can bring along.
+        Path(origin, "a").write_text("a\nb\nc\n")
+        git("-C", origin, "commit", "-q", "-am", "c")
+        git("-C", origin, "tag", "-a", "v3.0.68", "-m", "unsigned")
+        git("-C", origin, "tag", "-a", "v3.0.69", "-m", "unsigned")
+        stubs = {}
+        for name, body in (("no-checkout", NO_CHECKOUT_GIT), ("broken-checkout", BROKEN_CHECKOUT_GIT),
+                           ("status-fails", STATUS_FAILS_GIT)):
+            stubs[name] = Path(tmp, name)
+            stubs[name].mkdir()
+            (stubs[name] / "git").write_bytes(body)
+            (stubs[name] / "git").chmod(0o755)
         occupied = Path(tmp, "occupied")
         occupied.mkdir()
         (occupied / "mine.txt").write_text("somebody's\n")
@@ -671,8 +796,8 @@ def checkout_problems(sh, ps1):
         return [f"the checkout's fixtures could not be made ({exc}) -- unrun is not agreed"]
     url = Path(origin).as_uri()
 
-    def run(where, ref, stub=False):
-        first_on_path = f'"$(cd "{stub_dir.as_posix()}" && pwd)":' if stub else ""
+    def run(where, ref, stub=None):
+        first_on_path = f'"$(cd "{stubs[stub].as_posix()}" && pwd)":' if stub else ""
         script = ('REAL_GIT="$(command -v git)"; export REAL_GIT\n'
                   f'export PATH={first_on_path}"/usr/bin:$PATH"\n' + functions
                   + f'DRY_RUN=0\nAUTOSOUND_SKIP_TAG_VERIFY=""\nSKILL_SIGNING_PRINCIPAL=author\n'
@@ -686,8 +811,7 @@ def checkout_problems(sh, ps1):
 
     def the_tag(where, tag):
         """`where` is a copy detached on `tag`'s commit, the tag in its refs/tags, `origin` the method's remote. Asked of
-        the refs, not of `describe`: fetch brings along any tag on the same commit (v3.0.66 here), and `describe`
-        names whichever is newer."""
+        the refs, not of `describe`, which picks among tags on one commit by tagger date."""
         at = git("-C", where, "rev-parse", "--verify", "--quiet", f"refs/tags/{tag}^{{commit}}", check=False)
         return (bool(at) and head(where) == at
                 and not git("-C", where, "symbolic-ref", "--quiet", "HEAD", check=False)
@@ -701,27 +825,59 @@ def checkout_problems(sh, ps1):
                 f"{', on branch ' + branch if branch else ', detached'}"
                 f", origin {git('-C', where, 'remote', 'get-url', 'origin', check=False) or 'none'})")
 
-    copy = os.path.join(tmp, "copy")
+    def tag_at(where, tag):
+        return git("-C", where, "rev-parse", "--verify", "--quiet", f"refs/tags/{tag}", check=False)
+
+    def clean(where):
+        return git("-C", where, "status", "--porcelain", "--untracked-files=all", check=False) == ""
+
+    copy, own = os.path.join(tmp, "copy"), {}
+    empty = os.path.join(tmp, "empty")
     steps = (
-        ("a new copy of v3.0.64, a branch of that name on another commit", copy, "v3.0.64", False, 0,
-         ("signed by the skill's author",), lambda: head(copy) == first and the_tag(copy, "v3.0.64")),
-        ("that copy updated to v3.0.67", copy, "v3.0.67", False, 0, ("signed by the skill's author",),
-         lambda: head(copy) == later and the_tag(copy, "v3.0.67")),
-        ("that copy updated to v3.0.64 by a checkout that does not land", copy, "v3.0.64", True, 3,
+        # ...each fetch the one tag asked for: v3.0.66 shares v3.0.64's commit, v3.0.71 v3.0.67's (R48, `--no-tags`).
+        ("a new copy of v3.0.64, a branch of that name on another commit", copy, "v3.0.64", None, 0,
+         ("signed by the skill's author",),
+         lambda: head(copy) == first and the_tag(copy, "v3.0.64") and tag_at(copy, "v3.0.66") == ""),
+        ("that copy updated to v3.0.67", copy, "v3.0.67", None, 0, ("signed by the skill's author",),
+         lambda: head(copy) == later and the_tag(copy, "v3.0.67") and tag_at(copy, "v3.0.71") == ""),
+        ("that copy updated to v3.0.64 by a checkout that does not land", copy, "v3.0.64", "no-checkout", 3,
          ("did not take",), lambda: head(copy) == later),
-        ("a new copy of v3.0.66, unsigned", os.path.join(tmp, "unsigned"), "v3.0.66", False, 2,
+        # The deferred T7 pair (#142): the put-back's `--force` reaches the real git, over a tracked file a checkout
+        # that broke off left changed -- the copy is back where it was, and clean.
+        ("that copy updated to v3.0.64 by a checkout that breaks off half way", copy, "v3.0.64", "broken-checkout", 3,
+         ("did not take",), lambda: head(copy) == later and clean(copy)),
+        # R48 (#142): a refused update leaves refs/tags as it found them -- the tag it fetched is deleted again, and a
+        # local tag of that name, which the forced fetch overwrote, gets its own value back.
+        ("that copy updated to v3.0.68, unsigned, a tag it did not have", copy, "v3.0.68", None, 2,
+         ("does not check out",), lambda: head(copy) == later and tag_at(copy, "v3.0.68") == ""),
+        ("that copy updated to v3.0.69, unsigned, over a v3.0.69 of its own", copy, "v3.0.69", None, 2,
+         ("does not check out",), lambda: head(copy) == later and tag_at(copy, "v3.0.69") == own["v3.0.69"] != "",
+         lambda: (git("-C", copy, "tag", "-f", "v3.0.69", first), own.update({"v3.0.69": tag_at(copy, "v3.0.69")}))),
+        ("a new copy of v3.0.66, unsigned", os.path.join(tmp, "unsigned"), "v3.0.66", None, 2,
          ("does not check out",), lambda: not os.path.exists(os.path.join(tmp, "unsigned"))),
-        ("a new copy of the branch main, named", os.path.join(tmp, "branch"), "main", False, 0, ("UNSIGNED",),
+        ("a new copy of the branch main, named", os.path.join(tmp, "branch"), "main", None, 0, ("UNSIGNED",),
          lambda: head(os.path.join(tmp, "branch")) == later),
-        ("a new copy of v3.0.64 by a checkout that does not land", os.path.join(tmp, "stuck"), "v3.0.64", True, 3,
-         ("removed",), lambda: not os.path.exists(os.path.join(tmp, "stuck"))),
-        ("a new copy into a folder that is there and is not a checkout", str(occupied), "v3.0.64", False, 1, (),
+        ("a new copy of v3.0.64 by a checkout that does not land", os.path.join(tmp, "stuck"), "v3.0.64",
+         "no-checkout", 3, ("removed",), lambda: not os.path.exists(os.path.join(tmp, "stuck"))),
+        ("a new copy into a folder that is there and is not a checkout", str(occupied), "v3.0.64", None, 1, (),
          lambda: sorted(os.listdir(occupied)) == ["mine.txt"]),
+        # The deferred T7 item (#142): a new copy whose fetch fails leaves no folder -- an empty one already at that
+        # path included, which holds nothing to lose (the comment over it said "never a folder that was there").
+        ("a new copy of v3.0.99, a tag its remote does not have", os.path.join(tmp, "nothing"), "v3.0.99", None, 1,
+         (), lambda: not os.path.exists(os.path.join(tmp, "nothing"))),
+        ("a new copy of v3.0.99 into an empty folder already there", empty, "v3.0.99", None, 1, (),
+         lambda: not os.path.exists(empty), lambda: os.makedirs(empty)),
         # R32 (#142): an update that cannot be made is a stop, the copy where it was -- it was a warning, and the run
         # ended "Installed." on the old version.
-        ("that copy updated to v3.0.99, a tag its remote does not have", copy, "v3.0.99", False, 1,
+        ("that copy updated to v3.0.99, a tag its remote does not have", copy, "v3.0.99", None, 1,
          ("could not fetch v3.0.99", "nothing was changed"), lambda: head(copy) == later),
-        ("that copy, changed by hand, updated to v3.0.64 when the change cannot be kept", copy, "v3.0.64", False, 1,
+        # #142 (SFH 1): a `git status` that fails is no clean tree. It read as one, the checkout refused to overwrite the
+        # hand edit, and the forced put-back dropped it. Now a stop, 1, git's line said, the edit where it was.
+        ("that copy, changed by hand, updated to v3.0.64 when git status fails", copy, "v3.0.64", "status-fails", 1,
+         ("git status failed", "not a git repository", "nothing was changed"),
+         lambda: head(copy) == later and Path(copy, "a").read_text() == "a\nb\nmine\n",
+         lambda: Path(copy, "a").write_text("a\nb\nmine\n")),
+        ("that copy, changed by hand, updated to v3.0.64 when the change cannot be kept", copy, "v3.0.64", None, 1,
          ("cannot be kept automatically",),
          lambda: head(copy) == later and Path(copy, "a").read_text() == "a\nb\nmine\n",
          lambda: Path(copy, "a").write_text("a\nb\nmine\n")),
@@ -738,8 +894,15 @@ def checkout_problems(sh, ps1):
     # install.ps1's mirror, READ: a new copy made the same way, HEAD held to the tag, and every failed copy a stop.
     sync = re.search(r"^function Sync-MethodCheckout \{.*?^\}", ps1, re.M | re.S)
     body = sync.group(0) if sync else ""
-    lacking = [n for n in ("init --quiet $Dir", "remote add origin $SkillRepo", "fetch --quiet --depth 1 origin $spec",
-                           "Test-HeadIs $Dir $want", "$script:NotTheTag = $true") if n not in body]
+    lacking = [n for n in ("init --quiet $Dir", "remote add origin $SkillRepo",
+                           "fetch --quiet --no-tags --depth 1 origin $spec", "Test-HeadIs $Dir $want",
+                           "$script:NotTheTag = $true", "if ($statusRc -ne 0) {", "checkout --quiet @force $was")
+               if n not in body]
+    # #142 (SFH 1, R48): a status read with its exit code, a put-back forced only over a tree seen clean, and refs/tags
+    # put back on every way an update does not land -- refused, unreadable, not kept, not landed.
+    if body.count("Restore-Tag $Dir $tagRef $had") != 4 or body.count("fetch --quiet --no-tags --depth 1") != 2:
+        lacking.append(f"Restore-Tag on each of the four ways an update does not land, and --no-tags on both fetches "
+                       f"(Restore-Tag {body.count('Restore-Tag $Dir $tagRef $had')} times)")
     lacking += [f"a stop after {what}" for what, pattern in (
         ("a failed new copy", r"elseif \(-not \$cloned\) \{[^{}]*Stop-Installer 1; return"),
         ("an update that did not land", r"if \(\$script:NotTheTag\) \{[^{}]*Stop-Installer 1; return"),
@@ -827,9 +990,16 @@ RELINK_CASES = (
     ("foreign", "foreign", "0", 0, 0, ("left exactly as it is",), ("made again",), "foreign"),
     ("dangling", "dangling", "0", 0, 0, ("left exactly as it is",), ("made again",), "dangling"),
     ("a real folder", "folder", "0", 0, 0, ("a real directory this script did not create",), ("made again",), "folder"),
+    # #142 (SFH 7): a file there is neither ours nor a folder: left, as install.ps1 leaves it -- it was `rm -f`'d.
+    ("a regular file", "file", "0", 0, 0, ("a file this script did not create", "left alone"), ("made again",), "file"),
     ("missing, a dry run", None, "1", 0, 0, ("would make the missing link",), ("made again",), "nothing"),
     ("missing, the update not made", None, "0", 1, 1, ("update failed",), ("made again",), "nothing"),
-    ("missing, the update refused", None, "0", 2, 1, ("not a signed release",), ("made again",), "nothing"))
+    ("missing, the update refused", None, "0", 2, 1, ("not a signed release",), ("made again",), "nothing"),
+    # #142 (PTA 5): a checkout that did not land is a stop of its own, the copy put back.
+    ("missing, the update did not land", None, "0", 3, 1, ("could not be put on",), ("made again",), "nothing"))
+#: #142 (SFH 7): what the receipt's method_ref says when the method's step left the link's place as it was -- not a
+#: tag this run never installed.
+LEFT_AS_IT_WAS = "left as it was: "
 
 
 def relink_problems(sh, ps1):
@@ -884,6 +1054,11 @@ def relink_problems(sh, ps1):
         probe = subprocess.run([bash, "-c", 'cd "$1" && mkdir t && ln -s t l && [ -L l ]', "_", Path(tmp).as_posix()],
                                capture_output=True)
         ran = os.name != "nt" and probe.returncode == 0
+        # On POSIX a bash whose `ln -s` makes no link is a missing input, not a reason to read instead of run: the
+        # block's cases would pass unrun (#142, the last re-review). Windows reads it, and says so.
+        if os.name != "nt" and probe.returncode != 0:
+            out.append(f"{bash}: `ln -s` made no link here ({probe.stderr.decode('utf-8', 'replace').strip()[-120:]!r})"
+                       f" -- install.sh's link block cannot be run, and unrun is not agreed (T-38)")
         for case, before, dry, co_rc, want_rc, words, never, after in (RELINK_CASES if ran else ()):
             home = Path(tmp, case.replace(" ", "-").replace(",", ""))
             src = home / ".claude" / "skills" / ".autosound-tuning-src"
@@ -892,13 +1067,14 @@ def relink_problems(sh, ps1):
             (home / "elsewhere").mkdir()
             setup = {None: ":", "ours": 'ln -s "$SKILL_SRC/skills/autosound-tuning" "$SKILL_HOME"',
                      "foreign": 'ln -s "$HOME/elsewhere" "$SKILL_HOME"', "dangling": 'ln -s "$HOME/gone" "$SKILL_HOME"',
-                     "folder": 'mkdir -p "$SKILL_HOME/mine"'}[before]
+                     "folder": 'mkdir -p "$SKILL_HOME/mine"', "file": 'printf "mine\\n" > "$SKILL_HOME"'}[before]
             script = ('set -euo pipefail\nsay() { printf "%s\\n" "$*"; }\nwarn() { printf "  ! %s\\n" "$*"; }\n'
                       'stop() { _c="$1"; shift; printf "STOP %s\\n" "$*"; exit "$_c"; }\n'
                       f'checkout_method() {{ return {co_rc}; }}\n'
                       'SKILL_HOME="$HOME/.claude/skills/autosound-tuning"\n'
                       'SKILL_SRC="$HOME/.claude/skills/.autosound-tuning-src"\n'
-                      f'SKILL_REF=v3.1.3\nDRY_RUN={dry}\n{setup}\n' + block.group(0))
+                      f'SKILL_REF=v3.1.3\nDRY_RUN={dry}\nMETHOD_LEFT=""\n{setup}\n' + block.group(0)
+                      + 'printf "METHOD_LEFT=[%s]\\n" "$METHOD_LEFT"\n')
             r = subprocess.run([bash, "-s"], input=script.encode("utf-8"), capture_output=True,
                                env=dict(os.environ, HOME=home.as_posix()))
             said = (r.stdout + r.stderr).decode("utf-8", "replace")
@@ -910,7 +1086,7 @@ def relink_problems(sh, ps1):
                          else "ours" if os.path.samefile(place, src / "skills" / "autosound-tuning")
                          else "foreign" if os.path.samefile(place, home / "elsewhere") else "something else")
             else:
-                state = "folder" if place.is_dir() else "something else"
+                state = "folder" if place.is_dir() else "file" if place.is_file() else "something else"
             wrong = ([f"exit {r.returncode}, want {want_rc}"] if r.returncode != want_rc else [])
             wrong += [f"never says {w!r}" for w in words if w not in said]
             wrong += [f"says {w!r}" for w in never if w in said]
@@ -918,6 +1094,17 @@ def relink_problems(sh, ps1):
                 wrong.append(f"the link's place holds {state}, want {after}")
             if before == "folder" and not (place / "mine").is_dir():
                 wrong.append("the real folder's content is gone")
+            if before == "file" and state == "file" and place.read_text() != "mine\n":
+                wrong.append("the file's content is changed")
+            # The receipt's method_ref (#142, SFH 7): a place left as it was is said so, never as the tag picked.
+            left = re.search(r"METHOD_LEFT=\[(.*)\]", said)
+            left_at = left.group(1) if left else None
+            if r.returncode == 0 and before in ("foreign", "dangling", "folder", "file") \
+                    and not (left_at or "").startswith(LEFT_AS_IT_WAS):
+                wrong.append(f"the receipt's method_ref would be the tag picked, not {LEFT_AS_IT_WAS!r}...: "
+                             f"METHOD_LEFT is {left_at!r}")
+            elif r.returncode == 0 and before not in ("foreign", "dangling", "folder", "file") and left_at:
+                wrong.append(f"METHOD_LEFT is {left_at!r} for a place this run made or kept")
             if wrong:
                 out.append(f"install.sh's link block, {case}: " + "; ".join(wrong)
                            + f" -- said {said.strip()[-200:]!r} (T-38)")
@@ -926,6 +1113,337 @@ def relink_problems(sh, ps1):
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     return out, ran
+
+
+#: #142 (SFH 2 = PTA 1, PTA 3): install.sh's app block and its line in the checks, RUN with stand-ins -- (case, the tags
+#: ls-remote offers or None, ls-remote's exit, the tag signed, uv here, uv's install exit, an app here before, the parts
+#: missing after, MODE after, words). A failed upgrade over an app from an earlier run ended 0, ready: the checks saw
+#: the old app.
+APP_CASES = (("installed now", ("v1.1.2",), 0, True, True, 0, False, "", "tcc", ("✓ installed",)),
+             ("its signature refused", ("v1.1.2",), 0, False, True, 0, False, "TCC", "tcc",
+              ("could not be shown to be a signed release of TCC",)),
+             ("its tags unreadable behind a proxy", None, 128, True, True, 0, False, "TCC", "tcc",
+              ("could not read the app's release tags (", "SSL certificate problem")),
+             ("its upgrade failed, an app here from before", ("v1.1.2",), 0, True, True, 1, True, "TCC", "tcc",
+              ("was here before and was not upgraded",)),
+             ("its install failed, none here before", ("v1.1.2",), 0, True, True, 1, False, "TCC", "tcc",
+              ("Autosound TCC was not installed",)),
+             ("uv does not install", ("v1.1.2",), 0, True, False, 0, False, "TCC", "terminal",
+              ("uv did not install",)))
+#: The stand-ins the app's block meets: a `uv` that lists the app, installs it into $LOCAL_BIN or fails as $STUB_UV_RC
+#: says; and a `curl` that never reaches the network -- what it hands `sh` ends uv's own installer with 7.
+STUB_UV = (b"#!/bin/sh\n"
+           b"[ -z \"${STUB_LOG:-}\" ] || printf 'uv %s\\n' \"$*\" >> \"$STUB_LOG\"\n"
+           b"case \"$1 ${2:-}\" in\n"
+           b"  '--version '*) echo 'uv 0.12.10 (a stand-in)' ;;\n"
+           b"  'tool list') echo 'autosound-tcc v1.1.2' ;;\n"
+           b"  'tool install')\n"
+           b"    if [ \"${STUB_UV_RC:-0}\" != 0 ]; then echo 'error: the build failed (a stand-in)' >&2; "
+           b"exit \"$STUB_UV_RC\"; fi\n"
+           b"    mkdir -p \"$LOCAL_BIN\" && printf '#!/bin/sh\\nexit 0\\n' > \"$LOCAL_BIN/autosound-tcc\" "
+           b"&& chmod 755 \"$LOCAL_BIN/autosound-tcc\" ;;\n"
+           b"esac\n")
+STUB_CURL = (b"#!/bin/sh\n"
+             b"[ -z \"${STUB_LOG:-}\" ] || printf 'curl %s\\n' \"$*\" >> \"$STUB_LOG\"\n"
+             b"echo 'exit 7'\n")
+
+
+def app_problems(sh, ps1):
+    """#142 (SFH 2 = PTA 1, PTA 3, SFH 5): install.sh's app block -- `TCC_BIN=""` up to the reviewer's -- and the app's
+    line in the checks, cut out and RUN over APP_CASES with stand-ins for git, uv, curl and the signature check; [] when
+    each ends with the parts missing it should. Every site that leaves the app out counts it missing, by what it does,
+    not by where `missing TCC` is spelled. install.ps1's half is READ: its four Add-Missing "TCC" and the arm for an app
+    that was here before."""
+    import tempfile
+    out = []
+    block = re.search(r'^TCC_BIN=""\n.*?(?=^# ── the reviewer)', sh, re.M | re.S)
+    check = re.search(r'^if \[ "\$MODE" = "tcc" \] && \[ "\$DRY_RUN" = 0 \]; then\n.*?^fi\n', sh, re.M | re.S)
+    functions, missing = cut_functions(sh, ("say", "warn", "have", "runs_ok", "usable", "run", "pretty", "in_local_bin",
+                                            "find_bin", "manifest_add", "is_missing", "missing", "newest_on_channel",
+                                            "read_tags"))
+    if not block or not check or missing:
+        return [f"install.sh: the app's block, its line in the checks, or {missing} -- the app cannot be run (#142)"]
+    bash, why = find_bash()
+    if not bash:
+        return [f"{why} -- install.sh's app block cannot be run, and unrun is not agreed"]
+    tmp = tempfile.mkdtemp(prefix="autosound_app_")
+    try:
+        for i, (case, offered, ls_rc, signed, have_uv, uv_rc, before, want_missing, want_mode, words) \
+                in enumerate(APP_CASES):
+            home = Path(tmp, f"case-{i}")
+            stub = home / "stub"
+            stub.mkdir(parents=True)
+            for name, body, wanted in (("git", NO_NETWORK_GIT, True), ("uv", STUB_UV, have_uv), ("curl", STUB_CURL, True),
+                                       ("autosound-tcc", b"#!/bin/sh\nexit 0\n", before)):
+                if wanted:
+                    (stub / name).write_bytes(body)
+                    (stub / name).chmod(0o755)
+            tags = home / "tags"
+            tags.write_bytes("".join(t + "\n" for t in (offered or ())).encode("utf-8"))
+            script = ('set -euo pipefail\n' + functions
+                      + 'step() { printf "==> %s\\n" "$*"; }\non_mac() { return 1; }\n'
+                      + ('check_tcc_tag() { TCC_SHA=""; return 0; }\n' if signed
+                         else 'check_tcc_tag() { TCC_SHA=""; return 1; }\n')
+                      + 'tcc_tag_still_at() { return 0; }\n'
+                      + f'export PATH="$(cd "{stub.as_posix()}" && pwd):/usr/bin:/bin"\n'
+                      + f'LOCAL_BIN="{(home / "bin").as_posix()}"; export LOCAL_BIN\n'
+                      + f'MANIFEST="{(home / "manifest").as_posix()}"\nAPP="{(home / "no.app").as_posix()}"\n'
+                      + f'DESKTOP_LINK="{(home / "no-link").as_posix()}"\n'
+                      + 'MODE=tcc\nCHANNEL=stable\nTCC_REF=""\nDRY_RUN=0\nMISSING=""\nUV_VERSION=0.12.10\n'
+                      + 'TCC_REPO="https://github.com/ayukhno/autosound-tcc"\nTCC_TAG_GLOB="v*"\nTCC_BETA_GLOB="beta-v*"\n'
+                      + block.group(0) + check.group(0)
+                      + 'printf "MISSING=[%s] MODE=[%s]\\n" "$MISSING" "$MODE"\n')
+            env = dict(os.environ, HOME=home.as_posix(), STUB_TAGS=tags.as_posix() if offered else "",
+                       STUB_RC=str(ls_rc), STUB_SAYS=SSL_SAYS, STUB_UV_RC=str(uv_rc),
+                       STUB_LOG=(home / "calls").as_posix())
+            env.pop("UV_TOOL_BIN_DIR", None)
+            r = subprocess.run([bash, "-s"], input=script.encode("utf-8"), capture_output=True, env=env)
+            said = (r.stdout + r.stderr).decode("utf-8", "replace")
+            got = re.search(r"MISSING=\[(.*?)\] MODE=\[(.*?)\]", said)
+            wrong = [] if r.returncode == 0 else [f"exit {r.returncode}"]
+            if not got or got.group(1) != want_missing or got.group(2) != want_mode:
+                wrong.append(f"ends with {got.group(0) if got else 'no MISSING line'}, want MISSING=[{want_missing}] "
+                             f"MODE=[{want_mode}]")
+            wrong += [f"never says {w!r}" for w in words if w not in said]
+            calls = (home / "calls").read_text(encoding="utf-8") if (home / "calls").exists() else ""
+            if "curl" in calls and "astral.sh" not in calls:
+                wrong.append(f"curl was asked for something other than uv's installer: {calls!r}")
+            if wrong:
+                out.append(f"install.sh's app block, {case}: " + "; ".join(wrong) + f" -- said {said.strip()[-260:]!r}")
+    except OSError as exc:
+        out.append(f"the app block's fixtures could not be made ({exc}) -- unrun is not agreed")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    # install.ps1, READ: four ways to leave the app out, each counted -- no uv, refused or unreadable, not upgraded over
+    # an app from before, not installed -- and the arm for an app that was here before.
+    sh_sites = [ln for ln in sh.splitlines() if not ln.lstrip().startswith("#")
+                and re.search(r"(?:^|;)\s*missing TCC\s*$", ln.strip())]
+    reads = ((len(re.findall(r'Add-Missing "TCC"', ps1)) == 4, 'install.ps1 has four Add-Missing "TCC"'),
+             ('elseif ($HaveTcc) { Warn "Autosound TCC was here before and was not upgraded this time (above) -- it is '
+              'left as it was"; Add-Missing "TCC" }' in ps1, "install.ps1's arm for an app here before, not upgraded"),
+             (len(sh_sites) == 3,
+              f"install.sh has three `missing TCC` (no uv; refused, unreadable or not upgraded; not installed), "
+              f"not {len(sh_sites)}"),
+             ("TCC_REFUSED=\"its install did not finish -- uv's lines above say why\"" in sh,
+              "install.sh records a failed install of the app as TCC_REFUSED"))
+    out += [f"{what} -- does not hold (#142)" for holds, what in reads if not holds]
+    return out
+
+
+#: #142 (SFH 11): each option that takes a value, given none -- it ended 1 with no line (`shift` under `set -e`).
+OPTION_CASES = ((("--skill-ref",), 2, "--skill-ref needs a value"), (("--terminal", "--channel"), 2,
+                                                                       "--channel needs a value"),
+                (("--tcc-ref",), 2, "--tcc-ref needs a value"),
+                (("--skill-ref", "v3.1.0", "--tcc-ref", "v1.1.0", "--channel", "beta"), 0,
+                 "SKILL_REF=[v3.1.0] CHANNEL=[beta] TCC_REF=[v1.1.0]"))
+
+
+def option_problems(sh):
+    """#142 (SFH 11): install.sh's option loop, cut out and RUN under `set -euo pipefail` over OPTION_CASES; []."""
+    loop = re.search(r"^while \[ \$# -gt 0 \]; do\n.*?^done\n", sh, re.M | re.S)
+    bash, why = find_bash()
+    if not loop:
+        return ["install.sh: no option loop (`while [ $# -gt 0 ]; do ... done`) to run (#142)"]
+    if not bash:
+        return [f"{why} -- install.sh's option loop cannot be run, and unrun is not agreed"]
+    out = []
+    for args, want_rc, words in OPTION_CASES:
+        script = ('set -euo pipefail\nusage() { echo usage; }\nMODE=tcc\nSKILL_REF=""\nCHANNEL=stable\nTCC_REF=""\n'
+                  + "set -- " + " ".join(args) + "\n" + loop.group(0)
+                  + 'printf "SKILL_REF=[%s] CHANNEL=[%s] TCC_REF=[%s]\\n" "$SKILL_REF" "$CHANNEL" "$TCC_REF"\n')
+        r = subprocess.run([bash, "-s"], input=script.encode("utf-8"), capture_output=True)
+        said = (r.stdout + r.stderr).decode("utf-8", "replace")
+        if r.returncode != want_rc or words not in said:
+            out.append(f"install.sh {' '.join(args)}: exit {r.returncode}, want {want_rc} and {words!r} -- said "
+                       f"{said.strip()[-160:]!r} (#142)")
+    return out
+
+
+def engine_answer_problems(sh, ps1):
+    """#142 (PTA 6): fetch-binary's answers, each in its own arm. install.sh's `case "$ENGINE_RC" in ... esac` is cut out
+    and RUN for each code -- the receipt's words were searched anywhere in the file, so an arm that said another code's
+    words passed; install.ps1's `$engineRc -eq N` arms are READ, each one's own `$EngineDid`. []."""
+    out = []
+    case = re.search(r'^  case "\$ENGINE_RC" in\n.*?^  esac\n', sh, re.M | re.S)
+    functions, missing = cut_functions(sh, ("say", "warn", "pretty"))
+    bash, why = find_bash()
+    if not case or missing:
+        out.append('install.sh: no `case "$ENGINE_RC" in ... esac` to run (#142)')
+    elif not bash:
+        out.append(f"{why} -- install.sh's engine answers cannot be run, and unrun is not agreed")
+    else:
+        for code, words in tuple(ENGINE_ANSWERS.items()) + ((7, "fetch-binary failed (code 7)"),):
+            script = ('set -euo pipefail\n' + functions + 'python3() { echo "  ✓ it runs"; return 0; }\n'
+                      'method_is_checkout() { return 0; }\nSKILL_REF=v3.1.2\nENGINE_PY=/x/resonalyze_engine.py\n'
+                      f'ENGINE_HOME=/x/engines\nENGINE_DID=""\nENGINE_RC={code}\n' + case.group(0)
+                      + 'printf "ENGINE_DID=[%s]\\n" "$ENGINE_DID"\n')
+            r = subprocess.run([bash, "-s"], input=script.encode("utf-8"), capture_output=True)
+            said = (r.stdout + r.stderr).decode("utf-8", "replace")
+            did = re.search(r"ENGINE_DID=\[(.*)\]", said)
+            want = words.replace("<tag>", "v3.1.2")
+            others = [w.replace("<tag>", "v3.1.2") for c, w in ENGINE_ANSWERS.items() if c != code]
+            if r.returncode or not did or want not in did.group(1) or any(o in did.group(1) for o in others):
+                out.append(f"install.sh's engine arm for fetch-binary's {code}: the receipt's engine is "
+                           f"{did.group(1) if did else None!r}, want {want!r} and no other code's words (#142)")
+    for code, words in ENGINE_ANSWERS.items():
+        arm = re.search(rf'\$engineRc -eq {code}\) \{{\s*\n\s*\$EngineDid = "([^"]*)"', ps1)
+        if not arm or words.replace("<tag>", "$SkillRef") not in arm.group(1):
+            out.append(f"install.ps1's `$engineRc -eq {code}` arm does not set $EngineDid to {words!r} first (#142)")
+    return out
+
+
+#: #142 (SFH 6): upkeep.py verify-copy's codes, as the installers' plugin block reads them: 3 the copy is not as its
+#: author signed it, 4 it could not be checked here (no network, git failed) -- the two shared exit 3 and one sentence.
+VERIFY_COPY_CASES = ((0, ()), (3, ("is not v3.1.2 as its author signed it",)),
+                     (4, ("could not be checked against its signed release here",)))
+
+
+def plugin_check_problems(sh, ps1):
+    """#142 (SFH 6): install.sh's plugin block -- the check of a plugin copy -- cut out and RUN with a stand-in python3
+    answering each of verify-copy's codes; install.ps1's READ. []."""
+    out = []
+    block = re.search(r'^if \[ -n "\$PLUGIN_ROOT" \]; then\n  # The plugin\'s copy is the method.*?(?=^else\n)', sh,
+                      re.M | re.S)
+    functions, missing = cut_functions(sh, ("say", "warn", "pretty"))
+    bash, why = find_bash()
+    if not block or missing:
+        out.append("install.sh: no plugin block (`if [ -n \"$PLUGIN_ROOT\" ]; then ...`) to run (#142)")
+    elif not bash:
+        out.append(f"{why} -- install.sh's plugin check cannot be run, and unrun is not agreed")
+    else:
+        for code, words in VERIFY_COPY_CASES:
+            script = ('set -euo pipefail\n' + functions
+                      + 'stop() { _c="$1"; shift; printf "STOP %s\\n" "$*"; exit "$_c"; }\nusable() { return 0; }\n'
+                      + f'python3() {{ return {code}; }}\nPLUGIN_ROOT=/x/plugin\nPLUGIN_VERSION=3.1.2\nDRY_RUN=0\n'
+                      + block.group(0) + "fi\necho PAST\n")
+            r = subprocess.run([bash, "-s"], input=script.encode("utf-8"), capture_output=True)
+            said = (r.stdout + r.stderr).decode("utf-8", "replace")
+            want_rc, others = (0, ()) if code == 0 else (1, [w for c, ws in VERIFY_COPY_CASES if c not in (0, code)
+                                                             for w in ws])
+            if r.returncode != want_rc or any(w not in said for w in words) or any(o in said for o in others) \
+                    or (code == 0) != ("PAST" in said):
+                out.append(f"install.sh's plugin check, verify-copy's {code}: exit {r.returncode}, want {want_rc}"
+                           + (f" saying {words!r}" if words else " and going on") + f" -- said {said.strip()[-200:]!r}"
+                           + " (#142)")
+    reads = (("if ($LASTEXITCODE -eq 4) {" in ps1, "install.ps1 reads verify-copy's 4 apart from its 3"),
+             ("could not be checked against its signed release here" in ps1, "install.ps1 says a copy it could not check"))
+    out += [f"{what} -- does not hold (#142)" for holds, what in reads if not holds]
+    return out
+
+
+def ps1_native_problems(ps1):
+    """#142 (SFH 3): install.ps1's Run and Test-Quiet count a native command that could not start as one that ran -- a
+    command that is not there sets no exit code, and both read the 0 they had set beforehand. READ (no PowerShell here):
+    each clears the code to $null first, answers $false from its catch, and counts only a code that was set and is 0.
+    The same functions are RUN where PowerShell is (ps1_run_problems)."""
+    want = ("$global:LASTEXITCODE = $null", "return ($null -ne $LASTEXITCODE -and $LASTEXITCODE -eq 0)")
+    out = []
+    for name in ("Run", "Test-Quiet"):
+        fn = re.search(rf"^function {name} \{{\n.*?^\}}$", ps1, re.M | re.S)
+        body = fn.group(0) if fn else ""
+        lacking = [w for w in want if w not in body]
+        if not re.search(r"catch \{[^}]*return \$false", body):
+            lacking.append("catch { ... return $false }")
+        if "$global:LASTEXITCODE = 0" in body:
+            lacking.append("no `$global:LASTEXITCODE = 0` before the call")
+        if lacking:
+            out.append(f"install.ps1 {name}: a native command that could not start reads as one that ran -- want "
+                       + "; ".join(lacking) + " (#142)")
+    return out
+
+
+def find_powershell(which=shutil.which):
+    """Windows PowerShell 5.1 where it is (what install.cmd runs, and every Windows ships), else PowerShell 7, else
+    None -- the author's Mac has neither; GitHub's Windows runners have both."""
+    return which("powershell") or which("pwsh")
+
+
+#: The functions of install.ps1 that its end and its probes need, cut out as they stand.
+PS1_RUN_FUNCTIONS = ("Stop-Installer", "Write-Receipt", "Add-Missing", "Say", "Warn", "Pretty", "Run", "Test-Quiet")
+
+
+def ps1_run_problems(ps1):
+    """#142 (PTA 2's note, SFH 3): install.ps1's end and its two native-command probes, cut out and RUN under PowerShell
+    -- where there is one: the Windows job's runner; `(problems, ran)`. Each case is a script file of its own (so
+    Stop-Installer's `exit` is the process's code) in a temp folder that stands in for %LOCALAPPDATA%:
+      * the end with nothing missing: exit 0, `Installed.`, the receipt `ready`;
+      * the end with numpy missing: exit 3, `Installed, NOT ready: numpy`, the receipt `not ready` naming it;
+      * Run and Test-Quiet over a command that is not there ($false), one that ends 0 ($true) and one that ends 3
+        ($false) -- the interpreter running this check stands in for the native command.
+    """
+    import json
+    import tempfile
+    shell = find_powershell()
+    if not shell:
+        return [], False
+    cut, lacking = [], []
+    for name in PS1_RUN_FUNCTIONS:
+        # One line (`function Say  { ... }`), or from `function Name {` to the first `}` alone at column 0.
+        m = (re.search(rf"^function {re.escape(name)}\s+\{{[^\n]*\}}[ \t]*$", ps1, re.M)
+             or re.search(rf"^function {re.escape(name)} \{{\n.*?^\}}", ps1, re.M | re.S))
+        (cut.append(m.group(0)) if m else lacking.append(name))
+    end_at = ps1.find("$ok = $script:Missing.Count -eq 0")
+    if lacking or end_at < 0:
+        return [f"install.ps1: no {lacking or 'end'} to run under PowerShell (#142)"], True
+    py = Path(sys.executable).as_posix()
+    tmp = tempfile.mkdtemp(prefix="autosound_ps1_")
+    out = []
+
+    def run_case(case, body):
+        home = Path(tmp, case)
+        home.mkdir()
+        appdata = home / "appdata"
+        script = home / "case.ps1"
+        head = (f'$ErrorActionPreference = "Continue"\n$env:LOCALAPPDATA = "{appdata.as_posix()}"\n'
+                f'$DryRun = $false\n$PluginRoot = ""\n$LocalBin = "{(home / "bin").as_posix()}"\n'
+                f'$Py3 = "{(home / "bin" / "python3.exe").as_posix()}"\n$SkillHome = "{(home / "skill").as_posix()}"\n'
+                f'$SkillBetaSrc = "{(home / "beta").as_posix()}"\n$SkillRef = "v3.1.2"\n$MethodLeft = ""\n'
+                '$Mode = "terminal"\n$InstallerVersion = "3.1.2"\n$EngineDid = "not fetched: -NoEngine"\n'
+                '$TccRefused = ""\n$AutosoundTranscriptOn = $false\n$AutosoundRunAsFile = [bool]$PSCommandPath\n'
+                '$script:Missing = @()\n')
+        script.write_bytes((head + "\n".join(cut) + "\n" + body).encode("utf-8"))
+        r = subprocess.run([shell, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", str(script)],
+                           capture_output=True, timeout=120)
+        said = (r.stdout + r.stderr).decode("utf-8", "replace")
+        receipt_path = appdata / "autosound" / "install-receipt.json"
+        try:
+            receipt = json.loads(receipt_path.read_text(encoding="utf-8-sig")) if receipt_path.is_file() else None
+        except ValueError:
+            receipt = "not JSON"
+        return r.returncode, said, receipt
+
+    end = ps1[end_at:]
+    try:
+        for case, missing, want_rc, word, status in (("ready", "", 0, "Installed.", "ready"),
+                                                     ("not-ready", 'Add-Missing "numpy"\n', 3,
+                                                      "Installed, NOT ready: numpy", "not ready")):
+            rc, said, receipt = run_case(case, missing + end)
+            want_missing = ["numpy"] if missing else []
+            if rc != want_rc or word not in said or not isinstance(receipt, dict) or receipt.get("status") != status \
+                    or receipt.get("missing") != want_missing:
+                out.append(f"install.ps1's end under {Path(shell).name}, {case}: exit {rc}, receipt "
+                           f"{receipt if not isinstance(receipt, dict) else {k: receipt.get(k) for k in ('status', 'missing')}}"
+                           f" -- want {want_rc}, {word!r}, status {status!r}, missing {want_missing} -- said "
+                           f"{said.strip()[-300:]!r} (#142)")
+        nothere = Path(tmp, "not-there", "nothing.exe").as_posix()
+        probes = (f'Write-Host "Q-absent=$(Test-Quiet {{ & \'{nothere}\' }})"\n'
+                  f'Write-Host "Q-zero=$(Test-Quiet {{ & \'{py}\' -c \'import sys; sys.exit(0)\' }})"\n'
+                  f'Write-Host "Q-three=$(Test-Quiet {{ & \'{py}\' -c \'import sys; sys.exit(3)\' }})"\n'
+                  f'Write-Host "R-absent=$(Run {{ & \'{nothere}\' }} \'nothing\')"\n'
+                  f'Write-Host "R-zero=$(Run {{ & \'{py}\' -c \'import sys; sys.exit(0)\' }} \'zero\')"\n'
+                  f'Write-Host "R-three=$(Run {{ & \'{py}\' -c \'import sys; sys.exit(3)\' }} \'three\')"\n')
+        rc, said, _ = run_case("probes", probes)
+        want = {"Q-absent": "False", "Q-zero": "True", "Q-three": "False", "R-absent": "False", "R-zero": "True",
+                "R-three": "False"}
+        got = dict(re.findall(r"^([QR]-\w+)=(\w+)\s*$", said, re.M))
+        if got != want:
+            out.append(f"install.ps1's Run and Test-Quiet under {Path(shell).name}: {got}, want {want} -- a command "
+                       f"that could not start must not read as one that ran; said {said.strip()[-300:]!r} (#142)")
+    except (OSError, subprocess.SubprocessError) as exc:
+        out.append(f"install.ps1 could not be run under {shell} ({exc}) -- unrun is not agreed (#142)")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    return out, True
 
 
 def exit_contract_problems(sh, ps1):
@@ -1037,6 +1555,28 @@ def exit_contract_problems(sh, ps1):
     add_fn = re.search(r"^function Add-Missing \{\n.*?^\}$", ps1, re.M | re.S)
     if not add_fn or "-notcontains $Name" not in add_fn.group(0):
         ps_wrong.append("Add-Missing adds a name already listed -- a part is named once, as install.sh's `missing`")
+    # #142 (PTA 2): the verdict's one input, by position -- after the last Add-Missing, before the verdict is said. A
+    # `$ok` set anywhere else, or `-gt`/`-le` in it, would end a NOT ready run 0 with nothing else to catch it.
+    oks = [m.start() for m in re.finditer(r"^\$ok = \$script:Missing\.Count -eq 0$", ps1, re.M)]
+    adds = [m.start() for m in re.finditer(r'\bAdd-Missing "', ps1)]
+    verdict = ps1.find('elseif ($ok) { Write-Host "Installed." }')
+    if len(oks) != 1 or not adds or verdict < 0 or not adds[-1] < oks[0] < verdict \
+            or len(re.findall(r"^\$ok\s*=", ps1, re.M)) != 1:
+        ps_wrong.append("`$ok = $script:Missing.Count -eq 0` is not the one `$ok`, after the last Add-Missing and before "
+                        "the verdict")
+    # #142 (SFH 8): Write-Receipt says, once, when it cannot write -- the file and why -- and stops nothing. Its
+    # cmdlets stop on their error (-ErrorAction Stop), or Set-Content's non-terminating one passed the catch by.
+    if not write_fn or write_fn.group(0).count("-ErrorAction Stop") < 2 \
+            or 'Warn "the receipt was not written (' not in write_fn.group(0):
+        ps_wrong.append("Write-Receipt keeps a receipt it could not write quiet -- want -ErrorAction Stop on New-Item and "
+                        "Set-Content, and one Warn naming the file and the reason")
+    # #142 (SFH 7): a method step that left the link's place says so in method_ref, as install.sh's METHOD_LEFT.
+    if not write_fn or "$ref = if ($MethodLeft) { $MethodLeft } else { \"$SkillRef\" }" not in write_fn.group(0) \
+            or "method_ref = $ref;" not in write_fn.group(0) or len(re.findall(r'\$MethodLeft = "left as it was: ', ps1)) != 2:
+        ps_wrong.append("the receipt's method_ref is the tag picked even when the method's step left the link's place "
+                        "as it was -- want $MethodLeft, set twice (a link not ours, anything else there)")
+    if "which is not there, and this installer leaves a link it did not make -- remove that link" not in ps1:
+        ps_wrong.append("the end does not name a dangling link not ours as the thing to remove")
     if ps_wrong:
         out.append("install.ps1's end is not the exit contract: " + "; ".join(ps_wrong) + " (#142)")
 
@@ -1056,14 +1596,17 @@ def exit_contract_problems(sh, ps1):
         home = Path(tmp, case)
         home.mkdir()
         data, mark = home / "data", home / "plugin-ready-calls"
-        if before is not None:                          # an earlier run's receipt, there before this one
+        if callable(before):                            # the receipt's place made unwritable (#142, SFH 8)
+            before(data)
+        elif before is not None:                        # an earlier run's receipt, there before this one
             (data / "autosound").mkdir(parents=True)
             (data / "autosound" / "install-receipt.json").write_text(json.dumps(before), encoding="utf-8")
         # A file, so $0 is one: the receipt's sha256 is this script's, as it is install.sh's when it runs as a file.
         # Under the installer's own `set -euo pipefail`; `tty_ok` answers "no terminal", so `ask` takes its default.
         text = ('set -euo pipefail\nexport PATH="/usr/bin:$PATH"\n' + functions + FAKE_PYTHON3
                 + "tty_ok() { return 1; }\n" + ("usable() { return 1; }\n" if builder == "shell" else "")
-                + f'DRY_RUN={dry}\nASSUME_YES=0\nMODE=terminal\nSKILL_REF=v3.1.2\nINSTALLER_VERSION="{version}"\n'
+                + f'DRY_RUN={dry}\nASSUME_YES=0\nMODE=terminal\nSKILL_REF=v3.1.2\nMETHOD_LEFT=""\n'
+                + f'INSTALLER_VERSION="{version}"\n'
                 + f"ENGINE_DID={bash_literal(HOSTILE_ENGINE)}\nMISSING=\"\"\nTCC_REFUSED=\"\"\n"
                 + f'SKILL_HOME="{home.as_posix()}/skill"\nSKILL_BETA_SRC="{home.as_posix()}/beta"\n'
                 + (f'PLUGIN_ROOT="{home.as_posix()}/plugin"\nPLUGIN_VERSION=3.1.2\n' if plugin else 'PLUGIN_ROOT=""\n')
@@ -1076,7 +1619,7 @@ def exit_contract_problems(sh, ps1):
         said = r.stdout.decode("utf-8", "replace") + r.stderr.decode("utf-8", "replace")
         path = data / "autosound" / "install-receipt.json"
         receipt, unreadable = None, ""
-        if path.exists():
+        if path.is_file():
             try:
                 receipt = json.loads(path.read_text(encoding="utf-8-sig"))
             except ValueError as exc:
@@ -1121,8 +1664,9 @@ def exit_contract_problems(sh, ps1):
               ("Nothing installed",), "ready", [], 0, earlier),
              # ...and a run that ends neither in `stop` nor in `finish`: a failure under `set -e` is a stop, 1 -- also
              # when the failing command's own code is the table's 3 -- and the receipt says `stopped`; where no trap
-             # sees the end (a kill; here `exec`) it says `stopped` from going ahead on, and a signal, which bash 3.2's
-             # trap sees with $? = 0, ends by the signal with the receipt the same.
+             # sees the end (a kill; here `exec`) it says `stopped` from going ahead on, and a signal -- which bash
+             # 3.2's trap sees as 130 after a Ctrl-C stopped a child, as 0 when it was sent to the shell alone -- ends
+             # by the signal with the receipt the same.
              ("a-failure", go + "missing numpy\nfalse\nfinish\n", "python3", "0", False, 1,
               ("stopped (exit 1) -- the lines above say where",), ("Installed",), "stopped", ["numpy"], 0, earlier),
              ("a-failure-coded-3", go + "missing numpy\nsh -c 'exit 3'\nfinish\n", "python3", "0", False, 1,
@@ -1133,7 +1677,29 @@ def exit_contract_problems(sh, ps1):
              # ended the run 0 -- ready. Its line then names no code (bash 5's, 1): never "exit 0" for a run ending 1.
              ("an-unbound-variable", go + 'missing numpy\n: "$NOT_SET_ANYWHERE"\nfinish\n', "python3", "0", False, 1,
               ("unbound variable", "the lines above say where"), ("Installed", "(exit 0)"), "stopped", ["numpy"], 0,
-              earlier))
+              earlier),
+             # #142 (SFH 7): the method's step left the link's place as it was -- its receipt says so, not the tag
+             # picked; by either builder.
+             ("left-as-it-was", go + f'METHOD_LEFT="{LEFT_AS_IT_WAS}a folder this installer did not make"\nfinish\n',
+              "python3", "0", False, 0, ("Installed.",), (), "ready", [], 0),
+             ("left-as-it-was-no-python3", go + f'METHOD_LEFT="{LEFT_AS_IT_WAS}a link to /x"\nmissing numpy\nfinish\n',
+              "shell", "0", False, 3, ("Installed, NOT ready: numpy",), (), "not ready", ["numpy"], 0),
+             # #142 (SFH 8): a receipt that cannot be written stops nothing, and is said once per write: the file, and
+             # why. A file where its folder goes, and a folder where the file goes.
+             ("an-unwritable-receipt-folder", go + "finish\n", "python3", "0", False, 0,
+              ("Installed.", "the receipt was not written", "install-receipt.json")
+              + (("File exists",) if os.name != "nt" else ()), (), None, None, 0,
+              lambda data: (data.mkdir(parents=True), (data / "autosound").write_text("a file\n"))),
+             ("an-unwritable-receipt", go + 'missing scipy\nfinish\n', "shell", "0", False, 3,
+              ("Installed, NOT ready: scipy", "the receipt was not written", "install-receipt.json")
+              + (("Is a directory",) if os.name != "nt" else ()), (), None, None, 0,
+              lambda data: (data / "autosound" / "install-receipt.json").mkdir(parents=True)))
+    # #142 (SFH 7): a foreign link to nothing is what to remove -- "run this again" made it again, and again. A link,
+    # so POSIX only: Git Bash's `ln -s` copies.
+    if os.name != "nt":
+        cases += (("a-dangling-foreign-link", go + 'ln -s "$HOME/gone" "$SKILL_HOME"\nmissing "the method"\nfinish\n',
+                   "python3", "0", False, 3, ("is a link to", "which is not there", "remove that link"),
+                   ("the method's step above says why",), "not ready", ["the method"], 0),)
     try:
         for case, body, builder, dry, plugin, want_rc, words, never, status, missing_want, want_calls, *before in cases:
             rc, said, receipt, unreadable, calls, sha = run(case, body, builder, dry, plugin, *before)
@@ -1151,7 +1717,9 @@ def exit_contract_problems(sh, ps1):
             elif status is not None and receipt is None:
                 wrong.append("no receipt was written")
             elif status is not None:
-                want = {"installer": "install.sh", "installer_sha256": sha, "method_ref": "v3.1.2", "mode": "terminal",
+                left = re.search(r'METHOD_LEFT="([^"]*)"', body)
+                want = {"installer": "install.sh", "installer_sha256": sha,
+                        "method_ref": left.group(1) if left else "v3.1.2", "mode": "terminal",
                         "engine": HOSTILE_ENGINE if builder == "python3" else flat, "installer_version": version,
                         "status": status, "missing": missing_want}
                 if tuple(receipt) != RECEIPT_FIELDS:
@@ -1279,9 +1847,11 @@ def main():
     if rule:
         problems.extend(rule)
     else:
-        checked.append(f"one release-tag rule: install.sh's is_release_tag (run), upkeep.py's (imported) and "
-                       f"install.ps1's Test-ReleaseTag (read, as .NET reads it) answer {len(TAG_RULE_CASES)} names "
-                       f"alike (T-45)")
+        locales = utf8_locales()
+        checked.append(f"one release-tag rule: install.sh's is_release_tag (run"
+                       f"{', also under LC_ALL=' + locales[0] if locales else ', no en_US UTF-8 locale here'}), "
+                       f"upkeep.py's (imported) and install.ps1's Test-ReleaseTag (read, as .NET reads it) answer "
+                       f"{len(TAG_RULE_CASES)} names alike (T-45)")
     picked = selection_problems(sh, ps1)
     if picked:
         problems.extend(picked)
@@ -1479,6 +2049,38 @@ def main():
         checked.append("both installers' update branch makes a missing ~/.claude/skills/autosound-tuning link again, "
                        "after its stops, and install.ps1 sees a dangling junction (read; install.sh's block is not run "
                        "here -- this is Windows, or this bash's ln -s makes no link) (T-38)")
+    # The app (#142): every way the app is left out counts it missing -- a failed upgrade over an app from before too.
+    app = app_problems(sh, ps1)
+    if app:
+        problems.extend(app)
+    else:
+        checked.append(f"install.sh's app block and its line in the checks, run over {len(APP_CASES)} cases: installed "
+                       f"now is ready; refused, unreadable behind a proxy (git's own line said), an upgrade that failed "
+                       f"over an app from before, an install that failed, and no uv each name TCC missing; install.ps1 "
+                       f"counts the same four ways, its arm for an app from before read (#142)")
+    for found, ok_line in ((option_problems(sh), f"install.sh's options that take a value say so and end 2 when given "
+                                                 f"none, run over {len(OPTION_CASES)} command lines (#142)"),
+                           (plugin_check_problems(sh, ps1), "the plugin's check tells a copy that is not as signed "
+                                                            "(verify-copy's 3) from one that could not be checked (4): "
+                                                            "install.sh's block run, install.ps1's read (#142)"),
+                           (ps1_native_problems(ps1), "install.ps1's Run and Test-Quiet count only an exit code that "
+                                                      "was set and is 0 -- a native command that could not start is "
+                                                      "no success (read) (#142)")):
+        if found:
+            problems.extend(found)
+        else:
+            checked.append(ok_line)
+    # install.ps1's end and its probes RUN under PowerShell, where there is one (#142): the Windows job's runner.
+    ran_ps1, ps1_ran = ps1_run_problems(ps1)
+    if ran_ps1:
+        problems.extend(ran_ps1)
+    elif ps1_ran:
+        checked.append(f"install.ps1's end, run under {Path(find_powershell()).name}: nothing missing ends 0 with the "
+                       f"receipt ready, numpy missing ends 3 with it not ready; Run and Test-Quiet say $false for a "
+                       f"command that is not there or ends 3, $true for one that ends 0 (#142)")
+    else:
+        checked.append("install.ps1's end, Run and Test-Quiet are NOT run here -- no PowerShell on this machine; the "
+                       "Windows job runs them (#142)")
     # The exit contract (#142): what the run ended as, in its exit code and its receipt.
     contract = exit_contract_problems(sh, ps1)
     if contract:
@@ -1514,8 +2116,17 @@ def main():
     # upkeep's must also hand git its `env`: without it git reads the person's own config, and its selftest's OpenPGP
     # case would give a PGP block to their real gpg.
     pinned = ("gpg.ssh.program=ssh-keygen", "gpg.minTrustLevel=fully", 'Good "git" signature for ')
-    read_halves = (("install.ps1", re.search(r"^function Test-TagSignature \{.*?^\}", ps1, re.M | re.S), pinned),
-                   ("upkeep.py", re.search(r"^def verify_tag\(.*?(?=^\S)", up, re.M | re.S), pinned + ("env=env",)))
+    # #142 (PTA 4): the accepted sentence held to the start of a line -- install.ps1's two lines whole (the pattern with
+    # `(?m)^`, the principal, the exit code and `-cmatch`), upkeep's `(?m)^` -- and git's "cannot check" sentences too
+    # (T6): a signer's user id is printed inside gpg's own line, never at the start of one.
+    ps1_whole = ("$good = '(?m)^Good \"git\" signature for ' + [regex]::Escape($SkillSigningPrincipal) + ' with '",
+                 "if ($rc -eq 0 -and $said -cmatch $good) {", "if ($said -cmatch '(?m)^(?:")
+    read_halves = (("install.ps1", re.search(r"^function Test-TagSignature \{.*?^\}", ps1, re.M | re.S),
+                    pinned + ps1_whole),
+                   ("upkeep.py", re.search(r"^def verify_tag\(.*?(?=^\S)", up, re.M | re.S),
+                    pinned + ("env=env", "(?m)^Good \"git\" signature for ")),
+                   ("install.sh", re.search(r"^verify_tag\(\) \{.*?^\}", sh, re.M | re.S),
+                    ("grep -q \"^Good \\\"git\\\" signature for $SKILL_SIGNING_PRINCIPAL with \"", "grep -Eq '^(")))
     t35_missing = [f"{where}: {needle}" for where, fn, needles in read_halves for needle in needles
                    if not fn or needle not in fn.group(0)]
     if t35_missing:
@@ -1563,14 +2174,9 @@ def main():
                           "the method's to compute, not an installer's")
     # T-44 (#142): each of fetch-binary's answers read by both installers and written into the receipt's engine in the
     # same words -- 4 (a release with no archive for this platform) is an answer said out loud, not a failure, and 5
-    # (no answer at all) is not 4: a re-run later is what helps.
-    for code, words in ENGINE_ANSWERS.items():
-        if not re.search(rf"^\s*{code}\)", sh, re.M) or f"$engineRc -eq {code}" not in ps1:
-            engine.append(f"fetch-binary's exit {code} is not read by both installers (`{code})` in install.sh, "
-                          f"`$engineRc -eq {code}` in install.ps1)")
-        said = re.escape(words).replace(re.escape("<tag>"), r"\$\w+")
-        engine += [f"{where}: the receipt's engine for fetch-binary's exit {code} does not say {words!r}"
-                   for where, text in (("install.sh", sh), ("install.ps1", ps1)) if not re.search(said, text)]
+    # (no answer at all) is not 4: a re-run later is what helps. Each code in its own arm (PTA 6): install.sh's case RUN
+    # per code, install.ps1's arms read one by one.
+    engine += engine_answer_problems(sh, ps1)
     engine += engine_gate_problems(sh, ps1)
     if engine:
         problems.extend(engine)
