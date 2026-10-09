@@ -142,6 +142,7 @@ Every real run, `install.cmd` included. Written for v3.1.3; none of it has run o
 | `%LOCALAPPDATA%\autosound\install-receipt.json` | `"status"` `ready`, `not ready` (with `missing` naming the same parts) or `stopped`; `installer_version` the release; `python` `…\.local\bin\python3.exe 3.12.x` | `Write-Receipt` failed, and its `try`/`catch` kept that quiet |
 | `n` at «Go ahead?» | `Nothing installed. Re-run when you want to.`; `install.cmd` says `Finished with exit code 1`; the receipt says `stopped` | the decline still ends 0, which a script reads as ready |
 | Ctrl-C in the middle of a run, after «Go ahead?» | the receipt says `stopped` — never the `ready` of the run before | the receipt the run writes as it goes ahead (`Write-Receipt "stopped"`) did not run |
+| one provoked run, after an install: `install.cmd -TccRef v9.9.9` (a tag the app does not have) | the app's block says it could not fetch `v9.9.9`; the last lines `Installed, NOT ready: TCC` and the app's `!` line; `Finished with exit code 3`; the receipt `"status": "not ready"`, `"missing": ["TCC"]` | an exit 0 or `Installed.` here: `$ok` is no longer `$script:Missing.Count -eq 0` after the last `Add-Missing` |
 
 ### 2c. What a re-run repairs, and the engine in a plugin copy (#142, T-38, T-40)
 
@@ -150,7 +151,7 @@ Written for v3.1.3; until this has run, the Windows half of both is read-checked
 | do | pass | fail means |
 | :--- | :--- | :--- |
 | after an install, remove the junction (`cmd /c rmdir %USERPROFILE%\.claude\skills\autosound-tuning` — the junction only, never `/s`), then run the installer again | `the junction ~\.claude\skills\autosound-tuning was missing -- made again`; the junction is back, pointing into `.autosound-tuning-src` | the update branch did not make it, or `New-Item -ItemType Junction` failed |
-| point the junction at a folder that is gone (`mklink /J %USERPROFILE%\.claude\skills\autosound-tuning C:\gone`, after the `rmdir` above), then run again | `points at C:\gone, which is not there -- left exactly as it is.`, and no `made again` | the entry is seen with `Test-Path` again: a dangling junction read as missing |
+| point the junction at a folder that is gone (`cmd /c mklink /J %USERPROFILE%\.claude\skills\autosound-tuning C:\gone`, after the `rmdir` above), then run again | `points at C:\gone, which is not there -- left exactly as it is.`, and no `made again` | the entry is seen with `Test-Path` again: a dangling junction read as missing |
 | with the .NET SDK installed, the plugin's setup (`/autosound-tuning:setup`) | the engine step says `the .NET SDK is here, but a plugin copy is no checkout to build the engine from -- fetching it`, and fetches; no build | the plugin copy took the SDK route, whose `git submodule update` it cannot run |
 
 ## 3. An older app ref — the deliberate gap

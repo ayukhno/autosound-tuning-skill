@@ -103,7 +103,7 @@ Będziesz potrzebować laptopa, mikrofonu pomiarowego, procesora DSP w aucie ora
    ```powershell
    irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.1.2/install.ps1 | iex
    ```
-- W zależności od systemu inne instalatory mogą poprosić o uprawnienia; to normalne. Skrypt utworzy skrót **REW (API on)** na twoim Pulpicie.
+- W zależności od systemu inne instalatory mogą poprosić o uprawnienia; to normalne. Poczekaj 5–15 minut za pierwszym razem na Windowsie bez Gita, w przeciwnym razie kilka minut. Skrypt utworzy skrót **REW (API on)** na twoim Pulpicie.
 
 </details>
 

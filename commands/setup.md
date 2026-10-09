@@ -33,9 +33,14 @@ The installer is in this plugin: `${CLAUDE_PLUGIN_ROOT}`. Pick the line for the 
 
 1. **Show the line for this system and ask.** Say what it installs (above) and that it checks the plugin first.
 2. **Run it.** A few minutes; the libraries and the engine are the large part.
-3. **If it stopped on the check** («this plugin copy is not vX.Y.Z as its author signed it»), say so plainly and stop:
-   the files named are not what the author released. The way out is to reinstall the plugin, or to install with the
-   installer from the README. Do not work around the check (`AUTOSOUND_SKIP_TAG_VERIFY` is a developer's switch).
+3. **If it stopped on the check**, the line says which of two things happened — say that one, plainly, and stop:
+   - «this plugin copy is not vX.Y.Z as its author signed it»: the files named are not what the author released.
+     The way out is to reinstall the plugin, or to install with the installer from the README.
+   - «this plugin copy could not be checked against its signed release here»: nothing was judged — the release did not
+     answer (no network, a proxy), or git failed; the line above it says which. The copy may be fine: run the setup
+     again when GitHub answers. Do not reinstall over it for this.
+
+   Do not work around the check either way (`AUTOSOUND_SKIP_TAG_VERIFY` is a developer's switch).
 4. **Relay the sign-ins it printed** as commands the user runs with the `!` prefix in this prompt — `! agy` for the
    reviewer, `! gh auth login` if they asked for the backup — and say they open a browser.
 5. **Check the reviewer:** `python3 "${CLAUDE_PLUGIN_ROOT}/skills/autosound-tuning/scripts/autosound_ai.py" doctor`.

@@ -103,7 +103,7 @@ You will need a laptop, a measurement microphone, a DSP processor in the car, an
    ```powershell
    irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.1.2/install.ps1 | iex
    ```
-- Depending on the system, other installers may ask for permission; this is normal. The script creates a **REW (API on)** shortcut on your Desktop.
+- Depending on the system, other installers may ask for permission; this is normal. Wait 5–15 minutes the first time on Windows without Git, a few minutes otherwise. The script creates a **REW (API on)** shortcut on your Desktop.
 
 </details>
 
