@@ -5,7 +5,7 @@
 **Mówiąc prosto:** To Twój osobisty mistrz strojenia car audio oparty na AI. Chcesz idealnej sceny dźwiękowej i wyrównanego balansu tonalnego, ale wykresy, fazy i opóźnienia wydają się zbyt skomplikowane? Ten asystent zajmie się najtrudniejszą częścią. Odczytuje Twoje pomiary z mikrofonu i prowadzi Cię krok po kroku do perfekcyjnego dźwięku.
 
 - **Ty mierzysz — AI liczy:** Współpracuje z programem REW, analizuje akustykę Twojej kabiny i proponuje dokładne ustawienia EQ, zwrotnic oraz korekcji czasowej.
-- **Minimum czasu w aucie:** Główne obliczenia odbywają się przy biurku w domu. W samochodzie robisz tylko wstępne pomiary, a potem wracasz z gotowymi wartościami, aby odsłuchać efekt i krok po kroku przejść do dogłębnego strojenia.
+- **Minimum czasu w aucie:** Główne obliczenia odbywają się przy biurku w domu. Strojenie wymaga dwóch wizyt w aucie: jednej na pomiary i jednej na wprowadzenie gotowych wartości oraz ich sprawdzenie. Późniejsze precyzyjne dostrajanie na ucho zajmuje tyle wizyt, ile chcesz.
 - **Nic nie zapisuje w Twoim DSP — to Ty wgrywasz ustawienia:** Asystent nigdy nie modyfikuje Twojego procesora bezpośrednio. Pokazuje Ci liczby i wykresy oraz przygotowuje EQ do importu: w procesorach Helix cały bank Full EQ wgrywa się przez DSP PC-Tool w jednym kroku, a dla procesorów bez importu z pliku bezpłatny [REW-EQ-CopyPaste-Assistant](https://github.com/IvanBakhmutov/REW-EQ-CopyPaste-Assistant) wkleja je za Ciebie. To Ty decydujesz, co trafia do urządzenia.
 - **To nie jest zwykły czat:** Stan projektu i wszystkie ustawienia są zapisywane w plikach na Twoim dysku, dzięki czemu nic nie zostaje „zapomniane” między sesjami i zawsze możesz cofnąć się o krok.
 - **Dwa AI, a decyduje Twoje ucho:** jedno AI proponuje ustawienia, drugie je weryfikuje. Weryfikacja jest częścią metody; opcjonalne jest tylko automatyczne połączenie między nimi — bez niego wklejasz pakiet do dowolnego czatu AI ręcznie. Ostatecznym sędzią jest Twoje ucho: słuchasz i decydujesz, a nie po prostu zatwierdzasz.
@@ -99,9 +99,9 @@ Wolisz rozmawiać z AI w terminalu? To również działa i wielu uważa to za wy
 ## Jak wygląda proces strojenia
 
 1. **Przygotowanie w domu:** Opowiadasz AI o swoim systemie (jakie głośniki, jaki procesor).
-2. **Pomiary w aucie (jednorazowo):** z filtrami ochronnymi na DSP mierzysz każdy głośnik z osobna podczas jednej sesji; aplikacja TCC prowadzi Cię przez ten proces krok po kroku. Następnie całe strojenie jest projektowane przy biurku.
+2. **Pomiary w aucie (pierwsza z dwóch wizyt):** z filtrami ochronnymi na DSP mierzysz każdy głośnik z osobna podczas jednej sesji; aplikacja TCC prowadzi Cię przez ten proces krok po kroku. Następnie całe strojenie jest projektowane przy biurku.
 3. **Matematyka przy biurku:** Siedzisz przy komputerze (bez konieczności przebywania w samochodzie). AI analizuje pomiary, łączy subwoofer z midbasem, wyrównuje scenę dźwiękową i oblicza EQ. Biurko pozwala jedynie przewidzieć rezultaty; samochód następnie je weryfikuje.
-4. **Z powrotem w aucie — weryfikacja, korekta, precyzyjne dostrajanie:** wprowadzasz wartości do DSP, sprawdzasz je za pomocą kilku pomiarów oraz na ucho i poprawiasz to, co się nie zgadza. Następnie przychodzi pora na precyzyjne dostrajanie, które najlepiej przeprowadzić w aucie z najbardziej zaawansowanym modelem (obecnie Claude Fable): mówisz AI, co słyszysz — im lepsze brzmienie chcesz osiągnąć, tym więcej rund to wymaga. Praca przy biurku również jest możliwa — model i metoda dostosowują się do warunków.
+4. **Z powrotem w aucie (druga wizyta) — weryfikacja, korekta, precyzyjne dostrajanie:** wprowadzasz wartości do DSP, sprawdzasz je za pomocą kilku pomiarów oraz na ucho i poprawiasz to, co się nie zgadza; drugie AI sprawdza potem wynik przy biurku. Dwie wizyty składają się na strojenie. Następnie przychodzi pora na precyzyjne dostrajanie, które najlepiej przeprowadzić w aucie z najbardziej zaawansowanym modelem (obecnie Claude Fable): mówisz AI, co słyszysz — im lepsze brzmienie chcesz osiągnąć, tym więcej rund i wizyt to wymaga. Praca przy biurku również jest możliwa — model i metoda dostosowują się do warunków.
 
 ## Opinie, wsparcie i prywatność
 

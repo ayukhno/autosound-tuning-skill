@@ -53,6 +53,8 @@ Collaboration, not competition. Don't characterize a colleague's answer ("a weak
 > different things, and until 2026-09-09 all three were called "round".
 The default review is **one** stateless critique pass on the **round's whole batch** (crossovers+levels, or the full EQ plan) — not per-parameter, not two-pass. Package → critique → Arbiter. This keeps the loop fast; the escalations below are for specific symptoms, not routine.
 
+**Where the call is made** (the Arbiter, 2026-10-08). The reviewer is called at the desk by default, not from inside a car session: the car session measures and listens, and what needs a verdict goes into the next desk round. When the user wants a verdict in the car, it is called there — say first that the car session will wait for the reviewer. Phase 3 is the case in point: its two verdicts and the lock follow the car session, at the desk (`phase_3_control.md` §2).
+
 ### Triage the critique: verify NUMBERS by script, adopt PHYSICS as redesign
 A critic's objections come in two kinds, and they earn different responses (field-validated, 2026-07-15, two rounds vs Gemini 3.1 Pro):
 - **Numeric/predictive claims** ("this EQ will degrade the joint") — **verify immediately with the measured data + the filter model** before arguing or complying. In both live rounds the prediction was wrong (the cut *improved* the joint, measured robust −2.08 → −1.78), and a one-script check settled in minutes what argument would not have.

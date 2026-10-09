@@ -209,7 +209,7 @@
     "presets": {
       "count": 6,
       "input_selection_switches_with_preset": true,
-      "note": "The silent input reset trap (competition.md Pre-session #4): give every preset used during a session the same input, and check the input after every switch."
+      "note": "The silent input reset trap (competition.md; SKILL.md's Pre-Session item 1): give every preset used during a session the same input, and check the input after every switch."
     },
     "sources": [
       "the user's own unit and old setups, 2026-09-01 -- the source for the 17 ms delay maximum, for the odd-order Linkwitz entries being real menu items, and for the 512K being a materially different processor (different EQ filters and input stage)",

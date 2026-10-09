@@ -369,7 +369,7 @@ reveals a broken driver or wiring); without a rig, Fs from the datasheet with ma
   review ends in), and without them as a 🟠 candidate, on the line and not in the slot. The Arbiter enters a
   🟡 sheet, `attest` turns it 🟢, and a control measurement confirms it.
 
-### Phase 3 · Car, a short session — *goal: verify the desk against what the mic hears, do what the desk can't (MMM), and lock*
+### Phase 3 · Car, a short session, then the desk — *goal: verify the desk against what the mic hears, do what the desk can't (MMM), and lock at the desk after it*
 - **3.1** **enter and check entry**: the preset into the DSP per the sheet (EQ by file import); "entered"
   in the ledger. Levels from the passport. Two controls, from the tripod: *base* — `m-L (sw)` vs
   `m-L-ctl3` from Phase 0 → the drift between capture and today, recorded; *entry* — 1–2 solos `_N (sw)`
@@ -394,8 +394,12 @@ reveals a broken driver or wiring); without a rig, Fs from the datasheet with ma
   cannot say how it should sound but can say which sounds better ("how I like it", not competition;
   for a judged tune the same loop runs against the target and the judges' characteristics). Taste
   corrections live in their own preset or on the virtual layer, never in the per-driver EQ (Phase 5).
-- **3.4** two independent verdicts + the minimum ear pass (as today) → the technical lock → backup: the
-  ledger snapshot, the PC-Tool setup file, the `.mdat` into the project (+git).
+  Then, before leaving: **the minimum ear pass** (as today, `phase_3_control.md` §2.5) and **the DSP's
+  configuration backed up** (the PC-Tool setup file). The car session ends here.
+- **3.4** **at the desk, after the car session**: two independent verdicts (as today) → the technical lock →
+  backup: the ledger snapshot, the `.mdat` into the project (+git). The reviewer is called at the desk by
+  default ([`review-loop.md`](references/core/review-loop.md)); the verdicts and the lock are made in the car
+  only when the user asks for them there — and the session says first that the car will wait for the reviewer.
 
 **Phase 4** (ears) and **Phase 5** (variations, centre/rear) — as today; the listening cheat sheet
 ([`listening-cheat-sheet.md`](references/patterns/listening-cheat-sheet.md)) is the vocabulary.

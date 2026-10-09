@@ -5,7 +5,7 @@
 **In simple terms:** This is your personal AI car audio tuning master. You want a perfect soundstage and a smooth tonal balance, but graphs, phases, and delays seem too complicated? This assistant will take care of the hard parts. It reads your microphone measurements and guides you step-by-step to perfect sound.
 
 - **You measure — AI calculates:** It works together with REW software, analyzes your cabin acoustics, and proposes exact settings for EQ, crossovers, and time alignment.
-- **Minimum time in the car:** The main calculations are done at your desk at home. You only do the initial measurements in the car, and then return with ready-to-use numbers to listen to the result and dive into deep tuning step-by-step.
+- **Minimum time in the car:** The main calculations are done at your desk at home. A tune takes two visits to the car: one to measure, and one to enter the ready-to-use numbers and check them. The fine-tuning by ear after that takes as many visits as you like.
 - **Writes nothing to your DSP — you load it:** The assistant never touches your processor directly. It shows you numbers and graphs and prepares the EQ for import: on a Helix the whole Full EQ bank goes in through DSP PC-Tool in one step, and for processors without a file import the free [REW-EQ-CopyPaste-Assistant](https://github.com/IvanBakhmutov/REW-EQ-CopyPaste-Assistant) pastes it. You decide what goes in.
 - **Not a regular chat:** The project state and all settings are saved to files on your disk, so nothing is "forgotten" between sessions and you can always roll back a step.
 - **Two AIs, and your ear decides:** one AI proposes settings, a second one checks them. The check is part of the method; only the automatic link between them is optional — without it, you paste the package into any AI chat by hand. The final judge is your ear: you listen and decide, not just approve.
@@ -99,9 +99,9 @@ Prefer to talk to the AI in a terminal? That works too, and many find it handier
 ## What the Tuning Process Looks Like
 
 1. **Preparation at home:** You tell the AI about your system (which speakers, which processor).
-2. **Measurements in the car (once):** with protective filters on the DSP, you record each driver on its own, in one session; the TCC app walks you through it step by step. The tune is then designed at the desk.
+2. **Measurements in the car (the first of two visits):** with protective filters on the DSP, you record each driver on its own, in one session; the TCC app walks you through it step by step. The tune is then designed at the desk.
 3. **Math at the desk:** You sit at your computer (without the car nearby). The AI analyzes measurements, joins the subwoofer to the midbass, evens out the soundstage, and calculates the EQ. The desk only predicts the results; the car then verifies them.
-4. **Back in the car — verify, correct, fine-tune:** enter the numbers into the DSP, check them with a few measurements and by ear, and correct what is off. Then comes fine tuning, best done in the car with the most capable model (today Claude Fable): you tell the AI what you hear, and the better you want it to sound, the more rounds it takes. Working at the desk is possible too — the model and the method adapt.
+4. **Back in the car (the second visit) — verify, correct, fine-tune:** enter the numbers into the DSP, check them with a few measurements and by ear, and correct what is off; the second AI checks the result at the desk afterwards. Two visits make the tune. Then comes fine tuning, best done in the car with the most capable model (today Claude Fable): you tell the AI what you hear, and the better you want it to sound, the more rounds and visits it takes. Working at the desk is possible too — the model and the method adapt.
 
 ## Feedback, Support, and Privacy
 

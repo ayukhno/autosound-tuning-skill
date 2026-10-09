@@ -77,9 +77,18 @@ Rules:
     number). The series is the project's own; a runbook that said 1, followed on a project at `_49` or on a second
     capture day, opened series 1 again.
 
-Rules 9-12 read a phrase as a reader does (`_phrase`): across a wrapped line and inline markup, its first letter in
-either case (a sentence's head, a clause's middle) and the rest in the case it is given, as whole words. Their cases, and rules 13's and 14's, are `_check_*` functions, run through one
-loop that collects every failure.
+15. **`slot-names`** (#144, P3; the Arbiter, 2026-10-08). A DSP slot is named by its preset number and its
+    configuration's name (`3.S-shelf`, `1.SQ-1`): `naming-and-structure.md` §1a holds that sentence, and no document
+    of the skill calls a slot by a bare number -- "memory 3", "slot 3", "Preset 2" -- outside code and REW's own
+    "EQ slot". A number alone names a place the device shows and nothing of what stands in it.
+
+16. **`reviewer-at-desk`** (#144, P9; the Arbiter, 2026-10-08). The reviewer is called at the desk by default, not
+    from inside a car session, and in the car only when the user asks for it there: SKILL.md's Review Channel and
+    `review-loop.md` each say "at the desk by default".
+
+Rules 9-12, 15 and 16 read a phrase as a reader does (`_phrase`): across a wrapped line and inline markup, its first
+letter in either case (a sentence's head, a clause's middle) and the rest in the case it is given, as whole words.
+Their cases, and rules 13's and 14's, are `_check_*` functions, run through one loop that collects every failure.
 
 Run: `scripts/docs-check.py` (from anywhere), `--selftest` for the checker's own mechanics.
 stdlib only.
@@ -873,6 +882,107 @@ def rule_no_capture_start_literal(root: str) -> list[str]:
     return bad
 
 
+#: The slot rule's one home, its section, and the sentence it holds (#144, P3; the Arbiter's yes, 2026-10-08).
+SLOT_RULE_HOME = os.path.join(SKILL, "references", "core", "naming-and-structure.md")
+SLOT_RULE_SECTION = "## 1a."
+SLOT_RULE = "a DSP slot is named by its preset number and its configuration's name"
+#: A slot called by a bare number -- "memory 3", "slot 3", "Preset 2", "Slot 1/2/3" --, the number wrapped onto the
+#: next line or in bold too: the word, then a number with no configuration's name after it (`3.S-shelf` has one, and
+#: `2.8.3` is a version). REW's own "EQ slot" is the equaliser's, not the DSP's.
+_SLOT_BARE = re.compile(r"(?<![\w-])(?<!EQ )(?:memory|slot|preset)s?(?:" + _PHRASE_GAP + r")?(?:[#№][ \t]*)?"
+                        r"\d+(?!\w)(?!\.\w)", re.I)
+#: A fenced code block, and an inline code span (wrapped onto one more line at most): code, not a sentence.
+_FENCED = re.compile(r"^[ \t]*(```|~~~).*?^[ \t]*\1", re.S | re.M)
+_CODE_SPAN = re.compile(r"`[^`\n]+(?:\n[^`\n]+)?`")
+#: A mention, not a use: the wrong form quoted whole, as the rule's own sentence quotes it ('slot 3', «memory 3»).
+_OPEN_QUOTES, _CLOSE_QUOTES = "'\"‘“«", "'\"’”»"
+
+
+def _prose(text: str):
+    """`text` with its fenced code blocks blanked (the length and the line breaks kept, so a position is still a line
+    number), and the [start, end) of each inline code span left in it."""
+    masked = _FENCED.sub(lambda m: re.sub(r"[^\n]", " ", m.group()), text)
+    return masked, [m.span() for m in _CODE_SPAN.finditer(masked)]
+
+
+def rule_slot_names(root: str) -> list[str]:
+    """A DSP slot is named by its preset number and its configuration's name, never by a bare number (#144, P3).
+
+    The method had no rule for it: `phase_5_variations.md` saved the voiced profile as "Preset 2" beside the technical
+    one on "Preset 1", and `naming-and-structure.md` said "Helix Slot 1/2/3" -- a number alone names a place the
+    device shows and nothing of what stands in it. The rule has one home, `naming-and-structure.md` §1a, which holds
+    the sentence; and no method file calls a slot by the word and a bare number ("memory 3", "slot 3", "Preset 2",
+    "slots 1/2/3"), outside code (a fenced block, an inline span) and REW's own "EQ slot", or quoted whole as the wrong
+    form.
+    """
+    bad = []
+    home = _read(root, SLOT_RULE_HOME)
+    if home is None:
+        bad.append(f"{SLOT_RULE_HOME}: missing — it is the one home of the slot rule")
+    elif not _phrase(SLOT_RULE).search(_section(home, SLOT_RULE_SECTION)):
+        bad.append(f"{SLOT_RULE_HOME}: §1a does not say '{SLOT_RULE[0].upper() + SLOT_RULE[1:]} …' — the slot "
+                   f"rule's one home is gone, and every pointer to it lands on nothing")
+    for path in _md_files(root):
+        rel = os.path.relpath(path, root)
+        text = open(path, encoding="utf-8").read()
+        masked, spans = _prose(text)
+        for m in _SLOT_BARE.finditer(masked):
+            if any(a <= m.start() < b for a, b in spans):
+                continue                  # the word is code: a literal the reader copies, not a name he is told
+            before, after = text[m.start() - 1:m.start()] if m.start() else "", text[m.end():m.end() + 1]
+            if before and after and before in _OPEN_QUOTES and after in _CLOSE_QUOTES:
+                continue                  # the wrong form quoted whole, as the rule quotes it
+            n = text.count("\n", 0, m.start()) + 1
+            said = " ".join(m.group().replace("*", "").replace("`", "").split())
+            bad.append(f"{rel}:{n}: calls a slot '{said}' — a DSP slot is named by its preset number and its "
+                       f"configuration's name (`3.S-shelf`, `1.SQ-1`), never a bare number; the rule is "
+                       f"{SLOT_RULE_HOME} §1a")
+    return bad
+
+
+#: Where the reviewer is called, and the two homes of the line that says so (#144, P9; the Arbiter, 2026-10-08: at the
+#: desk as the rule, in the car when the user wants it there).
+REVIEWER_AT_DESK = "at the desk by default"
+REVIEWER_HOMES = ((os.path.join(SKILL, "SKILL.md"), "Review Channel"),
+                  (os.path.join(SKILL, "references", "core", "review-loop.md"), None))
+
+
+def _section_titled(text: str, title: str) -> str:
+    """The body under the first heading whose text holds `title`, up to the next same-or-higher heading; "" when no
+    heading holds it. Read by its words, so an emoji or a level changed in front of them does not lose the section."""
+    head = re.search(r"^(#{1,6}) [^\n]*" + re.escape(title) + r"[^\n]*$", text, re.M)
+    if head is None:
+        return ""
+    rest = text[head.end():]
+    end = re.search(r"^#{1,%d} " % len(head.group(1)), rest, re.M)
+    return rest[: end.start()] if end else rest
+
+
+def rule_reviewer_at_desk(root: str) -> list[str]:
+    """The reviewer is called at the desk by default, not from inside a car session (#144, P9).
+
+    Nothing placed the reviewer relative to the car, and Phase 3 put its two cross-vendor verdicts in the car session:
+    a session that calls the reviewer there keeps the person in the car waiting on a model, mid-capture. The Arbiter's
+    rule: the car measures and listens, what needs a verdict goes into the next desk round, and the reviewer is called
+    in the car only when the user asks for it there. The line has two homes, SKILL.md's Review Channel (always loaded)
+    and `review-loop.md` (the loop's own page), and each must carry it.
+    """
+    bad = []
+    for rel, title in REVIEWER_HOMES:
+        text = _read(root, rel)
+        if text is None:
+            bad.append(f"{rel}: missing — it carries the line that says where the reviewer is called")
+            continue
+        where = _section_titled(text, title) if title else text
+        if title and not where:
+            bad.append(f"{rel}: no '{title}' section — the line that says where the reviewer is called has no home")
+        elif not _phrase(REVIEWER_AT_DESK).search(where):
+            place = f"its {title}" if title else "it"
+            bad.append(f"{rel}: {place} does not say the reviewer is called '{REVIEWER_AT_DESK}' — a session calls "
+                       f"it from inside the car and keeps the person waiting on a model there")
+    return bad
+
+
 RULES = [("data-not-instructions", rule_data_not_instructions),
          ("phase-source", rule_phase_source),
          ("references-orphans", rule_references_orphans),
@@ -886,7 +996,9 @@ RULES = [("data-not-instructions", rule_data_not_instructions),
          ("arrivals", rule_arrivals),
          ("one-path-banner", rule_one_path_banner),
          ("step-ids", rule_step_ids),
-         ("no-capture-start-literal", rule_no_capture_start_literal)]
+         ("no-capture-start-literal", rule_no_capture_start_literal),
+         ("slot-names", rule_slot_names),
+         ("reviewer-at-desk", rule_reviewer_at_desk)]
 
 
 def run(root: str) -> int:
@@ -1337,6 +1449,81 @@ def _check_no_capture_start_literal():
         assert rule_no_capture_start_literal(pointed) == [], rule_no_capture_start_literal(pointed)
 
 
+#: Rule 15's home as it says the rule: §1a holds the sentence (bold, wrapped), and the wrong forms quoted whole.
+_SLOT_HOME = ("# N\n\n## 1a. The words a report uses\n\n"
+              "| preset / slot | **preset** | the DSP slot a version is FIXED in |\n\n"
+              "- **A DSP slot is named by its preset number and its configuration's\n  name** — `3.S-shelf`, "
+              "`1.SQ-1`. Never a bare number ('memory 3', 'slot 3') or 'Preset 2'.\n\n## 2. What triggers work\n\n"
+              "text\n")
+_SLOT_PHASE5 = os.path.join(SKILL, "references", "phases", "phase_5_variations.md")
+
+
+def _check_slot_names():
+    """Rule 15 (#144, P3): the slot rule's sentence stands in §1a, and no method file calls a slot by a bare number --
+    the forms the files carried ("Preset 2", "Slot 1/2/3"), the user's word ("memory 3"), the number wrapped, in bold,
+    in a code span after the word, jammed on or after '#' -- while a configuration's name after the number, a version,
+    code, REW's "EQ slot", the rule's own quoted wrong forms and a file outside the skill are not."""
+    with _scratch() as tmp:
+        clean = _fixture(tmp, {
+            SLOT_RULE_HOME: _SLOT_HOME,
+            _SLOT_PHASE5: ("# P5\n\n* Save it as a separate preset (e.g. `2.FULL-v1`), the baseline untouched in "
+                           "`1.SQ-1`, or in slot 3.S-shelf; the method is 3.1.3, after preset 2.8.3.\n"),
+            os.path.join(SKILL, "references", "tooling", "rew-api-quirks.md"):
+                ("# Q\n\nThe read-back raises (`slot 2: gaindB 14.0 was written`); REW's EQ slot 3 holds it.\n\n"
+                 "```\n5. Save the preset into Slot 1, the file as B8_v1.pct6.\n```\n"),
+            "README.md": "# R\n\nSave it in Preset 2.\n"})
+        assert rule_slot_names(clean) == [], rule_slot_names(clean)
+
+        bare = rule_slot_names(_fixture(tmp, {
+            SLOT_RULE_HOME: _SLOT_HOME + "\n- A multi-slot DSP (Helix Slot 1/2/3) holds several.\n",
+            _SLOT_PHASE5: ("# P5\n\n* Save it as a separate DSP preset (e.g., Preset 2: \"Enjoyment\"), the baseline on"
+                           "\n  Preset 1 (\"Reference\").\n* He said memory 3; then slot\n  4, **slot 5**, slot `6`, "
+                           "slots 1–3, preset #7 and Preset8.\n")}))
+        said = sorted((c.split(": ")[0], c.split("'")[1]) for c in bare)
+        assert said == [
+            (f"{SLOT_RULE_HOME}:14", "Slot 1"),
+            (f"{_SLOT_PHASE5}:3", "Preset 2"),
+            (f"{_SLOT_PHASE5}:4", "Preset 1"),
+            (f"{_SLOT_PHASE5}:5", "memory 3"), (f"{_SLOT_PHASE5}:5", "slot 4"),
+            (f"{_SLOT_PHASE5}:6", "Preset8"), (f"{_SLOT_PHASE5}:6", "preset #7"), (f"{_SLOT_PHASE5}:6", "slot 5"),
+            (f"{_SLOT_PHASE5}:6", "slot 6"), (f"{_SLOT_PHASE5}:6", "slots 1")], said
+        assert all("never a bare number" in c and "§1a" in c for c in bare), bare
+
+        # the home without the sentence, the sentence moved out of §1a, and the home gone are each named
+        for home in ("# N\n\n## 1a. The words\n\ntext\n",
+                     "# N\n\n## 1a. The words\n\ntext\n\n## 5. DSP\n\n" + _SLOT_HOME.split("\n\n", 3)[3]):
+            said = rule_slot_names(_fixture(tmp, {SLOT_RULE_HOME: home}))
+            assert len(said) == 1 and "§1a does not say 'A DSP slot is named by" in said[0], said
+        said = rule_slot_names(_fixture(tmp, {_SLOT_PHASE5: "# P5\n"}))
+        assert len(said) == 1 and f"{SLOT_RULE_HOME}: missing" in said[0], said
+
+
+def _check_reviewer_at_desk():
+    """Rule 16 (#144, P9): SKILL.md's Review Channel and `review-loop.md` each say the reviewer is called at the desk by
+    default -- wrapped and in bold too --, and a line that left the Review Channel, a file without it and a file gone
+    are each named."""
+    line = ("* The reviewer is called **at the desk by\n  default**, not from inside a car session: the car session "
+            "measures and listens.\n")
+    skill_md, loop_md = (rel for rel, _ in REVIEWER_HOMES)
+    channel = "# S\n\n## 🛠️ Review Channel\n\n* **Cadence:** one call per round.\n"
+    after = "\n## ✍️ Output Style\n\ntext\n"
+    with _scratch() as tmp:
+        both = _fixture(tmp, {skill_md: channel + line + after, loop_md: "# Review loop\n\n" + line})
+        assert rule_reviewer_at_desk(both) == [], rule_reviewer_at_desk(both)
+        # today's text: neither home says it
+        said = rule_reviewer_at_desk(_fixture(tmp, {skill_md: channel + after, loop_md: "# Review loop\n\ntext\n"}))
+        assert len(said) == 2 and all(REVIEWER_AT_DESK in c for c in said), said
+        assert any(c.startswith(f"{skill_md}: its Review Channel does not say") for c in said), said
+        # the line moved out of the Review Channel into the next section is not the Review Channel's
+        moved = rule_reviewer_at_desk(_fixture(tmp, {skill_md: channel + after + line, loop_md: "# L\n\n" + line}))
+        assert len(moved) == 1 and moved[0].startswith(f"{skill_md}: its Review Channel"), moved
+        # the section gone, and a home gone, are named -- a check whose input is missing fails
+        no_section = rule_reviewer_at_desk(_fixture(tmp, {skill_md: "# S\n\n" + line, loop_md: "# L\n\n" + line}))
+        assert len(no_section) == 1 and "no 'Review Channel' section" in no_section[0], no_section
+        gone = rule_reviewer_at_desk(_fixture(tmp, {skill_md: channel + line + after}))
+        assert len(gone) == 1 and f"{loop_md}: missing" in gone[0], gone
+
+
 def _selftest() -> int:
     import shutil
     import tempfile
@@ -1501,14 +1688,15 @@ def _selftest() -> int:
         moved_code = rule_protective_floor(floor_tree("HPF ≥ 1.1×Fs @ ≥24 dB/oct\n", margin="1.2"))
         assert any("1.1×Fs" in c for c in moved_code), "the gate is the home: a doc left behind is named"
 
-        # -- rules 9-14 (#138): each a `_check_*` of its own, and one loop that collects every failure
+        # -- rules 9-16 (#138, #144): each a `_check_*` of its own, and one loop that collects every failure
         failures = []
         for check in (_check_plugin_route, _check_owner_sentence, _check_arrivals, _check_one_path_banner,
                       _check_phrase_first_letter_in_either_case, _check_step_ids, _check_step_ids_off_by_one, _check_step_ids_wishes_on_crossovers,
                       _check_step_ids_delays_on_coarse_eq, _check_step_ids_second_on_review,
                       _check_step_ids_after_a_slash, _check_step_ids_read_as_written, _check_step_names_held,
                       _check_step_ids_reviewer_before_new_dsp, _check_step_ids_translation_keeps_every_row,
-                      _check_step_ids_unnamed_step_says_whose_word, _check_no_capture_start_literal):
+                      _check_step_ids_unnamed_step_says_whose_word, _check_no_capture_start_literal,
+                      _check_slot_names, _check_reviewer_at_desk):
             try:
                 check()
             except AssertionError as exc:
@@ -1546,7 +1734,11 @@ def _selftest() -> int:
           "reordering one, are each named, while a value, a unit, a version, a section, a range, a word no step is "
           "named by and a heading's number are not pointers; a phase file opening a capture round at a series "
           "written into it (1, 2, 12) is named, on a code line, in a bullet, in a pointer and wrapped, while the "
-          "series the project gives, Phase 3's `final` round and a file outside the phases folder are not; the rules' "
+          "series the project gives, Phase 3's `final` round and a file outside the phases folder are not; a slot "
+          "called by a bare number ('Preset 2', 'Slot 1/2/3', 'memory 3', wrapped, in bold, jammed, after '#') and "
+          "the slot rule gone from §1a are named, while a configuration's name after the number, a version, code, "
+          "REW's 'EQ slot' and the rule's own quoted wrong forms are not; a Review Channel or a review-loop.md that "
+          "does not say the reviewer is called at the desk by default, and either gone, are named; the rules' "
           "checks report every failure in one run")
     return 0
 

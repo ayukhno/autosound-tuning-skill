@@ -4,19 +4,19 @@ This phase acts as the final technical gate before proceeding to subjective list
 
 > 🗺️ **One path.** The order of work is [`virtual-first.md`](references/phases/virtual-first.md)'s; the sections of this file marked *iterative* apply only when its Degradation section routes here. This file stays the authority on every gate.
 
-> On virtual-first, Phase 3 is the short car session that VERIFIES the desk: enter the preset → the entry control (`verify_prediction --entry`, 1–2 solos) → all sums from the tripod → predicted/measured delta (≤ 1 dB trusted, otherwise a warning and on) → MMM fine EQ (`eq_propose --rta`; what cuts and what booms by `ear_suspects`, settled by A/B) → lock. Detail in [`virtual-first.md`](references/phases/virtual-first.md) §"Phase 3".
+> On virtual-first, Phase 3 is the short car session that VERIFIES the desk: enter the preset → the entry control (`verify_prediction --entry`, 1–2 solos) → all sums from the tripod → predicted/measured delta (≤ 1 dB trusted, otherwise a warning and on) → MMM fine EQ (`eq_propose --rta`; what cuts and what booms by `ear_suspects`, settled by A/B) → the minimum ear pass → the DSP's configuration backed up before leaving; then, at the desk, the two verdicts → lock (in the car only when the user asks for them there). Detail in [`virtual-first.md`](references/phases/virtual-first.md) §"Phase 3".
 
 ## 🎯 Goal-node
 
-**Purpose:** the final technical gate — verification scans + independent cross-vendor verdicts + Technical Lock, before subjective/multichannel work.
+**Purpose:** the final technical gate — verification scans in the car + independent cross-vendor verdicts at the desk + Technical Lock, before subjective/multichannel work.
 
 **Questions this phase answers:** does the measured system meet target/joint/symmetry criteria? do independent reviewers agree? is it stable enough to lock?
 
-**Required evidence:** the full verification MMM set (each `_final` channel, Ws/Ms/TWs, SW+Ws, L/R sides, `ALL_final`); independent Claude + Gemini analyses.
+**Required evidence:** the full verification MMM set (each `_final` channel, Ws/Ms/TWs, SW+Ws, L/R sides, `ALL_final`); independent Claude + Gemini analyses, made at the desk after the car session (§2).
 
-**✅ Quality gate → Phase 4/5 (Technical Lock):** verification scans captured; **two independent (cross-vendor) verdicts**; **a minimum ear assessment passed** — **stage** (mono-center / EMMA) **and overall tonal balance** — with an honest read of the result logged and the **Arbiter satisfied** (or the dissatisfaction resolved by an adjustment / a step back); disagreements resolved or escalated to the Arbiter (Disagreement Table at 3/3); config backed up to `dsp-config/`, changelog and audit-trail updated; `dsp-state-current` re-rendered (generated, never edited).
+**✅ Quality gate → Phase 4/5 (Technical Lock):** verification scans captured; **two independent (cross-vendor) verdicts**; **a minimum ear assessment passed** — **stage** (mono-center / EMMA) **and overall tonal balance** — with an honest read of the result logged and the **Arbiter satisfied** (or the dissatisfaction resolved by an adjustment / a step back); disagreements resolved or escalated to the Arbiter (Disagreement Table at 3/3); config backed up to `dsp-config/`, changelog and audit-trail updated; `dsp-state-current` re-rendered (generated, never edited). The scans, the ear assessment and the config backup are the car session's; the verdicts and the lock follow at the desk — in the car only when the user asks for them there.
 
-**⚠️ Failure modes:** endless review rounds (cap at 3/3 → Disagreement Table) · locking without a backup · a single-perspective verdict (must be cross-vendor).
+**⚠️ Failure modes:** endless review rounds (cap at 3/3 → Disagreement Table) · locking without a backup · a single-perspective verdict (must be cross-vendor) · the reviewer called from inside the car session unasked (the person waits in the car on a model — §2).
 
 **🧩 Refs:** [`review-loop.md`](references/core/review-loop.md) (loop, deadlock, Disagreement Table §5).
 
@@ -37,6 +37,8 @@ Open the round with these titles — `--plan` builds only from a series number, 
 ---
 
 ## 2. Independent Technical Verdicts
+**At the desk, after the car session.** The reviewer is called at the desk by default ([`review-loop.md`](references/core/review-loop.md)); the verdicts are made in the car only when the user asks for them there, and the session says first that the car will wait for the reviewer. The lock is banked where the verdicts are made.
+
 Claude (the Orchestrator) and Gemini (the Critic/Advisor) perform separate, unbiased analyses of the data:
 * **The Data Pull:** Use the REW API to query the measurement files directly, analyzing magnitude trends, joint summation quality, and L/R symmetry. **Include the band-integrated deviation-vs-target scan** on `ALL_final` (mean deviation per half-decade after level-normalizing to the target — method in [`analysis-playbook.md`](references/core/analysis-playbook.md)): a **broad tilt ≥~1–1.5 dB off target** — in *any* region (a hot lower-mid over a light midbass, a hot 2–5 kHz, a bloated/shy bass shelf, a rolled/hot top) — is a voicing error even when no single peak is large and the RMS looks done. It is the residual that fatigues on a long listen, so a verdict that only checks peaks/joints/symmetry **misses it**. Flag it here, not after the customer tires of the sound — and flag it as a *broad gentle* fix, never as narrow deep cuts (which would trade fatigue for a dead, over-processed sound).
 * **The Verdict:** Each AI issues an independent report assessing target-curve accuracy, joint alignment, and imaging trends. Claude acts as the primary contact, compiling the results for the user.
@@ -61,8 +63,8 @@ Then **read the result honestly with the Arbiter** and record it:
 ---
 
 ## 3. Configuration Backup & Handoff
-Once the technical alignment is accepted by the Arbiter:
-* Save the final DSP configuration file. Copy it to `rew_analitic/dsp-config/` with an updated `README.md` cataloging the changes.
+The final DSP configuration file is saved in the car, before leaving (the DSP's own software needs the DSP). Once the technical alignment is accepted by the Arbiter:
+* Copy that file to `rew_analitic/dsp-config/` with an updated `README.md` cataloging the changes.
 * Back up the project's REW `.mdat` file.
 * Bank the locked state through `apply.propose` (it writes the `v_NNN` snapshot and re-renders `dsp-state-current` — that sheet is generated, not edited), then write the human narrative: `tuning-changelog` and `audit-trail.md` (at the project root).
 

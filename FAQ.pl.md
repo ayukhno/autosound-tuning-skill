@@ -116,8 +116,8 @@ Jak zakończyło się uruchomienie, widać w jego kodzie wyjścia: `0` gotowe ·
 3. **Otwórz TCC**, utwórz pusty folder dla swojego auta (np. `MyCarTuning`) i go wybierz.
 4. **Wybierz modele** na dole okna TCC: **AI main** — Claude Opus, **Effort** — x-high (domyślny), **AI critic** — Gemini Pro (High) lub Gemini Flash (High), jeśli Pro nie jest ci oferowany. Do późniejszego dostrajania w aucie przełącz tam **AI main** na model o najwyższych możliwościach (obecnie Claude Fable).
 5. **Wpisz** na czacie TCC: **"tune a new car from scratch"**. AI zapyta o twój system i twoje cele, a następnie zaplanuje pomiary.
-6. **W aucie** TCC wskaże każdy pomiar z nazwy w sekcji *In focus now*. Wykonaj go w REW pod dokładnie tą nazwą, a następnie kliknij **⬇**, aby go wczytać. Gdy wszystkie będą gotowe, kliknij **Done**.
-7. **Przy biurku** AI zaprojektuje strojenie; **z powrotem w aucie** wprowadzasz wartości do DSP, sprawdzasz je i dostrajasz brzmienie na ucho.
+6. **W aucie** (pierwsza z dwóch wizyt) TCC wskaże każdy pomiar z nazwy w sekcji *In focus now*. Wykonaj go w REW pod dokładnie tą nazwą, a następnie kliknij **⬇**, aby go wczytać. Gdy wszystkie będą gotowe, kliknij **Done**.
+7. **Przy biurku** AI zaprojektuje strojenie; **z powrotem w aucie** (druga wizyta) wprowadzasz wartości do DSP, sprawdzasz je i dostrajasz brzmienie na ucho. Dwie wizyty składają się na strojenie; późniejsze precyzyjne dostrajanie na ucho zajmuje tyle wizyt, ile chcesz.
 
 ### Aktualizacja
 

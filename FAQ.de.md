@@ -116,8 +116,8 @@ Wie der Durchlauf endete, steht in seinem Exit-Code: `0` bereit · `1` gestoppt 
 3. **TCC öffnen**, einen leeren Ordner für dein Auto anlegen (z. B. `MyCarTuning`) und diesen auswählen.
 4. **Modelle auswählen** am unteren Rand des TCC-Fensters: **AI main** – Claude Opus, **Effort** – x-high (der Standardwert), **AI critic** – Gemini Pro (High), oder Gemini Flash (High), falls dir Pro nicht angeboten wird. Für das spätere Feintuning im Auto stelle **AI main** dort auf das leistungsfähigste Modell um (derzeit Claude Fable).
 5. **Eingeben** im Chat von TCC: **"tune a new car from scratch"**. Die KI fragt nach deinem System und deinen Zielen und plant anschließend die Messungen.
-6. **Im Auto** listet TCC jede Messung namentlich unter *In focus now* auf. Führe sie in REW genau unter diesem Namen durch und drücke dann auf **⬇**, um sie einzulesen. Wenn alle erfasst sind, drücke auf **Done**.
-7. **Am Schreibtisch** entwirft die KI das Tuning; **zurück im Auto** trägst du die Werte in den DSP ein, überprüfst sie und stimmst nach Gehör fein ab.
+6. **Im Auto** (der erste von zwei Besuchen) listet TCC jede Messung namentlich unter *In focus now* auf. Führe sie in REW genau unter diesem Namen durch und drücke dann auf **⬇**, um sie einzulesen. Wenn alle erfasst sind, drücke auf **Done**.
+7. **Am Schreibtisch** entwirft die KI das Tuning; **zurück im Auto** (der zweite Besuch) trägst du die Werte in den DSP ein, überprüfst sie und stimmst nach Gehör fein ab. Mit zwei Besuchen steht das Tuning; das anschließende Feintuning nach Gehör braucht so viele Besuche, wie du möchtest.
 
 ### Aktualisierung
 

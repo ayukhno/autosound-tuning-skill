@@ -211,9 +211,9 @@ apply.attest(h)                                 # Arbiter entered it in Helix ->
   honest audit trail), so it earns its place on merit — not as a mechanism to police the model.
 
 ## Multi-slot registry (`Registry` — issue #5)
-A multi-preset DSP (e.g. Helix Slot 1/2/3) invites a degrading model to anchor on the **wrong slot's**
-gains: the real incident was tuning Slot 3 (SQ-Comp-Ref) while the top of a flat state table still
-showed Slot 2 (ResoNix) numbers, so proposed HF filters were computed off a baseline that belonged to
+A multi-preset DSP (e.g. a Helix's numbered slots) invites a degrading model to anchor on the **wrong slot's**
+gains: the real incident was tuning `3.SQ-Comp-Ref` while the top of a flat state table still
+showed `2.ResoNix` numbers, so proposed HF filters were computed off a baseline that belonged to
 a different slot. Each preset's snapshots are **already** physically isolated under `<root>/<preset>/`;
 the registry adds the one missing thing — an explicit, machine-checked pointer to the **live** slot.
 ```

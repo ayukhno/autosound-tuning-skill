@@ -10,8 +10,8 @@
 | **EQ** | Bands/channel? · types (PK / shelf / all-pass)? · **file import + format**? (none → REW-EQ-CopyPaste-Assistant, below). |
 | **Crossovers** | Types (LR / BW / BE)? · orders? · independent HP/LP per channel? · frequency accuracy? → which sets from `filter-types-car-audio.md` are realizable. |
 | **Delays / polarity / phase** | Delay step + limits? · polarity NORM/INV per channel? · a **phase control (all-pass)**? at which frequency / order? → the phase method. |
-| **Presets** | How many? · ⚠️ **what resets on a switch (the INPUT!)** — the "silent input reset" trap (`competition.md`, Pre-session #4). |
-| **Inputs** | RCA / optical / coax / BT / USB? · a **separate input for the measurement signal**? → Pre-session #4 for this car. |
+| **Presets** | How many? · ⚠️ **what resets on a switch (the INPUT!)** — the "silent input reset" trap (`competition.md`, `SKILL.md` Pre-Session item 1). |
+| **Inputs** | RCA / optical / coax / BT / USB? · a **separate input for the measurement signal**? → `SKILL.md` Pre-Session item 1 for this car. |
 | **Gain staging** | Universal method: min amp gain + max DSP level → raise to the first THD jump (RTA) → back off ~10%. ⚠️ The resulting Output number is **RIG-specific** (DSP output voltage × amp sensitivity) — measure it, don't copy. |
 | **Native sample rate** | ? → measure the main mic rig at it where possible. |
 | **Config file** | Parseable, or binary/encrypted (RESTORE-only)? → if not parseable, a **backup map** is mandatory (`naming-and-structure §4a`); the tool's file-version ≠ our `vN`. |

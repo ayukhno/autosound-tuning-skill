@@ -46,7 +46,7 @@ Apply minor EQ adjustments to resolve specific listening symptoms. Common exampl
 ### 4. Maintain the Two-Layer Config (Base vs. Voicing)
 * **The Base Layer (Output EQ):** Keeps the individual speaker linearizations, crossover slopes, and time delays intact. **Never edit output-layer parameters for subjective taste.**
 * **The Voicing Layer (Virtual EQ):** Apply subjectivevoicing moves **exclusively on the Virtual Layer** (linked L=R EQ). Since virtual moves do not introduce phase discrepancies between left and right channels, they are safe and will not break the crossover joints or time alignment.
-* **Save as a Separate Preset:** Save the final client-voiced profile as a separate DSP preset (e.g., Preset 2: "Enjoyment/Voiced"), leaving the technical baseline untouched on Preset 1 ("Reference/Technical") for easy comparison and A/B testing.
+* **Save as a Separate Preset:** Save the final client-voiced profile as a separate DSP preset (e.g. `2.FULL-v1`, the voiced one), leaving the technical baseline untouched in `1.SQ-1` (the reference) for easy comparison and A/B testing — a slot is named by its preset number and its configuration's name ([`naming-and-structure.md`](references/core/naming-and-structure.md) §1a).
 * **Each preset is its own versioned state history** — run `apply.propose` under that preset name for every voicing move (gain/virtual-EQ pointer/hard-param), so the taste variations are snapshotted, diff-able, and revertible without touching the locked base. The **A/B and "revert this idea"** you want in voicing is exactly `state.diff` / `revert` (one command), which is what makes trying a bold voicing cheap. Schema → [`rew_tool/state/schema.md`](rew_tool/state/schema.md).
 
 ---

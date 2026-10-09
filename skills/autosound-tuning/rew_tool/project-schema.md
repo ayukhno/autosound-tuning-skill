@@ -38,7 +38,7 @@ machine-readable to render for its Project/System/Car-audio-analysis panels eith
              "kind": "head_unit",                            //   what plays the music
              "connection": "optical",                        //   how the signal ENTERS the DSP
              "listening_input": "Optical 1",                 //   one question, two answers --
-             "measurement_input": "Coax 2"},                 //   Pre-session checklist #4 reads them
+             "measurement_input": "Coax 2"},                 //   SKILL.md's Pre-Session item 1 checks them
   "dsp": {"vendor": "Audiotec-Fischer", "model": "Helix DSP Ultra S",   // links dsp_profile.json
           "tiers_used": ["channels", "virtual_channels"],    // the intake page: which of the
                                                              //   processor's tiers this car uses

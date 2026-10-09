@@ -897,7 +897,7 @@ COUPLINGS = {
                     "A–H, outputs B–K), so `slot: F` is legal in both and a guess files a spare "
                     "output among the virtual channels (SCR-042).",
     "inputs": "Which input is for listening and which carries the measurement signal. One question "
-              "with two answers — it is what the Pre-session checklist #4 reads, and a preset "
+              "with two answers — it is what SKILL.md's Pre-Session item 1 checks, and a preset "
               "switch silently resetting the input is the trap it exists for.",
     "taste": "Four axes of one taste -- warm/bright, bass, forward/laid-back, accuracy/fun. Asked "
              "apart they read as four questions; they are one picture of what the person likes, "
@@ -1054,7 +1054,7 @@ FIELDS = (
     _f("dsp.presets", "dsp", dsp_profile.CAPABILITY_CHECKLIST[5], required=True, checklist=5,
        writes="dsp_profile.draft:presets",
        note="What resets on a switch — the INPUT above all: a preset silently resetting it is "
-            "Pre-session checklist #4's whole reason for existing.",
+            "the input check's whole reason for existing (SKILL.md's Pre-Session item 1).",
        when="0", derive="the bundled profile on an exact vendor+model match", place="new_dsp"),
     # skill #52: three switches on the vendor software's settings panel -- what THIS machine is set to, asked when
     # the step that needs it comes, and written to the finalised profile by `dsp_profile.set_setting`.
@@ -1211,12 +1211,12 @@ FIELDS = (
             "the processing rate is `dsp.processing_rate_hz`.",
        default=48000, when="0", place="memo"),
     _f("rew.api_reachable", "rew", "Does REW's API answer at localhost:4735?", required=True,
-       enum=("yes", "no"), lands="the Pre-session checklist (a live check, not a setting)",
+       enum=("yes", "no"), lands="SKILL.md's Pre-Session item 1 (a live check, not a setting)",
        note="Reading is free; FIRING a sweep needs a Pro licence, so a human runs the session "
             "either way.",
        when="0", derive="probed: a GET on localhost:4735"),
     _f("rew.input_clip_checked", "rew", "Has the measurement input been checked for clipping?",
-       required=True, enum=("yes", "no"), lands="the Pre-session checklist (`project-intake.md` §3.8)",
+       required=True, enum=("yes", "no"), lands="the install verification (`project-intake.md` §3.8)",
        when="install", derive="probed at the capture set-up (`project-intake.md` §3.8)"),
 
     # ── goal: what the tune is FOR (§2.1–§2.4, §2.7) ──────────────────────────────────────────

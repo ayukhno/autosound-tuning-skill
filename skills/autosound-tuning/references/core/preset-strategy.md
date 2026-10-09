@@ -1,6 +1,6 @@
 # Preset strategy — which preset library to build
 
-One DSP config = **one OUTPUT base (correctness, curve-agnostic)** + **several VIRTUAL voicing presets** for different goals (the base+voicing mechanism → `diagnostic-techniques.md §6`, `SKILL.md`, the base/voicing rule in the pre-session steps). Switching a preset = swapping the **voicing/upper-layer settings**, not the base. Here — *which presets* are worth setting up and how they differ.
+One DSP config = **one OUTPUT base (correctness, curve-agnostic)** + **several VIRTUAL voicing presets** for different goals (the base+voicing mechanism → `diagnostic-techniques.md §6`, `phase_5_variations.md` §4). Switching a preset = swapping the **voicing/upper-layer settings**, not the base. Here — *which presets* are worth setting up and how they differ.
 
 > The specific preset set is a project decision (determined at intake: purpose + the DSP's preset-count limit, `phase_-1_intake.md §2`, `project-intake.md §4`). Below — a typical reference library, not dogma.
 
@@ -9,16 +9,17 @@ One DSP config = **one OUTPUT base (correctness, curve-agnostic)** + **several V
 - **Varies in a preset:** voicing (curve/tilt/shelves on virtual) · center/rear on-off · sub level/extension · DSP-FX · **the source/input** · special stage techniques (crossfeed — below).
 
 ## A typical preset library
+Once saved in the device, each is named by the slot rule (`naming-and-structure.md` §1a): its preset number and its configuration's name — `1.SQ-1`, `2.FULL-v1`.
 1. **SQ / reference** — the exact target curve, neutral voicing (Accurate/the chosen reference), often front-only. For critical listening and judging.
 2. **FULL / "for yourself" / enjoyment** — envelopment: center + rear on, a warmer voicing (Laid-back type), a hotter sub. For daily enjoyment.
 3. **SQL (SQ + Loud)** — like SQ, but with level/headroom margin and a slightly reduced subsonic (so it doesn't boom at volume). Loud, but quality.
 4. **Surround / DSP-FX** *(if the DSP has it, e.g. Virtual X / sound-field)* — a separate preset, because FX changes the phase/measurement (measurements with the `FX` suffix). **Capability-driven:** it appears from the hardware's abilities — e.g. a Goldhorn processor with a surround DSP opens a surround preset. So **the set of available presets depends on the project's equipment** (determined at intake §4; hardware experience → `knowledge/dsp/`).
-5. **Source / input preset** — for a **different source**: e.g. a daily preset where **navigation comes from the head unit, and music — via BT/USB from the phone**. Here the input routing differs (and sometimes the mix of navigation prompts). ⚠️ A preset here is **bound to the input** — document the "preset → active input" pair; switching a preset can **silently reset the input** (Pre-session §4, `competition.md`) — the most annoying loss of sound/points.
+5. **Source / input preset** — for a **different source**: e.g. a daily preset where **navigation comes from the head unit, and music — via BT/USB from the phone**. Here the input routing differs (and sometimes the mix of navigation prompts). ⚠️ A preset here is **bound to the input** — document the "preset → active input" pair; switching a preset can **silently reset the input** (`SKILL.md` Pre-Session item 1, `competition.md`) — the most annoying loss of sound/points.
 
 ## Competition presets — for the RULES, not "in general"
 Different formats judge differently → competition presets for **EMMA / AYA / CARMusic differ**, and the techniques can be **mutually exclusive**. Keep them separate, not "one competition".
 
-- ⚠️ **A different format can need a different FOUNDATION, not just a different voicing.** EMMA (LR4 on every joint, a locked stage) vs AYA (gentle/Bessel, a natural blend) differ at the **crossover/TA** level — so the second format's preset is **not a voicing swap on the same base**; it carries only the curve-agnostic foundation (drivers/T-S/box, the cabin map, measurements) and **rebuilds crossovers + voicing from scratch** (`SKILL.md`, the base/voicing rule in the pre-session steps). Its **NTT per-band targets are crossover-dependent → regenerate them**, don't copy the other format's targets (`tooling/rew-tool-docs.md` → `nono_curves.py`); keep each format's artifacts in its **own `target-curves/<preset>/`** so they don't leak.
+- ⚠️ **A different format can need a different FOUNDATION, not just a different voicing.** EMMA (LR4 on every joint, a locked stage) vs AYA (gentle/Bessel, a natural blend) differ at the **crossover/TA** level — so the second format's preset is **not a voicing swap on the same base**; it carries only the curve-agnostic foundation (drivers/T-S/box, the cabin map, measurements) and **rebuilds crossovers + voicing from scratch** (the base/voicing split: `diagnostic-techniques.md §6`). Its **NTT per-band targets are crossover-dependent → regenerate them**, don't copy the other format's targets (`tooling/rew-tool-docs.md` → `nono_curves.py`); keep each format's artifacts in its **own `target-curves/<preset>/`** so they don't leak.
 
 - **Crossfeed (L↔R blending)** — mix a fraction of the opposite channel into the front (a bit of L into R and vice versa) → **stabilizes/compresses the stage toward the center**, removes extreme lateralization; the cost — less width and separation.
   - **EMMA — applicable** (per the user's practice): L→R and R→L blending to **stabilize the stage**.
