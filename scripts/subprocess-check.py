@@ -198,8 +198,14 @@ def check(root=ROOT, allowed=ALLOWED):
     """Every complaint, one line each; empty when the tree holds."""
     problems, seen = [], set()
     for rel, path in _py_files(root):
-        with open(path, encoding="utf-8") as f:
-            text = f.read()
+        try:
+            with open(path, encoding="utf-8") as f:
+                text = f.read()
+        except (OSError, UnicodeDecodeError) as exc:
+            # Named, as selftest-reach-check names it (group fix 1, item 16): it raised out of check(), a traceback.
+            problems.append(f"{rel}: cannot be read ({exc.__class__.__name__}: {exc}) -- the children it starts are "
+                            f"not seen; save it as UTF-8, or make it readable")
+            continue
         try:
             tree = ast.parse(text, filename=path)
         except SyntaxError as exc:
@@ -221,7 +227,39 @@ def check(root=ROOT, allowed=ALLOWED):
     return problems
 
 
+def _check_a_file_it_cannot_read_is_named():
+    """A `.py` under the skill that is not UTF-8 -- one saved in cp1251 -- is a named complaint, as selftest-reach-check
+    names one (group fix 1, item 16): `open(...).read()` raised `UnicodeDecodeError` out of `check()`, a traceback
+    where the run's verdict belonged. The other files are still read: a child with no timeout beside it is named."""
+    import shutil
+    import tempfile
+    root = tempfile.mkdtemp(prefix="subprocess_check_cp1251_")
+    try:
+        tool = os.path.join(root, *f"{SCAN}/rew_tool".split("/"))
+        os.makedirs(tool)
+        with open(os.path.join(tool, "x.py"), "wb") as f:
+            f.write("# Перевірка\nimport subprocess\nsubprocess.run(['git'])\n".encode("cp1251"))
+        with open(os.path.join(tool, "y.py"), "w", encoding="utf-8") as f:
+            f.write("import subprocess\n\n\ndef head():\n    subprocess.run(['git'])\n")
+        try:
+            got = check(root, {})
+        except Exception as exc:  # noqa: BLE001 -- a traceback is the failure under test
+            got = [f"raised {type(exc).__name__}: {exc}"]
+        assert len(got) == 2 and got[0].startswith(f"{SCAN}/rew_tool/x.py: cannot be read (UnicodeDecodeError") \
+            and "save it as UTF-8" in got[0] and got[1].startswith(f"{SCAN}/rew_tool/y.py:5: subprocess.run in head()"), \
+            got
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def _selftest():
+    failures = []
+    for check_ in (_check_a_file_it_cannot_read_is_named,):
+        try:
+            check_()
+        except AssertionError as exc:
+            failures.append(f"{check_.__name__}: {exc}")
+    assert not failures, "\n".join(failures)
     import shutil
     import tempfile
     root = tempfile.mkdtemp(prefix="subprocess_check_")
