@@ -1,44 +1,44 @@
 {
   "what": "scripts/reading-cost.py's baseline: what a session reads per phase (#145); --check fails a phase that reads more, and --write-baseline writes this file",
   "unit": "tokens = characters / 4",
-  "next_phase": "whole",
+  "next_phase": "to its Goal-node",
   "phases": {
     "-1": {
-      "tokens": 70826,
-      "chars": 283304,
+      "tokens": 61867,
+      "chars": 247469,
       "files": {
-        "SKILL.md": 37282,
-        "references/phases/phase_-1_intake.md": 33586,
-        "references/phases/phase_0_baseline.md (next)": 26431,
-        "references/core/project-intake.md": 28168,
+        "SKILL.md": 23174,
+        "references/phases/phase_-1_intake.md": 33177,
+        "references/phases/phase_0_baseline.md (to its Goal-node)": 2375,
+        "references/core/project-intake.md": 28005,
         "references/phases/virtual-first.md": 39814,
-        "references/phases/capture-session-sheet.md": 9119,
+        "references/phases/capture-session-sheet.md": 10425,
         "references/tooling/setup-critic-channel.md": 39998,
-        "references/core/naming-and-structure.md": 35577,
+        "references/core/naming-and-structure.md": 36891,
         "references/core/review-loop.md": 10613,
-        "knowledge/dsp/helix-dsp-ultra-s.md": 22716
+        "knowledge/dsp/helix-dsp-ultra-s.md": 22997
       }
     },
     "0": {
-      "tokens": 44350,
-      "chars": 177401,
+      "tokens": 37617,
+      "chars": 150467,
       "files": {
-        "SKILL.md": 37282,
+        "SKILL.md": 23174,
         "references/phases/phase_0_baseline.md": 26431,
-        "references/phases/phase_1_foundation.md (next)": 20550,
+        "references/phases/phase_1_foundation.md (to its Goal-node)": 5104,
         "references/phases/virtual-first.md": 39814,
-        "references/phases/capture-session-sheet.md": 9119,
-        "references/core/naming-and-structure.md": 35577,
+        "references/phases/capture-session-sheet.md": 10425,
+        "references/core/naming-and-structure.md": 36891,
         "references/core/project-intake.md § ## 3.": 8628
       }
     },
     "1": {
-      "tokens": 45177,
-      "chars": 180706,
+      "tokens": 37316,
+      "chars": 149263,
       "files": {
-        "SKILL.md": 37282,
+        "SKILL.md": 23174,
         "references/phases/phase_1_foundation.md": 20550,
-        "references/phases/phase_2_eq.md (next)": 20070,
+        "references/phases/phase_2_eq.md (to its Goal-node)": 2735,
         "references/phases/virtual-first.md": 39814,
         "references/core/project-intake.md § ## 3.": 8628,
         "references/tooling/rew-api-quirks.md": 37947,
@@ -46,12 +46,12 @@
       }
     },
     "2": {
-      "tokens": 50593,
-      "chars": 202371,
+      "tokens": 45767,
+      "chars": 183066,
       "files": {
-        "SKILL.md": 37282,
+        "SKILL.md": 23174,
         "references/phases/phase_2_eq.md": 20070,
-        "references/phases/phase_3_control.md (next)": 7877,
+        "references/phases/phase_3_control.md (to its Goal-node)": 2680,
         "references/phases/virtual-first.md": 39814,
         "references/core/diagnostic-techniques.md": 65334,
         "references/patterns/listening-cheat-sheet.md": 14627,
@@ -59,12 +59,12 @@
       }
     },
     "3": {
-      "tokens": 37150,
-      "chars": 148601,
+      "tokens": 31353,
+      "chars": 125411,
       "files": {
-        "SKILL.md": 37282,
+        "SKILL.md": 23174,
         "references/phases/phase_3_control.md": 7877,
-        "references/phases/phase_4_listening.md (next)": 11384,
+        "references/phases/phase_4_listening.md (to its Goal-node)": 2302,
         "references/phases/virtual-first.md": 39814,
         "references/core/review-loop.md": 10613,
         "references/core/analysis-playbook.md": 17367,
@@ -72,24 +72,24 @@
       }
     },
     "4": {
-      "tokens": 35399,
-      "chars": 141594,
+      "tokens": 30332,
+      "chars": 121328,
       "files": {
-        "SKILL.md": 37282,
-        "references/phases/phase_4_listening.md": 11384,
-        "references/phases/phase_5_variations.md (next)": 8235,
+        "SKILL.md": 23174,
+        "references/phases/phase_4_listening.md": 11371,
+        "references/phases/phase_5_variations.md (to its Goal-node)": 1802,
         "references/patterns/listening-cheat-sheet.md": 14627,
         "references/patterns/test-tracks.md": 24264,
-        "references/core/feedback-loop.md": 19693,
+        "references/core/feedback-loop.md": 19981,
         "references/patterns/staging-depth.md": 8742,
         "references/core/analysis-playbook.md": 17367
       }
     },
     "5": {
-      "tokens": 32209,
-      "chars": 128837,
+      "tokens": 28682,
+      "chars": 114729,
       "files": {
-        "SKILL.md": 37282,
+        "SKILL.md": 23174,
         "references/phases/phase_5_variations.md": 8235,
         "references/patterns/voicing-by-ear.md": 10755,
         "references/core/preference-profile.md": 2369,
@@ -98,5 +98,5 @@
       }
     }
   },
-  "full_tune_tokens": 315704
+  "full_tune_tokens": 272934
 }

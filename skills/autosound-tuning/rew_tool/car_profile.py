@@ -67,8 +67,8 @@ def body_slug(make, model, generation="", body=""):
     is absent from the slug on purpose -- it is recorded in the project because it describes THAT
     car, and it is never asked whether two cabins match.
 
-    Built rather than searched for, which is the naming rule's whole purpose (`SKILL.md:108`: the
-    path comes from the answer, never from a `find`). That also makes the refusals fall out of the
+    Built rather than searched for, which is the naming rule's whole purpose (SKILL.md's Reference
+    Map, the `knowledge/` row: the path comes from the answer, never from a `find`). That also makes the refusals fall out of the
     arithmetic instead of needing rules of their own: a wagon slugs differently from a sedan and so
     does not match it, and a body nobody named slugs short and matches nothing.
 

@@ -9,7 +9,7 @@ the well-known reference curves and shows how to load one into NTT / REW.
 > [`knowledge-architecture.md`](references/core/knowledge-architecture.md).
 
 ## Open the interactive comparison
-`target_curves_visualizer.html` is **fully self-contained — it works OFFLINE** (Chart.js is inlined; no CDN / no internet needed — important when tuning in the car). Open it in a browser:
+`target_curves_visualizer.html` is **fully self-contained — it works OFFLINE** (Chart.js is inlined; no CDN / no internet needed — important when tuning in the car). It is ≈ 0.5 MB of inlined code: a person opens it, a session never reads it (audit I-26). Open it in a browser:
 - **Quickest:** open **`curves.html`** — every project gets one **symlinked at its own root** during intake (`phase_-1_intake.md §5`), so it's right there without digging into the skill's folders. The skill root also has one (`skills/autosound-tuning/curves.html`) — same one-click launcher, either copy works.
 - **macOS:** `open <skill-dir>/references/patterns/target-curves/target_curves_visualizer.html` (or double-click it in Finder → opens in your default browser).
 - **Any OS:** double-click the file, or drag it onto a browser tab.

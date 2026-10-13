@@ -1,5 +1,10 @@
 # Knowledge Architecture — the 5 layers
 
+> 🗺️ **Not on SKILL.md's Reference Map — by design:** maintainer material — where a piece of knowledge belongs —
+> which a tuning session does not need routed on every load (audit I-26). It is reached from the files that stand on
+> it: every pattern file's banner, `preference-profile.md`, `target_curves_guide.md`, the `knowledge/` templates and
+> `CONTRIBUTING.md`.
+
 The skill's knowledge is organized in five layers across two locations. This keeps the
 normative method separate from per-project data, and starting hypotheses separate from rules.
 

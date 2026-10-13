@@ -1,26 +1,17 @@
 ---
 name: autosound-tuning
-description: >
-  Orchestrates car-audio DSP tuning for ANY car/system — from a brand-new project
-  (intake: equipment + goals interview, target-curve choice, install verification) to deep
-  iterative tuning — using REW + a Claude(Generator)↔Gemini(Critic/Advisor)↔User(Arbiter) review
-  loop. Use whenever the user wants to (e.g. "help me set up my car audio", "tune my speakers/system"):
-  set up or tune a car-audio system FROM SCRATCH, tune speakers,
-  pick crossover points, set time delays, phase, or polarity, build per-channel EQ, fix imaging/staging,
-  match OR create/build a target/house curve (bring your own, or get ResoNix / Jazzi / Harman /
-  Audiofrog from the Nono Tuning Tool — those are their authors' and are not bundled here),
-  pull REW measurements, or run a tuning session. Also fires when RESUMING an
-  in-progress car-audio tune — "resume/continue my car-audio tune", "what's my current
-  DSP / crossover / time-alignment / gain state", "where did we leave off on the tune",
-  «продовжити тюн», «нагадай стан DSP / кросовери / затримки», «на чому зупинились у тюні авто».
-  Also fires on native-language requests — UK: «налаштувати автозвук/процесор у машині»,
-  «затримки та кросовери в авто», «образ липне до динаміка / сцена попливла»; DE: „Car-HiFi
-  einmessen / DSP einstellen", „Laufzeitkorrektur im Auto"; PL: „strojenie DSP w aucie/samochodzie",
-  „ustawić opóźnienia czasowe car audio". Also fires when the request is ABOUT the tooling rather
-  than the tune — reporting a bug or filing feedback on this skill or on the Autosound TCC app:
-  "report a bug", "file an issue", "feedback package", "something in TCC is broken", «оформи ішью»,
-  «баг у TCC», «поскаржитись на TCC», „Fehler melden / Issue anlegen", „zgłoś błąd / załóż issue" —
-  issues go through the skill's own gate, never through a hand-written `gh issue create`.
+description: >-
+  Car-audio DSP tuning for any car, from a new project to iterative tuning, with REW and a second AI as
+  reviewer. Use to set up or tune car audio from scratch, pick crossovers, set time delays, phase or
+  polarity, build per-channel EQ, fix imaging/staging, match or build a target curve, pull REW
+  measurements or run a tuning session. Also on resuming a car-audio tune ("what's my current DSP / delay
+  state", "where did we leave off") — «продовжити тюн», «нагадай стан DSP / кросовери / затримки», «на
+  чому зупинились у тюні авто»; UK: «налаштувати автозвук/процесор у машині», «затримки та кросовери в
+  авто», «образ липне до динаміка / сцена попливла»; DE: „Car-HiFi einmessen / DSP einstellen",
+  „Laufzeitkorrektur im Auto"; PL: „strojenie DSP w aucie/samochodzie", „ustawić opóźnienia czasowe car
+  audio". Also bug reports or feedback on this skill or the Autosound TCC app: "report a bug", "file an
+  issue", «оформи ішью», «баг у TCC», «поскаржитись на TCC», „Fehler melden / Issue anlegen", „zgłoś błąd
+  / załóż issue".
 ---
 
 # Autosound Tuning Orchestrator
@@ -143,7 +134,6 @@ Everything else — the inventory, the caveats, the previews, the reasoning, the
 | Reference | Read when |
 | :--- | :--- |
 | **[knowledge/](knowledge/)** | **A DSP, car or approach this skill already knows — LOOK HERE FIRST, before asking.** Naming is fixed, so you can build the path from the answer instead of searching: `knowledge/dsp/<vendor>-<model>.md` (slug-cased, e.g. "Helix DSP Ultra S" → `knowledge/dsp/helix-dsp-ultra-s.md`), `knowledge/cars/<make>-<model>.md`, `knowledge/approaches.md`. Read the file; if it is not there, `ls knowledge/dsp/` — never `find`. |
-| [core/knowledge-architecture.md](references/core/knowledge-architecture.md) | Where a piece of knowledge belongs (5-layer model). |
 | [core/preference-profile.md](references/core/preference-profile.md) | Subjective voicing vs objective engineering goals. |
 | [tooling/installation.md](references/tooling/installation.md) | Install and update (the installer, or the plugin from the catalog plus `/autosound-tuning:setup`), which copy is running, troubleshooting. |
 | [core/process-phases.md](references/core/process-phases.md) | Phase transitions, the seven phases (−1…5). |
@@ -151,8 +141,7 @@ Everything else — the inventory, the caveats, the previews, the reasoning, the
 | [core/project-intake.md](references/core/project-intake.md) | The doctrine intake stands on: the briefing and the reviewer (§0), install verification and the protective-filter minima (§3), the DSP's capability level (§4). The interview and the files are the Phase −1 runbook. |
 | [core/intake-from-prose.md](references/core/intake-from-prose.md) | A project whose state is in prose and has no ledger — READ it across, never re-interview. `contract.py check` says when this is the case. |
 | [patterns/target-curves/target_curves_guide.md](references/patterns/target-curves/target_curves_guide.md) | Target curves + offsets. |
-| [patterns/target-curves/target_curves_visualizer.html](references/patterns/target-curves/target_curves_visualizer.html) | Interactive curve comparison. |
-| [core/naming-and-structure.md](references/core/naming-and-structure.md) | Measurement names, .mdat storage, preset structure. |
+| [core/naming-and-structure.md](references/core/naming-and-structure.md) | Measurement names, .mdat storage, preset structure; the report's words (§1a); step ids and names (§1b). |
 | [core/capabilities.md](references/core/capabilities.md) | **Find the tool by what you want, not by the path** — ask it first: `python3 rew_tool/capabilities.py find "<what you want>"` prints the matching rows; every capability by intent (EN/UK words), its command, what it needs, its maturity. For a session that comes with its own process. |
 | [core/analysis-playbook.md](references/core/analysis-playbook.md) | Which REW graph for which decision. |
 | [core/estimator-scope.md](references/core/estimator-scope.md) | When a number is NOT an answer: where each tool abstains, why a measurement is not a setting, what survives a "from scratch". |
@@ -176,8 +165,8 @@ Everything else — the inventory, the caveats, the previews, the reasoning, the
 | [tooling/resonalyze-virtual-dsp.md](references/tooling/resonalyze-virtual-dsp.md) | Resonalyze's IR and Virtual-DSP session files: what we read, which versions, and the drift check on the ported readers. |
 | [tooling/screen-read-dsp.md](references/tooling/screen-read-dsp.md) | Reading DSP params off screenshots. |
 | [core/review-loop.md](references/core/review-loop.md) | Review cadence, TWO-PASS, deadlocks, audits. |
-| [core/process-control.md](references/core/process-control.md) | Operating modes A/B/C, pull-based control. |
+| [core/process-control.md](references/core/process-control.md) | Operating modes A/B/C, pull-based control; which writer records the process; the stop's order (its one home); the phase boundary (`handoff`). |
 | [core/driver-discipline.md](references/core/driver-discipline.md) | Solo driver (mode B/C): anti-confabulation rules. |
 | [tooling/setup-critic-channel.md](references/tooling/setup-critic-channel.md) | CLI setup, .critic-env, models, `--doctor`, ladder. |
 | [core/feedback-loop.md](references/core/feedback-loop.md) | Session-close feedback ritual (issues in English). |
-| [core/why-these-rules.md](references/core/why-these-rules.md) | What each always-on rule cost when it was missing — read when a rule looks like ceremony. |
+| [core/why-these-rules.md](references/core/why-these-rules.md) | What each always-on rule cost when it was missing — read when a rule looks like ceremony — and where each came from. |

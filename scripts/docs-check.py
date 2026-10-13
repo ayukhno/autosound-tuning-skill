@@ -91,7 +91,8 @@ Rules:
     description folds to at most 1,024 characters, the Reference Map is SKILL.md's last `##` section with at most
     17,500 bytes before it, and every rule of the manifest `SKILL_RULE_PHRASES` stands before it, in the body (a phrase
     only the description carries is not the rule). A rule moved out of SKILL.md leaves the manifest in the same commit,
-    and that commit names where it went. Red in the tree by design until SKILL.md is cut (`RED_IN_TREE`).
+    and that commit names where it went (`scripts/move-check.py` reads its `dropped:` list). Green since the cut (W-9,
+    Task 14).
 
 Rules 9-12 and 15-17 read a phrase as a reader does (`_phrase`): across a wrapped line and inline markup, its first
 letter in either case (a sentence's head, a clause's middle) and the rest in the case it is given, as whole words.
@@ -1207,7 +1208,7 @@ RULES = [("data-not-instructions", rule_data_not_instructions),
 #: Rules the tree is red on BY DESIGN, each with why and until when (W-9's ruling R4: a check is written, red, before
 #: the change that makes it hold). The selftest holds the tree to every other rule, and to each of these still being
 #: red: an entry left behind once its rule holds fails the selftest, so it goes in the commit that turns it green.
-RED_IN_TREE = {"skill-budget": "#145: SKILL.md is over its budget until it is cut (W-9, Task 14)"}
+RED_IN_TREE = {}                       # skill-budget left it with the cut (W-9, Task 14)
 
 
 def run(root: str) -> int:
