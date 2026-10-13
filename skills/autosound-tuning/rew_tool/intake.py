@@ -1478,7 +1478,9 @@ def _dig(data, dotted):
 
 def _answered(field_row, data, project_dir):
     """Is this field answered on disk? `None` = not machine-readable from here (say so, never
-    report a prose answer as missing — an honest 'cannot see it' is the whole point of the bucket)."""
+    report a prose answer as missing — an honest 'cannot see it' is the whole point of the bucket).
+    `{"unreadable": <file, why and repair>}` = its home is there and cannot be read (#147, item 5): the glossary, read
+    strictly -- read leniently, a cut `glossary.json` was no glossary, and the field was asked again as unanswered."""
     writes = field_row["writes"]
     if writes is None:
         return None
@@ -1489,7 +1491,12 @@ def _answered(field_row, data, project_dir):
                 return True
         return False
     if writes.startswith("glossary:"):
-        g = naming.Glossary.for_project(project_dir)
+        try:
+            g = naming.Glossary.for_project(project_dir, strict=True)
+        except Exception as exc:  # noqa: BLE001 -- matched by its attribute; anything else still raises
+            if not getattr(type(exc), "is_unreadable", False):
+                raise
+            return {"unreadable": str(exc)}
         return bool(g.channels or g.pairs or g.combos or g.joints or g.sides)
     if not writes.startswith("project:"):
         return None
@@ -1509,15 +1516,21 @@ def missing(project_dir):
     A form shows the second bucket before the session opens. The third is not a gap — goals, taste
     and the curve seed land in prose and in a recorded decision, and pretending to read them would
     be worse than saying plainly that they are not machine-readable.
+
+    A fourth, `unreadable`, holds a field whose home is there and cannot be read (#147, item 5), each row with its
+    `issue` -- the file, why and the repair. It is not missing: the answer may be in that file, and asking it again
+    would write past it.
     """
     data = _read_project(project_dir)
-    out = {"project_dir": project_dir, "answered": [], "missing": [], "not_machine_readable": []}
+    out = {"project_dir": project_dir, "answered": [], "missing": [], "not_machine_readable": [], "unreadable": []}
     for f in FIELDS:
         state = _answered(f, data, project_dir)
         row = {"id": f["id"], "group": f["group"], "required": f["required"],
                "ask": f["ask"], "enum": f["enum"], "lands": f["lands"] or f["writes"],
                "when": f["when"], "default": f["default"], "derive": f["derive"]}
-        if state is None:
+        if isinstance(state, dict):
+            out["unreadable"].append(dict(row, issue=state["unreadable"]))
+        elif state is None:
             out["not_machine_readable"].append(row)
         elif state:
             out["answered"].append(row)
@@ -1789,6 +1802,8 @@ def _dispatch(argv):
                   f"of them needed before measuring: {len(data['required_missing_now'])})")
             print(f"  not machine-readable {len(data['not_machine_readable'])}"
                   f"  — prose and recorded decisions\n")
+            for r in data["unreadable"]:
+                print(f"  ! {r['id']:<34} cannot be read: {r['issue']}")
             for r in data["missing"]:
                 if r["id"] in data["required_missing_now"]:
                     print(f"  * {r['id']:<34} {r['ask']}")
@@ -1888,6 +1903,34 @@ def _check_change_dsp_sets_an_unreadable_profile_aside():
         for path, target in zip(damaged, done["set_aside"]):
             with open(target, "rb") as fh:
                 assert fh.read() == damaged[path], f"{target} changed after it was set aside"
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_an_unreadable_glossary_is_not_unanswered():
+    """`missing` tells a glossary that cannot be read from one nobody wrote (#147, item 5): `_answered` read it
+    leniently, a cut `glossary.json` as no glossary, and the field went to `missing` -- the person asked to agree the
+    codes again over a file that holds them. Now it is in `unreadable`, with the file, why and its repair, and out of
+    `missing`; no glossary at all is still missing."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_intake_glossary_unreadable_")
+    fid = "channel_map.glossary_agreed"
+    try:
+        project.Project(top).save({"schema_version": project.SCHEMA_VERSION,
+                                   "channels": [{"code": "w-L", "tier": "channels"}]})
+        none = missing(top)
+        assert fid in [r["id"] for r in none["missing"]] and not none.get("unreadable"), "no glossary is missing"
+        path = os.path.join(top, "glossary.json")
+        with open(path, "wb") as fh:
+            fh.write(b'{"schema_version": 1, "chan')
+        got = missing(top)
+        where = {bucket: [r["id"] for r in got.get(bucket) or []]
+                 for bucket in ("answered", "missing", "not_machine_readable", "unreadable")}
+        rows = [r for r in got.get("unreadable") or [] if r["id"] == fid]
+        assert rows and fid not in where["missing"] and fid not in where["answered"] \
+            and rows[0].get("issue", "").startswith(f"{path} ") and "checkout HEAD -- glossary.json" in rows[0]["issue"] \
+            and fid not in got["required_missing"], where
     finally:
         shutil.rmtree(top, ignore_errors=True)
 
@@ -2217,6 +2260,7 @@ def _selftest():
 
     failures = []
     for check in (_check_change_dsp_sets_an_unreadable_profile_aside, _check_gate_shut_over_an_unreadable_file,
+                  _check_an_unreadable_glossary_is_not_unanswered,
                   _check_set_car_waits_for_the_lock, _check_a_bad_timeout_is_a_usage_error,
                   _check_composite_writers_hold_once, _check_save_controls_holds_once,
                   _check_save_new_dsp_holds_once, _check_a_missing_project_makes_nothing,

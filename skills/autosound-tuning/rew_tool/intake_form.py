@@ -71,6 +71,8 @@ PROBES = ("rew.api_reachable", "rew.input_clip_checked", "dsp.readable")
 
 #: The four states a field can be in on the page. `prose` is not a gap.
 HAVE, GATE, NICE, PROSE = "have", "gate", "nice", "prose"
+#: A field whose home is there and cannot be read (#147, item 5): said with the file, why and its repair.
+UNREAD = "unread"
 
 
 # ── labels ────────────────────────────────────────────────────────────────────
@@ -146,6 +148,10 @@ def model(project_dir, lang=DEFAULT_LANG):
         state[row["id"]] = GATE if row["required"] else NICE
     for row in buckets["not_machine_readable"]:
         state[row["id"]] = PROSE
+    unread = {}
+    for row in buckets.get("unreadable") or []:
+        state[row["id"]] = UNREAD
+        unread[row["id"]] = row["issue"]
     try:
         data = project.Project(project_dir).load()
     except (project.ProjectError, OSError):
@@ -203,6 +209,7 @@ def model(project_dir, lang=DEFAULT_LANG):
             "value": _value_of(f, data, project_dir), "probe": auto,
             "when": f["when"], "place": f["place"], "default": default, "suggest": suggest,
             "derive": _derive(lab, f) if auto else None,
+            "unreadable": unread.get(f["id"]),
         })
 
     gate = intake.gate_requirements(project_dir)
@@ -245,6 +252,7 @@ def model(project_dir, lang=DEFAULT_LANG):
                    "nice": sum(1 for f in fields if f["state"] == NICE),
                    "have": sum(1 for f in fields if f["state"] == HAVE),
                    "prose": sum(1 for f in fields if f["state"] == PROSE),
+                   "unread": sum(1 for f in fields if f["state"] == UNREAD),
                    "all": len(fields),
                    # What the page puts in front of the person, and how much of it is a choice.
                    "now": len(now),
@@ -274,7 +282,7 @@ h1 { margin:0 0 4px; font-size:19px; }
 .chip b { font-weight:600; }
 .dot { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:6px; }
 .d-have{background:var(--have)} .d-gate{background:var(--gate)} .d-nice{background:var(--nice)}
-.d-prose{background:var(--prose)}
+.d-prose{background:var(--prose)} .d-unread{background:var(--gate)}
 .gate-ok { color:var(--have); font-weight:600; } .gate-shut { color:var(--gate); font-weight:600; }
 main { padding:18px 24px 60px; max-width:1100px; }
 h2 { font-size:17px; margin:4px 0 4px; }
@@ -292,6 +300,7 @@ label.opt { display:inline-flex; align-items:center; gap:5px; margin:2px 14px 2p
      padding:11px 13px; margin:0 0 9px; }
 .f.s-have{border-left-color:var(--have)} .f.s-gate{border-left-color:var(--gate)}
 .f.s-nice{border-left-color:var(--nice)} .f.s-prose{border-left-color:var(--prose)}
+.f.s-unread{border-left-color:var(--gate)}
 .q { font-weight:500; }
 .meta { font-size:11.5px; color:#666; margin-top:3px; }
 .meta code { font-family: ui-monospace, Menlo, monospace; }
@@ -907,11 +916,14 @@ def _field_html(f, ui):
     mark = (f' <span class="meta">({_esc(ui.get("required", "required"))})</span>'
             if f["required"] and f["place"] == "now" else "")
     writes = f["writes"] or ""
+    # Its home is there and cannot be read (#147, item 5): said on the question, the file, why and its repair.
+    unread = (f'<div class="meta gate-shut">{_esc(ui.get("unreadable", "Not read:"))} {_esc(f["unreadable"])}</div>'
+              if f.get("unreadable") else "")
     if writes.startswith("glossary:") or writes.startswith("dsp_profile.draft:") or f["per"] or not writes:
         note = ui.get("glossary_note", "") if writes.startswith("glossary:") else ""
         return (f'<div class="f s-{f["state"]}" id="f-{_esc(f["id"])}">'
                 f'<div class="q"><span class="dot d-{f["state"]}"></span>{_esc(f["ask"])}{mark}</div>'
-                f'<div class="meta">{_esc(note)}</div></div>')
+                f'<div class="meta">{_esc(note)}</div>{unread}</div>')
     if f["id"] in LOCKED_ONCE_SET and f["value"] not in (None, ""):
         # Fixed once written (the Arbiter, 2026-09-22): not offered as a control at all, and the
         # page says why and what to do instead -- rather than letting a Save be refused.
@@ -1859,13 +1871,39 @@ def _check_unreadable_gate_file_named():
         shutil.rmtree(root, ignore_errors=True)
 
 
+def _check_unreadable_glossary_field_said():
+    """The glossary's field is shown as unreadable, with the file, why and its repair (#147, item 5): `intake.missing`
+    read a cut `glossary.json` as no glossary, and the page marked the question unanswered -- red, "required" --
+    beside the refusal at its top naming the same file."""
+    import shutil
+    import tempfile
+    root = tempfile.mkdtemp(prefix="autosound_form_glossary_field_")
+    try:
+        project.Project(root).save({"schema_version": project.SCHEMA_VERSION,
+                                    "channels": [{"code": "w-L", "tier": "channels"}]})
+        path = os.path.join(root, "glossary.json")
+        with open(path, "wb") as fh:
+            fh.write(b'{"schema_version": 1, "chan')
+        m = model(root, "uk")
+        field = next(f for f in m["fields"] if f["id"] == "channel_map.glossary_agreed")
+        assert field["state"] == UNREAD and str(field.get("unreadable") or "").startswith(f"{path} ") \
+            and "checkout HEAD -- glossary.json" in field["unreadable"], (field["state"], field.get("unreadable"))
+        shown = _field_html(field, m["ui"])
+        assert f"s-{UNREAD}" in shown and _esc(field["unreadable"]) in shown \
+            and _esc(m["ui"]["unreadable"]) in shown, shown
+        assert m["totals"]["gate"] == sum(1 for f in m["fields"] if f["state"] == GATE), m["totals"]
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def _selftest():
     import re
     import tempfile
 
     failures = []
     for check in (_check_unreadable_profile_shown_and_refused, _check_unreadable_gate_file_named,
-                  _check_save_answers_under_a_held_lock, _check_an_answer_holds_once, _check_a_busy_batch_waits_once):
+                  _check_save_answers_under_a_held_lock, _check_an_answer_holds_once, _check_a_busy_batch_waits_once,
+                  _check_unreadable_glossary_field_said):
         try:
             check()
         except Exception as exc:  # noqa: BLE001 -- a check that raises is reported by name, like one that fails

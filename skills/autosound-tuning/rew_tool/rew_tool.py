@@ -1825,7 +1825,8 @@ def _selftest():
     print("selftest[journal] OK — analyze-joints --process refuses a journal it cannot read in one line, exit 1, "
           "never as REW's failure (#134, R53).")
     failures = []
-    for check in (_check_no_folder_is_the_curves_default, _check_the_default_reads_the_methods_layout):
+    for check in (_check_no_folder_is_the_curves_default, _check_the_default_reads_the_methods_layout,
+                  _check_the_glossary_read_strictly):
         try:
             check()
         except AssertionError as exc:
@@ -1981,6 +1982,58 @@ def _check_the_default_reads_the_methods_layout():
     assert not failures, "\n  ".join(["the default's layout:"] + failures)
 
 
+def _check_the_glossary_read_strictly():
+    """`analyze-batch` and `analyze-joints` read the project's glossary strictly (#147, item 5): a `glossary.json` or a
+    `project.json` that is there and cannot be read is one line, `error: <file> <reason> -- <repair>`, exit 1. Read
+    leniently it was no glossary -- the batch ran its table on the default codes, the joints went on to REW -- and the
+    batch's `except` called every failure REW's ("Помилка підключення до REW API"). REW is a stand-in."""
+    import contextlib
+    import io
+    import json
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_rew_tool_glossary_")
+    saved = api.get_measurements, api.get_fr, sys.argv, os.environ.get("AUTOSOUND_PROJECT_DIR")
+    failures = []
+    try:
+        api.get_measurements = lambda: {"1": {"title": "m-L_2 (rta)"}}
+        api.get_fr = lambda mid, smoothing=None: ([100, 500, 1000, 5000], [82, 84, 83, 80], None)
+        os.environ.pop("AUTOSOUND_PROJECT_DIR", None)
+        for name in ("glossary.json", "project.json"):
+            proj = os.path.join(top, name.split(".")[0])
+            os.makedirs(proj)
+            if name == "glossary.json":
+                with open(os.path.join(proj, "project.json"), "w", encoding="utf-8") as fh:
+                    json.dump({"schema_version": 3}, fh)
+            path = os.path.join(proj, name)
+            with open(path, "wb") as fh:
+                fh.write(b'{"schema_version": 1, "chan')
+            for verb in (["analyze-batch", "_2 (rta)", "--no-targets"],
+                         ["analyze-joints", "--joint", "w-L,m-L,400", "--ver", "2"]):
+                sys.argv = ["rew_tool.py", *verb, "--project", proj]
+                out, err = io.StringIO(), io.StringIO()
+                code = 0
+                try:
+                    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                        main()
+                except SystemExit as stop:
+                    code = stop.code
+                except Exception as exc:  # noqa: BLE001 -- a traceback is the failure under test
+                    code = f"raised {type(exc).__name__}: {exc}"
+                said = err.getvalue().strip().splitlines()
+                if code != 1 or len(said) != 1 or not said[0].startswith(f"error: {path} ") \
+                        or f"checkout HEAD -- {name}" not in said[0] or "REW" in out.getvalue():
+                    failures.append(f"{verb[0]} over a {name} cut off: exit {code!r}, said {said[-2:]!r}, "
+                                    f"out {out.getvalue().strip()[-200:]!r}")
+    finally:
+        api.get_measurements, api.get_fr, sys.argv = saved[:3]
+        os.environ.pop("AUTOSOUND_PROJECT_DIR", None)
+        if saved[3] is not None:
+            os.environ["AUTOSOUND_PROJECT_DIR"] = saved[3]
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["the glossary's read:"] + failures)
+
+
 def _check_joints_refuse_an_unreadable_journal():
     """`analyze-joints --process` refuses a journal it cannot read in one line, `error: <file> <reason> -- <repair>`,
     exit 1, and never a traceback (#134, R53). The round's protective record is read as the method reads the journal,
@@ -2102,8 +2155,18 @@ def main():
         _selftest()
         return
     if args.cmd == "analyze-batch":
-        import naming                    # the grammar's one reader, and the project's codes
-        glossary = naming.Glossary.for_project(args.project) if args.project else None
+        # The project's codes, read strictly and first (#147, item 5): a `glossary.json` or a `project.json` that is
+        # there and cannot be read is its own one line, `error: <file> <reason> -- <repair>`, exit 1 -- read leniently
+        # it was no glossary, and the table ran on the default codes. `naming` is the module's: imported here too, it
+        # was a name local to `main`, and `analyze-joints` met it unbound ("local variable 'naming' referenced before
+        # assignment"), said as REW's failure, whenever a project was given.
+        try:
+            glossary = naming.Glossary.for_project(args.project, strict=True) if args.project else None
+        except Exception as e:  # noqa: BLE001 -- matched by its attribute; anything else still raises
+            if not getattr(type(e), "is_unreadable", False):
+                raise
+            print(f"error: {e}", file=sys.stderr)
+            sys.exit(1)
         (curves_dir, no_curves), vs_targets = curves_dir_for(args.curves_dir, args.project), not args.no_targets
         if vs_targets and curves_dir is None:
             print(no_curves)
@@ -2112,6 +2175,10 @@ def main():
             analyze_batch(args.pattern, curves_dir,
                           vs_targets=vs_targets, glossary=glossary)
         except Exception as e:
+            # Not every failure is REW's (#147, item 5): a project file this reads and cannot is its own line first.
+            if getattr(type(e), "is_unreadable", False):
+                print(f"error: {e}", file=sys.stderr)
+                sys.exit(1)
             print(f"Помилка підключення до REW API: {e}")
             print("Переконайся що REW запущений з -api і API сервер увімкнений.")
             sys.exit(1)
@@ -2177,7 +2244,8 @@ def main():
             # the joints typed with a pair still run, and the others say where a glossary comes from.
             project_dir = args.project or os.environ.get("AUTOSOUND_PROJECT_DIR") or (
                 os.path.dirname(os.path.abspath(args.process)) if args.process else None)
-            glossary = naming.Glossary.for_project(project_dir) if project_dir else None
+            # Read strictly (#147, item 5): one that cannot be read is said below as itself, never as no glossary.
+            glossary = naming.Glossary.for_project(project_dir, strict=True) if project_dir else None
             analyze_joints(specs, ver=args.ver, band_oct=args.band_oct,
                            candidates=candidates, protective_record=record,
                            baseline=True if args.baseline else None, window=window,
