@@ -2267,8 +2267,9 @@ def _check_a_curves_folder_it_cannot_search():
         assert folder is None and line.startswith(NO_CURVES + " -- ") and "cannot be listed (" in line \
             and os.path.join(top, PROJECT_CURVES) in line, line
         os.chmod(outer, 0o755)
-        os.rename(os.path.join(outer, "target-curves"), os.path.join(outer, "moved"))
-        assert curves_dir_for(None, top) == (None, NO_CURVES), curves_dir_for(None, top)
+        bare = os.path.join(top, "bare")                 # a folder that is not there is still none, said as none
+        os.makedirs(os.path.join(bare, "rew_analitic"))
+        assert curves_dir_for(None, bare) == (None, NO_CURVES), curves_dir_for(None, bare)
     finally:
         if os.path.isdir(outer):
             os.chmod(outer, 0o755)
