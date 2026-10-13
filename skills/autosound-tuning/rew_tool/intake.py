@@ -181,7 +181,7 @@ SUGGESTED_CONSTRAINTS = ("no_door_work", "no_trim_changes", "budget", "time")
 GENRES = ("rock", "pop", "jazz", "classical", "electronic", "hip_hop", "acoustic", "metal", "other")
 #: The target curves as the Nono Tuning Tool offers its presets (the Arbiter, 2026-09-22), spelled
 #: as NTT spells them. They are their authors' and are NOT bundled: the file is downloaded at
-#: nonotuningtool.com (SKILL.md, `target_curves_guide.md`).
+#: nonotuningtool.com (`target_curves_guide.md`, the target-curves README).
 NTT_CURVE_PRESETS = ("Audiofrog", "Whitledge", "Half Whitledge", "Harman", "JBL", "JL Audio", "Jazzi",
                      "Jazzi v2", "RAW-Cat", "ResoNix Accurate", "ResoNix Laid-Back", "ResoNix 2026",
                      "ATF Daily", "ATF SQ", "EPY", "Hanatsu")
