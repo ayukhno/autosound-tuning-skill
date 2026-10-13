@@ -7,6 +7,8 @@ Usage: python3 rew_tool.py [--curves-dir PATH]
 import sys
 import os
 import argparse
+import errno
+import stat
 import glob
 import cmath
 import math
@@ -37,7 +39,17 @@ def curves_dir_for(given, project):
     if given:
         return given, None
     folder = os.path.join(project, PROJECT_CURVES) if project else None
-    if not folder or not os.path.isdir(folder):
+    if not folder:
+        return None, NO_CURVES
+    try:
+        # `os.stat`, not `os.path.isdir`, which answers False for a folder this user may not search (group fix 1,
+        # item 19): the curves read as absent, "targets: none". Only a folder that is not there is none.
+        there = stat.S_ISDIR(os.stat(folder).st_mode)
+    except OSError as exc:
+        if exc.errno == errno.ENOENT:
+            return None, NO_CURVES
+        return None, f"{NO_CURVES} -- {folder} cannot be listed ({exc})"
+    if not there:
         return None, NO_CURVES
     if glob.glob(os.path.join(glob.escape(folder), "*" + TARGET_SUFFIX)):
         return folder, None
@@ -1865,7 +1877,7 @@ def _selftest():
     failures = []
     for check in (_check_no_folder_is_the_curves_default, _check_the_default_reads_the_methods_layout,
                   _check_the_glossary_read_strictly, _check_only_rews_failure_is_said_as_rews,
-                  _check_joints_with_a_project_name_the_pair):
+                  _check_joints_with_a_project_name_the_pair, _check_a_curves_folder_it_cannot_search):
         try:
             check()
         except AssertionError as exc:
@@ -2235,6 +2247,32 @@ def _check_joints_with_a_project_name_the_pair():
             os.environ["AUTOSOUND_PROJECT_DIR"] = saved[1]
         shutil.rmtree(top, ignore_errors=True)
     assert not failures, "\n  ".join(["analyze-joints with a project:"] + failures)
+
+
+def _check_a_curves_folder_it_cannot_search():
+    """A project whose `rew_analitic/` this user may not search (group fix 1, item 19): `os.path.isdir` answered False,
+    and the run said "targets: none" -- the folder read as absent. It says the folder cannot be listed, and why. Not
+    run as root, who searches any folder, nor on Windows, whose `chmod` cannot take a folder's search right away."""
+    import shutil
+    import tempfile
+    if os.name == "nt" or os.geteuid() == 0:
+        print("  skipped: a folder's search right cannot be taken away here (root, or Windows)")
+        return
+    top = tempfile.mkdtemp(prefix="autosound_rew_tool_curves_search_")
+    outer = os.path.join(top, "rew_analitic")
+    try:
+        os.makedirs(os.path.join(outer, "target-curves", "house"))
+        os.chmod(outer, 0o600)
+        folder, line = curves_dir_for(None, top)
+        assert folder is None and line.startswith(NO_CURVES + " -- ") and "cannot be listed (" in line \
+            and os.path.join(top, PROJECT_CURVES) in line, line
+        os.chmod(outer, 0o755)
+        os.rename(os.path.join(outer, "target-curves"), os.path.join(outer, "moved"))
+        assert curves_dir_for(None, top) == (None, NO_CURVES), curves_dir_for(None, top)
+    finally:
+        if os.path.isdir(outer):
+            os.chmod(outer, 0o755)
+        shutil.rmtree(top, ignore_errors=True)
 
 
 def _check_joints_refuse_an_unreadable_journal():

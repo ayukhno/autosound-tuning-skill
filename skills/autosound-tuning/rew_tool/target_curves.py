@@ -8,8 +8,10 @@ target reads as a driver that needs 8 dB of EQ (#56 items 4 and 5).
 
 Run `python3 target_curves.py selftest`.
 """
+import errno
 import glob
 import os
+import stat
 
 import naming
 
@@ -137,10 +139,26 @@ def explain_target_curve(measurement_title, curves_dir, glossary=None):
     except ValueError as exc:            # a glossary code no title reads back: no file can be it
         return None, None, str(exc)
     path = os.path.join(curves_dir, name)
-    if not os.path.isfile(path):
-        if not os.path.isdir(curves_dir):
+    # `os.stat`, not `isfile`/`isdir`, which answer False for a file or a folder this user may not search (group fix
+    # 1, item 19): read as absent, the row said "no `<code>_target.txt`" over a file that is there.
+    unread, is_file = None, False
+    try:
+        is_file = stat.S_ISREG(os.stat(path).st_mode)
+    except OSError as exc:
+        if exc.errno not in (errno.ENOENT, errno.ENOTDIR):
+            unread = exc
+    if not is_file:
+        try:
+            is_dir = stat.S_ISDIR(os.stat(curves_dir).st_mode)
+        except OSError as exc:
+            if exc.errno not in (errno.ENOENT, errno.ENOTDIR):
+                return None, None, f"{curves_dir} cannot be listed ({exc.strerror or exc})"
+            is_dir = False
+        if not is_dir:
             # F8: a folder that is not there is the folder's fault, not a project without targets.
             return None, None, f"no folder {curves_dir}"
+        if unread is not None:
+            return None, None, f"`{name}` in {curves_dir} cannot be read ({unread.strerror or unread})"
         why = f"no `{name}` in {curves_dir}"
         # A project's `rew_analitic/target-curves/` keeps each curve in a folder of its own: the file in one of them is
         # read with that folder as --curves-dir (F8; the tool no longer picks a curve for the person).
@@ -202,6 +220,36 @@ def _check_the_reason_names_the_folder(car):
             and f"--curves-dir {os.path.join(curves, 'house')}" in why and "studio" not in why, why
         got, _, why = explain_target_curve("w-L_2 (sw)", curves, car)
         assert got is None and why == f"no `w-L_target.txt` in {curves}", why
+
+
+def _check_a_folder_it_cannot_search_is_said(car):
+    """A curves folder this user may not search (group fix 1, item 19): `isfile`/`isdir` answered False, and the row
+    said "no folder <it>" -- or, inside one that lists but cannot be searched, "no `m-L_target.txt`" over a file that is
+    there. Each says it cannot be listed or read, and why. Not run as root, who searches any folder, nor on Windows,
+    whose `chmod` cannot take a folder's search right away."""
+    import shutil
+    import tempfile
+    if os.name == "nt" or os.geteuid() == 0:
+        print("  skipped: a folder's search right cannot be taken away here (root, or Windows)")
+        return
+    top = tempfile.mkdtemp(prefix="autosound_target_curves_search_")
+    outer, curves = os.path.join(top, "rew_analitic"), os.path.join(top, "rew_analitic", "house")
+    try:
+        os.makedirs(curves)
+        with open(os.path.join(curves, "m-L_target.txt"), "w", encoding="utf-8") as fh:
+            fh.write("20 0.0\n20000 0.0\n")
+        os.chmod(outer, 0o600)
+        got, data, why = explain_target_curve("m-L_2 (sw)", curves, car)
+        assert got is None and data is None and why.startswith(f"{curves} cannot be listed ("), why
+        os.chmod(outer, 0o755)
+        os.chmod(curves, 0o600)
+        got, data, why = explain_target_curve("m-L_2 (sw)", curves, car)
+        assert got is None and data is None and why.startswith(f"`m-L_target.txt` in {curves} cannot be read ("), why
+    finally:
+        for d in (outer, curves):
+            if os.path.lexists(d):
+                os.chmod(d, 0o755)
+        shutil.rmtree(top, ignore_errors=True)
 
 
 def _check_a_target_in_another_code_page(car):
@@ -315,7 +363,8 @@ def _selftest():
         assert find_target_curve("xyz_1 (sw)", d, car) == (None, None)
 
     failures = []
-    for check in (_check_the_reason_names_the_folder, _check_a_target_in_another_code_page):
+    for check in (_check_the_reason_names_the_folder, _check_a_folder_it_cannot_search_is_said,
+                  _check_a_target_in_another_code_page):
         try:
             check(car)
         except AssertionError as exc:
