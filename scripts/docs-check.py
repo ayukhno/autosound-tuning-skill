@@ -105,8 +105,9 @@ Rules 9-12 and 15-17 read a phrase as a reader does (`_phrase`): across a wrappe
 letter in either case (a sentence's head, a clause's middle) and the rest in the case it is given, as whole words.
 Their cases, and rules 13's, 14's and 18's, are `_check_*` functions, run through one loop that collects every failure.
 
-A file a rule reads that cannot be read as UTF-8 is a finding of that rule, naming the file and the repair -- never a
-traceback that stops the rules after it (#148); rule 18 says it per file and reads on.
+A file a rule reads that cannot be read -- not UTF-8, or refused by the system -- is a finding of that rule, naming the
+file, the cause and its repair -- never a traceback that stops the rules after it (#148); rule 18 says it per file and
+reads on.
 
 Run: `scripts/docs-check.py` (from anywhere), `--selftest` for the checker's own mechanics, `--write-index` to write
 rule 18's indexes from the headings.
@@ -116,6 +117,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import errno
 import json
 import os
 import re
@@ -210,14 +212,31 @@ SKILL_RULE_PHRASES = (
 
 
 class Unreadable(Exception):
-    """A file a rule reads that cannot be read as UTF-8 (#148): a finding naming the file and the repair -- `run` says
-    it for the rule that met it, `rule_section_index` for each file it reads -- never a traceback that stops every
-    rule after it. `.path` is the file."""
+    """A file a rule reads that cannot be read (#148): a finding naming the file and the repair -- `run` says it for the
+    rule that met it, `rule_section_index` for each file it reads -- never a traceback that stops every rule after it.
+    `.path` is the file. The words and the repair follow the cause (group fix 1, item 18): not UTF-8 is "cannot be read
+    as UTF-8 ... save it as UTF-8"; an `OSError` is "cannot be read (...)" with its own repair -- it said "as UTF-8"
+    for a file this user may not read too."""
 
     def __init__(self, path: str, exc: Exception):
         self.path = path
-        super().__init__(f"cannot be read as UTF-8 ({exc.__class__.__name__}: {exc}) — save it as UTF-8, or make it "
-                         f"readable")
+        if isinstance(exc, UnicodeDecodeError):
+            said = f"cannot be read as UTF-8 ({exc.__class__.__name__}: {exc}) — save it as UTF-8"
+        else:
+            said = f"cannot be read ({exc.__class__.__name__}: {exc}) — {_repair_for(exc)}"
+        super().__init__(said)
+
+
+def _repair_for(exc: Exception) -> str:
+    """The repair for an `OSError` met reading a file, by its cause."""
+    no = getattr(exc, "errno", None)
+    if isinstance(exc, PermissionError) or no in (errno.EACCES, errno.EPERM):
+        return "give this user read access to it (its owner and mode, `ls -l`), or close what holds it, and run again"
+    if isinstance(exc, FileNotFoundError) or no == errno.ENOENT:
+        return "it is not there (a link to nothing?): restore it, or remove what names it"
+    if isinstance(exc, IsADirectoryError) or no == errno.EISDIR:
+        return "a folder stands where the file belongs: move it aside"
+    return "check the disk and the folder it is in, and run again"
 
 
 def _text(path: str) -> str:
@@ -2343,6 +2362,31 @@ def _check_section_index_unreadable_file():
             and f"[section-index] {ref}: cannot be read as UTF-8" in out.getvalue(), out.getvalue()
 
 
+def _check_unreadable_says_its_cause():
+    """`Unreadable` says what stopped the read and the repair for that cause (group fix 1, item 18): it said "cannot be
+    read as UTF-8 ... save it as UTF-8" for any `OSError` too -- a file this user may not read, one gone from under a
+    link, a folder where the file belongs -- and saving it as UTF-8 mends none of those. Not UTF-8 keeps its sentence."""
+    said = {label: str(Unreadable("f.md", exc)) for label, exc in (
+        ("not UTF-8", UnicodeDecodeError("utf-8", b"\xcf", 0, 1, "invalid continuation byte")),
+        ("denied", PermissionError(errno.EACCES, "Permission denied", "f.md")),
+        ("gone", FileNotFoundError(errno.ENOENT, "No such file or directory", "f.md")),
+        ("a folder", IsADirectoryError(errno.EISDIR, "Is a directory", "f.md")),
+        ("the disk", OSError(errno.EIO, "Input/output error", "f.md")))}
+    assert said["not UTF-8"].startswith("cannot be read as UTF-8 (UnicodeDecodeError") \
+        and said["not UTF-8"].endswith("— save it as UTF-8"), said["not UTF-8"]
+    for label, words in (("denied", "read access"), ("gone", "restore it"), ("a folder", "a folder stands where"),
+                         ("the disk", "check the disk")):
+        text = said[label]
+        assert text.startswith("cannot be read (") and "UTF-8" not in text and words in text, (label, text)
+    with _scratch() as tmp:
+        try:
+            _text(tmp)                                   # a folder: IsADirectoryError, or Windows' PermissionError
+        except Unreadable as exc:
+            assert "UTF-8" not in str(exc) and str(exc).startswith("cannot be read ("), str(exc)
+        else:
+            raise AssertionError("a folder was read as a file")
+
+
 def _check_section_index_pointers():
     """Rule 18 (#145, I-25): a `§N` pointer to the indexed file names a section it has -- read in every .md and .py of
     the skill: a list (`§3, §2, §50`), a range (`§2–4`), after a slash, behind a link's bracket, wrapped onto the next
@@ -2581,7 +2625,7 @@ def _selftest() -> int:
                       _check_section_index, _check_section_index_repairs_a_lone_mark,
                       _check_section_index_one_of_each_mark, _check_section_index_unreadable_file,
                       _check_section_index_pointers, _check_section_index_inputs,
-                      _check_section_index_crlf):
+                      _check_section_index_crlf, _check_unreadable_says_its_cause):
             try:
                 check()
             except AssertionError as exc:
