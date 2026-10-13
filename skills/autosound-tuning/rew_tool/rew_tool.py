@@ -1435,6 +1435,34 @@ def _selftest_joint_impulse():
           f"verdict block on top counts every joint, the refused one too.")
 
 
+def _own_tempdir(selftest):
+    """`selftest` run with tempfile's folder -- and TMPDIR, for the children it starts -- set to one folder of its own,
+    removed with everything in it when the selftest ends, passed or failed, both put back (#148): a check that forgets
+    a folder it made leaves it in no shared temp folder (scripts/run-selftests.sh fails a selftest that does)."""
+    import functools
+
+    @functools.wraps(selftest)
+    def run(*args, **kwargs):
+        import os
+        import shutil
+        import tempfile
+        saved = tempfile.tempdir, os.environ.get("TMPDIR")
+        own = tempfile.mkdtemp(prefix="selftest_" + os.path.splitext(os.path.basename(__file__))[0] + "_")
+        tempfile.tempdir = own
+        os.environ["TMPDIR"] = own
+        try:
+            return selftest(*args, **kwargs)
+        finally:
+            tempfile.tempdir = saved[0]
+            if saved[1] is None:
+                os.environ.pop("TMPDIR", None)
+            else:
+                os.environ["TMPDIR"] = saved[1]
+            shutil.rmtree(own, ignore_errors=True)
+    return run
+
+
+@_own_tempdir
 def _selftest():
     """Offline check of the batch orchestration + rendering (no live REW).
 

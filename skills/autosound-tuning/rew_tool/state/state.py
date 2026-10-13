@@ -3755,6 +3755,34 @@ def _check_a_pointer_file_of_another_shape_refused():
     assert not failures, "a ledger pointer file of another shape:\n  " + "\n  ".join(failures)
 
 
+def _own_tempdir(selftest):
+    """`selftest` run with tempfile's folder -- and TMPDIR, for the children it starts -- set to one folder of its own,
+    removed with everything in it when the selftest ends, passed or failed, both put back (#148): a check that forgets
+    a folder it made leaves it in no shared temp folder (scripts/run-selftests.sh fails a selftest that does)."""
+    import functools
+
+    @functools.wraps(selftest)
+    def run(*args, **kwargs):
+        import os
+        import shutil
+        import tempfile
+        saved = tempfile.tempdir, os.environ.get("TMPDIR")
+        own = tempfile.mkdtemp(prefix="selftest_" + os.path.splitext(os.path.basename(__file__))[0] + "_")
+        tempfile.tempdir = own
+        os.environ["TMPDIR"] = own
+        try:
+            return selftest(*args, **kwargs)
+        finally:
+            tempfile.tempdir = saved[0]
+            if saved[1] is None:
+                os.environ.pop("TMPDIR", None)
+            else:
+                os.environ["TMPDIR"] = saved[1]
+            shutil.rmtree(own, ignore_errors=True)
+    return run
+
+
+@_own_tempdir
 def _selftest():
     failures = []
     for check in (_check_variant_delta_refused, _check_eq_refusals, _check_canonical_code_uses_the_loaded_naming,

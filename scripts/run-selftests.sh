@@ -9,7 +9,9 @@
 #   * each one runs under a timeout (SELFTEST_TIMEOUT seconds, default 300) that stops the check AND everything it
 #     started -- perl's alarm over a process group, since macOS has no `timeout`;
 #   * a check that could not run (ruff absent, a module printing SKIPPED) is NOT RUN: counted, printed, and a
-#     failure under CI.
+#     failure under CI;
+#   * each check runs under a TMPDIR of its own, made empty for it and removed after it; one that exits 0 and leaves
+#     anything there fails, the count named (#148).
 # REW is pointed at a dead port (T-30): a selftest must never reach a REW that happens to be open on this machine.
 #
 #   scripts/run-selftests.sh              # everything; the LAST line is the verdict (`| tail -1`)
@@ -58,7 +60,13 @@ if [ "${1:-}" = "--selftest" ]; then
   printf 'print("selftest OK -- good")\n'                    > "$tmp/t/good.py"
   printf 'print("usage: usage.py --selftest")\n'            > "$tmp/t/usage.py"
   printf 'print("selftest SKIPPED -- no tool here")\n'      > "$tmp/t/skipped.py"
-  printf 'import time\nprint("slow: started", flush=True)\ntime.sleep(5)\nprint("selftest OK")\n' > "$tmp/t/slow.py"
+  # slow.py makes a folder in its TMPDIR before it hangs: the runner removes a timed-out check's folder too (#148).
+  printf '%s\n' 'import os, tempfile, time' \
+                'open(os.environ["SELFTEST_TMPDIRS"], "a").write(tempfile.gettempdir() + "\n")' \
+                'tempfile.mkdtemp()' \
+                'print("slow: started", flush=True)' \
+                'time.sleep(5)' \
+                'print("selftest OK")'                      > "$tmp/t/slow.py"
   # Modules that start a child: whether the check times out (spawner) or passes and exits (leaver), the child is
   # stopped with it -- otherwise it holds the output pipe open and the run waits for it, past any timeout.
   printf 'import subprocess, time\nsubprocess.Popen(["sleep", "30"])\ntime.sleep(5)\nprint("selftest OK")\n' \
@@ -90,6 +98,21 @@ if [ "${1:-}" = "--selftest" ]; then
                 'if sys.flags.optimize:' \
                 '    sys.exit("asserts are stripped here (PYTHONOPTIMIZE reached the check)")' \
                 'print("selftest OK -- asserts run")'      > "$tmp/t/optimize.py"
+  # Temp folders (#148): each check runs under a TMPDIR of its own, empty -- leaves.py's two leftovers are not in
+  # fresh.py's, which runs after it -- and a check that leaves anything there fails, the count named. Each records its
+  # folder, and the runner removes every one.
+  printf '%s\n' 'import os, tempfile' \
+                'open(os.environ["SELFTEST_TMPDIRS"], "a").write(tempfile.gettempdir() + "\n")' \
+                'tempfile.mkdtemp()' \
+                'tempfile.mkstemp()' \
+                'print("selftest OK -- and left two things in its TMPDIR")' > "$tmp/t/leaves.py"
+  printf '%s\n' 'import os, sys, tempfile' \
+                'here = tempfile.gettempdir()' \
+                'open(os.environ["SELFTEST_TMPDIRS"], "a").write(here + "\n")' \
+                'if os.listdir(here) or os.path.realpath(os.environ.get("TMPDIR", "")) != os.path.realpath(here):' \
+                '    sys.exit("TMPDIR is no empty folder of its own: %s holds %s" % (here, os.listdir(here)))' \
+                'os.rmdir(tempfile.mkdtemp())' \
+                'print("selftest OK -- an empty TMPDIR of its own, left empty")' > "$tmp/t/fresh.py"
   printf 'print("selftest OK")\n'                           > "$tmp/t/noreason.py"
   # A skip line cannot hide a module that has a selftest of its own.
   printf 'def _selftest():\n    print("selftest OK")\n\n\nif __name__ == "__main__":\n    _selftest()\n' \
@@ -102,11 +125,13 @@ if [ "${1:-}" = "--selftest" ]; then
   # A skip line names a file on disk and gives a reason; the manifest's last line counts without its newline.
   { printf '%s\n' "$tmp/t/good.py" "$tmp/t/usage.py" "$tmp/t/skipped.py" "$tmp/t/slow.py" "$tmp/t/spawner.py" \
                   "$tmp/t/leaver.py" "$tmp/t/deaf.py" "$tmp/t/exit3.py" "$tmp/t/okrc1.py" "$tmp/t/oknotlast.py" \
-                  "$tmp/t/deadport.py" "$tmp/t/optimize.py" "skip $tmp/t/vanished.py gone from disk" \
+                  "$tmp/t/deadport.py" "$tmp/t/optimize.py" "$tmp/t/leaves.py" "$tmp/t/fresh.py" \
+                  "skip $tmp/t/vanished.py gone from disk" \
                   "skip $tmp/t/noreason.py" "skip $tmp/t/hidden.py a reason that hides a selftest"
     printf '%s' "$tmp/t/gone.py"; } > "$tmp/m.txt"
   started=$SECONDS
   out="$(REW_API_URL="http://127.0.0.1:9" PYTHONOPTIMIZE=1 SELFTEST_ONLY_TOOL=1 SELFTEST_TOOL="$tmp/t" \
+         SELFTEST_TMPDIRS="$tmp/tmpdirs" \
          SELFTEST_MANIFEST="$tmp/m.txt" SELFTEST_TIMEOUT=1 CI= bash "$SELF" 2>&1)"; rc=$?
   took=$((SECONDS - started))
   # grep reads to EOF (no -q), so printf never dies of SIGPIPE and pipefail never reads a match as a miss.
@@ -135,7 +160,15 @@ if [ "${1:-}" = "--selftest" ]; then
   want '^  FAIL gone\.py .*listed in .*not on disk'   # the manifest's last line, which has no newline
   want '^  FAIL unlisted\.py .*not in '
   want '^  FAIL sub/unlisted2\.py .*not in '
-  last_is "FAILED: 13 of 18 -- usage.py slow.py spawner.py deaf.py exit3.py okrc1.py oknotlast.py vanished.py noreason.py hidden.py gone.py sub/unlisted2.py unlisted.py; NOT RUN: skipped.py"
+  want '^  FAIL leaves\.py +left 2 in its TMPDIR'      # the count named
+  want '^  ok   fresh\.py'
+  # Three folders, three checks, and none of them left behind: the runner removed each, the timed-out one's too.
+  [ "$(sort -u "$tmp/tmpdirs" 2>/dev/null | wc -l | tr -d ' ')" = 3 ] || {
+    printf 'runner selftest: want three TMPDIRs, one per check (slow, leaves, fresh), got:\n%s\n' "$(cat "$tmp/tmpdirs" 2>&1)"; exit 1; }
+  while IFS= read -r d || [ -n "$d" ]; do
+    [ ! -e "$d" ] || { printf 'runner selftest: a check'"'"'s TMPDIR is still there after the run: %s\n' "$d"; exit 1; }
+  done < "$tmp/tmpdirs"
+  last_is "FAILED: 14 of 20 -- usage.py slow.py spawner.py deaf.py exit3.py okrc1.py oknotlast.py leaves.py vanished.py noreason.py hidden.py gone.py sub/unlisted2.py unlisted.py; NOT RUN: skipped.py"
   # Under CI a NOT RUN alone fails the run; locally it is counted and the run passes. A valid skip line -- a file
   # with no selftest, and the reason -- fails nothing, and is printed.
   cp "$tmp/t/good.py" "$tmp/t/skipped.py" "$tmp/t2/"
@@ -154,7 +187,7 @@ if [ "${1:-}" = "--selftest" ]; then
          echo "pass=$pass fail=$fail notrun=$notrun skipped=${skipped[*]:-}")"
   want '^  --   ruff +NOT RUN: no uvx and no ruff here$'
   last_is "pass=0 fail=0 notrun=1 skipped=ruff"
-  ok_line="runner selftest OK -- every failure is named and counted in the verdict: a usage text, rc 1 under an OK line, an OK line not last, rc 3, a module that prints it skipped, a timeout, a missing or unlisted module (one in a subfolder too), a bad skip line or one hiding a selftest; no ruff anywhere is NOT RUN; a child left behind, or deaf to TERM, is stopped; checks see REW at the dead port, with asserts on"
+  ok_line="runner selftest OK -- every failure is named and counted in the verdict: a usage text, rc 1 under an OK line, an OK line not last, rc 3, a module that prints it skipped, a timeout, a missing or unlisted module (one in a subfolder too), a bad skip line or one hiding a selftest; no ruff anywhere is NOT RUN; a child left behind, or deaf to TERM, is stopped; checks see REW at the dead port, with asserts on, each in an empty TMPDIR of its own that one leaving anything there fails, the count named, and that the runner removes"
   # In a full run this line is the runner's own last line, read by the same rules as every check's: it must read as a
   # pass. One that named the NOT RUN word counted the runner itself as NOT RUN -- and failed CI -- while all passed.
   if says_not_run "$ok_line" || ! says_ok "$ok_line"; then
@@ -193,18 +226,35 @@ GROUP_TIMEOUT='
 
 # run_one NAME MODE ARGV...   MODE: "ok" = exit 0 AND a last line saying OK; "rc" = exit 0, for a tree check whose
 # success line says no OK (secret-scan's "clean"). Every check that does end its success with an OK line is `ok`.
+#
+# Each check runs under a TMPDIR of its own, made empty for it, and must leave it empty (#148): what a selftest leaves in
+# the shared temp folder piles up run after run (hundreds of autosound_* folders on the author's Mac), and nobody can
+# see whose it is. A check that exits 0 and leaves anything there fails, the count and the first names said; the runner
+# removes the folder after every check -- one that failed, timed out or was interrupted too.
 run_one() {
   local name="$1" mode="$2"; shift 2
-  local out rc last
-  if [[ "$1" == *.sh ]]; then
-    out="$(perl -e "$GROUP_TIMEOUT" "$LIMIT" bash "$@" 2>&1 </dev/null)"; rc=$?
-  else
-    out="$(perl -e "$GROUP_TIMEOUT" "$LIMIT" "$PY" "$@" 2>&1 </dev/null)"; rc=$?
+  local out rc last tdir left names
+  if ! tdir="$(mktemp -d)" || [ ! -d "$tdir" ]; then
+    fail=$((fail + 1)); failed+=("$name"); printf '  FAIL %-24s no TMPDIR of its own could be made (mktemp -d)\n' "$name"
+    return
   fi
+  if [[ "$1" == *.sh ]]; then
+    out="$(TMPDIR="$tdir" perl -e "$GROUP_TIMEOUT" "$LIMIT" bash "$@" 2>&1 </dev/null)"; rc=$?
+  else
+    out="$(TMPDIR="$tdir" perl -e "$GROUP_TIMEOUT" "$LIMIT" "$PY" "$@" 2>&1 </dev/null)"; rc=$?
+  fi
+  left="$(find "$tdir" -mindepth 1 -maxdepth 1 2>/dev/null | wc -l | tr -d ' ')"
+  names="$(find "$tdir" -mindepth 1 -maxdepth 1 2>/dev/null | sed 's|.*/||' | sort | head -n 5 | paste -sd ' ' -)"
+  chmod -R u+rwx "$tdir" 2>/dev/null; rm -rf "$tdir"     # a check that took a folder's permissions away, too
   last="$(printf '%s\n' "$out" | sed '/^[[:space:]]*$/d' | tail -n1)"
   if [ "$rc" -eq 142 ]; then                                   # 128 + SIGALRM
     fail=$((fail + 1)); failed+=("$name"); printf '  FAIL %-24s timeout after %ss\n' "$name" "$LIMIT"
     [ -z "$out" ] || printf '%s\n' "$out" | tail -n 12 | sed 's/^/         /'
+  elif [ "$rc" -eq 0 ] && [ "$left" -ne 0 ]; then              # its verdict aside: a pass, a NOT RUN, a usage text
+    fail=$((fail + 1)); failed+=("$name")
+    printf '  FAIL %-24s left %s in its TMPDIR (%s%s) -- a selftest removes what it makes\n' "$name" "$left" "$names" \
+      "$([ "$left" -gt 5 ] && echo ' ...')"
+    printf '         its last line: %s\n' "$(printf '%s' "$last" | cut -c1-100)"
   elif [ "$rc" -eq 0 ] && says_not_run "$last"; then
     notrun=$((notrun + 1)); skipped+=("$name"); printf '  --   %-24s NOT RUN: %s\n' "$name" "$(printf '%s' "$last" | cut -c1-60)"
   elif [ "$rc" -eq 0 ] && { [ "$mode" = rc ] || says_ok "$last"; }; then

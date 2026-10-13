@@ -653,6 +653,34 @@ def upload_issue_asset(image_path, dest_name, *, consented=False, message=None,
 
 
 # ── self-test (no network — the runner is faked) ──────────────────────────────
+def _own_tempdir(selftest):
+    """`selftest` run with tempfile's folder -- and TMPDIR, for the children it starts -- set to one folder of its own,
+    removed with everything in it when the selftest ends, passed or failed, both put back (#148): a check that forgets
+    a folder it made leaves it in no shared temp folder (scripts/run-selftests.sh fails a selftest that does)."""
+    import functools
+
+    @functools.wraps(selftest)
+    def run(*args, **kwargs):
+        import os
+        import shutil
+        import tempfile
+        saved = tempfile.tempdir, os.environ.get("TMPDIR")
+        own = tempfile.mkdtemp(prefix="selftest_" + os.path.splitext(os.path.basename(__file__))[0] + "_")
+        tempfile.tempdir = own
+        os.environ["TMPDIR"] = own
+        try:
+            return selftest(*args, **kwargs)
+        finally:
+            tempfile.tempdir = saved[0]
+            if saved[1] is None:
+                os.environ.pop("TMPDIR", None)
+            else:
+                os.environ["TMPDIR"] = saved[1]
+            shutil.rmtree(own, ignore_errors=True)
+    return run
+
+
+@_own_tempdir
 def _selftest():
     import os, tempfile
     body = os.path.join(tempfile.mkdtemp(), "feedback.md")
@@ -1092,6 +1120,7 @@ def _check_method_version_reads_its_own_repository():
         shutil.rmtree(top, ignore_errors=True)
 
 
+@_own_tempdir
 def _selftest_dsp_profile():
     import os, tempfile
     profile = os.path.join(tempfile.mkdtemp(), "profile.json")

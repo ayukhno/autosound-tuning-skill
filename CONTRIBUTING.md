@@ -66,7 +66,10 @@ Before opening a PR, make sure you have:
   and ruff. Read the count off `scripts/run-selftests.sh | tail -1`, never off this line: the
   verdict is always the last stdout line. A new `rew_tool` module goes into
   `scripts/selftests.txt` with the argv its selftest takes, or on a `skip` line with the reason; a
-  module in neither fails the run. It needs `numpy` and `scipy` (`dsp_math` and `eq_gate` import
+  module in neither fails the run. Each check runs under a `TMPDIR` of its own and fails when it
+  leaves anything there: a selftest removes what it makes (#148). Its `_check_*` functions run
+  through the one loop in its `_selftest()`; `scripts/selftest-reach-check.py` names one nothing
+  calls. It needs `numpy` and `scipy` (`dsp_math` and `eq_gate` import
   scipy by name, and the `dsp_math` selftest designs crossovers). CI runs this exact script on push
   and PR, so a green run here with nothing NOT RUN is a green run there: under CI a NOT RUN fails.
 - **Deliberately without a selftest:** the `skip` lines in `scripts/selftests.txt`, each with its
