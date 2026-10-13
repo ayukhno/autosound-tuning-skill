@@ -1041,15 +1041,16 @@ fi
 # TCC's `_verdict_by_name`: the app's tag is fetched only when it must be.
 settled_by_name() {  # settled_by_name <ref> <first signed tag>
   _sn_ref="$1"; _sn_from="$2"
-  if [ "$DRY_RUN" = 1 ]; then say "  would check the signature of $_sn_ref"; return 0; fi
-  if [ "${AUTOSOUND_SKIP_TAG_VERIFY:-}" = 1 ]; then
-    warn "the signature of $_sn_ref is NOT checked: AUTOSOUND_SKIP_TAG_VERIFY=1 is set (a developer's switch)"
-    return 0
-  fi
-  # Only the rule's own "no" settles a name: any other failure of it goes on to the signature, which refuses.
+  # Only the rule's own "no" settles a name: any other failure of it goes on to the signature, which refuses. That "no"
+  # is said here, the one place, and first -- a dry run too: the pick says nothing of it (#142, final fix).
   _sn_rel=0; is_release_tag "$_sn_ref" || _sn_rel=$?
   if [ "$_sn_rel" = 1 ]; then
     warn "$_sn_ref is not a release: it is installed UNSIGNED, unchecked"
+    return 0
+  fi
+  if [ "$DRY_RUN" = 1 ]; then say "  would check the signature of $_sn_ref"; return 0; fi
+  if [ "${AUTOSOUND_SKIP_TAG_VERIFY:-}" = 1 ]; then
+    warn "the signature of $_sn_ref is NOT checked: AUTOSOUND_SKIP_TAG_VERIFY=1 is set (a developer's switch)"
     return 0
   fi
   [ "$_sn_rel" = 0 ] || return 1
@@ -1179,6 +1180,7 @@ checkout_method() {
     # A dry run on a Mac without Apple's tools has no git to ask: /usr/bin/git there opens Apple's window (#142).
     if [ "$DRY_RUN" = 1 ] && ! usable git; then
       say "  would fetch $_co_ref into $(pretty "$_co_dir"), check it, and check it out (no git yet)"
+      [ -n "$_co_tag" ] || settled_by_name "$_co_ref" "$SKILL_SIGNED_FROM"
       return 0
     fi
     _co_had=""
@@ -1232,6 +1234,8 @@ checkout_method() {
   fi
   if [ "$DRY_RUN" = 1 ]; then
     say "  would fetch $_co_ref into $(pretty "$_co_dir"), check it, and check it out"
+    # The signature step is not reached here: a name that is not a release is said UNSIGNED by it all the same (#142).
+    [ -n "$_co_tag" ] || settled_by_name "$_co_ref" "$SKILL_SIGNED_FROM"
     return 0
   fi
   # Made here, so removed here when it fails -- an empty folder already at that path too, which holds nothing to lose
@@ -1273,15 +1277,14 @@ read_tags() {  # read_tags <repo> <glob>...
 }
 
 # The method's version (T-37, #142): the name given with --skill-ref, or the newest release tag. A release goes on to
-# its signature; any other name -- a branch, a sha -- is installed as it stands, and said. When no release tag can be
-# read and none was named, nothing is installed: an empty `ls-remote` (no network, a proxy) installed an unchecked
-# `main`, and moved a copy already verified onto it. A dry run changes nothing, so there an unreadable list is said and
-# the run goes on (#142): it stopped a dry run on a Mac without the developer tools, blaming the network. The ref is all
-# that goes to stdout -- the caller takes it with $(...) -- and installer-consistency.py runs this with a `git` that
-# has no network.
+# its signature; any other name -- a branch, a sha -- is installed as it stands, said UNSIGNED once, at that step
+# (`settled_by_name`): said here too, it was said twice. When no release tag can be read and none was named, nothing
+# is installed: an empty `ls-remote` (no network, a proxy) installed an unchecked `main`, and moved a copy already
+# verified onto it. A dry run changes nothing, so there an unreadable list is said and the run goes on (#142): it
+# stopped a dry run on a Mac without the developer tools, blaming the network. The ref is all that goes to stdout --
+# the caller takes it with $(...) -- and installer-consistency.py runs this with a `git` that has no network.
 pick_method_ref() {  # pick_method_ref <the --skill-ref name, or "">
   if [ -n "$1" ]; then
-    is_release_tag "$1" || warn "$1 is not a release: it is installed UNSIGNED, unchecked"
     printf '%s\n' "$1"
     return 0
   fi

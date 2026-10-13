@@ -441,6 +441,12 @@ def signing_problems(sh):
         if rc != want_rc or want_text not in said:
             out.append(f"install.sh verify_tag {ref}{' (skip)' if skip else ''}: exit {rc}, want {want_rc} "
                        f"and {want_text!r} -- said {said.strip()[-160:]!r}")
+    # #142 (final fix): this step is the one place a named branch is said UNSIGNED -- the pick says nothing of it -- so
+    # a dry run says it here too, once, and never that it "would check the signature" of a name that has none.
+    rc, said = run(f'verify_tag "{repo_posix}" main 2>&1\n', dry="1")
+    if rc != 0 or said.count("UNSIGNED") != 1 or "would check the signature" in said:
+        out.append(f"install.sh verify_tag main in a dry run: exit {rc}, want 0 and 'UNSIGNED' once, never 'would "
+                   f"check the signature' -- said {said.strip()[-160:]!r}")
     # Only the rule's own "no" settles a name as unsigned: a rule that fails some other way (here it is not there at
     # all, exit 127) sends the name on to the signature, which refuses it -- it never installs unchecked (T-45).
     rc, said = run(f'unset -f is_release_tag\nverify_tag "{repo_posix}" main 2>&1\n')
@@ -596,10 +602,11 @@ def selection_problems(sh, ps1):
     """T-37 (#142): install.sh's `pick_method_ref` RUN with a `git` that has no network; [] when it answers right.
 
     No tag readable and none named is a stop, exit 1, with nothing on stdout -- an empty `ls-remote` installed an
-    unchecked `main`, and moved a verified copy onto it on a re-run. A named branch goes on, said UNSIGNED; a named
-    release needs no network to be picked; and with tags readable the newest stable release wins whatever else the
-    remote offers. The ref is all that reaches stdout, since the caller takes it with $(...). The call sites in both
-    installers, and install.ps1's mirror, are READ: no `main` to fall back on, no app spec without a tag.
+    unchecked `main`, and moved a verified copy onto it on a re-run. A named branch goes on, said nothing of here: its
+    signature step says it UNSIGNED, once (`signing_problems`); a named release needs no network to be picked; and with
+    tags readable the newest stable release wins whatever else the remote offers. The ref is all that reaches stdout,
+    since the caller takes it with $(...). The call sites in both installers, and install.ps1's mirror, are READ: no
+    `main` to fall back on, no app spec without a tag.
     """
     import json
     import tempfile
@@ -630,7 +637,7 @@ def selection_problems(sh, ps1):
                  ("", None, 128, None, "0", False, 1, None, unreadable + ("Could not resolve host: github.com",), ()),
                  ("", None, 128, SSL_SAYS, "0", False, 1, None, unreadable + ("SSL certificate problem: self-signed",),
                   ("no network?",)),
-                 ("main", None, 0, None, "0", False, 0, "main", ("UNSIGNED",), ()),
+                 ("main", None, 0, None, "0", False, 0, "main", (), ("UNSIGNED",)),
                  ("v3.0.33", None, 128, None, "0", False, 0, "v3.0.33", (), ("UNSIGNED",)),
                  ("", tags, 0, None, "0", False, 0, "v3.1.10", (), ("UNSIGNED",)),
                  ("", None, 128, SSL_SAYS, "1", False, 0, "v3.*",
@@ -717,6 +724,18 @@ def selection_problems(sh, ps1):
     if wrong:
         out.append("the installers still have a way to an unchecked `main` or default branch: " + "; ".join(wrong)
                    + " (T-37)")
+    # #142 (final fix): a named branch is said UNSIGNED once, at its signature step -- Test-SettledByName, the mirror of
+    # settled_by_name, before its dry-run line -- and never by the pick, which said it a second time.
+    settled_ps1 = re.search(r"^function Test-SettledByName \{.*?^\}", ps1, re.M | re.S)
+    said_at = settled_ps1.group(0).find("UNSIGNED") if settled_ps1 else -1
+    sync_ps1 = re.search(r"^function Sync-MethodCheckout \{.*?^\}", ps1, re.M | re.S)
+    settle = "if (-not $tagRef) { $null = Test-SettledByName $Ref $SkillSignedFrom }"
+    if not pick_ps1 or "UNSIGNED" in pick_ps1.group(0) or said_at < 0 \
+            or said_at > settled_ps1.group(0).find("if ($DryRun)") \
+            or not sync_ps1 or sync_ps1.group(0).count(settle) != 2:
+        out.append("install.ps1 says a named branch UNSIGNED other than once, at Test-SettledByName before its dry-run "
+                   "line, which Sync-MethodCheckout's two dry-run returns reach for a name that is not a release: "
+                   "Select-MethodRef must say nothing of it (#142)")
     return out
 
 
@@ -796,11 +815,11 @@ def checkout_problems(sh, ps1):
         return [f"the checkout's fixtures could not be made ({exc}) -- unrun is not agreed"]
     url = Path(origin).as_uri()
 
-    def run(where, ref, stub=None):
+    def run(where, ref, stub=None, dry="0", extra=""):
         first_on_path = f'"$(cd "{stubs[stub].as_posix()}" && pwd)":' if stub else ""
         script = ('REAL_GIT="$(command -v git)"; export REAL_GIT\n'
-                  f'export PATH={first_on_path}"/usr/bin:$PATH"\n' + functions
-                  + f'DRY_RUN=0\nAUTOSOUND_SKIP_TAG_VERIFY=""\nSKILL_SIGNING_PRINCIPAL=author\n'
+                  f'export PATH={first_on_path}"/usr/bin:$PATH"\n' + functions + extra
+                  + f'DRY_RUN={dry}\nAUTOSOUND_SKIP_TAG_VERIFY=""\nSKILL_SIGNING_PRINCIPAL=author\n'
                   f'SKILL_SIGNING_KEY="{author}"\nSKILL_SIGNED_FROM=v3.0.64\nSKILL_REPO="{url}"\n'
                   f'checkout_method "{Path(where).as_posix()}" "{ref}" "the method"\n')
         r = subprocess.run([bash, "-s"], input=script.encode("utf-8"), capture_output=True, env=env)
@@ -890,6 +909,18 @@ def checkout_problems(sh, ps1):
             out.append(f"install.sh checkout_method, {what}: exit {rc}, {where_is(where)} -- want exit {want_rc}"
                        + (f", saying {' + '.join(map(repr, words))}" if words else "")
                        + f" -- said {said.strip()[-220:]!r} (T-45)")
+    # #142 (final fix): a dry run says a named branch UNSIGNED once, from the signature step, on the ways that return
+    # before it -- a new copy, and an update with no git yet -- and a release there is not said UNSIGNED. The pick said
+    # it in every run, and a second time at the signature step; it says nothing of it now.
+    for what, where, ref, extra, times in (
+            ("a new copy of the branch main", os.path.join(tmp, "dry-branch"), "main", "", 1),
+            ("a new copy of v3.0.64", os.path.join(tmp, "dry-release"), "v3.0.64", "", 0),
+            ("an update to the branch main with no git yet", copy, "main", "usable() { return 1; }\n", 1)):
+        rc, said = run(where, ref, dry="1", extra=extra)
+        if rc != 0 or said.count("UNSIGNED") != times or (where != copy and os.path.exists(where)):
+            out.append(f"install.sh checkout_method in a dry run, {what}: exit {rc}, 'UNSIGNED' said "
+                       f"{said.count('UNSIGNED')} time(s), want 0 and {times}, nothing made -- said "
+                       f"{said.strip()[-220:]!r} (#142)")
     shutil.rmtree(tmp, ignore_errors=True)
     # install.ps1's mirror, READ: a new copy made the same way, HEAD held to the tag, and every failed copy a stop.
     sync = re.search(r"^function Sync-MethodCheckout \{.*?^\}", ps1, re.M | re.S)
@@ -1916,7 +1947,8 @@ def main():
         problems.extend(picked)
     else:
         checked.append("install.sh's pick_method_ref stops, exit 1, when no release tag can be read and none is named "
-                       "-- network down or refused -- installs a named branch said UNSIGNED, and picks v3.1.10 from "
+                       "-- network down or refused -- installs a named branch, said UNSIGNED once at its signature "
+                       "step and not by the pick, and picks v3.1.10 from "
                        f"{len(SELECTION_TAGS)} offered names (run); neither installer has a `main` or an untagged app "
                        "to fall back on (read) (T-37)")
 
