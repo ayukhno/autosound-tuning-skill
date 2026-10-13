@@ -94,11 +94,19 @@ Rules:
     and that commit names where it went (`scripts/move-check.py` reads its `dropped:` list). Green since the cut (W-9,
     Task 14).
 
+18. **`section-index`** (#145, audit I-25). `diagnostic-techniques.md` is 66 KB in 35 numbered sections, cited by
+    number; with no contents a session read the whole file for one section, and `phase_2_eq.md` cited a §50 it never
+    had. Each file of `SECTION_INDEX_FILES` opens, after its intro, with an index of its `##` sections (`§N title`, in
+    order) that `--write-index` writes and the rule holds to the headings, so it is never typed; no § number is two
+    headings; and every `§N` pointer to the file -- in the skill's .md and .py files, or bare in the file itself --
+    names a section it has.
+
 Rules 9-12 and 15-17 read a phrase as a reader does (`_phrase`): across a wrapped line and inline markup, its first
 letter in either case (a sentence's head, a clause's middle) and the rest in the case it is given, as whole words.
-Their cases, and rules 13's and 14's, are `_check_*` functions, run through one loop that collects every failure.
+Their cases, and rules 13's, 14's and 18's, are `_check_*` functions, run through one loop that collects every failure.
 
-Run: `scripts/docs-check.py` (from anywhere), `--selftest` for the checker's own mechanics.
+Run: `scripts/docs-check.py` (from anywhere), `--selftest` for the checker's own mechanics, `--write-index` to write
+rule 18's indexes from the headings.
 stdlib only.
 """
 from __future__ import annotations
@@ -1187,6 +1195,168 @@ def rule_skill_budget(root: str) -> list[str]:
     return bad
 
 
+#: The reference files that open with a generated index of their `##` sections (#145, audit I-25): pointed into by
+#: `§N` from the phases, and too long to read for one section.
+SECTION_INDEX_FILES = (os.path.join(SKILL, "references", "core", "diagnostic-techniques.md"),)
+#: The index's two marks. What stands between them is `--write-index`'s, and the rule holds it to the headings.
+INDEX_OPEN = ("<!-- section index: written by `scripts/docs-check.py --write-index` from the `##` headings below; "
+              "edit a heading, never these lines -->")
+INDEX_CLOSE = "<!-- /section index -->"
+
+
+#: A `§N` list as a pointer writes it: `§3`, `§3, §9`, `§2/§13`, `§9 and §16`, a range `§27–33` or `§2-4`.
+_SECTION_LIST = re.compile(r"§[ \t]?\d+(?:[ \t]*(?:,|/|&|\band\b)[ \t]*§[ \t]?\d+|[ \t]*–[ \t]*§?[ \t]?\d+|-§?\d+)*")
+#: What may stand between a file's name and its `§`: `.md`, an anchor, a backtick, bold, a link's bracket or parenthesis,
+#: a comma, and one line break.
+_NAME_GAP = r"(?:\.md)?(?:#[\w.-]*)?[`*\])( \t,:]*(?:\n[ \t>*]*)?"
+#: Before a bare `§` in the indexed file: another file's name (`estimator-scope.md` §3, `project-intake §4`) -- a word
+#: with a dot, a hyphen or an underscore in it. Its § is that file's, not this one's.
+_FOREIGN_NAME = re.compile(r"[\w.-]*[._-][\w.-]*`?\)?[ \t]*$")
+
+
+def _numbers(said: str) -> list[int]:
+    """The section numbers a `§` list names, a range's every number included."""
+    out = []
+    for m in re.finditer(r"(?P<range>[–-])?[ \t]*§?[ \t]?(?P<n>\d+)", said):
+        n = int(m.group("n"))
+        if m.group("range") and out and out[-1] < n:
+            out += range(out[-1] + 1, n + 1)
+        else:
+            out.append(n)
+    return out
+
+
+def _sections(text: str) -> list:
+    """(number or None, title) of each `##` heading of `text`, in order; a `## ` line inside a fenced block is not a
+    heading."""
+    masked = _FENCED.sub(lambda m: re.sub(r"[^\n]", " ", m.group()), text)
+    out = []
+    for m in re.finditer(r"^## +(.+?)[ \t]*$", masked, re.M):
+        numbered = re.match(r"(\d+)\.[ \t]+(.*)$", m.group(1))
+        out.append((int(numbered.group(1)), numbered.group(2)) if numbered else (None, m.group(1)))
+    return out
+
+
+def _index_text(sections: list, newline: str = "\n") -> str:
+    """The index `--write-index` writes for `sections`, its two marks included."""
+    lines = [INDEX_OPEN, "**Sections** — `§N` is this file's `## N.` heading:", ""]
+    lines += [f"- §{n} {title}" if n is not None else f"- {title}" for n, title in sections]
+    return newline.join(lines + ["", INDEX_CLOSE])
+
+
+def _first_heading(text: str) -> int:
+    masked = _FENCED.sub(lambda m: re.sub(r"[^\n]", " ", m.group()), text)
+    first = re.search(r"^## ", masked, re.M)
+    return first.start() if first else len(text)
+
+
+def _span(numbers) -> str:
+    """`§1–§35` for a run without a gap, else each one."""
+    numbers = sorted(numbers)
+    if numbers and numbers == list(range(numbers[0], numbers[-1] + 1)):
+        return f"§{numbers[0]}–§{numbers[-1]}"
+    return ", ".join(f"§{n}" for n in numbers) or "none"
+
+
+def _skill_sources(root: str) -> list[str]:
+    """Every .md and .py file of the skill: the documents a session reads, and the code that prints or cites them."""
+    out = []
+    for cur, dirs, files in os.walk(os.path.join(root, SKILL)):
+        dirs[:] = [d for d in dirs if d not in {".git", "__pycache__"}]
+        out += [os.path.join(cur, f) for f in files if f.endswith((".md", ".py"))]
+    return sorted(out)
+
+
+def rule_section_index(root: str) -> list[str]:
+    """A long reference opens with an index of its sections, and a `§N` pointer into it lands on one (#145, I-25).
+
+    `diagnostic-techniques.md` is 66 KB in 35 numbered sections, cited by number from the phases, the core files and
+    the code; with no contents a session read the whole file to find one section, or guessed -- and
+    `phase_2_eq.md` cited a §50 the file never had. So each file of `SECTION_INDEX_FILES` carries, after its intro and
+    before its first section, the index `--write-index` writes between `INDEX_OPEN` and `INDEX_CLOSE`: one line per
+    `##`, `§N title` for a numbered one, in order -- held to the headings line for line, so it is never typed. No §
+    number is two headings. And every `§N` pointer to the file in the skill's .md and .py files -- the file named,
+    then a `§` list -- and every bare `§N` in the file itself, but one after another file's name, names a section
+    it has.
+    """
+    bad = []
+    for rel in SECTION_INDEX_FILES:
+        text = _read(root, rel)
+        if text is None:
+            bad.append(f"{rel}: missing — it carries a section index, and the pointers into it land on nothing")
+            continue
+        sections = _sections(text)
+        numbered = [n for n, _ in sections if n is not None]
+        for n in sorted({n for n in numbered if numbered.count(n) > 1}):
+            bad.append(f"{rel}: §{n} is held by two headings — a pointer to §{n} lands on either")
+        has_open, has_close = INDEX_OPEN in text, INDEX_CLOSE in text
+        if not (has_open or has_close):
+            bad.append(f"{rel}: no section index — a session reads the whole file to find one section; write it with "
+                       f"`scripts/docs-check.py --write-index`")
+        elif has_open != has_close or text.index(INDEX_OPEN) > text.index(INDEX_CLOSE):
+            bad.append(f"{rel}: its section index has one mark of two — `scripts/docs-check.py --write-index` writes "
+                       f"both")
+        else:
+            start = text.index(INDEX_OPEN)
+            found = text[start:text.index(INDEX_CLOSE) + len(INDEX_CLOSE)]
+            if start > _first_heading(text):
+                bad.append(f"{rel}: its section index stands after its first section — it goes after the intro; "
+                           f"`scripts/docs-check.py --write-index` moves it")
+            elif found != _index_text(sections):
+                have, want = found.splitlines(), _index_text(sections).splitlines()
+                i = next((k for k, (a, b) in enumerate(zip(have, want)) if a != b), min(len(have), len(want)))
+                said = have[i] if i < len(have) else "(nothing)"
+                wanted = want[i] if i < len(want) else "(nothing)"
+                bad.append(f"{rel}: its section index is not what its headings make — line {i + 1} of it is "
+                           f"'{said}', the headings make '{wanted}'; write it with `scripts/docs-check.py "
+                           f"--write-index`, never by hand")
+        have = set(numbered)
+        where = f"its numbered sections are {_span(have)}, listed at its top"
+        stem = os.path.basename(rel)[:-len(".md")]
+        pointer = re.compile(r"(?<![\w-])" + re.escape(stem) + _NAME_GAP + r"(" + _SECTION_LIST.pattern + r")")
+        for path in _skill_sources(root):
+            other = os.path.relpath(path, root)
+            body = open(path, encoding="utf-8").read()
+            for m in pointer.finditer(body):
+                line = body.count("\n", 0, m.start()) + 1
+                for n in _numbers(m.group(1)):
+                    if n not in have:
+                        bad.append(f"{other}:{line}: points to {stem}.md §{n}, and it has no §{n} — {where}")
+        own = _FENCED.sub(lambda m: re.sub(r"[^\n]", " ", m.group()), text)
+        if has_open and has_close and text.index(INDEX_OPEN) < text.index(INDEX_CLOSE):
+            a, b = own.index(INDEX_OPEN), own.index(INDEX_CLOSE)
+            own = own[:a] + re.sub(r"[^\n]", " ", own[a:b]) + own[b:]
+        for m in re.finditer(r"(?<![\w§])" + _SECTION_LIST.pattern, own):
+            head = own[own.rfind("\n", 0, m.start()) + 1:m.start()]
+            if _FOREIGN_NAME.search(head) or re.search(re.escape(stem) + _NAME_GAP + r"$", head):
+                continue                  # another file's §, or this file by its name (read above)
+            line = own.count("\n", 0, m.start()) + 1
+            for n in _numbers(m.group()):
+                if n not in have:
+                    bad.append(f"{rel}:{line}: points to its own §{n}, and it has none — {where}")
+    return bad
+
+
+def write_index(root: str) -> list[str]:
+    """Write each file's section index from its headings (`--write-index`): after the intro, before the first `##`,
+    an old one taken out first, the file's line ends kept. Returns the files it changed."""
+    changed = []
+    for rel in SECTION_INDEX_FILES:
+        path = os.path.join(root, rel)
+        with open(path, encoding="utf-8", newline="") as fh:
+            raw = fh.read()
+        newline = "\r\n" if "\r\n" in raw else "\n"
+        text = raw.replace("\r\n", "\n")
+        bare = re.sub(re.escape(INDEX_OPEN) + r".*?" + re.escape(INDEX_CLOSE) + r"\n*", "", text, flags=re.S)
+        at = _first_heading(bare)
+        new = bare[:at] + _index_text(_sections(bare)) + "\n\n" + bare[at:]
+        if new != text:
+            with open(path, "w", encoding="utf-8", newline="") as fh:
+                fh.write(new.replace("\n", newline))
+            changed.append(rel)
+    return changed
+
+
 RULES = [("data-not-instructions", rule_data_not_instructions),
          ("phase-source", rule_phase_source),
          ("references-orphans", rule_references_orphans),
@@ -1203,12 +1373,13 @@ RULES = [("data-not-instructions", rule_data_not_instructions),
          ("no-capture-start-literal", rule_no_capture_start_literal),
          ("slot-names", rule_slot_names),
          ("reviewer-at-desk", rule_reviewer_at_desk),
-         ("skill-budget", rule_skill_budget)]
+         ("skill-budget", rule_skill_budget),
+         ("section-index", rule_section_index)]
 
 #: Rules the tree is red on BY DESIGN, each with why and until when (W-9's ruling R4: a check is written, red, before
 #: the change that makes it hold). The selftest holds the tree to every other rule, and to each of these still being
 #: red: an entry left behind once its rule holds fails the selftest, so it goes in the commit that turns it green.
-RED_IN_TREE = {}                       # skill-budget left it with the cut (W-9, Task 14)
+RED_IN_TREE = {"section-index": "diagnostic-techniques.md has no index yet and phase_2_eq.md cites a §50 it never had; both are written next (W-9, Task 15)"}
 
 
 def run(root: str) -> int:
@@ -1888,6 +2059,116 @@ def _check_skill_budget_description_folds():
     assert desc("name: s\n") is None and _description("# S\n\ndescription: x\n") is None
 
 
+_INDEXED = SECTION_INDEX_FILES[0]
+#: An indexed file: an intro, three numbered sections and one that is not, a `## ` line inside a fenced block (not a
+#: section), a pointer to its own §2 and one to another file's §50 (not its own).
+_INDEXED_TEXT = ("# Diagnostic techniques\n\nThe intro, one paragraph.\n\n"
+                 "## 1. Level: anchor to the mids\n- text, see §2.\n\n"
+                 "## 2. Peak or null — decide BEFORE any EQ\n- text (`estimator-scope.md` §50 is another file's).\n\n"
+                 "```\n## 4. not a section, a fenced line\n```\n\n"
+                 "## 3. Summation: the measured sum vs the power-sum\n- text\n\n"
+                 "## Symmetry, and what the mic cannot see\n- text\n")
+_INDEX_LINES = ["- §1 Level: anchor to the mids", "- §2 Peak or null — decide BEFORE any EQ",
+                "- §3 Summation: the measured sum vs the power-sum", "- Symmetry, and what the mic cannot see"]
+
+
+def _index_block(text: str) -> str:
+    return text[text.index(INDEX_OPEN):text.index(INDEX_CLOSE) + len(INDEX_CLOSE)]
+
+
+def _check_section_index():
+    """Rule 18 (#145, I-25): a file without its index is named; `--write-index` writes one line per `##` -- `§N
+    title` for a numbered one, its title as it stands, in order, a fenced `##` not among them -- after the intro and
+    before the first section, touching nothing else, and a second write changes nothing; then a heading renamed or
+    added, an index edited by hand, one moved below the first section and one with a mark gone are each named."""
+    with _scratch() as tmp:
+        root = _fixture(tmp, {_INDEXED: _INDEXED_TEXT})
+        none = rule_section_index(root)
+        assert len(none) == 1 and "no section index" in none[0] and "--write-index" in none[0], none
+        assert write_index(root) == [_INDEXED], "the index is written"
+        text = _read(root, _INDEXED)
+        assert [ln for ln in _index_block(text).splitlines() if ln.startswith("- ")] == _INDEX_LINES, text
+        assert text.index("The intro") < text.index(INDEX_OPEN) < text.index("## 1."), "after the intro, before §1"
+        assert text.replace(_index_block(text) + "\n\n", "") == _INDEXED_TEXT, "nothing else is touched"
+        assert rule_section_index(root) == [], rule_section_index(root)
+        assert write_index(root) == [] and _read(root, _INDEXED) == text, "a second write changes nothing"
+
+        def said(edit) -> list:
+            with open(os.path.join(root, _INDEXED), "w", encoding="utf-8") as fh:
+                fh.write(edit(text))
+            return rule_section_index(root)
+        renamed = said(lambda t: t.replace("## 2. Peak or null", "## 2. Peak, or null"))
+        assert len(renamed) == 1 and "§2 Peak, or null" in renamed[0] and "--write-index" in renamed[0], renamed
+        added = said(lambda t: t + "\n## 4. A new one\n- text\n")
+        assert len(added) == 1 and "§4 A new one" in added[0], added
+        by_hand = said(lambda t: t.replace(_INDEX_LINES[2] + "\n", ""))
+        assert len(by_hand) == 1 and "§3 Summation" in by_hand[0], by_hand
+        block = _index_block(text)
+        moved = said(lambda t: t.replace(block + "\n\n", "").replace("- text, see §2.\n", f"- text, see §2.\n\n{block}\n"))
+        assert len(moved) == 1 and "after its first section" in moved[0], moved
+        half = said(lambda t: t.replace(INDEX_CLOSE, ""))
+        assert len(half) == 1 and "one mark of two" in half[0], half
+
+
+def _check_section_index_pointers():
+    """Rule 18 (#145, I-25): a `§N` pointer to the indexed file names a section it has -- read in every .md and .py of
+    the skill: a list (`§3, §2, §50`), a range (`§2–4`), after a slash, behind a link's bracket, wrapped onto the next
+    line, and the file's own bare pointers -- each one that lands on nothing named by its file and line; another
+    file's §50, a § with no file named, and a file named with no § after it are not pointers to it."""
+    said = _numbers("§3, §9/§16 and §20, §27–30, §2-4")
+    assert said == [3, 9, 16, 20, 27, 28, 29, 30, 2, 3, 4], f"a range names every number in it: {said}"
+    with _scratch() as tmp:
+        phase = os.path.join(SKILL, "references", "phases", "p.md")
+        code = os.path.join(SKILL, "rew_tool", "x.py")
+        root = _fixture(tmp, {
+            _INDEXED: _INDEXED_TEXT.replace("- text\n\n## Symmetry", "- text; Our §9 says so.\n\n## Symmetry"),
+            phase: ("power-sum via RTA/MMM (`diagnostic-techniques.md §3, §2, §50`)\n"
+                    "see [`diagnostic-techniques.md` §2](../core/diagnostic-techniques.md) and "
+                    "`diagnostic-techniques` §1–3\n"
+                    "the rule is `diagnostic-techniques.md`\n§7, wrapped\n"
+                    "a range: `diagnostic-techniques.md` §2–4\n"
+                    "Not pointers: §50 of the contract, `estimator-scope.md` §50, `diagnostic-techniques.md`, and the "
+                    "contract's §50, 2026-06-04\n"),
+            code: "# the rule (`diagnostic-techniques.md §2/§13`)\nX = 1\n"})
+        write_index(root)
+        got = rule_section_index(root)
+        want = [(phase, 1, "§50"), (phase, 3, "§7"), (phase, 5, "§4"), (code, 1, "§13"), (_INDEXED, None, "§9")]
+        assert len(got) == len(want), got
+        for rel, line, num in want:
+            hits = [c for c in got if c.startswith(f"{rel}:") and f" {num}," in c]
+            assert len(hits) == 1, (rel, num, got)
+            if line is not None:
+                assert hits[0].startswith(f"{rel}:{line}: "), (rel, line, hits)
+        assert all("§1–§3" in c for c in got), got
+
+
+def _check_section_index_inputs():
+    """Rule 18: an indexed file gone is named, and so is a § number two headings hold -- a pointer to it lands on
+    either."""
+    with _scratch() as tmp:
+        gone = rule_section_index(_fixture(tmp, {}))
+        assert len(gone) == 1 and f"{_INDEXED}: missing" in gone[0], gone
+        root = _fixture(tmp, {_INDEXED: _INDEXED_TEXT + "\n## 2. Twice\n- text\n"})
+        write_index(root)
+        twice = rule_section_index(root)
+        assert len(twice) == 1 and "§2 is held by two headings" in twice[0], twice
+
+
+def _check_section_index_crlf():
+    """Rule 18: a CRLF checkout (Git for Windows' default) gets its index in CRLF, and passes."""
+    with _scratch() as tmp:
+        root = _fixture(tmp, {})
+        path = os.path.join(root, _INDEXED)
+        os.makedirs(os.path.dirname(path))
+        with open(path, "wb") as fh:
+            fh.write(_INDEXED_TEXT.replace("\n", "\r\n").encode("utf-8"))
+        assert write_index(root) == [_INDEXED]
+        with open(path, "rb") as fh:
+            raw = fh.read()
+        assert raw.count(b"\n") == raw.count(b"\r\n") and INDEX_OPEN.encode("utf-8") in raw, raw[:400]
+        assert rule_section_index(root) == [], rule_section_index(root)
+
+
 def _selftest() -> int:
     import shutil
     import tempfile
@@ -2062,7 +2343,9 @@ def _selftest() -> int:
                       _check_step_ids_unnamed_step_says_whose_word, _check_no_capture_start_literal,
                       _check_slot_names, _check_reviewer_at_desk, _check_skill_budget,
                       _check_skill_budget_clip_newline, _check_skill_budget_crlf, _check_skill_budget_inputs,
-                      _check_skill_budget_description_folds, _check_skill_budget_rules_after_frontmatter):
+                      _check_skill_budget_description_folds, _check_skill_budget_rules_after_frontmatter,
+                      _check_section_index, _check_section_index_pointers, _check_section_index_inputs,
+                      _check_section_index_crlf):
             try:
                 check()
             except AssertionError as exc:
@@ -2116,6 +2399,12 @@ def _selftest() -> int:
           "are named, while one at 1,024 characters and 17,500 bytes passes, its description read as YAML folds it "
           "(a `>` block's last line break counted, as the Agent Skills validator counts it) and a CRLF checkout "
           "measured as its LF text; "
+          "a file with no section index, one whose index a renamed or added heading, a hand edit, a move below the "
+          "first section or a lost mark parted from its headings, a § number two headings hold and the file gone are "
+          "named, while --write-index writes it after the intro (in CRLF for a CRLF checkout) and a second write "
+          "changes nothing; a § pointer to the file landing on no section -- in a list, a range, after a slash, wrapped, "
+          "in code, bare in the file itself -- is named by file and line, while another file's § and a § with no "
+          "file named are not; "
           "the tree is clean but for the rules red in it by design, each still red; the rules' "
           "checks report every failure in one run")
     return 0
@@ -2125,9 +2414,16 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--selftest", action="store_true", help="check the checker's own rules")
     parser.add_argument("--root", default=ROOT, help="the repository root to scan")
+    parser.add_argument("--write-index", action="store_true",
+                        help="write the section index of each file of SECTION_INDEX_FILES from its headings")
     args = parser.parse_args(argv)
     if args.selftest:
         return _selftest()
+    if args.write_index:
+        changed = write_index(args.root)
+        for rel in SECTION_INDEX_FILES:
+            print(f"{rel}: section index {'written' if rel in changed else 'already what its headings make'}")
+        return 0
     return run(args.root)
 
 
