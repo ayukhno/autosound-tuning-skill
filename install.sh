@@ -85,7 +85,7 @@ UV_VERSION="0.12.10"
 #: This installer's own version, written into its receipt (#142): the sha256 there is empty under `curl | bash`, where
 #: no file stands behind $0. Held equal to install.ps1's $InstallerVersion and to .claude-plugin/plugin.json's version
 #: by installer-consistency.py; the release's bookkeeping moves all three.
-INSTALLER_VERSION="3.1.2"
+INSTALLER_VERSION="3.1.3"
 TCC_REPO="https://github.com/ayukhno/autosound-tcc"
 SKILL_HOME="${HOME}/.claude/skills/autosound-tuning"
 # The repo lives beside the skill and the skill POINTS at it. Cloning and then moving the

@@ -220,7 +220,7 @@ $TccBetaGlob   = "beta-v*"
 $UvVersion    = "0.12.10"
 #: This installer's own version, for its receipt (#142): the sha256 there is empty under `irm | iex`. Must equal
 #: install.sh's INSTALLER_VERSION and .claude-plugin/plugin.json's version; the release's bookkeeping moves all three.
-$InstallerVersion = "3.1.2"
+$InstallerVersion = "3.1.3"
 $TccRepo      = "https://github.com/ayukhno/autosound-tcc"
 $SkillHome    = Join-Path $HOME ".claude\skills\autosound-tuning"
 # The checkout lives beside the skill and the skill points at it (a junction) -- see install.sh
