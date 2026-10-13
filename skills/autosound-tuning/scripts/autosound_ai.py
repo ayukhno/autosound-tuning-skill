@@ -462,8 +462,15 @@ def copy_to_clipboard(text):
     data, said = text.encode("utf-8", "replace"), []
     for cmd in commands:
         # stderr into a file, not a pipe: `xclip` stays behind in the background to serve the selection, holding what
-        # it was given -- a pipe it holds never ends, and `communicate` would wait on it until the deadline.
-        with tempfile.TemporaryFile() as errors:
+        # it was given -- a pipe it holds never ends, and `communicate` would wait on it until the deadline. A temp
+        # folder that takes no file is a failed copy, said (group fix 1, item 10): made outside the `try`, it raised
+        # out of the door.
+        try:
+            errors = tempfile.TemporaryFile()
+        except OSError as exc:
+            said.append(f"{cmd[0]}: no file for its errors in the temp folder ({exc})")
+            continue
+        with errors:
             try:
                 process = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=errors)
             except FileNotFoundError:
@@ -3196,6 +3203,106 @@ def _check_a_failed_copy_is_not_a_copy():
     assert not failures, "\n  ".join(["the clipboard:"] + failures)
 
 
+class _ClipboardScene:
+    """Stand-in clipboard programs on a PATH of their own (POSIX shell scripts), `sys.platform` and
+    `CLIPBOARD_TIMEOUT_S` set for the scene; `copy()` answers `(what copy_to_clipboard returned, its stderr)`."""
+
+    def __init__(self, platform=None, timeout=None):
+        self.platform, self.timeout = platform, timeout
+
+    def __enter__(self):
+        self.top = tempfile.mkdtemp(prefix="autosound_ai_clipboard_")
+        self.saved = os.environ.get("PATH"), globals().get("CLIPBOARD_TIMEOUT_S"), sys.platform
+        os.environ["PATH"] = self.top
+        if self.platform:
+            sys.platform = self.platform
+        if self.timeout is not None:
+            globals()["CLIPBOARD_TIMEOUT_S"] = self.timeout
+        return self
+
+    def __exit__(self, *exc):
+        if self.saved[0] is None:
+            os.environ.pop("PATH", None)
+        else:
+            os.environ["PATH"] = self.saved[0]
+        globals()["CLIPBOARD_TIMEOUT_S"], sys.platform = self.saved[1], self.saved[2]
+        shutil.rmtree(self.top, ignore_errors=True)
+
+    def program(self, name, body):
+        path = os.path.join(self.top, name)
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write("#!/bin/sh\n" + body)
+        os.chmod(path, 0o755)
+
+    @staticmethod
+    def copy():
+        import contextlib
+        import io
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            try:
+                got = copy_to_clipboard("the package")
+            except Exception as exc:  # noqa: BLE001 -- an escape is the check's finding
+                got = f"raised {exc!r}"
+        return got, err.getvalue()
+
+
+def _check_a_copy_beside_a_background_child():
+    """A clipboard program that leaves a child behind holding its stderr -- as `xclip` stays to serve the selection --
+    is a copy, said True well inside CLIPBOARD_TIMEOUT_S (group fix 1, item 10): read through a pipe, that stderr
+    never ends, and `communicate` waited to the deadline and said "no answer". The stand-in exits 0 at once, its
+    `sleep` in the background holding stderr. POSIX only (a shell script)."""
+    if os.name != "posix":
+        return
+    import time
+    with _ClipboardScene(timeout=5) as scene:
+        held = os.path.join(scene.top, "held.txt")
+        name = "pbcopy" if sys.platform == "darwin" else "xclip"
+        scene.program(name, f"/bin/cat > '{held}'\n/bin/sleep 20 &\nexit 0\n")
+        started = time.monotonic()
+        got, said = scene.copy()
+        took = time.monotonic() - started
+        with open(held, encoding="utf-8") as fh:
+            kept = fh.read()
+        assert got is True and took < 5 and kept == "the package", (got, round(took, 2), said.strip(), kept)
+
+
+def _check_a_copy_off_darwin():
+    """Off macOS and Windows the clipboard is `xclip`, then `xsel` (group fix 1, item 10): with only `xsel` on PATH the
+    copy is True, through it; with neither it is False, each said "not installed" on stderr. `sys.platform` is set to
+    "linux" for the scene, so it runs on any POSIX."""
+    if os.name != "posix":
+        return
+    failures = []
+    with _ClipboardScene(platform="linux") as scene:
+        held = os.path.join(scene.top, "held.txt")
+        got, said = scene.copy()
+        if got is not False or "xclip: not installed" not in said or "xsel: not installed" not in said:
+            failures.append(f"neither on PATH: {got!r}, said {said.strip()!r}")
+        scene.program("xsel", f"/bin/cat > '{held}'\n")
+        got, said = scene.copy()
+        if got is not True or not os.path.isfile(held) or said.strip():
+            failures.append(f"only xsel on PATH: {got!r}, said {said.strip()!r}")
+    assert not failures, "\n  ".join(["the clipboard off macOS:"] + failures)
+
+
+def _check_a_copy_with_no_temp_file():
+    """A temp folder that takes no file -- full, or not this user's to write -- is a failed copy, said (group fix 1,
+    item 10): `tempfile.TemporaryFile()`, where the program's stderr goes, stood outside the `try` and raised out of
+    the door -- before T-50 it was "Помилка копіювання в буфер", False. Any platform: no program is started."""
+    real = tempfile.TemporaryFile
+
+    def full(*args, **kwargs):
+        raise OSError(28, "No space left on device")
+    tempfile.TemporaryFile = full
+    try:
+        got, said = _ClipboardScene.copy()
+    finally:
+        tempfile.TemporaryFile = real
+    assert got is False and "Помилка копіювання в буфер" in said and "No space left on device" in said, \
+        (got, said.strip())
+
+
 def _check_help_is_the_usage():
     """T-50 (the 09-09 review's F6): `--help` and `-h` print the usage -- every task: critic, advisor, ask, doctor, key,
     selftest -- on stdout and exit 0. They were "unknown task: --help", exit 1, and the usage named four of the six."""
@@ -3276,7 +3383,8 @@ def _selftest():
                   _check_the_audit_trail_is_the_projects, _check_the_key_guard_says_when_git_cannot,
                   _check_the_key_guard_refuses_what_git_would_take, _check_the_key_guard_keeps_gits_repair,
                   _check_a_git_that_cannot_run_is_no_git,
-                  _check_a_failed_copy_is_not_a_copy, _check_help_is_the_usage,
+                  _check_a_failed_copy_is_not_a_copy, _check_a_copy_beside_a_background_child,
+                  _check_a_copy_off_darwin, _check_a_copy_with_no_temp_file, _check_help_is_the_usage,
                   _check_the_quarantine_read_has_a_deadline):
         try:
             check()
