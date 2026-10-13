@@ -183,9 +183,10 @@ SKILL_RULE_PHRASES = (
     # 🧭 Phase Sliding Window
     "A PHASE BOUNDARY is where a chat gets cleared",
     "Load ONLY the active phase's reference file",
-    # 🛠️ Review Channel: the cadence, where the reviewer is called (at the desk; in the car when asked, said first), the
-    # ladder
+    # 🛠️ Review Channel: the cadence and TWO-PASS's gates, where the reviewer is called (at the desk; in the car when
+    # asked, said first), the ladder
     "ONE reviewer call per round",
+    "TWO-PASS at the Phase-1 and Phase-3 gates or after two full agreements in a row",
     "at the desk by default",
     "say first that the car session will wait for the reviewer",
     "Descend THE ladder",
