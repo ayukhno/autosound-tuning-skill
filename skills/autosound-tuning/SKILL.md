@@ -130,18 +130,12 @@ out loud, replied in English anyway, and advised him to go fix it in the app.
 
 ## 🧭 Phase Sliding Window
 
-**A PHASE BOUNDARY is where a chat gets cleared, and clearing is only safe once the state is on disk.** Before you suggest it — or the Arbiter asks for it — run `python3 rew_tool/state/process.py <project>/process handoff`. It REFUSES while anything the next session needs is only in this conversation (an open capture round, a step left `todo`, a done step whose evidence resolves to nothing, no ledger snapshot, no ▶️ CONTINUE block) and names each one; it writes nothing, because which evidence closes a step is a decision. When it passes it prints the line to say next and what must stay open — the REW session whose titles are the captures' only identity. A session can neither restart itself nor `/clear`, so the offer is his to take; what this removes is the improvising (S-044).
+**A PHASE BOUNDARY is where a chat gets cleared, and clearing is only safe once the state is on disk.** Before you suggest it — or the Arbiter asks for it — run `python3 rew_tool/state/process.py <project>/process handoff`. It refuses, naming each thing the next session needs that is only in this conversation; once it passes, clearing is the Arbiter's to do (→ `process-control.md` § The phase boundary).
 
-Read the active phase from `process/process-state.json` (`python3 rew_tool/state/process.py <project>/process show`) — the same source step 2 names. `tuning-changelog`'s ▶️ CONTINUE block is the human-readable cross-check to read alongside it, and where they disagree the machine file wins. Load **ONLY** the active phase's reference file + the next adjacent one. Don't guess the phase; don't load others unless asked.
+Read the active phase from `process/process-state.json` (`python3 rew_tool/state/process.py <project>/process show`) — the same source step 2 names. `tuning-changelog`'s ▶️ CONTINUE block is the human-readable cross-check to read alongside it, and where they disagree the machine file wins. Load **ONLY** the active phase's reference file, and read the next phase only to its `## 🎯 Goal-node`. Don't guess the phase; don't load others unless asked.
 
-* **Phase -1: Project Intake & Checklist** ──► [phase_-1_intake.md](references/phases/phase_-1_intake.md)
-* **Phase 0: Baseline & Target Selection** ──► [phase_0_baseline.md](references/phases/phase_0_baseline.md)
-* **Phase 1: Wishes, Crossovers as Variants, Coarse EQ, Levels & Delays** ──► [phase_1_foundation.md](references/phases/phase_1_foundation.md)
-* **Phase 2: EQ, the second part — pairs, junctions, sides, everything, centre, rear** ──► [phase_2_eq.md](references/phases/phase_2_eq.md)
-* **Phase 3: Technical Verdict & Lock** ──► [phase_3_control.md](references/phases/phase_3_control.md)
-* **Phase 4: Targeted Listening → Feedback → Close** ──► [phase_4_listening.md](references/phases/phase_4_listening.md)
-* **Phase 5: Variations (cyclical) — Voicing + Center/Rear** ──► [phase_5_variations.md](references/phases/phase_5_variations.md)
-* **Virtual-first happy path** (one capture → desk design → verify) across Phases 0–3 ──► [virtual-first.md](references/phases/virtual-first.md) · [capture-session-sheet.md](references/phases/capture-session-sheet.md) Its commands, in path order: `ellipsoid` (0.3 → 1.1) · `capture-check --session` (0.6) · `eq_propose` (1.4 coarse EQ / 2.1 second part / 3.3 fine EQ over MMM) · `predict --align` (1.5 joints) · `verify_prediction --entry` (3.1) · `ear_suspects` (3.3) — all in [`tooling/rew-tool-docs.md`](references/tooling/rew-tool-docs.md).
+* **The phases**, each a file in `references/phases/`: −1 intake `phase_-1_intake.md` · 0 baseline, target `phase_0_baseline.md` · 1 wishes, crossovers, coarse EQ, levels, delays `phase_1_foundation.md` · 2 EQ, the second part `phase_2_eq.md` · 3 verdict, lock `phase_3_control.md` · 4 listening, close `phase_4_listening.md` · 5 voicing, centre/rear `phase_5_variations.md`.
+* **Virtual-first happy path** (one capture → desk design → verify) across Phases 0–3: `virtual-first.md`, `capture-session-sheet.md`; its commands → `tooling/rew-tool-docs.md`.
 
 ---
 

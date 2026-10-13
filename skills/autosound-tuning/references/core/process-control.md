@@ -96,6 +96,14 @@ reads as open again.
 **No new carrier was added for this**, deliberately (autosound-hub `HUB-023`, the ask from the hub):
 a second record of the same thing drifts from the first. What was missing was an order, not a store.
 
+## The phase boundary — `handoff`
+
+A phase boundary is where a chat gets cleared (SKILL.md's Phase Sliding Window), and clearing is only safe once the
+state is on disk: `python3 rew_tool/state/process.py <project>/process handoff` is the check before it. It REFUSES while anything the next session needs is only in this conversation (an open capture round, a step left `todo`, a done step whose evidence resolves to nothing, no ledger snapshot, no ▶️ CONTINUE block) and names each one; it writes nothing, because which evidence closes a step is a decision. When it passes it prints the line to say next and what must stay open — the REW session whose titles are the captures' only identity.
+
+A session can neither restart itself nor `/clear`, so the offer is the Arbiter's to take; what the check removes is the
+improvising (S-044).
+
 ## The record and the hardware drift apart — verify, don't compute from memory
 
 Three independent occurrences on one build, each caught only by someone reading a screen:
