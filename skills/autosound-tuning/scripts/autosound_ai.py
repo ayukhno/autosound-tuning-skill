@@ -3313,6 +3313,16 @@ def _check_help_is_the_usage():
             f"{flag}: exit {code}, out {out.strip()!r}, err {err.strip()!r}"
 
 
+def _check_an_unknown_task_names_every_task():
+    """An unknown task names every task there is, as the usage does -- critic, advisor, ask, doctor, key, selftest
+    (group fix 1, item 22): it named four of the six, and `key` and `selftest` read as no tasks at all. Exit 1."""
+    with _DoorScene() as scene:
+        code, out, err = scene.run("judge")
+    said = out + err
+    assert code == 1 and "judge" in said and "critic, advisor, ask, doctor, key, selftest" in said, \
+        f"exit {code}, out {out.strip()!r}, err {err.strip()!r}"
+
+
 def _check_the_quarantine_read_has_a_deadline():
     """#146 (T-49): the doctor's read of macOS's quarantine mark (`xattr -p com.apple.quarantine`) has its deadline,
     10 s, and one that does not answer is "not checked", said -- not a doctor that waits for ever. `subprocess` is a
@@ -3385,6 +3395,7 @@ def _selftest():
                   _check_a_git_that_cannot_run_is_no_git,
                   _check_a_failed_copy_is_not_a_copy, _check_a_copy_beside_a_background_child,
                   _check_a_copy_off_darwin, _check_a_copy_with_no_temp_file, _check_help_is_the_usage,
+                  _check_an_unknown_task_names_every_task,
                   _check_the_quarantine_read_has_a_deadline):
         try:
             check()
@@ -5407,7 +5418,7 @@ def main():
         sys.exit(key_command(sys.argv[2:]))
         
     if role not in REVIEW_TASKS:
-        print(f"Невідома задача: {role}. Підтримуються: critic, advisor, ask, doctor")
+        print(f"Невідома задача: {role}. Підтримуються: critic, advisor, ask, doctor, key, selftest")
         sys.exit(1)
     # `critic` / `advisor` / `ask` is the TASK of this call on the one channel (the Arbiter's
     # ruling, 2026-09-11; hub SKL-032): the same model and path — the prompt's layers differ by
