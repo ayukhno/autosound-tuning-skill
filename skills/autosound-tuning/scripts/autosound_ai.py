@@ -2876,6 +2876,50 @@ def _check_the_audit_trail_is_the_projects():
     assert not failures, "\n  ".join(["the audit trail's home, the project root:"] + failures)
 
 
+def _check_the_hand_line_stays_last_beside_an_old_trail():
+    """#143, I-21 with R46 (final fix): beside an older project's `rew_analitic/audit-trail.md`, a review not asked to
+    record still ends its stderr with the line that records it by hand (`... Запиши посилання: <command>`), as
+    CONTRACT.md §5 says -- TCC hands a session the last six lines as `detail`. The line naming the trail's old place
+    came after it: the audit trail was logged once the review was filed. It is said, once, before. Each route that
+    files an answer -- api, cli, omp -- through a stand-in that answers."""
+    top = tempfile.mkdtemp(prefix="autosound_ai_hand_line_last_")
+    marker = "Запиши посилання: "
+    failures = []
+    try:
+        project = os.path.join(top, "car")
+        mirror = os.path.join(project, "rew_analitic")
+        os.makedirs(mirror)
+        with open(os.path.join(project, "project.json"), "w", encoding="utf-8") as fh:
+            fh.write("{}")
+        context = os.path.join(project, "autosound_context.md")
+        with open(context, "w", encoding="utf-8") as fh:
+            fh.write("# The car, in prose\n")
+        pkg = os.path.join(top, "proposal.md")
+        with open(pkg, "w", encoding="utf-8") as fh:
+            fh.write("Check the proposal.")
+        old = os.path.join(mirror, "audit-trail.md")
+        with open(old, "w", encoding="utf-8") as fh:
+            fh.write("2026-10-01 10:00 | critic=m | package=old.md\n")
+        api = lambda key, model, prompt, var=None: ("THE REVIEW", model)  # noqa: E731
+        cli = lambda provider, binary, model, prompt, timeout=None: ("THE REVIEW", None, None)  # noqa: E731
+        for route, model in (("api", "gemini-3.1-pro"), ("cli", "gemini-3.1-pro"), ("omp", "openrouter/deepseek-r1")):
+            with _DoorScene(CONTEXT=context, AUDIT_TRAIL=None, AUTOSOUND_DIR="", call_gemini_api=api, call_cli=cli,
+                            detect_cli=lambda provider="google", honour_forced=True: "gemini") as scene:
+                os.environ.update(GEMINI_API_KEY="AQ." + "x" * 50, AUTOSOUND_PROJECT_DIR=project)
+                code, out, err = scene.run("critic", pkg, "--via", route, "--model", model)
+            said = err.strip().splitlines()
+            moved = [ln for ln in said if old in ln]
+            if code or "THE REVIEW" not in out or len(moved) != 1:
+                failures.append(f"{route}: exit {code}, the old place said {len(moved)} time(s), "
+                                f"said {said[-3:]!r}")
+            elif not said or marker not in said[-1]:
+                failures.append(f"{route}: the last line said is not the one that records the review by hand: "
+                                f"{said[-2:]!r}")
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["the hand line, last beside an old audit trail:"] + failures)
+
+
 def _check_the_key_guard_says_when_git_cannot():
     """T-41: the key guard reads what git SAID, not only that it failed. A project `.critic-env` carrying a key, in a
     repository git refuses to read -- "dubious ownership", rc 128, as in a folder another user owns -- passed as "not a
@@ -3390,7 +3434,8 @@ def _selftest():
                   _check_a_fault_in_the_record_is_not_a_refusal,
                   _check_an_omp_review_names_its_vendor, _check_the_contract_is_the_skills_own,
                   _check_the_context_is_the_roots, _check_another_folders_context_is_never_read,
-                  _check_the_audit_trail_is_the_projects, _check_the_key_guard_says_when_git_cannot,
+                  _check_the_audit_trail_is_the_projects, _check_the_hand_line_stays_last_beside_an_old_trail,
+                  _check_the_key_guard_says_when_git_cannot,
                   _check_the_key_guard_refuses_what_git_would_take, _check_the_key_guard_keeps_gits_repair,
                   _check_a_git_that_cannot_run_is_no_git,
                   _check_a_failed_copy_is_not_a_copy, _check_a_copy_beside_a_background_child,
@@ -5011,15 +5056,15 @@ class _RecordFault(Exception):
 
 
 def _file_review(role, text, model, mode, pkg_file, vendor=None, record=False):
-    """The end of every answered review -- API, CLI, omp: filed (`_persist_review`), recorded when asked, logged in the
-    audit trail. A fault of the code in the record exits 70 (R47) after all three: the review is on disk and printed,
-    so a session that sees 70 loses nothing, and is told so."""
+    """The end of every answered review -- API, CLI, omp: logged in the audit trail, filed (`_persist_review`), recorded
+    when asked. Logged first (final fix): the line that records the review by hand is the run's last (CONTRACT.md §5),
+    and the trail's line naming an older trail came after it. A fault of the code in the record exits 70 (R47) after
+    all three: the review is on disk and printed, so a session that sees 70 loses nothing, and is told so."""
+    _log_audit(role, model, pkg_file)
     try:
         _persist_review(role, text, model, mode, vendor=vendor, record=record)
     except _RecordFault:
-        _log_audit(role, model, pkg_file)
         sys.exit(70)
-    _log_audit(role, model, pkg_file)
 
 
 def _persist_review(role, text, model, mode, vendor=None, record=False):
