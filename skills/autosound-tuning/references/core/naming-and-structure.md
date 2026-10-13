@@ -29,16 +29,18 @@ The **path defines the process** — the ordered steps the user described, refin
 Settled with the Arbiter 2026-09-20. The method's own English is **not** the reader's, and a
 session that renders it on the fly produces a metaphor he does not share: `seed` came out as «сію»
 and cost a stop in the middle of a wave to unpack (S-040). So the mapping is written once, here,
-and spoken everywhere — **the middle column is what goes in the report, and it has no synonyms.**
+and spoken everywhere — **the column of the report's language is what goes in the report, and it has no
+synonyms.** The `en` column is the report's English, which is not always the method's word: a Phase-1 proposal is a
+*variant*, because *configuration* is the ledger version's.
 
-| the method's word | in the report (uk) | what it is |
-|---|---|---|
-| project | **проєкт** | the car plus its install. Everything else belongs to it. |
-| whole configuration (Phase 1) | **варіант** | what the desk PROPOSES in Phase 1 — 2–3 of them with their trade-offs. Not in the DSP yet. Never «конфігурація»: that word is taken by the row below. |
-| ledger version `v_NNN` | **конфігурація** = **версія `v_NNN`** | the full set standing in the processor right now: crossovers, delays, levels, EQ, polarity. Every agreed change is a new one. The two words are synonyms — he says «конфігурація», the files say `v_NNN`. |
-| preset / slot | **пресет** | the DSP slot a version is FIXED in (one before the competition, another the test one), named by the slot rule at the end of this section (`1.SQ-1`). A slot holds one version; several versions pass through it while testing. |
-| measurement series `_N` | **серія `_N`** | a set of measurements (§3). NOT a version: one DSP state can be measured in several series. |
-| phase | **фаза** | a step of the work plan (−1…5) — unchanged. |
+| the method's word | en | uk | de | pl | what it is |
+|---|---|---|---|---|---|
+| project | **project** | **проєкт** | **Projekt** | **projekt** | the car plus its install. Everything else belongs to it. |
+| whole configuration (Phase 1) | **variant** | **варіант** | **Variante** | **wariant** | what the desk PROPOSES in Phase 1 — 2–3 of them with their trade-offs. Not in the DSP yet. Never the word of the row below: it is taken. |
+| ledger version `v_NNN` | **configuration** = **version `v_NNN`** | **конфігурація** = **версія `v_NNN`** | **Konfiguration** = **Version `v_NNN`** | **konfiguracja** = **wersja `v_NNN`** | the full set standing in the processor right now: crossovers, delays, levels, EQ, polarity. Every agreed change is a new one. The two words are synonyms — the person says the first, the files say `v_NNN`. |
+| preset / slot | **preset** | **пресет** | **Preset** | **preset** | the DSP slot a version is FIXED in (one before the competition, another the test one), named by the slot rule at the end of this section (`1.SQ-1`). A slot holds one version; several versions pass through it while testing. |
+| measurement series `_N` | **series `_N`** | **серія `_N`** | **Serie `_N`** | **seria `_N`** | a set of measurements (§3). NOT a version: one DSP state can be measured in several series. |
+| phase | **phase** | **фаза** | **Phase** | **faza** | a step of the work plan (−1…5) — unchanged. |
 
 - **Nothing is written INTO the processor by the method.** The person types the settings in PC-Tool
   and the ledger records what stands there, so the phrase is «записую, що зараз у ДСП: конфігурація

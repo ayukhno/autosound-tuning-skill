@@ -1,8 +1,11 @@
 # Trigger eval set
 
-`trigger-eval-set.json` — 20 queries (10 should-trigger incl. the impedance/T-S/box-design
-capability + recall guards for existing triggers, 10 should-NOT near-misses) for validating
-the SKILL.md `description` triggering via skill-creator:
+`trigger-eval-set.json` — 51 queries (since 2026-10-13; 34 before): 25 that should trigger — a tune from scratch,
+casual English, imaging, an EMMA round, an MMM sweep, a house curve, uk/de/pl asks, resuming a tune (by name, inside a
+project folder, and TCC's two openers), a bug report or feedback on the skill or TCC in en/uk/de/pl — and 26
+near-misses that should not: home audio and studio monitors, a speaker, box, impedance or crossover question with no
+tune in it (a sub or a DSP to buy, a door rattle included), a code project's "where did we leave off", a bug report
+for another project. It validates the SKILL.md `description` triggering; skill-creator's loop was the first harness:
 
 ```
 python3 -m scripts.run_loop --eval-set <this>/trigger-eval-set.json \
@@ -149,3 +152,44 @@ monitors". In two: a miss on «продовжуємо тюн авто, нага�
 Wohnzimmer-Heimkino und die HiFi-Anlage einzustellen". Once each: the EMMA, MMM-sweep and resume-my-helix misses, and
 the living-room subwoofer and Dolby Atmos false positives. The runs after the cut use the same command, settings and
 kind of folder, so the two compare like with like.
+
+## The runs after the SKILL.md cut — 2026-10-13 (#145, I-4's "after")
+
+First the set grew from 34 to 51 queries (I-24). Ten should fire: a bug report on TCC in en/uk/de/pl and a feedback
+package for the skill (the tooling block: "something in TCC is broken", "file an issue", "feedback package"); "continue
+my car-audio tune … crossover, time-alignment and gain state"; resuming inside a project folder, in English and
+Ukrainian; TCC's two openers, as `core/openers.py` writes them. Seven should not: an issue for a React repo, a bug for
+the Python maintainers, DIY bookshelf crossovers, REW and an AV receiver in a living room, studio-monitor imaging, "what
+is a Linkwitz-Riley crossover", a DSP to buy. The runner starts every query in one folder, so "inside a project
+folder" is said in the query. In a real project a bare "continue" names nothing, and what loads the skill there is the
+first line of the project `CLAUDE.md` that `rew_tool/project_seed.py` writes — "Load the `autosound-tuning` skill for
+every request in this folder." This set cannot measure that line.
+
+Six runs on the 51, with the command, settings and kind of folder of the baseline above (the other car-audio skill
+hidden, the account's hooks off), Claude Code 2.1.296, `claude-sonnet-4-6`. Every run printed `init skill list:
+autosound-tuning in all 51 runs, rew-car-audio-tuning in none`. Three on the description as `a04396e` cut it (1,017
+characters); three on the old one: the frontmatter of `ed95425` (as `8ab9133` left it) put over the cut body in the
+working tree's SKILL.md, the copy the `~/.claude/skills/autosound-tuning` link reads, and taken back after.
+
+| run (UTC) | description | score | should fire, fired | should not, fired | the baseline's 34 |
+|---|---|---|---|---|---|
+| 1 · 14:46 | cut, `a04396e` | **41/51** | 17/25 | 2/26 | 30/34 |
+| 2 · 14:51 | cut | **37/51** | 15/25 | 4/26 | 28/34 |
+| 3 · 14:57 | cut | **40/51** | 18/25 | 4/26 | 29/34 |
+| 4 · 15:02 | old, `ed95425` | **40/51** | 17/25 | 3/26 | 28/34 |
+| 5 · 15:06 | old | **37/51** | 14/25 | 3/26 | 27/34 |
+| 6 · 15:13 | old | **37/51** | 13/25 | 2/26 | 27/34 |
+
+**No recall drop.** The cut description scores 37–41 (39.3 on average), the old one 37–40 (38.0): inside the spread of
+2–3 recorded above. Moved by two of three or more: the Passat imaging ask (old 0/3 fired, cut 2/3), the custom house
+curve (1 → 3), "resume my car-audio tune — … crossover and delay settings" (1 → 3), and the Ukrainian home-cinema
+near-miss (0 → 2: a false positive gained). Moved by one: «продовжуємо тюн авто, нагадай …» and the Dolby Atmos
+near-miss (1 → 2), the German Heimkino near-miss and the feedback package (3 → 2).
+
+**What fires on neither.** The four bug reports on TCC fire 0/3 on both descriptions; the audit's probes (one run each,
+2026-10-04, another machine) had 4/4. Probed here, the model takes the request for a GitHub task and goes looking for a
+repository — and the run folder's own path, a session scratchpad, carries the hub's name, so it looks there. That is
+so for every run here and for the baseline, which keeps the comparison like with like; a folder whose path names
+nothing would say more. Inside a project the `CLAUDE.md` names the gate. Resuming inside a project folder fires 1/3 in
+English and 0/3 in Ukrainian, "continue my car-audio tune" 1/3, the pure status question 0/3 (the limit above). TCC's
+two openers fire 3/3 on both.

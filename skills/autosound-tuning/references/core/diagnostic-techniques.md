@@ -2,6 +2,49 @@
 
 Practical methods for interpreting REW measurements that have saved us repeatedly. Complements `analysis-playbook.md` (which measurement for which question) — here it's "how to read and decide".
 
+<!-- section index: written by `scripts/docs-check.py --write-index` from the `##` headings below; edit a heading, never these lines -->
+**Sections** — `§N` is this file's `## N.` heading:
+
+- §1 Level: anchor to the mids / the full target, NEVER an absolute
+- §2 Peak or null — decide BEFORE any EQ
+- §3 Summation: the measured sum vs the power-sum
+- §4 Checking the joint phase BEFORE changing a crossover
+- §5 Imaging: center vs frequency wander
+- §6 Two EQ layers: OUTPUT (asymmetry/surgery) vs VIRTUAL (symmetric voicing)
+- §7 Checking the measurement chain (hard lessons)
+- §8 The cycle with the Critic — in practice
+- §9 Polarity — by SUMMATION at the joint, NOT by "impulse up/down" (lesson 2026-06-04)
+- §10 In-cabin phase/timing via the REW API — usable with the RIGHT method (NOT a blanket "go to the GUI")
+- §11 L/R SHAPE matching for the stage (NOT just level) (lesson 2026-06-04)
+- §12 Near-field dominance of the NEARER side (a repeating motif, 2026-06-04)
+- §13 Mic-shift: mode vs interference; MMM vs solo-LP (2026-06-04)
+- §14 Per-channel EQ = a GLOBAL L/R balance knob, not local per position (2026-06-05)
+- §15 Changing a crossover changes BOTH the sum AND the timing — isolate by reverting (2026-06-05)
+- §16 The foundation: order, the phantom center, tolerance (Audiofrog/Wehmeyer "Straightforward Stereo Tuning Process")
+- §17 The final L/R level/tone match + left-stage compression (ResoNix/Apicella)
+- §18 SBIR vs box: the full method → `enclosure-install-diagnostics.md`
+- §19 A symmetric virtual EQ → an ASYMMETRIC imaging effect when one channel has a spectral hole (2026-06-10)
+- §20 A physical center (manual L+R) = a 3rd source → a comb with the mids; treat it by NARROWING the band to the body (2026-06-12)
+- §21 Surgical EQ: the bank's summed curve + fine resolution BEFORE loading (2026-06-11)
+- §22 Reversing the tune from PER-CHANNEL measurements (black-box DSP — the state isn't readable) (2026-06-16)
+- §23 Imaging TA: zero each pair's MEASURED arrival difference — never one constant side shift (2026-07-13)
+- §24 Joint-phase fixes are SESSION-LOCAL and must be ROBUST, not razor-optimal (2026-07-13)
+- §25 A delay change that crosses a repaired joint ships ONLY as a package with its APF retune (2026-07-13)
+- §26 L/R pair decorrelation beyond ~1 rotation = MULTIPATH — electrical phase correction cannot compact it (2026-07-13)
+- §27 Ghost-overshoot trap: a delta against a SINGLE baseline lies on steep interference edges (2026-07-19)
+- §28 Time-of-arrival for a band-limited LF pair is ILL-DEFINED — decide by coherence, never by one number (2026-07-19)
+- §29 Drift-floor family: in-cabin SOLO ratios are unreadable near corners AND on skirts (consolidated 2026-07)
+- §30 Measurement-frame discipline: differential ops are immune to constant setup errors; arithmetic beats noisy medians (2026-07-17)
+- §31 Pan collapse in a band = a frequency SEESAW of the two solo responses, not a phase/delay defect (2026-07-19)
+- §32 Amp gain structure — the field kit (2026-07-17)
+- §33 A complementary center's corner alignment BREAKS when its overlapped branch changes (2026-07-16)
+- §34 The mute-one-channel test: separating an inter-channel phase dip from a channel's own (Wehmeyer, "A Straightforward Stereo Tuning Process", p. 52)
+- §35 A residual is a WEIGHTED number, and three more lessons each bought with a retraction (bench, 2026-09)
+- Symmetry, asymmetry, and what the mic cannot see
+- Choosing the lever: what a level move drags with it
+
+<!-- /section index -->
+
 ## 1. Level: anchor to the mids / the full target, NEVER an absolute
 - Absolute SPL **drifts between passes** (loudness, reference — shifts of +18 dB have happened). Always work RELATIVELY / normalized.
 - Anchor a band's level to the **MIDS' offset vs their target** (the mids = the system's reference level).

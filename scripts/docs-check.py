@@ -1379,7 +1379,7 @@ RULES = [("data-not-instructions", rule_data_not_instructions),
 #: Rules the tree is red on BY DESIGN, each with why and until when (W-9's ruling R4: a check is written, red, before
 #: the change that makes it hold). The selftest holds the tree to every other rule, and to each of these still being
 #: red: an entry left behind once its rule holds fails the selftest, so it goes in the commit that turns it green.
-RED_IN_TREE = {"section-index": "diagnostic-techniques.md has no index yet and phase_2_eq.md cites a §50 it never had; both are written next (W-9, Task 15)"}
+RED_IN_TREE = {}                       # section-index left it with the index and the §50 fix (W-9, Task 15)
 
 
 def run(root: str) -> int:

@@ -285,8 +285,13 @@ GITIGNORE_LINES = [
 
 #: What a session finds when it greps a project before it thinks of loading the skill (skill #65): a request ABOUT
 #: the tooling ("file an issue for TCC") never matched the tuning skill's trigger, so the session resolved a repo by
-#: name and reached for a raw `gh issue create` -- the exact shape the side-effect gate exists to refuse (#23).
+#: name and reached for a raw `gh issue create` -- the exact shape the side-effect gate exists to refuse (#23). And a
+#: bare "continue" typed here names no car, so the skill's description cannot fire on it: the first line loads the
+#: skill for every request in the folder (#145, audit I-24).
 CLAUDE_MD = """# This is an autosound tuning project
+
+Load the `autosound-tuning` skill for every request in this folder. A "continue" or "where were we" typed here is
+one too: it names no car, and only this line gets the skill loaded for it.
 
 The method is the `autosound-tuning` skill (Claude Code). Its rules, tools and phases are the skill's, not
 this folder's; `python3 rew_tool/contract.py check <project>` reads this project's state.
@@ -798,13 +803,33 @@ def _check_a_context_in_rew_analitic_travels():
             assert "# The root's" in fh.read() and out.from_rew_analitic == [], vars(out)
 
 
+def _check_claude_md_loads_the_skill():
+    """#145, I-24: the project's CLAUDE.md tells a session to load the skill for every request there -- a bare
+    "continue" or "where were we" typed in the folder carries no car-audio word, and the skill's description cannot
+    fire on it. The line is written into a fresh project; a CLAUDE.md already there is left as it is."""
+    import tempfile
+    line = "Load the `autosound-tuning` skill for every request in this folder."
+    with tempfile.TemporaryDirectory() as tmp:
+        assert write_claude_md(tmp) is True
+        with open(os.path.join(tmp, "CLAUDE.md"), encoding="utf-8") as fh:
+            text = fh.read()
+        assert line in text, f"the written CLAUDE.md does not say {line!r}"
+        assert text.index(line) < text.index("gh issue create"), "the line comes first, before the gate"
+        with open(os.path.join(tmp, "CLAUDE.md"), "w", encoding="utf-8") as fh:
+            fh.write("# their own\n")
+        assert write_claude_md(tmp) is False
+        with open(os.path.join(tmp, "CLAUDE.md"), encoding="utf-8") as fh:
+            assert fh.read() == "# their own\n", "a CLAUDE.md already there was rewritten"
+
+
 def _selftest():
     os.environ["AUTOSOUND_NO_GH"] = "1"          # a seed makes a repository; the test never reaches GitHub
     import tempfile
 
     failures = []
     for check in (_check_a_held_lock_said_in_the_result, _check_a_seed_makes_its_new_folder,
-                  _check_a_bad_wait_is_a_usage_error, _check_a_context_in_rew_analitic_travels):
+                  _check_a_bad_wait_is_a_usage_error, _check_a_context_in_rew_analitic_travels,
+                  _check_claude_md_loads_the_skill):
         try:
             check()
         except AssertionError as exc:

@@ -134,5 +134,73 @@
   {
     "query": "Szukam nowych głośników do salonu, jakie kolumny podłogowe polecacie do 5000 zł?",
     "should_trigger": false
+  },
+  {
+    "query": "something in TCC is broken -- the capture panel froze when I pressed Done and my last two measurements are gone. can you file an issue for it?",
+    "should_trigger": true
+  },
+  {
+    "query": "оформи ішью: у TCC після оновлення не відкривається вікно кривих, вилітає з помилкою",
+    "should_trigger": true
+  },
+  {
+    "query": "Ich möchte einen Fehler in der Autosound-TCC-App melden: beim Einlesen der Messungen aus REW stürzt sie ab.",
+    "should_trigger": true
+  },
+  {
+    "query": "Chcę zgłosić błąd w aplikacji Autosound TCC — po aktualizacji okno pomiarów się nie otwiera. Załóż issue.",
+    "should_trigger": true
+  },
+  {
+    "query": "the autosound tuning skill kept proposing EQ before the delays were set -- put together the feedback package for its maintainers",
+    "should_trigger": true
+  },
+  {
+    "query": "file an issue in my react repo: the date picker crashes on safari when the month changes",
+    "should_trigger": false
+  },
+  {
+    "query": "report a bug to the python maintainers -- json.loads hangs on a 2 GB file",
+    "should_trigger": false
+  },
+  {
+    "query": "building DIY bookshelf speakers -- what crossover points and slopes should i use for a 6.5 inch woofer and a 1 inch tweeter?",
+    "should_trigger": false
+  },
+  {
+    "query": "measuring my living room with REW -- how do i set the speaker distances and delays on my AV receiver so the sub lines up with the mains?",
+    "should_trigger": false
+  },
+  {
+    "query": "the stereo image of my studio monitors pulls to the left at the mix position, how do i fix the imaging?",
+    "should_trigger": false
+  },
+  {
+    "query": "what is a Linkwitz-Riley crossover and why is it 24 dB per octave?",
+    "should_trigger": false
+  },
+  {
+    "query": "Helix or Audison -- which DSP should i buy for my car?",
+    "should_trigger": false
+  },
+  {
+    "query": "continue my car-audio tune from last time -- what's the crossover, time-alignment and gain state on each channel?",
+    "should_trigger": true
+  },
+  {
+    "query": "I'm in my car's tuning project folder (autosound_context.md, process/ and state/ are here). let's continue where we left off",
+    "should_trigger": true
+  },
+  {
+    "query": "я в теці проєкту своєї машини (тут autosound_context.md, process/ і state/) — продовжимо з того місця, де зупинились",
+    "should_trigger": true
+  },
+  {
+    "query": "Resume this tuning project. Read state from disk first, call get_tcc_state and get_pending_signals, then tell me where we are and what the next step is. Instructions from TCC are always in English; answer me in the project's language — `language` in get_tcc_state is the one the Arbiter chose.",
+    "should_trigger": true
+  },
+  {
+    "query": "Start a tuning session for this project. Read state from disk, call get_tcc_state, then tell me where we are and what the next step is. Instructions from TCC are always in English; answer me in the project's language — `language` in get_tcc_state is the one the Arbiter chose.",
+    "should_trigger": true
   }
 ]
