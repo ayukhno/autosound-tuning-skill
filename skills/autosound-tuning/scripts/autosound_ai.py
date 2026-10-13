@@ -133,7 +133,9 @@ def _refuse_if_git_would_take(path):
     ignored -- stops the run. The user's rule (2026-09-08): a file that can carry a key MUST be
     ignored so it never reaches GitHub. A file with no key line, outside any repository, or on a
     machine with no git, is read as before. A git that cannot say -- any failure but "not a git
-    repository", no answer in 10 s, a git that cannot be started -- stops the run too, exit 2 (T-41)."""
+    repository", no answer in 10 s, a git that cannot be started -- stops the run too, exit 2 (T-41).
+    A git that starts and cannot run -- macOS's `xcrun` shim with no command-line tools, whose
+    `git --version` fails too -- cannot commit either, and is read as no git (group fix 1, item 9)."""
     try:
         with open(path, encoding="utf-8", errors="replace") as fh:
             if not any(line.strip().lstrip("export ").split("=", 1)[0].strip().endswith("API_KEY")
@@ -152,12 +154,16 @@ def _refuse_if_git_would_take(path):
 
     # What git SAID decides, not only that it failed (T-41): "dubious ownership" -- a repository another user owns --
     # is rc 128 too, and read as "not a repository" it passed a key file git may well commit.
-    rc, said = _git_says(d, "rev-parse", "--is-inside-work-tree")
-    if rc == 128 and "not a git repository" in said:
+    rc, said, text = _git_says(d, "rev-parse", "--is-inside-work-tree")
+    # On any line of git's answer, in either case (group fix 1, item 8): older git says "Not a git repository", and a
+    # warning can come before it.
+    if rc == 128 and "not a git repository" in text.lower():
         return
     if rc != 0:
+        if rc is not None and _git_cannot_run(d):
+            return
         cannot_say(said)
-    rc, said = _git_says(d, "ls-files", "--error-unmatch", "--", name)
+    rc, said, _ = _git_says(d, "ls-files", "--error-unmatch", "--", name)
     if rc == 0:
         print(f"critic-env: {path} carries a key AND is TRACKED by git — відмова.\n"
               f"  fix: git rm --cached '{path}'; '{name}' у .gitignore; ключ — у {config_hint()}; "
@@ -165,7 +171,7 @@ def _refuse_if_git_would_take(path):
         sys.exit(2)
     if rc != 1:
         cannot_say(said)
-    rc, said = _git_says(d, "check-ignore", "-q", "--", name)
+    rc, said, _ = _git_says(d, "check-ignore", "-q", "--", name)
     if rc == 1:
         print(f"critic-env: {path} carries a key and git would ADD it (нема в .gitignore) — відмова.\n"
               f"  fix: додай '{name}' у .gitignore репозиторію — або перенеси ключ у {config_hint()} "
@@ -180,18 +186,33 @@ GIT_READ_TIMEOUT_S = 10
 
 
 def _git_says(folder, *args):
-    """`(returncode, git's first line on stderr)` of `git -C folder <args>`, asked with `LC_ALL=C` so its sentence is
-    the one the key guard reads. A git that does not answer in GIT_READ_TIMEOUT_S, or cannot be started, is `(None,
-    why)` (T-41, #146)."""
+    """`(returncode, said, stderr)` of `git -C folder <args>`, asked with `LC_ALL=C` so its sentence is the one the key
+    guard reads. `said` is git's first line on stderr, and the command git gives to run when it gives one -- after
+    "dubious ownership", `git config --global --add safe.directory <path>`, the way out (group fix 1, item 8; the first
+    line alone lost it); `stderr` is all of it, for a sentence on any line. A git that does not answer in
+    GIT_READ_TIMEOUT_S, or cannot be started, is `(None, why, "")` (T-41, #146)."""
     try:
         done = subprocess.run(["git", "-C", folder, *args], capture_output=True, text=True, encoding="utf-8",
                               errors="replace", env={**os.environ, "LC_ALL": "C"}, timeout=GIT_READ_TIMEOUT_S)
     except subprocess.TimeoutExpired:
-        return None, f"no answer in {GIT_READ_TIMEOUT_S} s"
+        return None, f"no answer in {GIT_READ_TIMEOUT_S} s", ""
     except OSError as exc:
-        return None, str(exc)
-    lines = [line.strip() for line in (done.stderr or "").splitlines() if line.strip()]
-    return done.returncode, (lines[0] if lines else f"git exited {done.returncode}")
+        return None, str(exc), ""
+    text = done.stderr or ""
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if not lines:
+        return done.returncode, f"git exited {done.returncode}", text
+    repair = [line for line in lines[1:] if line.startswith("git ")]
+    return done.returncode, lines[0] + "".join(f"; git says to run: {line}" for line in repair), text
+
+
+def _git_cannot_run(folder):
+    """True when git starts and cannot run at all: `git --version` -- which a working git always answers -- fails too
+    (macOS's `xcrun` shim with no command-line tools: rc 1, "invalid active developer path"; `machine_lines` names
+    it). A git that cannot run cannot commit (group fix 1, item 9). A `--version` that answers, or one that cannot be
+    asked (no answer, not started), is no such git: False."""
+    rc, _, _ = _git_says(folder, "--version")
+    return rc is not None and rc != 0
 
 
 # Спроба зчитати конфігурацію з .critic-env
@@ -2944,6 +2965,182 @@ def _check_the_key_guard_says_when_git_cannot():
     assert not failures, "\n  ".join(["the key guard:"] + failures)
 
 
+class _KeyGuardRepo:
+    """A temp folder with git isolated from this machine's config -- `GIT_CONFIG_GLOBAL` the null device, no system
+    config, `GIT_CEILING_DIRECTORIES` above it, an author named -- for the key guard's checks; `guard(path)` runs
+    `_refuse_if_git_would_take` and answers `(exit code, stderr)`."""
+    NAMES = ("GIT_CONFIG_GLOBAL", "GIT_CONFIG_NOSYSTEM", "GIT_CEILING_DIRECTORIES", "GIT_AUTHOR_NAME",
+             "GIT_AUTHOR_EMAIL", "GIT_COMMITTER_NAME", "GIT_COMMITTER_EMAIL", "GIT_TEST_ASSUME_DIFFERENT_OWNER")
+
+    def __enter__(self):
+        self.top = tempfile.mkdtemp(prefix="autosound_ai_key_guard_")
+        self.saved = {name: os.environ.get(name) for name in self.NAMES}
+        os.environ.update(GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1",
+                          GIT_CEILING_DIRECTORIES=os.path.dirname(os.path.realpath(self.top)),
+                          GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@example.invalid", GIT_COMMITTER_NAME="t",
+                          GIT_COMMITTER_EMAIL="t@example.invalid")
+        os.environ.pop("GIT_TEST_ASSUME_DIFFERENT_OWNER", None)
+        return self
+
+    def __exit__(self, *exc):
+        for name, value in self.saved.items():
+            os.environ.pop(name, None)
+            if value is not None:
+                os.environ[name] = value
+        shutil.rmtree(self.top, ignore_errors=True)
+
+    def repo(self, name):
+        folder = os.path.join(self.top, name)
+        os.makedirs(folder)
+        self.git(folder, "init", "-q")
+        return folder
+
+    @staticmethod
+    def git(folder, *args):
+        subprocess.run(["git", "-C", folder, "-c", "commit.gpgsign=false", *args], capture_output=True, timeout=60,
+                       check=True)
+
+    @staticmethod
+    def env_file(folder, text):
+        path = os.path.join(folder, ".critic-env")
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(text)
+        return path
+
+    @staticmethod
+    def guard(path):
+        import contextlib
+        import io
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            try:
+                _refuse_if_git_would_take(path)
+                return 0, err.getvalue()
+            except SystemExit as stop:
+                return stop.code, err.getvalue()
+            except Exception as exc:  # noqa: BLE001 -- an escape is the check's finding
+                return f"raised {exc!r}", err.getvalue()
+
+
+_A_KEY_LINE = "GEMINI_API_KEY=AQ." + "k" * 50 + "\n"
+
+
+def _check_the_key_guard_refuses_what_git_would_take():
+    """The key guard's two refusals, against real git (group fix 1, item 7): a project `.critic-env` carrying a key
+    that git would ADD -- no line of .gitignore covers it -- is exit 2, "would ADD"; one git already TRACKS, ignored
+    after it was committed, is exit 2, "TRACKED", and the key is to be changed ("ЗМІНИТИ"): it is in the history. A
+    `.critic-env` with no key line, not ignored, is read as before (exit 0, the control). git answering `ls-files`
+    with rc 128 -- neither "tracked" (0) nor "not" (1) -- is exit 2, "could not say". Each branch had no test: a
+    mutation of the check-ignore branch to `return` passed every check."""
+    failures = []
+    real_run = subprocess.run
+    with _KeyGuardRepo() as g:
+        added = g.env_file(g.repo("not-ignored"), _A_KEY_LINE)
+        code, said = g.guard(added)
+        if code != 2 or "would ADD" not in said or config_hint() not in said:
+            failures.append(f"a key file git would add: exit {code}, said {said.strip()!r}")
+        tracked_repo = g.repo("tracked")
+        tracked = g.env_file(tracked_repo, _A_KEY_LINE)
+        g.git(tracked_repo, "add", "-f", ".critic-env")
+        g.git(tracked_repo, "commit", "-q", "-m", "a key, committed")
+        with open(os.path.join(tracked_repo, ".gitignore"), "w", encoding="utf-8") as fh:
+            fh.write(".critic-env\n")
+        code, said = g.guard(tracked)
+        if code != 2 or "TRACKED" not in said or "ЗМІНИТИ" not in said:
+            failures.append(f"a key file git tracks: exit {code}, said {said.strip()!r}")
+        keyless = g.env_file(g.repo("keyless"), "AUTOSOUND_CRITIC_MODEL=gemini-3.1-pro-high\n")
+        code, said = g.guard(keyless)
+        if code or said.strip():
+            failures.append(f"a .critic-env with no key, not ignored: exit {code}, said {said.strip()!r}")
+
+        def ls_files_unknown(cmd, **kw):
+            if "ls-files" in cmd:
+                return subprocess.CompletedProcess(cmd, 128, "", "fatal: something git has not said before\n")
+            return real_run(cmd, **kw)
+        subprocess.run = ls_files_unknown
+        try:
+            code, said = g.guard(added)
+        finally:
+            subprocess.run = real_run
+        if code != 2 or f"git could not say whether {added} would be committed" not in said \
+                or "something git has not said before" not in said:
+            failures.append(f"ls-files answering 128: exit {code}, said {said.strip()!r}")
+    assert not failures, "\n  ".join(["the key guard's refusals:"] + failures)
+
+
+def _check_the_key_guard_keeps_gits_repair():
+    """git's repair stays in the key guard's line (group fix 1, item 8): "dubious ownership" is four lines, and the
+    fourth -- `git config --global --add safe.directory <path>` -- is the way out; `_git_says` kept the first alone.
+    And "not a git repository" is read on any line of git's answer, in either case: older git says "Not a git
+    repository", and a warning can come first."""
+    failures = []
+    real_run = subprocess.run
+    with _KeyGuardRepo() as g:
+        repo = g.repo("car")
+        with open(os.path.join(repo, ".gitignore"), "w", encoding="utf-8") as fh:
+            fh.write(".critic-env\n")
+        path = g.env_file(repo, _A_KEY_LINE)
+        os.environ["GIT_TEST_ASSUME_DIFFERENT_OWNER"] = "1"
+        try:
+            code, said = g.guard(path)
+        finally:
+            os.environ.pop("GIT_TEST_ASSUME_DIFFERENT_OWNER", None)
+        if code != 2 or "dubious ownership" not in said or "git config --global --add safe.directory" not in said:
+            failures.append(f"dubious ownership: exit {code}, said {said.strip()!r}")
+        for label, stderr in (("old git's capital N", "fatal: Not a git repository (or any of the parent "
+                                                      "directories): .git\n"),
+                              ("a warning first", "warning: unable to access '/x/.config/git/attributes': "
+                                                  "Permission denied\nfatal: not a git repository (or any of the "
+                                                  "parent directories): .git\n")):
+            def outside(cmd, stderr=stderr, **kw):
+                return subprocess.CompletedProcess(cmd, 128, "", stderr)
+            subprocess.run = outside
+            try:
+                code, said = g.guard(path)
+            finally:
+                subprocess.run = real_run
+            if code or said.strip():
+                failures.append(f"{label}: exit {code}, said {said.strip()!r}")
+    assert not failures, "\n  ".join(["git's own words in the key guard:"] + failures)
+
+
+def _check_a_git_that_cannot_run_is_no_git():
+    """A git that is there and cannot run is read as no git (group fix 1, item 9): macOS's `xcrun` shim without the
+    command-line tools answers every call rc 1, "invalid active developer path" (`machine_lines` names it) -- and the
+    guard stopped every run with a key in the project, exit 2. A git that cannot run cannot commit either: it passes,
+    as a missing git passes. A git whose `--version` answers, failing the repository question in words the guard does
+    not know, still stops the run."""
+    failures = []
+    real_run = subprocess.run
+    shim = ("xcrun: error: invalid active developer path (/Library/Developer/CommandLineTools), missing xcrun at: "
+            "/Library/Developer/CommandLineTools/usr/bin/xcrun\n")
+    with _KeyGuardRepo() as g:
+        path = g.env_file(os.path.join(g.top), _A_KEY_LINE)
+
+        def broken(cmd, **kw):
+            return subprocess.CompletedProcess(cmd, 1, "", shim)
+        subprocess.run = broken
+        try:
+            code, said = g.guard(path)
+        finally:
+            subprocess.run = real_run
+        if code or said.strip():
+            failures.append(f"the xcrun shim: exit {code}, said {said.strip()!r}")
+
+        def odd(cmd, **kw):
+            if "--version" in cmd:
+                return subprocess.CompletedProcess(cmd, 0, "git version 2.54.0\n", "")
+            return subprocess.CompletedProcess(cmd, 1, "", "error: a failure the guard does not know\n")
+        subprocess.run = odd
+        try:
+            code, said = g.guard(path)
+        finally:
+            subprocess.run = real_run
+        if code != 2 or "a failure the guard does not know" not in said:
+            failures.append(f"a git that runs and fails otherwise: exit {code}, said {said.strip()!r}")
+    assert not failures, "\n  ".join(["a git that cannot run:"] + failures)
+
+
 def _check_a_failed_copy_is_not_a_copy():
     """T-50: the clipboard helper reads each program's return code. A `pbcopy` / `xclip` that fails -- no pasteboard,
     no display -- answered True, and the door said "✓ copied" over a clipboard that held nothing; it is False now, with
@@ -3077,6 +3274,8 @@ def _selftest():
                   _check_an_omp_review_names_its_vendor, _check_the_contract_is_the_skills_own,
                   _check_the_context_is_the_roots, _check_another_folders_context_is_never_read,
                   _check_the_audit_trail_is_the_projects, _check_the_key_guard_says_when_git_cannot,
+                  _check_the_key_guard_refuses_what_git_would_take, _check_the_key_guard_keeps_gits_repair,
+                  _check_a_git_that_cannot_run_is_no_git,
                   _check_a_failed_copy_is_not_a_copy, _check_help_is_the_usage,
                   _check_the_quarantine_read_has_a_deadline):
         try:
