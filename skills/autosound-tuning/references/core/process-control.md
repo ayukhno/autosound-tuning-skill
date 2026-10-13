@@ -60,6 +60,16 @@ project, collect `state/` + the session transcripts + `dsp-config/` + the `.mdat
 with invocation-greps (**count real `python3 …py` executions, not token mentions** — mentions
 include the skill's own text and the model's narration; only invocations are ground truth).
 
+## Recording the process — the tool or the terminal
+
+SKILL.md's guardrail *Write the PROCESS as it happens* names the record (`process/process-state.json` +
+`journal.jsonl`) and the verbs; which writer records them, and where a critique's text goes, is here.
+
+**If a process-recording TOOL is on your tool surface (a `tcc`-style front-end offers `enter_phase` / `add_step` / `start_step` / `finish_step` / `skip_step` / `block_step` / `start_capture` / `record_capture` / `skip_capture` / `close_capture` / `capture_knobs` / `record_decision` / `set_target` / `session_close`), THAT is the call** — same journal, same writer, no path to get wrong. Its `call_critic` writes the `reviewer` record; `capture-protective` and `listening-verdict` are its GUI's, recorded in its dialogs, with no tool. A plain terminal runs the `python3 rew_tool/state/process.py <project>/process …` verbs
+SKILL.md lists, exactly as written.
+
+**The critique's TEXT is a file**: `scripts/autosound_ai.py critic|advisor <package> --record` writes it to `process/reviews/<ts>-<role>.md` and records this step; by hand only a clipboard answer, or what the door says it could not record (it prints the line).
+
 ## Stopping is an event, and it has a closing order
 
 The discipline of this method is strong while work is happening — every agreed change is banked,

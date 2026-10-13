@@ -26,6 +26,11 @@ Ready answers to the capability checklist `project-intake.md §4`. Detail — in
 1. **Canonical (Helix): file import** of Audiotec-Fischer → `helix-eq-export.md`. Advantage: in REW you immediately see the filters' effect on the curve. ⚠️ If file import is inconvenient (e.g. the path through Parallels/VM on Mac — feedback from a live test) → you can try path 2 on the **Helix PC-Tool window** too (the keystroke approach is generic; PC-Tool field compatibility is **provisional, not verified on Helix**).
 2. **Alternative (and the path for DSPs without import): REW-EQ-CopyPaste-Assistant** (github.com/IvanBakhmutov/REW-EQ-CopyPaste-Assistant) — a Windows/PowerShell helper: "Copy" in REW's EQ section → the tool converts the clipboard into keystroke sequences and types the bands into the DSP software's window itself (click the first band → auto-entry). **30+ platforms**: Musway TUNEST_PC (verified by the skill author), ESX, Zapco, Goldhorn, Ground Zero, Nakamichi-K, etc. Claude can prepare a filter package for copying the same way it prepares an Audiotec-Fischer file (via REW or `rew_tool`).
 
+## Banking a change on the virtual tier
+
+`apply.propose` addresses ANY tier the ledger has, not just the physical outputs: a change on a Helix virtual channel
+banks the same way as one on a driver output, e.g. `apply.propose(h, {"virtual_channels": {"VFL": {"gain_db": -1.0}}})`.
+
 ## Worked settings-sheet example (illustrates SKILL.md's presentation rule)
 
 `SKILL.md`'s always-loaded core requires every actionable DSP change to be presented as a step-by-step, arrow-pointer (`──►`) list — samples **and** ms, never a bare file reference. ⚠️ **Gains and parameters: ABSOLUTE target values only** — never relative phrasing like "remove the +3" (a live sheet with "gain −3.0 (remove the historical +3)" was read as *change by −3* and landed 3 dB off the intent; hardware is truth, but the sheet caused the fork). This is what that looks like on THIS DSP (a different DSP profile would show its own PC-Tool/app steps; the rule itself is DSP-agnostic — see SKILL.md).

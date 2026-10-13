@@ -40,6 +40,8 @@ the day runs all sweeps, then all MMM. The questions the tools will ask later go
 answered in the car: the level as a quantity (`capture-start … --level "-25 dB rel. max"`), the knobs
 (`capture-knobs`), and what protective filter was in the chain (`capture-protective`).
 
+**A request to measure IS a round, never words** (SKILL.md's guardrail; the round's mechanics are here). **One recipe opens it**, [`capture-session-sheet.md`](references/phases/capture-session-sheet.md) Block 0 — the phase entered first, N from `naming.py next-series`, then `capture-start <N> --plan [title…]`, a capture the phase file names and the plan does not give typed on the same line (Phase 3's tripod sweeps); Phase 3's `_final` set is the one round `--plan` cannot build, `_final` being no series number (`phase_3_control.md` §1) — and the round `cap_NNN` carries its list from the method's plan for the phase, the channels the project has on, ordered by setup (the method the car is in first, one switch — skill #78), in four columns (Solo/Group × sw/rta — skill #79); **what it prints is the message to the Arbiter** — nothing is asked for in prose only, and "if you have time" captures go on the list as `--optional` (skill #80), never in the sentence. A capture the list should not have: `capture-skip <title> <reason>`. `capture-taken <title>` as each comes back. **`capture-close` closes against REW, whatever captured**: held → taken, taken beyond the list → recorded, absent → left open (yellow), the checks run on what was taken; `--no-rew` says on the record that it was not checked.
+
 ```
 BLOCK 0 · OPEN THE ROUND (laptop, ~1 min)                      [0.0]
   process.py <project>/process enter-phase 0

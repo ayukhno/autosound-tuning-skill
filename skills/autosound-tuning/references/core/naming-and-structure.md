@@ -54,6 +54,15 @@ and spoken everywhere — **the middle column is what goes in the report, and it
   the device shows, the name `state.py … config save` gave the configuration. Never a bare number ('memory 3',
   'slot 3') or 'Preset 2'. (The Arbiter, 2026-10-08.)
 
+## 1b. Steps — the id, the name, what a step covers
+
+How a step of the process record is named and cited; SKILL.md's guardrail keeps each rule's head.
+
+**A step goes by its id, everywhere**: `add-step` puts the id at the head of the name (`2.8 фінальний EQ`) and drops a section letter typed there (`2d:`), so cite a step by that id in the text — the panel shows the same one (skill #72). **A step is named for what it ENDS IN** — a version, a verdict, a review file, a sheet, a round closed — never for a rule it follows; a step that ends in nothing the Arbiter can see is a line inside another step, not a step (skill #73: ten Phase-2 steps that measured, computed and wrote without moving). Phase 2 on the desk path is four steps (`virtual-first.md` 2.1–2.4), and a plan that copies both paths' trips into one phase is the mistake that rule exists for. **A step whose subject is a set of facts carries them**: `--covers <dotted paths>` (as `project.py open-questions` prints them) — the name is then composed from the first three plus `+N`, because a bare count in the plan is not a subject the Arbiter can act on.
+
+A step closes on evidence that resolves — a measurement name in the grammar (§3), a ledger version or a project file
+that exists. Prose may ride along with one of those; prose alone is refused.
+
 ## 2. What triggers work — and whether raw data survives
 
 A "new project run" isn't always from scratch. Classify it first; it decides how much you re-measure:
