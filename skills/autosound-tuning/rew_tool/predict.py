@@ -2076,12 +2076,18 @@ def main(argv=None):
 
 def _own_rew_project(project_dir):
     """`paths.rew_project` of the project's `project.json` -- the `.mdat` its own measurements live in (#58 P4) -- or
-    None when it records none. A UTF-8 BOM is read (#147, item 6): read as `utf-8`, the BOM failed the JSON, and the
-    run's check against another build's solos was skipped without a word. Raises as `open` and `json` raise; the run
-    reads a failure as no answer."""
-    with open(os.path.join(project_dir, "project.json"), encoding="utf-8-sig") as fh:
-        data = json.load(fh)
-    return (data.get("paths") or {}).get("rew_project") if isinstance(data, dict) else None
+    None when it records none, or there is no `project.json`. A UTF-8 BOM is read (#147, item 6): read as `utf-8`, the
+    BOM failed the JSON, and the run's check against another build's solos was skipped without a word.
+
+    Read strictly (group fix 1, item 3): one that is there and cannot be read -- cut, held, not UTF-8, not an object --
+    raises `project_io.Unreadable` (`is_unreadable` on its class) naming it, why and the repair, and `main` says it as
+    its one line, exit 1. Read as no answer, it dropped the check."""
+    import project_io
+    path = os.path.join(project_dir, "project.json")
+    data = project_io.read_json(path, None, repair=project_io.restore_line(path),
+                                repair_encoding=project_io.reencode_line(project_dir))
+    paths = (data or {}).get("paths")
+    return paths.get("rew_project") if isinstance(paths, dict) else None
 
 
 def ladder_edges(specs):
@@ -2275,14 +2281,21 @@ def _main(argv=None):
         # #58 P4: a solo from ANOTHER build's .mdat is refused here, before it is read as this car's. The same
         # titles and the same `_N` in a neighbouring project's file were analysed as this one's.
         if args.project and not args.allow_foreign:
+            # The project's own file is read first and outside the fallback (group fix 1, item 3): a `project.json`
+            # that cannot be read refuses the run naming it (`Unreadable`, said by `main`) -- under the fallback it
+            # dropped the check, and another build's solos were read as this car's. REW not answering is no
+            # refusal, nor REW's error answer: the solos' own read meets it. Anything else is a bug, raised as itself.
+            _own = _own_rew_project(args.project)
+            import rew_api as _rew
             try:
-                import rew_api as _rew
-                _own = _own_rew_project(args.project)
                 _foreign = _rew.foreign_measurements(_rew.get_measurements().values(), _own)
-                _mine = {f"{c}_{args.ver} (sw)" for c in codes}
-                _hit = {t_: f_ for t_, f_ in _foreign.items() if t_ in _mine}
-            except Exception:                            # noqa: BLE001 -- no answer is not a refusal
-                _hit = {}
+            except Exception as exc:                     # noqa: BLE001 -- matched by its attribute
+                import urllib.error
+                if getattr(type(exc), "rew_state", None) is None and not isinstance(exc, urllib.error.HTTPError):
+                    raise
+                _foreign = {}
+            _mine = {f"{c}_{args.ver} (sw)" for c in codes}
+            _hit = {t_: f_ for t_, f_ in _foreign.items() if t_ in _mine}
             if _hit:
                 raise PredictError("solos from another file than this project's own: "
                                    + ", ".join(f"{t_} ({f_})" for t_, f_ in sorted(_hit.items()))
@@ -2949,6 +2962,79 @@ def _check_own_rew_project_reads_a_bom():
         assert got[0] == got[1] == "C:/Авто/passat.mdat", got
     finally:
         shutil.rmtree(d, ignore_errors=True)
+
+
+def _check_foreign_solos_refused_over_any_project_json():
+    """The check against another build's solos (#58 P4) is never dropped without a word (group fix 1, item 3). It sat
+    under `except Exception: _hit = {}`, so a `project.json` that could not be read -- cut, held, not UTF-8 -- skipped
+    it, and another build's solos were read as this car's. Through `main --rew`, against a stand-in `rew_api`: a BOM'd
+    `project.json` still refuses another build's solo; a cut one refuses, naming the file and its repair, exit 1;
+    `--allow-foreign` reads past both; REW not answering is no refusal (the solos' own read meets it); a bug in the
+    check is raised as itself."""
+    import shutil
+    import tempfile
+    import rew_api as _rew
+    saved_env = os.environ.pop("AUTOSOUND_PROJECT_DIR", None)
+    saved = _rew.get_measurements, _rew.foreign_measurements
+    top = tempfile.mkdtemp(prefix="autosound_predict_foreign_")
+    failures = []
+
+    class Down(OSError):
+        rew_state = "unavailable"
+    try:
+        proj, _solos = _two_way_fixture(top)
+        path = os.path.join(proj, "project.json")
+        with open(path, encoding="utf-8") as fh:
+            facts = json.load(fh)
+        facts.setdefault("paths", {})["rew_project"] = "passat.mdat"
+        text = json.dumps(facts, ensure_ascii=False, indent=2).encode("utf-8")
+        _rew.get_measurements = lambda: {}
+        _rew.foreign_measurements = lambda records, own: ({"w-L_7 (sw)": "other.mdat"} if own == "passat.mdat"
+                                                          else {})
+        argv = ["--rew", "--project", proj, "--ver", "7", "--json"]
+        with open(path, "wb") as fh:
+            fh.write(b"\xef\xbb\xbf" + text)
+        rc, out, err = _run_main(argv)
+        if rc != 1 or "error: solos from another file than this project's own: w-L_7 (sw) (other.mdat)" not in err:
+            failures.append(f"a BOM'd project.json: rc {rc!r}, said {err.strip()[-300:]!r}")
+        with open(path, "wb") as fh:
+            fh.write(text[: len(text) // 2])
+        rc, out, err = _run_main(argv)
+        said = [line for line in err.splitlines() if line.startswith("error: ")]
+        if rc != 1 or len(said) != 1 or not said[0].startswith(f"error: {path} ") \
+                or "checkout HEAD -- project.json" not in said[0] or "Traceback" in err:
+            failures.append(f"a cut project.json: rc {rc!r}, said {err.strip()[-300:]!r}")
+        rc, out, err = _run_main(argv + ["--allow-foreign"])
+        if f"error: {path} " in err or "another file" in err or str(rc).startswith("raised"):
+            failures.append(f"--allow-foreign over a cut project.json: rc {rc!r}, said {err.strip()[-300:]!r}")
+        with open(path, "wb") as fh:
+            fh.write(text)
+
+        asked = []
+
+        def down():                  # the check's own read only: the solos' read after it is not this check's
+            asked.append(1)
+            if len(asked) == 1:
+                raise Down(61, "Connection refused")
+            return {}
+        _rew.get_measurements = down
+        rc, out, err = _run_main(argv)
+        if "another file" in err or str(rc).startswith("raised Down"):
+            failures.append(f"REW not answering at the check: rc {rc!r}, said {err.strip()[-300:]!r}")
+        _rew.get_measurements = lambda: {}
+
+        def bug(records, own):
+            raise AttributeError("'NoneType' object has no attribute 'lower'")
+        _rew.foreign_measurements = bug
+        rc, out, err = _run_main(argv)
+        if not str(rc).startswith("raised AttributeError"):
+            failures.append(f"a bug in the check: rc {rc!r}, said {err.strip()[-300:]!r}")
+    finally:
+        _rew.get_measurements, _rew.foreign_measurements = saved
+        if saved_env is not None:
+            os.environ["AUTOSOUND_PROJECT_DIR"] = saved_env
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["the check against another build's solos:"] + failures)
 
 
 def _check_predict_error_says_it_is_a_refusal():
@@ -3671,7 +3757,7 @@ def _selftest():
     _check_refused_notes_never_cut()
     failures = []
     for check in (_check_says_what_it_did_not_check, _check_predict_error_says_it_is_a_refusal,
-                  _check_own_rew_project_reads_a_bom):
+                  _check_own_rew_project_reads_a_bom, _check_foreign_solos_refused_over_any_project_json):
         try:
             check()
         except AssertionError as exc:
