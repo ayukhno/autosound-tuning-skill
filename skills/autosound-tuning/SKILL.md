@@ -168,5 +168,5 @@ Everything else — the inventory, the caveats, the previews, the reasoning, the
 | [core/process-control.md](references/core/process-control.md) | Operating modes A/B/C, pull-based control; which writer records the process; the stop's order (its one home); the phase boundary (`handoff`). |
 | [core/driver-discipline.md](references/core/driver-discipline.md) | Solo driver (mode B/C): anti-confabulation rules. |
 | [tooling/setup-critic-channel.md](references/tooling/setup-critic-channel.md) | CLI setup, .critic-env, models, `--doctor`, ladder. |
-| [core/feedback-loop.md](references/core/feedback-loop.md) | Session-close feedback ritual (issues in English). |
+| [core/feedback-loop.md](references/core/feedback-loop.md) | Session-close feedback ritual (issues in English); every issue or bug report, the skill's or TCC's, goes through its gate (`post_feedback`), never a hand-written `gh issue create`. |
 | [core/why-these-rules.md](references/core/why-these-rules.md) | What each always-on rule cost when it was missing — read when a rule looks like ceremony — and where each came from. |
