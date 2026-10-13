@@ -65,11 +65,11 @@ Rules:
 
 13. **`step-ids`** (#138, I-6). `virtual-first.md` is the one home of the step ids, and a pointer names its
     step after the number (`1.5 joints`): no id is two steps there; a pointer `<id> <word>` in `SKILL.md`, the
-    phase and core files and the English listening cheat sheet lands on the step whose name the word starts --
-    `STEP_NAMES`, a table held to each step's opening line, since those lines cite their neighbours too; the cheat
-    sheet routes every ✗ that way, never by a bare number; and its translations carry every row of it, in its order
-    and no other, each routed to the same ids. A renumber left the routes on the old numbers, and a listening ✗
-    re-opened the crossover choice instead of the joint delay.
+    phase and core files and the English listening cheat sheet lands on the step whose name holds the word, any word
+    of it (`1.4 EQ`) -- `STEP_NAMES`, a table held to each step's opening line, since those lines cite their
+    neighbours too; the cheat sheet routes every ✗ that way, never by a bare number; and its translations carry every
+    row of it, in its order and no other, each routed to the same ids. A renumber left the routes on the old numbers,
+    and a listening ✗ re-opened the crossover choice instead of the joint delay.
 
 14. **`no-capture-start-literal`** (#138, I-7). A capture round is opened by one recipe, `capture-session-sheet.md`'s
     Block 0 (`enter-phase 0` → `naming.py next-series` → `capture-start <N> --plan`), and the phase files point to
@@ -705,13 +705,14 @@ STEP_HOME = os.path.join(SKILL, "references", "phases", "virtual-first.md")
 CHEAT_SHEET = os.path.join(SKILL, "references", "patterns", "listening-cheat-sheet.md")
 CHEAT_ROUTE = "where a ✗ goes"
 #: The name of each step a pointer names, as the pointer writes it after the number (`1.5 joints`, `1.4 coarse EQ`):
-#: a pointer lands when its word starts its step's name here. Each name stands on its step's opening line in
-#: `virtual-first.md`, and the rule holds it there, so a renumber cannot leave the table behind unseen. The opening
-#: lines cite their neighbours as well (1.3 "without the wishes", 1.4 "BEFORE the delays", 1.5 "with the coarse
-#: EQ", 2.3 "the second"), so a pointer is held to its step's name, not to whatever its step's line says. −1.1, −1.2
-#: and −1.5 are named before anything points at them: the new DSP moved from −1.2 to −1.5 when the reviewer channel
-#: took −1.2 (the code's ids, `intake.py`), and a pointer left on the old number is named with the step its word
-#: starts; −1.1 is the dialogue language, the decision `intake.py` records under it (the S1 review, Minor 7).
+#: a pointer lands when its word is a word of its step's name here -- any word, `1.4 EQ` is the coarse EQ (#148).
+#: Each name stands on its step's opening line in `virtual-first.md`, and the rule holds it there, so a renumber
+#: cannot leave the table behind unseen. The opening lines cite their neighbours as well (1.3 "without the wishes",
+#: 1.4 "BEFORE the delays", 1.5 "with the coarse EQ", 2.3 "the second"), so a pointer is held to its step's name, not
+#: to whatever its step's line says. −1.1, −1.2 and −1.5 are named before anything points at them: the new DSP moved
+#: from −1.2 to −1.5 when the reviewer channel took −1.2 (the code's ids, `intake.py`), and a pointer left on the old
+#: number is named with the step whose name holds its word; −1.1 is the dialogue language, the decision `intake.py`
+#: records under it (the S1 review, Minor 7).
 STEP_NAMES = {
     "-1.1": "dialogue language",
     "-1.2": "reviewer channel",
@@ -787,15 +788,22 @@ def _says(head: str, name: str) -> bool:
     return re.search(r"(?<![\w'’-])" + words + r"(?![\w'’-])", head.replace("*", ""), re.I) is not None
 
 
+def _name_words(name: str) -> set:
+    """The words of a step's name in `STEP_NAMES` a pointer may land by, lower-case: any of them -- `1.4 EQ` is the
+    coarse EQ -- but the small words no step is named by (`of`, `after`, `over`)."""
+    return {w.lower() for w in name.split()} - _NOT_A_STEP_NAME
+
+
 def _step_named(steps: dict, sid: str, word: str) -> str | None:
-    """None when step `sid` exists and `word` starts its name in `STEP_NAMES`; else why not -- naming the step whose
-    name the word does start, when there is one, whatever else is wrong: a pointer to a step with no name in the
-    table, or to no step at all, is told where its word belongs too (Task 14's re-review, Minor 2)."""
+    """None when step `sid` exists and `word` is a word of its name in `STEP_NAMES` (#148: any word, not only the
+    first); else why not -- naming every step whose name holds the word, whatever else is wrong: a pointer to a step
+    with no name in the table, or to no step at all, is told where its word belongs too (Task 14's re-review, Minor
+    2)."""
     name = STEP_NAMES.get(sid) if sid in steps else None
-    if name is not None and word == name.split()[0].lower():
+    if name is not None and word in _name_words(name):
         return None
-    other = next((s for s, n in STEP_NAMES.items() if n.split()[0].lower() == word), None)
-    belongs = f"; '{STEP_NAMES[other]}' is step {other}" if other else ""
+    others = [s for s, n in STEP_NAMES.items() if s != sid and word in _name_words(n)]
+    belongs = ("; " + ", ".join(f"'{STEP_NAMES[s]}' is step {s}" for s in others)) if others else ""
     if sid not in steps:
         return f"there is no step {sid} in {STEP_HOME}" + belongs
     if name is None:
@@ -833,9 +841,9 @@ def rule_step_ids(root: str) -> list[str]:
     joints to 1.3, which is now the crossover choice, and a later step was numbered 1.7 twice. A bare number cannot
     be checked and a renumber moves it silently, so a pointer says its step's name after the number (`1.5 joints`),
     and here: (a) no id is two steps in `virtual-first.md`; (b) a pointer written `<id> <word>` in `SKILL.md`, the
-    phase and core files and the English cheat sheet resolves -- the id is a step, and the word starts the name
+    phase and core files and the English cheat sheet resolves -- the id is a step, and the word is a word of the name
     `STEP_NAMES` gives it; the table is held to `virtual-first.md`, each name on its step's opening line, and a
-    word another step's name starts is named as that step's (a word counts as a pointer's when it stands on some
+    word only another step's name holds is named as that step's (a word counts as a pointer's when it stands on some
     step's opening line, so `1.5 dB` is not one); (c) every route cell of the English cheat sheet names its steps
     that way, never a bare number; (d) each translated cheat sheet carries the English rows -- every one, in the
     English order, and no other -- and routes each to the same ids as the English one.
@@ -1650,8 +1658,8 @@ def _step_ids_said(line: str) -> list:
 
 
 def _check_step_ids():
-    """Rule 13 (#138, I-6): a step id is one step, a pointer `<id> <word>` lands on the step whose name the word
-    starts, a route names its steps, and a translation routes where the English does."""
+    """Rule 13 (#138, I-6): a step id is one step, a pointer `<id> <word>` lands on the step whose name holds the
+    word, a route names its steps, and a translation routes where the English does."""
     with _scratch() as tmp:
         assert rule_step_ids(_ids_tree(tmp)) == [], rule_step_ids(_ids_tree(tmp))
         # (a) one id, two steps -- the second 1.7 the renumber left; a U+2212 minus and an ASCII one are one id
@@ -1765,6 +1773,21 @@ def _check_step_ids_unnamed_step_says_whose_word():
     assert len(said) == 1 and "step 0.7 has no name" in said[0] and "'joints' is step 1.5" in said[0], said
     said = _step_ids_said("1.9 levels")
     assert len(said) == 1 and "there is no step 1.9" in said[0] and "'levels' is step 1.6" in said[0], said
+
+
+def _check_step_ids_any_word_of_its_name():
+    """Rule 13 (#148): a pointer lands by any word of its step's name, not only the first -- "1.4 EQ" is the coarse
+    EQ, "2.1 part" the second part of EQ, "3.3 MMM" the fine EQ over MMM, "1.7 front" the trade-off front, "−1.5 DSP"
+    the new DSP; a word only ANOTHER step's name holds still fails, and names every step that holds it."""
+    for line in ("1.4 EQ", "2.1 part", "3.3 MMM", "1.7 front", "−1.5 DSP"):
+        said = _step_ids_said(line)
+        assert said == [], (line, said)
+    said = _step_ids_said("1.5 EQ")
+    assert len(said) == 1 and "'1.5 EQ'" in said[0] and "step 1.5 is 'joints'" in said[0] \
+        and "'coarse EQ' is step 1.4" in said[0] and "'second part of EQ' is step 2.1" in said[0] \
+        and "'check after EQ' is step 2.2" in said[0] and "'fine EQ over MMM' is step 3.3" in said[0], said
+    said = _step_ids_said("1.6 front")
+    assert len(said) == 1 and "step 1.6 is 'levels'" in said[0] and "'trade-off front' is step 1.7" in said[0], said
 
 
 def _check_step_ids_reviewer_before_new_dsp():
@@ -2341,7 +2364,8 @@ def _selftest() -> int:
                       _check_step_ids_delays_on_coarse_eq, _check_step_ids_second_on_review,
                       _check_step_ids_after_a_slash, _check_step_ids_read_as_written, _check_step_names_held,
                       _check_step_ids_reviewer_before_new_dsp, _check_step_ids_translation_keeps_every_row,
-                      _check_step_ids_unnamed_step_says_whose_word, _check_no_capture_start_literal,
+                      _check_step_ids_unnamed_step_says_whose_word, _check_step_ids_any_word_of_its_name,
+                      _check_no_capture_start_literal,
                       _check_slot_names, _check_reviewer_at_desk, _check_skill_budget,
                       _check_skill_budget_clip_newline, _check_skill_budget_crlf, _check_skill_budget_inputs,
                       _check_skill_budget_description_folds, _check_skill_budget_rules_after_frontmatter,
@@ -2381,10 +2405,11 @@ def _selftest() -> int:
           "lower-case 'must inspect the summation' is not), and so is a phase file or the quirks file left "
           "without the sentence that the tools read arrivals, or gone; a phase file that opens 'If Phase −1 chose', "
           "a banner copy edited alone, all four banners deleted at once and a phase file gone are each named; a "
-          "step id held by two steps, a pointer in a phase or a core file whose word does not start its step's name "
+          "step id held by two steps, a pointer in a phase or a core file whose word is no word of its step's name "
           "(one step off, a neighbour its step's opening line cites, after a slash, behind a capital article, left "
           "on the id a renumber gave another step) or whose step does not exist (1.10 too) or has no name -- each "
-          "told whose name its word starts --, a name table parted from the steps, a route by a bare number (one "
+          "told every step whose name holds its word, while one by any word of its name lands (1.4 EQ) --, a name "
+          "table parted from the steps, a route by a bare number (one "
           "ending its sentence too or a version) and a translation routing a row elsewhere, or dropping, adding or "
           "reordering one, are each named, while a value, a unit, a version, a section, a range, a word no step is "
           "named by and a heading's number are not pointers; a phase file opening a capture round at a series "
