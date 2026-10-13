@@ -90,6 +90,18 @@ def _git(root, *args):
     return lines[0].strip() if lines else ""
 
 
+def _own_repository(root):
+    """True when the repository git finds at `root` is `root`'s OWN (T-42): `git rev-parse --show-toplevel` names `root`
+    itself (`os.path.samefile`, as `provenance._answer_at`). A copy with no `.git` of its own -- a plugin copy -- has
+    none: git asked there walks up into any repository around it, a git-tracked home folder, whose HEAD is no commit of
+    the method's."""
+    top = _git(root, "rev-parse", "--show-toplevel")
+    try:
+        return bool(top) and os.path.samefile(top, root)
+    except OSError:
+        return False
+
+
 def version_at(root):
     """`.claude-plugin/plugin.json`'s `version`, or "" -- the string a PERSON quotes.
 
@@ -163,7 +175,10 @@ def describe(path, plugins=None):
         if parent == here:
             break
         here = parent
-    sha = _git(root, "rev-parse", "HEAD") if root else ""
+    # HEAD, describe and the branch only from the copy's own repository (T-42); otherwise the registry's sha for a
+    # plugin copy, or none.
+    own = bool(root) and _own_repository(root)
+    sha = _git(root, "rev-parse", "HEAD") if own else ""
     recorded = next((p for p in plugins or () if root and os.path.realpath(p["install"]) == root), None)
     if recorded and not sha:
         # A plugin install: no `.git`, and the commit Claude Code recorded for it is its identity (#122).
@@ -178,9 +193,9 @@ def describe(path, plugins=None):
         "root": root or "",
         "sha": sha if len(sha) == 40 and all(c in "0123456789abcdef" for c in sha) else "",
         "version": version_at(root),
-        "ref": _git(root, "describe", "--tags", "--always") if root else "",
+        "ref": _git(root, "describe", "--tags", "--always") if own else "",
         # "" means detached -- which is what a pin looks like, so it is reported, not hidden.
-        "branch": _git(root, "symbolic-ref", "--quiet", "--short", "HEAD") if root else "",
+        "branch": _git(root, "symbolic-ref", "--quiet", "--short", "HEAD") if own else "",
     }
 
 
@@ -447,12 +462,78 @@ def _selftest():
         os.makedirs(deep)
         assert describe(deep)["sha"] == "", "a nested folder adopted a repository above it"
 
+    failures = []
+    for check in (_check_a_plugin_copy_inside_a_repository_is_its_record,):
+        try:
+            check()
+        except AssertionError as exc:
+            failures.append(f"{check.__name__}: {exc}")
+    assert not failures, "\n".join(failures)
+
     # -- and on this machine, whatever it is, the answer has ONE shape --
     code, line = verdict(candidates())
     assert code in (0, 3, 4), f"unknown verdict {code}"
     print(f"selftest OK — disagreement, agreement, no-identity and nothing-at-all all named; a plugin install read by its recorded commit (#122); "
           f"here: {line}")
     return 0
+
+
+def _check_a_plugin_copy_inside_a_repository_is_its_record():
+    """T-42: a plugin copy -- no `.git` of its own -- inside a home folder that is a git repository is read by the commit
+    Claude Code recorded for it, and says `plugin`; never by the home's HEAD. git asked in the copy walks up into the
+    home's repository, and `describe()` took that HEAD, its `describe` and its branch as the copy's: the recorded sha
+    went unread, and the copy was "split" from every checkout of the method (exit 3). Unrecorded, it has no identity
+    (""), as a copy in no repository. A checkout of its own inside that home still answers for itself."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_deployment_home_")
+    env = {**os.environ, "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1", "GIT_AUTHOR_NAME": "t",
+           "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}
+
+    def git(cwd, *args):
+        done = subprocess.run(["git", "-C", cwd, *args], capture_output=True, text=True, env=env, timeout=60,
+                              encoding="utf-8", errors="replace")
+        assert done.returncode == 0, (args, done.stderr)
+        return done.stdout.strip()
+
+    try:
+        home = os.path.join(top, "home")
+        os.makedirs(home)
+        git(home, "init", "-q")
+        with open(os.path.join(home, "notes.txt"), "w", encoding="utf-8") as fh:
+            fh.write("a home folder kept in git\n")
+        git(home, "add", "-A")
+        git(home, "commit", "-q", "-m", "home")
+        home_head = git(home, "rev-parse", "HEAD")
+        install = os.path.join(home, ".claude", "plugins", "cache", "autosound-tuning-skill", PLUGIN_NAME, "3.1.0")
+        skill = os.path.join(install, "skills", SKILL_DIRNAME)
+        os.makedirs(os.path.join(install, ".claude-plugin"))
+        os.makedirs(skill)
+        with open(os.path.join(install, ".claude-plugin", "plugin.json"), "w", encoding="utf-8") as fh:
+            json.dump({"name": PLUGIN_NAME, "version": "3.1.0"}, fh)
+        recorded = "e8dabf7" + "0" * 33
+        plugins = [{"install": install, "sha": recorded, "version": "3.1.0", "scope": "user", "project": ""}]
+        d = describe(skill, plugins)
+        assert d.get("plugin") and d["sha"] == recorded and d["ref"] == f"plugin 3.1.0 @ {recorded[:12]}" \
+            and d["branch"] == "", f"a recorded plugin copy inside the home's repository: {d}"
+        d = describe(skill, [])
+        assert d["sha"] == "" and d["ref"] == "" and d["branch"] == "" and home_head not in str(d), \
+            f"an unrecorded plugin copy inside the home's repository took the home's: {d}"
+        # A checkout of its own inside the same home: its own HEAD, describe and branch.
+        own = os.path.join(home, "dev", "skill")
+        os.makedirs(os.path.join(own, ".claude-plugin"))
+        os.makedirs(os.path.join(own, "skills", SKILL_DIRNAME))
+        with open(os.path.join(own, ".claude-plugin", "plugin.json"), "w", encoding="utf-8") as fh:
+            json.dump({"name": PLUGIN_NAME, "version": "3.1.2"}, fh)
+        git(own, "init", "-q")
+        git(own, "add", "-A")
+        git(own, "commit", "-q", "-m", "own")
+        own_head = git(own, "rev-parse", "HEAD")
+        d = describe(os.path.join(own, "skills", SKILL_DIRNAME), plugins)
+        assert d["sha"] == own_head and d["ref"] == own_head[:7] and d["branch"] and not d.get("plugin"), \
+            f"a checkout of its own inside the home: {d}"
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
 
 
 def main(argv=None):

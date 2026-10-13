@@ -324,8 +324,13 @@ def make_patch(clone):
                 raise Refused(f"{clone}: could not collect the local changes ({' '.join(args)}): {err.strip()}")
         # Bytes, not text: a file checked out with CRLF (every .ps1 on Windows) carries them in its diff lines, and
         # reading the diff as text would turn them into LF -- a patch that no longer applies to what it came from.
-        p = subprocess.run(["git", "-C", clone, "diff", "--cached", "--binary", "HEAD"], env=env,
-                           capture_output=True, stdin=subprocess.DEVNULL)
+        # `run`'s deadline, answered as this step's refusal (#146).
+        try:
+            p = subprocess.run(["git", "-C", clone, "diff", "--cached", "--binary", "HEAD"], env=env,
+                               capture_output=True, stdin=subprocess.DEVNULL, timeout=120)
+        except subprocess.TimeoutExpired:
+            raise Refused(f"{clone}: could not write the local changes as a patch: git gave no answer in 120 s") \
+                from None
         if p.returncode != 0:
             raise Refused(f"{clone}: could not write the local changes as a patch: "
                           f"{p.stderr.decode('utf-8', 'replace').strip()}")
@@ -629,13 +634,62 @@ def tool_rows(env=None, runner=run, ask_available=True, fetch=_http_json):
     return rows
 
 
+#: How long one download of gh's release may take (#146): its archive, then its checksums.
+DOWNLOAD_TIMEOUT_S = 60
+
+
+def _extract_tar(t, dest, label, data_filter=None):
+    """Every member of the tar `t` into `dest`, and nothing outside it (#146, T-49): tarfile's "data" filter where
+    tarfile takes one (3.12, and the security releases of 3.8-3.11); where it does not -- Apple's 3.9 -- a member whose
+    path is absolute, climbs out with `..`, or is a link that leads out (absolute, or with a `..` in it) is refused
+    before anything is extracted. `data_filter` None asks tarfile; the selftest names it. A refusal is `Refused`."""
+    import tarfile
+    if data_filter is None:
+        data_filter = hasattr(tarfile, "data_filter")
+    if data_filter:
+        try:
+            t.extractall(dest, filter="data")
+        except tarfile.FilterError as exc:
+            raise Refused(f"{label}: a member of the archive was refused -- {exc}; not installed") from None
+        return
+    import ntpath
+    import posixpath
+
+    def climbs(path):
+        parts = posixpath.normpath(path.replace("\\", "/")).split("/")
+        return parts[:1] == [".."]
+
+    def absolute(path):
+        return path.startswith(("/", "\\")) or bool(ntpath.splitdrive(path)[0]) or os.path.isabs(path)
+
+    for m in t.getmembers():
+        why = None
+        if absolute(m.name):
+            why = "an absolute path"
+        elif climbs(m.name):
+            why = "a path that climbs out of the folder"
+        elif (m.issym() or m.islnk()) and (absolute(m.linkname) or ".." in m.linkname.replace("\\", "/").split("/")):
+            why = f"a link out of the folder (to {m.linkname!r})"
+        if why:
+            raise Refused(f"{label}: the archive's member {m.name!r} is {why}; nothing extracted, not installed")
+    t.extractall(dest)
+
+
 def update_gh_release(dest_dir=LOCAL_BIN):
     """gh from its newest GitHub release, checked against the checksums that release publishes -- the installers'
-    path, so an installer-installed gh moves the way it came. The old binary is replaced only after the check."""
+    path, so an installer-installed gh moves the way it came. The old binary is replaced only after the check. Each
+    download has DOWNLOAD_TIMEOUT_S, and one that fails is a refusal (#146)."""
     import hashlib
     import tarfile
     import urllib.request
     import zipfile
+
+    def download(url):
+        try:
+            with urllib.request.urlopen(url, timeout=DOWNLOAD_TIMEOUT_S) as r:
+                return r.read()
+        except OSError as exc:            # URLError, a time-out, a refused connection: all OSError
+            raise Refused(f"gh: {url} could not be downloaded ({exc}); not installed") from None
     ver = _gh_latest()
     if not ver:
         raise Refused("gh: the newest release could not be asked for (no network?)")
@@ -646,8 +700,9 @@ def update_gh_release(dest_dir=LOCAL_BIN):
     base = f"https://github.com/cli/cli/releases/download/v{ver}"
     with tempfile.TemporaryDirectory(prefix="autosound_gh_") as tmp:
         got = os.path.join(tmp, asset)
-        urllib.request.urlretrieve(f"{base}/{asset}", got)
-        sums = urllib.request.urlopen(f"{base}/gh_{ver}_checksums.txt", timeout=60).read().decode()
+        with open(got, "wb") as fh:
+            fh.write(download(f"{base}/{asset}"))
+        sums = download(f"{base}/gh_{ver}_checksums.txt").decode()
         want = next((line.split()[0] for line in sums.splitlines() if line.split()[-1:] == [asset]), "")
         with open(got, "rb") as fh:
             have = hashlib.sha256(fh.read()).hexdigest()
@@ -659,7 +714,7 @@ def update_gh_release(dest_dir=LOCAL_BIN):
                 z.extractall(tmp)
         else:
             with tarfile.open(got) as t:
-                t.extractall(tmp)
+                _extract_tar(t, tmp, "gh")
         exe = "gh.exe" if sys.platform == "win32" else "gh"
         built = next((os.path.join(d, exe) for d, _, names in os.walk(tmp) if exe in names and d.endswith("bin")), None)
         if not built:
@@ -1188,6 +1243,167 @@ def _check_verify_copy_says_which_way_it_failed(fx):
     assert "could not check: could not fetch v3.0.70" in said.getvalue(), said.getvalue()[-300:]
 
 
+def _refusal(call):
+    """What `call()` raised -- read by its `exit_code`, never matched by class (the rule for a module two copies of may
+    be loaded) -- or an AssertionError when it raised nothing."""
+    try:
+        call()
+    except Exception as exc:  # noqa: BLE001 -- read by attribute below
+        if getattr(exc, "exit_code", None) is None:
+            raise AssertionError(f"raised {exc!r}, not a refusal") from exc
+        return exc
+    raise AssertionError("no refusal")
+
+
+def _check_a_patch_that_does_not_come_is_refused(fx):
+    """#146 (T-49): `make_patch`'s diff -- bytes, so it calls git itself rather than `run` -- has `run`'s deadline, 120
+    s, and one past it is the step's own refusal (exit 3) naming the deadline. It had none, and a git that hung held
+    `keep-local`, and the update dialog that asked for it, for ever. The diff alone times out here; the clone is real."""
+    tmp, env = fx["tmp"], fx["env"]
+    clone = os.path.join(tmp, "patch-deadline")
+    os.makedirs(clone)
+    for cmd in (["git", "init", "-q", clone], ["git", "-C", clone, "commit", "-q", "--allow-empty", "-m", "a"]):
+        rc, _out, err = run(cmd, env=env)
+        assert rc == 0, (cmd, err)
+    with open(os.path.join(clone, "new.txt"), "w", encoding="utf-8") as fh:
+        fh.write("a local change\n")
+    real_run, seen = subprocess.run, []
+
+    def diff_times_out(cmd, **kw):
+        if "diff" in cmd:
+            seen.append(kw.get("timeout"))
+            raise subprocess.TimeoutExpired(cmd, kw.get("timeout"))
+        return real_run(cmd, **kw)
+    subprocess.run = diff_times_out
+    try:
+        refused = _refusal(lambda: make_patch(clone))
+    finally:
+        subprocess.run = real_run
+    assert seen == [120] and refused.exit_code == 3 and "no answer in 120 s" in str(refused), (seen, refused)
+
+
+def _check_the_gh_download_has_a_deadline(fx):
+    """#146 (T-49): gh's release archive is fetched with `urlopen(..., timeout=60)`, as its checksums are -- it came
+    by `urlretrieve`, which takes no timeout, and a download that stalled held `tools` for ever. One that fails is the
+    step's refusal, nothing installed. The network is a stand-in serving an archive and its checksums."""
+    import hashlib
+    import io
+    import tarfile
+    import urllib.request
+    import zipfile
+    dest = os.path.join(fx["tmp"], "gh-download")
+    os.makedirs(dest)
+    exe = "gh.exe" if sys.platform == "win32" else "gh"
+    served, timeouts, retrieved = {}, [], []
+
+    def archive(name):
+        buf = io.BytesIO()
+        if name.endswith(".zip"):
+            with zipfile.ZipFile(buf, "w") as z:
+                z.writestr(f"gh_9.9.9/bin/{exe}", "#!/bin/sh\necho gh version 9.9.9\n")
+        else:
+            with tarfile.open(fileobj=buf, mode="w:gz") as t:
+                data = b"#!/bin/sh\necho gh version 9.9.9\n"
+                info = tarfile.TarInfo(f"gh_9.9.9/bin/{exe}")
+                info.size, info.mode = len(data), 0o755
+                t.addfile(info, io.BytesIO(data))
+        return buf.getvalue()
+
+    def answering(url, *args, timeout=None, **kw):
+        timeouts.append(timeout)
+        if url.endswith("_checksums.txt"):
+            return io.BytesIO("".join(f"{hashlib.sha256(b).hexdigest()}  {n}\n" for n, b in served.items()).encode())
+        name = url.rsplit("/", 1)[-1]
+        served[name] = archive(name)
+        return io.BytesIO(served[name])
+
+    def stalling(url, *args, timeout=None, **kw):
+        timeouts.append(timeout)
+        raise OSError("timed out")
+
+    def retrieve(url, path, *args, **kw):
+        retrieved.append(url)
+        with open(path, "wb") as fh:
+            fh.write(served.setdefault(url.rsplit("/", 1)[-1], archive(url.rsplit("/", 1)[-1])))
+        return path, None
+    saved = urllib.request.urlopen, urllib.request.urlretrieve, globals()["_gh_latest"]
+    globals()["_gh_latest"] = lambda: "9.9.9"
+    urllib.request.urlretrieve = retrieve
+    try:
+        urllib.request.urlopen = answering
+        assert update_gh_release(dest_dir=dest) == "9.9.9" and os.path.isfile(os.path.join(dest, exe))
+        assert not retrieved and timeouts == [60, 60], f"urlretrieve {retrieved}, urlopen's timeouts {timeouts}"
+        os.remove(os.path.join(dest, exe))
+        timeouts.clear()
+        urllib.request.urlopen = stalling
+        refused = _refusal(lambda: update_gh_release(dest_dir=dest))
+        assert refused.exit_code == 3 and "timed out" in str(refused) and "not installed" in str(refused) \
+            and not os.listdir(dest) and timeouts == [60], (refused, os.listdir(dest), timeouts)
+    finally:
+        urllib.request.urlopen, urllib.request.urlretrieve, globals()["_gh_latest"] = saved
+
+
+def _check_a_tar_member_out_of_its_folder_is_refused(fx):
+    """#146 (T-49): gh's archive is extracted with tarfile's "data" filter where tarfile takes one, and where it does
+    not -- Apple's Python 3.9 -- a member whose path is absolute, climbs out with `..`, or is a link out of the folder
+    is refused before anything is extracted. `extractall` took every member as it came, so an archive could write
+    anywhere this user may. Archives built here, each extracted into a sandbox that shows what landed outside."""
+    import io
+    import tarfile
+    extract = globals().get("_extract_tar")
+    assert extract, "no _extract_tar: tarfile's extractall takes every member as it comes"
+    sandbox = os.path.join(fx["tmp"], "tar-sandbox")
+
+    def archive(members):
+        buf = io.BytesIO()
+        with tarfile.open(fileobj=buf, mode="w:gz") as t:
+            for name, link in members:
+                info = tarfile.TarInfo(name)
+                if link is None:
+                    info.size = 1
+                    t.addfile(info, io.BytesIO(b"x"))
+                else:
+                    info.type, info.linkname = link
+                    t.addfile(info)
+        buf.seek(0)
+        return tarfile.open(fileobj=buf, mode="r:gz")
+    sym, hard = tarfile.SYMTYPE, tarfile.LNKTYPE
+    bad = [("an absolute path", [(os.path.join(sandbox, "evil-abs").replace(os.sep, "/"), None)]),
+           ("a climb out", [("gh/bin/gh", None), ("../evil-up", None)]),
+           ("a climb out from inside", [("gh/bin/../../../evil-up2", None)]),
+           ("a link to an absolute path", [("gh/bin/link", (sym, "/etc"))]),
+           ("a link out of the folder", [("gh/bin/link", (sym, "../../../evil-link"))]),
+           ("a hard link out of the folder", [("gh/bin/hard", (hard, "../evil-hard"))])]
+    filters = [False] + ([True] if hasattr(tarfile, "data_filter") else [])
+    failures = []
+    for data_filter in filters:
+        for label, members in bad:
+            shutil.rmtree(sandbox, ignore_errors=True)
+            dest = os.path.join(sandbox, "dest")
+            os.makedirs(dest)
+            with archive(members) as t:
+                try:
+                    refused = _refusal(lambda: extract(t, dest, "gh", data_filter=data_filter))
+                except AssertionError as exc:
+                    refused = exc
+            outside = sorted(set(os.listdir(sandbox)) - {"dest"})
+            if outside or (not data_filter and (getattr(refused, "exit_code", None) != 3 or os.listdir(dest))):
+                failures.append(f"{label} (data filter {data_filter}): {refused!r}, outside {outside}, "
+                                f"in dest {os.listdir(dest)}")
+        shutil.rmtree(sandbox, ignore_errors=True)
+        dest = os.path.join(sandbox, "dest")
+        os.makedirs(dest)
+        good = [("gh/bin/gh", None), ("gh/share/man/gh.1", None)]
+        if os.name == "posix":
+            good.append(("gh/bin/gh-link", (sym, "gh")))
+        with archive(good) as t:
+            extract(t, dest, "gh", data_filter=data_filter)
+        if not os.path.isfile(os.path.join(dest, "gh", "bin", "gh")):
+            failures.append(f"a clean archive (data filter {data_filter}): {os.listdir(dest)}")
+    shutil.rmtree(sandbox, ignore_errors=True)
+    assert not failures, "\n  ".join(["gh's archive:"] + failures)
+
+
 def _selftest():
     """Offline, in temporary repositories: a signed tag passes, an unsigned or foreign-signed one is refused, an
     old one predates signing; only the author's SSH signature is good, whatever the git configuration says (the
@@ -1416,6 +1632,16 @@ def _selftest_in(tmp):
                   _check_a_missing_hook_fails_the_hook_check, _check_the_ready_file_is_where_the_hook_looks):
         try:
             check(tmp)
+        except AssertionError as exc:
+            failures.append(f"{check.__name__}: {exc}")
+    assert not failures, "\n".join(failures)
+
+    # #146 (T-49): the patch's diff, gh's download and its archive -- each has its end.
+    failures = []
+    for check in (_check_a_patch_that_does_not_come_is_refused, _check_the_gh_download_has_a_deadline,
+                  _check_a_tar_member_out_of_its_folder_is_refused):
+        try:
+            check({"tmp": tmp, "env": env})
         except AssertionError as exc:
             failures.append(f"{check.__name__}: {exc}")
     assert not failures, "\n".join(failures)

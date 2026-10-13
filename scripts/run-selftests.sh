@@ -272,6 +272,10 @@ if [ -z "${SELFTEST_ONLY_TOOL:-}" ]; then
   # scan's own mechanics in a throwaway tree, then this tree (its success line says OK).
   run_one "atomic-write"    ok scripts/atomic-write-check.py --selftest
   run_one "atomic-in-tree"  ok scripts/atomic-write-check.py
+  # #146: every production subprocess and download under the skill has its timeout, but the few ALLOWED names with
+  # their reasons. The check's own mechanics in a throwaway tree, then this tree (its success line says OK).
+  run_one "subprocess-check" ok scripts/subprocess-check.py --selftest
+  run_one "subprocess-in-tree" ok scripts/subprocess-check.py
   # HUB-044: README and FAQ live in four languages. The guard compares what can be compared without
   # knowing them -- the heading skeleton and the commands -- and says out loud that it cannot see all
   # four lagging the code together.

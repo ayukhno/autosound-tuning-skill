@@ -76,6 +76,9 @@ CAPTURE_FS = FS
 #: and `_selftest` exercises a profile that disagrees with the model on purpose.
 DSP_RATE = 96000
 PY = sys.executable
+#: How long a stage run by a fresh interpreter may take (#146, T-49): a tool waiting on a REW that never answers held
+#: the walk for ever. Past it the stage is rc 124, as `upkeep.run` answers.
+FRESH_TIMEOUT_S = 120
 
 # ---------------------------------------------------------------- the definitions
 # Arrival of each driver at the seat, in CAPTURE samples (integers, so a synthetic impulse is one
@@ -132,7 +135,7 @@ def _run(*args, env=None, ok=(0,)):
         same address as this process's (the runner exports a dead port to every selftest, #133)
         changes nothing at import, so it stays in-process -- and so does an `env` that names no
         `REW_API_URL` at all: a fresh interpreter would fall back to localhost:4735, while this one
-        keeps the address it was given.
+        keeps the address it was given. That process has FRESH_TIMEOUT_S; past it the stage is rc 124 (#146).
 
     A tool that raises anything other than `SystemExit` in-process is reported as rc 1 with its
     traceback in `out`, which is what the subprocess version would have shown.
@@ -143,9 +146,12 @@ def _run(*args, env=None, ok=(0,)):
         # runs (issue #21). Without this the parent decodes UTF-8 while a Windows child writes
         # cp1252, and the difference shows up as mangled evidence, not as an error.
         env = {**env, "PYTHONIOENCODING": "utf-8"}
-        proc = subprocess.run([PY, *args], capture_output=True, text=True, env=env,
-                              encoding="utf-8", errors="replace")
-        rc, out = proc.returncode, proc.stdout + proc.stderr
+        try:
+            proc = subprocess.run([PY, *args], capture_output=True, text=True, env=env,
+                                  encoding="utf-8", errors="replace", timeout=FRESH_TIMEOUT_S)
+            rc, out = proc.returncode, proc.stdout + proc.stderr
+        except subprocess.TimeoutExpired:
+            rc, out = 124, f"no answer in {FRESH_TIMEOUT_S} s"
     else:
         import contextlib
         import io
@@ -305,9 +311,34 @@ def _check_env_without_rew_url():
         shutil.rmtree(d, ignore_errors=True)
 
 
+def _check_a_fresh_interpreter_has_a_deadline():
+    """#146 (T-49): a stage run by a fresh interpreter -- the one an `env` naming another REW gets -- has its deadline,
+    120 s, and one that runs past it is rc 124 with the deadline named, as `upkeep.run` answers: it ran with none, and a
+    tool waiting on a REW that never answers held the walk for ever. A sleeping script, the deadline shortened here."""
+    d = tempfile.mkdtemp(prefix="autosound_path_deadline_")
+    saved = globals().get("FRESH_TIMEOUT_S")
+    try:
+        assert saved == 120, f"a fresh interpreter's deadline: {saved!r}, not 120 s"
+        sleeper = os.path.join(d, "sleeper.py")
+        with open(sleeper, "w", encoding="utf-8") as f:
+            f.write("import time\ntime.sleep(8)\nprint('woke')\n")
+        globals()["FRESH_TIMEOUT_S"] = 1
+        other = {"REW_API_URL": "http://127.0.0.1:2"}           # another REW than this process's: a fresh interpreter
+        rc, out = _run(sleeper, env=other, ok=None)
+        assert rc == 124 and "no answer in 1 s" in out and "woke" not in out, (rc, out)
+        try:
+            _run(sleeper, env=other)
+            raise AssertionError("a stage past its deadline passed as rc 0")
+        except AssertionError as exc:
+            assert "returned 124" in str(exc) and "no answer in 1 s" in str(exc), str(exc)
+    finally:
+        globals()["FRESH_TIMEOUT_S"] = saved
+        shutil.rmtree(d, ignore_errors=True)
+
+
 def _selftest():
     failures = []
-    for check in (_check_env_without_rew_url,):
+    for check in (_check_env_without_rew_url, _check_a_fresh_interpreter_has_a_deadline):
         try:
             check()
         except AssertionError as exc:

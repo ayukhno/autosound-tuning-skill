@@ -131,8 +131,9 @@ def config_hint():
 def _refuse_if_git_would_take(path):
     """A project-local config that carries a KEY and that git would take -- tracked, or not
     ignored -- stops the run. The user's rule (2026-09-08): a file that can carry a key MUST be
-    ignored so it never reaches GitHub. A file with no key line, or outside any repository, is read
-    as before."""
+    ignored so it never reaches GitHub. A file with no key line, outside any repository, or on a
+    machine with no git, is read as before. A git that cannot say -- any failure but "not a git
+    repository", no answer in 10 s, a git that cannot be started -- stops the run too, exit 2 (T-41)."""
     try:
         with open(path, encoding="utf-8", errors="replace") as fh:
             if not any(line.strip().lstrip("export ").split("=", 1)[0].strip().endswith("API_KEY")
@@ -143,18 +144,54 @@ def _refuse_if_git_would_take(path):
     if not shutil.which("git"):
         return
     d, name = os.path.dirname(os.path.abspath(path)), os.path.basename(path)
-    if subprocess.run(["git", "-C", d, "rev-parse", "--is-inside-work-tree"], capture_output=True).returncode != 0:
+
+    def cannot_say(why):
+        print(f"critic-env: git could not say whether {path} would be committed ({why}) — move the key to the machine "
+              f"file ({config_hint()}) or fix git, then run again", file=sys.stderr)
+        sys.exit(2)
+
+    # What git SAID decides, not only that it failed (T-41): "dubious ownership" -- a repository another user owns --
+    # is rc 128 too, and read as "not a repository" it passed a key file git may well commit.
+    rc, said = _git_says(d, "rev-parse", "--is-inside-work-tree")
+    if rc == 128 and "not a git repository" in said:
         return
-    if subprocess.run(["git", "-C", d, "ls-files", "--error-unmatch", "--", name], capture_output=True).returncode == 0:
+    if rc != 0:
+        cannot_say(said)
+    rc, said = _git_says(d, "ls-files", "--error-unmatch", "--", name)
+    if rc == 0:
         print(f"critic-env: {path} carries a key AND is TRACKED by git — відмова.\n"
               f"  fix: git rm --cached '{path}'; '{name}' у .gitignore; ключ — у {config_hint()}; "
               f"ключ ЗМІНИТИ (він уже в історії).", file=sys.stderr)
         sys.exit(2)
-    if subprocess.run(["git", "-C", d, "check-ignore", "-q", "--", name], capture_output=True).returncode != 0:
+    if rc != 1:
+        cannot_say(said)
+    rc, said = _git_says(d, "check-ignore", "-q", "--", name)
+    if rc == 1:
         print(f"critic-env: {path} carries a key and git would ADD it (нема в .gitignore) — відмова.\n"
               f"  fix: додай '{name}' у .gitignore репозиторію — або перенеси ключ у {config_hint()} "
               f"(setup-critic-channel.md §3).", file=sys.stderr)
         sys.exit(2)
+    if rc != 0:
+        cannot_say(said)
+
+
+#: How long the key guard waits on git (#146): a git read of a local repository.
+GIT_READ_TIMEOUT_S = 10
+
+
+def _git_says(folder, *args):
+    """`(returncode, git's first line on stderr)` of `git -C folder <args>`, asked with `LC_ALL=C` so its sentence is
+    the one the key guard reads. A git that does not answer in GIT_READ_TIMEOUT_S, or cannot be started, is `(None,
+    why)` (T-41, #146)."""
+    try:
+        done = subprocess.run(["git", "-C", folder, *args], capture_output=True, text=True, encoding="utf-8",
+                              errors="replace", env={**os.environ, "LC_ALL": "C"}, timeout=GIT_READ_TIMEOUT_S)
+    except subprocess.TimeoutExpired:
+        return None, f"no answer in {GIT_READ_TIMEOUT_S} s"
+    except OSError as exc:
+        return None, str(exc)
+    lines = [line.strip() for line in (done.stderr or "").splitlines() if line.strip()]
+    return done.returncode, (lines[0] if lines else f"git exited {done.returncode}")
 
 
 # Спроба зчитати конфігурацію з .critic-env
@@ -385,27 +422,52 @@ def context_copies_that_differ():
 #: when a review is logged (#143, I-21).
 AUDIT_TRAIL = None
 
+#: How long a clipboard program may take (#146): it copies a few kilobytes.
+CLIPBOARD_TIMEOUT_S = 10
+
+
 # Функція кросплатформного копіювання в буфер обміну
 def copy_to_clipboard(text):
-    try:
-        if sys.platform == "darwin":  # macOS
-            process = subprocess.Popen(["pbcopy"], stdin=subprocess.PIPE)
-            process.communicate(text.encode("utf-8"))
-            return True
-        elif sys.platform == "win32":  # Windows
-            process = subprocess.Popen(["clip"], stdin=subprocess.PIPE)
-            process.communicate(text.encode("utf-8"))
-            return True
-        else:  # Linux fallbacks
-            for cmd in [["xclip", "-selection", "clipboard"], ["xsel", "-b"]]:
+    """True when a clipboard program took `text`: `pbcopy` (macOS), `clip` (Windows), `xclip` then `xsel` (elsewhere).
+    Each program's return code is read (T-50): one that failed -- no pasteboard, no display -- answered True, and the
+    door said "copied" over a clipboard that held nothing. A failure, a missing program and one that does not answer in
+    CLIPBOARD_TIMEOUT_S is False, each said on stderr in a line naming the program."""
+    if sys.platform == "darwin":  # macOS
+        commands = [["pbcopy"]]
+    elif sys.platform == "win32":  # Windows
+        commands = [["clip"]]
+    else:  # Linux fallbacks
+        commands = [["xclip", "-selection", "clipboard"], ["xsel", "-b"]]
+    data, said = text.encode("utf-8", "replace"), []
+    for cmd in commands:
+        # stderr into a file, not a pipe: `xclip` stays behind in the background to serve the selection, holding what
+        # it was given -- a pipe it holds never ends, and `communicate` would wait on it until the deadline.
+        with tempfile.TemporaryFile() as errors:
+            try:
+                process = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=errors)
+            except FileNotFoundError:
+                said.append(f"{cmd[0]}: not installed")
+                continue
+            except OSError as exc:
+                said.append(f"{cmd[0]}: {exc}")
+                continue
+            try:
+                process.communicate(data, timeout=CLIPBOARD_TIMEOUT_S)
+            except subprocess.TimeoutExpired:
+                process.kill()
                 try:
-                    process = subprocess.Popen(cmd, stdin=subprocess.PIPE)
-                    process.communicate(text.encode("utf-8"))
-                    return True
-                except FileNotFoundError:
-                    continue
-    except Exception as e:
-        print(f"Помилка копіювання в буфер: {e}", file=sys.stderr)
+                    process.communicate(timeout=CLIPBOARD_TIMEOUT_S)        # reaps it: a killed child goes at once
+                except subprocess.TimeoutExpired:
+                    pass
+                said.append(f"{cmd[0]}: no answer in {CLIPBOARD_TIMEOUT_S} s")
+                continue
+            if process.returncode == 0:
+                return True
+            errors.seek(0)
+            lines = [line.strip() for line in errors.read().decode("utf-8", "replace").splitlines() if line.strip()]
+        said.append(f"{cmd[0]} exited {process.returncode}" + (f": {lines[-1]}" if lines else ""))
+    for line in said:
+        print(f"Помилка копіювання в буфер: {line}", file=sys.stderr)
     return False
 
 
@@ -2786,6 +2848,193 @@ def _check_the_audit_trail_is_the_projects():
     assert not failures, "\n  ".join(["the audit trail's home, the project root:"] + failures)
 
 
+def _check_the_key_guard_says_when_git_cannot():
+    """T-41: the key guard reads what git SAID, not only that it failed. A project `.critic-env` carrying a key, in a
+    repository git refuses to read -- "dubious ownership", rc 128, as in a folder another user owns -- passed as "not a
+    repository", and the key was read from a file git might well commit. Only rc 128 saying `not a git repository` is
+    that; any other failure, a git that does not answer in 10 s, or one that cannot be started stops the run, exit 2,
+    with git's own line. Outside any repository, and with no git at all, the file is read as before. Asked with
+    `LC_ALL=C`, so git's sentence is the one read for."""
+    import contextlib
+    import io
+    top = tempfile.mkdtemp(prefix="autosound_ai_key_guard_")
+    failures = []
+    names = ("GIT_CONFIG_GLOBAL", "GIT_CONFIG_NOSYSTEM", "GIT_CEILING_DIRECTORIES", "GIT_TEST_ASSUME_DIFFERENT_OWNER")
+    saved_env = {name: os.environ.get(name) for name in names}
+    real_run, real_which = subprocess.run, shutil.which
+
+    def guard(path):
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            try:
+                _refuse_if_git_would_take(path)
+                return 0, err.getvalue()
+            except SystemExit as stop:
+                return stop.code, err.getvalue()
+            except Exception as exc:  # noqa: BLE001 -- an escape is the check's finding
+                return f"raised {exc!r}", err.getvalue()
+
+    def key_file(folder):
+        os.makedirs(folder, exist_ok=True)
+        path = os.path.join(folder, ".critic-env")
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write("GEMINI_API_KEY=AQ." + "k" * 50 + "\n")
+        return path
+    try:
+        os.environ.update(GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1",
+                          GIT_CEILING_DIRECTORIES=os.path.dirname(os.path.realpath(top)))
+        repo = os.path.join(top, "car")
+        os.makedirs(repo)
+        real_run(["git", "init", "-q", repo], capture_output=True, timeout=60, check=True)
+        with open(os.path.join(repo, ".gitignore"), "w", encoding="utf-8") as fh:
+            fh.write(".critic-env\n")
+        ignored = key_file(repo)
+        code, said = guard(ignored)
+        if code:
+            failures.append(f"an ignored key file in a repository git reads: exit {code}, said {said.strip()!r}")
+        os.environ["GIT_TEST_ASSUME_DIFFERENT_OWNER"] = "1"
+        code, said = guard(ignored)
+        os.environ.pop("GIT_TEST_ASSUME_DIFFERENT_OWNER")
+        if code != 2 or "dubious ownership" not in said or f"git could not say whether {ignored} would be committed" \
+                not in said or config_hint() not in said:
+            failures.append(f"a repository git refuses to read: exit {code}, said {said.strip()!r}")
+        code, said = guard(key_file(os.path.join(top, "loose")))
+        if code or said.strip():
+            failures.append(f"outside any repository: exit {code}, said {said.strip()!r}")
+        shutil.which = lambda name, *a, **k: None if name == "git" else real_which(name, *a, **k)
+        try:
+            code, said = guard(ignored)
+        finally:
+            shutil.which = real_which
+        if code or said.strip():
+            failures.append(f"no git on this machine: exit {code}, said {said.strip()!r}")
+        for label, fault, words in (("a git that does not answer", subprocess.TimeoutExpired(["git"], 10),
+                                     "no answer in 10 s"),
+                                    ("a git that cannot be started", PermissionError(13, "Permission denied"),
+                                     "Permission denied")):
+            def failing(cmd, fault=fault, **kw):
+                raise fault
+            subprocess.run = failing
+            try:
+                code, said = guard(ignored)
+            finally:
+                subprocess.run = real_run
+            if code != 2 or f"git could not say whether {ignored} would be committed" not in said or words not in said:
+                failures.append(f"{label}: exit {code}, said {said.strip()!r}")
+        seen = []
+
+        def recording(cmd, **kw):
+            seen.append(kw)
+            return real_run(cmd, **kw)
+        subprocess.run = recording
+        try:
+            guard(ignored)
+        finally:
+            subprocess.run = real_run
+        asked = [(kw.get("timeout"), (kw.get("env") or {}).get("LC_ALL"), kw.get("text")) for kw in seen]
+        if not asked or any(a != (10, "C", True) for a in asked):
+            failures.append(f"how git is asked (timeout, LC_ALL, text): {asked}")
+    finally:
+        subprocess.run, shutil.which = real_run, real_which
+        for name, value in saved_env.items():
+            os.environ.pop(name, None)
+            if value is not None:
+                os.environ[name] = value
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["the key guard:"] + failures)
+
+
+def _check_a_failed_copy_is_not_a_copy():
+    """T-50: the clipboard helper reads each program's return code. A `pbcopy` / `xclip` that fails -- no pasteboard,
+    no display -- answered True, and the door said "✓ copied" over a clipboard that held nothing; it is False now, with
+    the program's own line on stderr. One that does not answer in 10 s is stopped and said. Stand-in programs on PATH,
+    shell scripts: on Windows, which starts none, this is not checked."""
+    if os.name != "posix":
+        return
+    import contextlib
+    import io
+    top = tempfile.mkdtemp(prefix="autosound_ai_clipboard_")
+    names = ["pbcopy"] if sys.platform == "darwin" else ["xclip", "xsel"]
+    saved_path, saved_timeout = os.environ.get("PATH"), globals().get("CLIPBOARD_TIMEOUT_S")
+    failures = []
+
+    def stand_in(body):
+        for name in names:
+            path = os.path.join(top, name)
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write("#!/bin/sh\n" + body)
+            os.chmod(path, 0o755)
+
+    def copy():
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            try:
+                got = copy_to_clipboard("the package")
+            except Exception as exc:  # noqa: BLE001 -- an escape is the check's finding
+                got = f"raised {exc!r}"
+        return got, err.getvalue()
+    try:
+        os.environ["PATH"] = top
+        held = os.path.join(top, "held.txt")
+        stand_in(f"/bin/cat > '{held}'\n")
+        got, said = copy()
+        if got is not True or open(held, encoding="utf-8").read() != "the package":
+            failures.append(f"a program that copies: {got!r}, said {said.strip()!r}")
+        stand_in('/bin/cat >/dev/null\necho "$0: no pasteboard here" >&2\nexit 1\n')
+        got, said = copy()
+        if got is not False or "no pasteboard here" not in said:
+            failures.append(f"a program that fails: {got!r}, said {said.strip()!r}")
+        globals()["CLIPBOARD_TIMEOUT_S"] = 1
+        stand_in("exec /bin/sleep 8\n")
+        got, said = copy()
+        if got is not False or "no answer in 1 s" not in said:
+            failures.append(f"a program that does not answer: {got!r}, said {said.strip()!r}")
+    finally:
+        if saved_path is None:
+            os.environ.pop("PATH", None)
+        else:
+            os.environ["PATH"] = saved_path
+        globals()["CLIPBOARD_TIMEOUT_S"] = saved_timeout
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["the clipboard:"] + failures)
+
+
+def _check_help_is_the_usage():
+    """T-50 (the 09-09 review's F6): `--help` and `-h` print the usage -- every task: critic, advisor, ask, doctor, key,
+    selftest -- on stdout and exit 0. They were "unknown task: --help", exit 1, and the usage named four of the six."""
+    for flag in ("--help", "-h"):
+        with _DoorScene() as scene:
+            code, out, err = scene.run(flag)
+        assert code == 0 and "critic|advisor|ask|doctor|key|selftest" in out and not err.strip(), \
+            f"{flag}: exit {code}, out {out.strip()!r}, err {err.strip()!r}"
+
+
+def _check_the_quarantine_read_has_a_deadline():
+    """#146 (T-49): the doctor's read of macOS's quarantine mark (`xattr -p com.apple.quarantine`) has its deadline,
+    10 s, and one that does not answer is "not checked", said -- not a doctor that waits for ever. `subprocess` is a
+    stand-in here."""
+    probe = globals().get("_quarantined")
+    assert probe, "no _quarantined: the doctor asks xattr with no deadline"
+    real_run = subprocess.run
+    seen = []
+    try:
+        for rc, want in ((0, True), (1, False)):
+            subprocess.run = lambda cmd, rc=rc, **kw: (seen.append(kw.get("timeout")),
+                                                       subprocess.CompletedProcess(cmd, rc, "", ""))[1]
+            got = probe("/x/agy")
+            assert got == (want, ""), f"xattr exit {rc}: {got!r}"
+
+        def no_answer(cmd, **kw):
+            seen.append(kw.get("timeout"))
+            raise subprocess.TimeoutExpired(cmd, kw.get("timeout"))
+        subprocess.run = no_answer
+        got = probe("/x/agy")
+        assert got == (None, "xattr gave no answer in 10 s"), f"xattr past its deadline: {got!r}"
+    finally:
+        subprocess.run = real_run
+    assert seen == [10, 10, 10], f"the deadlines xattr was given: {seen}"
+
+
 def _selftest():
     """Offline: a retired model becomes a CHOICE carrying the key's list (never a fall-through),
     the list is parsed from the API's shape, and a run with a key and no model stops on the list."""
@@ -2799,7 +3048,9 @@ def _selftest():
                   _check_a_fault_in_the_record_is_not_a_refusal,
                   _check_an_omp_review_names_its_vendor, _check_the_contract_is_the_skills_own,
                   _check_the_context_is_the_roots, _check_another_folders_context_is_never_read,
-                  _check_the_audit_trail_is_the_projects):
+                  _check_the_audit_trail_is_the_projects, _check_the_key_guard_says_when_git_cannot,
+                  _check_a_failed_copy_is_not_a_copy, _check_help_is_the_usage,
+                  _check_the_quarantine_read_has_a_deadline):
         try:
             check()
         except AssertionError as exc:
@@ -3653,6 +3904,23 @@ def _selftest():
     return 0
 
 
+#: How long the doctor waits on `xattr` (#146).
+XATTR_TIMEOUT_S = 10
+
+
+def _quarantined(where):
+    """`(True, "")` when macOS's quarantine mark is on `where`, `(False, "")` when not, `(None, why)` when `xattr` did
+    not answer in XATTR_TIMEOUT_S or could not be started (#146): the doctor says "not checked" and goes on."""
+    try:
+        done = subprocess.run(["xattr", "-p", "com.apple.quarantine", where], capture_output=True,
+                              timeout=XATTR_TIMEOUT_S)
+    except subprocess.TimeoutExpired:
+        return None, f"xattr gave no answer in {XATTR_TIMEOUT_S} s"
+    except OSError as exc:
+        return None, f"xattr could not be started ({exc})"
+    return done.returncode == 0, ""
+
+
 def machine_lines(run=None):
     """`[(ok, line)]` about the machine under the method, before anything else is read (S-028, hub #192).
 
@@ -4097,10 +4365,13 @@ def run_doctor(smoke=True, via=None):
         if cli_flavor(cli_bin) == "gemini" and not api_key_for("google"):
             print(f"✗ CLI gemini без GEMINI_API_KEY — {FAILURE_ADVICE['dead_cli']}")
             ok = False
-        if sys.platform == "darwin" and os.path.exists(where) and shutil.which("xattr") and subprocess.run(
-                ["xattr", "-p", "com.apple.quarantine", where], capture_output=True).returncode == 0:
+        quarantined, why = (_quarantined(where) if sys.platform == "darwin" and os.path.exists(where)
+                            and shutil.which("xattr") else (False, ""))
+        if quarantined:
             print(f"✗ {where} у карантині Gatekeeper. Виправлення: xattr -dr com.apple.quarantine \"{where}\"")
             ok = False
+        elif quarantined is None:
+            print(f"· {where}: Gatekeeper's quarantine not checked -- {why}")
         if provider == "google" and cli_flavor(cli_bin) == "agy":
             route, line = agy_sign_in()
             print(f"{'✗' if route == 'none' else '✓'} Вхід agy: {line}")
@@ -4713,14 +4984,19 @@ def review_through_omp(role, binary, model, prompt, pkg_file, role_var, record=F
     sys.exit(4)
 
 
-_USAGE = ("Використання: python3 scripts/autosound_ai.py [critic|advisor|ask|doctor] <package_file.md> [trace.csv] "
-          "[--via api|cli|omp|clipboard] [--model <id>] [--provider google|anthropic|openai] [--record]")
+_USAGE = ("Використання: python3 scripts/autosound_ai.py [critic|advisor|ask|doctor|key|selftest] <package_file.md> "
+          "[trace.csv] [--via api|cli|omp|clipboard] [--model <id>] [--provider google|anthropic|openai] [--record]\n"
+          "  doctor [--no-smoke] · key set|status|rm|move-shell ... · selftest -- these take no package file")
 
 
 def main():
     if len(sys.argv) < 2:
         print(_USAGE)
         sys.exit(1)
+    if sys.argv[1] in ("-h", "--help"):
+        # T-50 (the 09-09 review's F6): asked for, the usage is the answer, on stdout, exit 0 -- not "unknown task".
+        print(_USAGE)
+        sys.exit(0)
 
     argv = list(sys.argv)
     # `--record` (#143, R46): a tuning review this run files is recorded as the process's reviewer step by the door

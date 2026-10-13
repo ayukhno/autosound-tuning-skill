@@ -144,7 +144,9 @@ TCC does not need it (§8 M6). It answers as `SKILL.md` documents, outside this 
 ## 5. `scripts/autosound_ai.py critic|advisor|ask|doctor|key` — guaranteed, as today
 
 Before any verb runs, the script exits 2 when a project's `.critic-env` carries a key and git would take it (the file
-is tracked, or not ignored). It exits 1 when `--via`, `--model` or `--provider` is not valid, when
+is tracked, or not ignored), or git cannot say whether it would -- any failure but "not a git repository", no answer
+in 10 s, a git that cannot be started (#146) -- naming git's line. `--help` and `-h` print the usage and exit 0
+(#146). It exits 1 when `--via`, `--model` or `--provider` is not valid, when
 `AUTOSOUND_CRITIC_VIA` is not valid and the run names no route of its own (`--via` or `--mode`), when no verb is
 given, when the verb is unknown, or when `--record` is given to a verb other than `critic` and `advisor`. Any verb also
 exits 1 on an exception the script does not catch, with Python's traceback on stderr. Then each verb answers:

@@ -83,6 +83,12 @@ RELEASE_DOWNLOAD = "https://github.com/ayukhno/autosound-tuning-skill/releases/d
 SUMS_NAME = "SHA256SUMS"
 #: ~30 MB over whatever line the person has, so not the 20 s a form gets.
 FETCH_TIMEOUT_S = 180
+#: How long each child may take (#146, T-49): git's reads of this checkout, the submodule's fetch (the network), the
+#: wrapper's build (a first restore), and one engine run. Past it the caller answers as for any other failure.
+GIT_READ_TIMEOUT_S = 10
+SUBMODULE_TIMEOUT_S = 300
+BUILD_TIMEOUT_S = 900
+ENGINE_TIMEOUT_S = 1800
 
 LAYOUT_CONTRACT = "autosound.resonalyze-layout.v1"
 RESULT_CONTRACT = "autosound.resonalyze-result.v1"
@@ -138,18 +144,28 @@ def method_is_checkout():
 
 
 def pin():
-    """The fork commit the skill records for `vendor/Resonalyze`, and the one checked out there (None when absent).
-    None and None in a plugin copy (#142): `git -C REPO` there answers for whatever repository is above it."""
+    """The fork commit the skill records for `vendor/Resonalyze`, and the one checked out there (None when absent, or
+    when git does not answer in GIT_READ_TIMEOUT_S, #146). None and None in a plugin copy (#142): `git -C REPO` there
+    answers for whatever repository is above it."""
     if not method_is_checkout():
         return {"recorded": None, "checked_out": None}
-    r = subprocess.run(["git", "-C", REPO, "ls-tree", "HEAD", "vendor/Resonalyze"], capture_output=True, text=True, encoding="utf-8", errors="replace")
-    recorded = r.stdout.split()[2] if r.returncode == 0 and len(r.stdout.split()) >= 3 else None
+    r = _git_read(REPO, "ls-tree", "HEAD", "vendor/Resonalyze")
+    recorded = r.stdout.split()[2] if r and r.returncode == 0 and len(r.stdout.split()) >= 3 else None
     checked = None
     # An uninitialised submodule is an empty folder, and `git -C` there answers for the SKILL's repository.
     if os.path.exists(os.path.join(SUBMODULE, ".git")):
-        r = subprocess.run(["git", "-C", SUBMODULE, "rev-parse", "HEAD"], capture_output=True, text=True, encoding="utf-8", errors="replace")
-        checked = r.stdout.strip() if r.returncode == 0 else None
+        r = _git_read(SUBMODULE, "rev-parse", "HEAD")
+        checked = r.stdout.strip() if r and r.returncode == 0 else None
     return {"recorded": recorded, "checked_out": checked}
+
+
+def _git_read(where, *args):
+    """`git -C where <args>`'s completed process, or None when git did not answer in GIT_READ_TIMEOUT_S (#146)."""
+    try:
+        return subprocess.run(["git", "-C", where, *args], capture_output=True, text=True, encoding="utf-8",
+                              errors="replace", timeout=GIT_READ_TIMEOUT_S)
+    except subprocess.TimeoutExpired:
+        return None
 
 
 def rid():
@@ -336,7 +352,7 @@ def _checkout_tag():
         return None
     try:
         r = subprocess.run(["git", "-C", REPO, "describe", "--tags", "--exact-match"], capture_output=True, text=True,
-                           encoding="utf-8", errors="replace", timeout=10)
+                           encoding="utf-8", errors="replace", timeout=GIT_READ_TIMEOUT_S)
     except Exception:  # noqa: BLE001
         return None
     return r.stdout.strip() or None if r.returncode == 0 else None
@@ -436,7 +452,8 @@ def fetch_binary(tag, get=_http_get):
 
 
 def build(fetch=True, dotnet=None):
-    """(True, dll) or (False, what is missing). Fetches the submodule when it is not checked out and `fetch` allows."""
+    """(True, dll) or (False, what is missing). Fetches the submodule when it is not checked out and `fetch` allows. A
+    fetch or a build past its deadline is (False, why) (#146)."""
     dotnet = dotnet or find_dotnet()
     if not dotnet:
         return False, ("no .NET SDK: `dotnet` is not on PATH and ~/.dotnet/dotnet is absent -- install the SDK the "
@@ -449,18 +466,28 @@ def build(fetch=True, dotnet=None):
         if not method_is_checkout():
             return False, ("vendor/Resonalyze is not here, and this copy is no git checkout (a plugin copy) to fetch it "
                            "into -- fetch-binary --tag <this copy's tag> installs the prebuilt engine instead")
-        r = subprocess.run(["git", "-C", REPO, "submodule", "update", "--init", "--checkout", "vendor/Resonalyze"],
-                           capture_output=True, text=True, encoding="utf-8", errors="replace")
+        try:
+            r = subprocess.run(["git", "-C", REPO, "submodule", "update", "--init", "--checkout", "vendor/Resonalyze"],
+                               capture_output=True, text=True, encoding="utf-8", errors="replace",
+                               timeout=SUBMODULE_TIMEOUT_S)
+        except subprocess.TimeoutExpired:
+            return False, (f"fetching vendor/Resonalyze failed: git gave no answer in {SUBMODULE_TIMEOUT_S} s -- check "
+                           "the network and run again")
         if r.returncode != 0:
             return False, f"fetching vendor/Resonalyze failed: {r.stderr.strip()[-400:]}"
-    r = subprocess.run([dotnet, "build", "-c", "Release", "-nologo", "-v", "q", CSPROJ], capture_output=True, text=True, encoding="utf-8", errors="replace")
+    try:
+        r = subprocess.run([dotnet, "build", "-c", "Release", "-nologo", "-v", "q", CSPROJ], capture_output=True,
+                           text=True, encoding="utf-8", errors="replace", timeout=BUILD_TIMEOUT_S)
+    except subprocess.TimeoutExpired:
+        return False, f"dotnet build failed: no answer in {BUILD_TIMEOUT_S} s"
     if r.returncode != 0:
         return False, "dotnet build failed:\n" + "\n".join((r.stdout + r.stderr).strip().splitlines()[-15:])
     return True, DLL
 
 
 def run_engine(layout, out_dir, dotnet=None):
-    """Write the layout, run the wrapper, read the result. Returns (exit code, result or None, stderr)."""
+    """Write the layout, run the wrapper, read the result. Returns (exit code, result or None, stderr) -- (124, None,
+    why) for a run past ENGINE_TIMEOUT_S (#146)."""
     command, how = engine_command(dotnet)
     if command is None:
         return 2, None, how
@@ -471,8 +498,12 @@ def run_engine(layout, out_dir, dotnet=None):
         json.dump(layout, fh, indent=1, ensure_ascii=False)
     if os.path.exists(result_path):
         os.remove(result_path)
-    r = subprocess.run([*command, layout_path, result_path, "--log", os.path.join(out_dir, "engine.log")],
-                       capture_output=True, text=True, encoding="utf-8", errors="replace")
+    try:
+        r = subprocess.run([*command, layout_path, result_path, "--log", os.path.join(out_dir, "engine.log")],
+                           capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=ENGINE_TIMEOUT_S)
+    except subprocess.TimeoutExpired:
+        # As `upkeep.run` answers a child past its deadline: 124, and nothing read -- a result it left is no result.
+        return 124, None, f"the engine ({how}) gave no answer in {ENGINE_TIMEOUT_S} s"
     result = None
     if os.path.isfile(result_path):
         with open(result_path, encoding="utf-8") as fh:
@@ -2555,10 +2586,73 @@ def _check_an_archive_that_times_out_is_unreachable():
         shutil.rmtree(home, ignore_errors=True)
 
 
+def _check_every_child_has_its_deadline():
+    """#146 (T-49): every child the engine module starts has its deadline -- git's reads 10 s, the submodule's fetch
+    300 s, `dotnet build` 900 s, the engine run 1,800 s -- and one past it answers in its caller's own terms: `pin()`
+    None (cannot be told), `build()` `(False, why)`, `run_engine()` `(124, None, why)`, which its callers already report
+    as "wrote nothing (exit N)". None had one: a git on a drive gone away, a build stuck on a restore, an engine that
+    never returned each held the desk for ever. `subprocess` is a stand-in here that times every child out."""
+    import types
+    root = tempfile.mkdtemp(prefix="autosound_engine_deadline_")
+    calls = []
+
+    def times_out(cmd, **kw):
+        calls.append((os.path.basename(str(cmd[0])), cmd[1:4], kw.get("timeout")))
+        raise subprocess.TimeoutExpired(cmd, kw.get("timeout"))
+
+    names = ("REPO", "SUBMODULE", "DLL", "subprocess", "engine_command")
+    real = {key: globals()[key] for key in names}
+    failures = []
+    try:
+        os.makedirs(os.path.join(root, ".git"))
+        os.makedirs(os.path.join(root, "vendor", "Resonalyze", ".git"))
+        globals().update(REPO=root, SUBMODULE=os.path.join(root, "vendor", "Resonalyze"),
+                         DLL=os.path.join(root, "bin", "ResonalyzeEngine.dll"),
+                         subprocess=types.SimpleNamespace(run=times_out, TimeoutExpired=subprocess.TimeoutExpired,
+                                                          SubprocessError=subprocess.SubprocessError),
+                         engine_command=lambda dotnet=None: (["/x/ResonalyzeEngine"], "a stand-in engine"))
+
+        def answer(what, call):
+            try:
+                return call()
+            except subprocess.TimeoutExpired as exc:
+                failures.append(f"{what}: the time-out escaped as {type(exc).__name__}")
+                return None
+
+        got = answer("pin()", pin)
+        if got is not None and got != {"recorded": None, "checked_out": None}:
+            failures.append(f"pin() past its deadline: {got}")
+        got = answer("build() fetching", lambda: build(dotnet="/x/dotnet"))
+        if got is not None and (got[0] or "no answer in 300 s" not in got[1]):
+            failures.append(f"build() whose submodule fetch timed out: {got}")
+        os.makedirs(os.path.join(root, "vendor", "Resonalyze", "dsp"))
+        with open(os.path.join(root, "vendor", "Resonalyze", "dsp", "Resonalyze.Dsp.csproj"), "w", encoding="utf-8"):
+            pass
+        got = answer("build() building", lambda: build(dotnet="/x/dotnet"))
+        if got is not None and (got[0] or "dotnet build" not in got[1] or "no answer in 900 s" not in got[1]):
+            failures.append(f"build() whose dotnet build timed out: {got}")
+        got = answer("run_engine()", lambda: run_engine({"contract": LAYOUT_CONTRACT}, os.path.join(root, "out")))
+        if got is not None and (got[0] != 124 or got[1] is not None or "no answer in 1800 s" not in got[2]):
+            failures.append(f"run_engine() past its deadline: {got}")
+        want = [("git", ["-C", root, "ls-tree"], 10), ("git", ["-C", os.path.join(root, "vendor", "Resonalyze"),
+                                                               "rev-parse"], 10),
+                ("git", ["-C", root, "submodule"], 300), ("dotnet", ["build", "-c", "Release"], 900),
+                ("ResonalyzeEngine", None, 1800)]
+        seen = [(name, args if want_args is not None else None, timeout)
+                for (name, args, timeout), (_, want_args, _) in zip(calls, want)]
+        if seen != want:
+            failures.append(f"the children and their deadlines: {calls}")
+    finally:
+        globals().update(real)
+        shutil.rmtree(root, ignore_errors=True)
+    assert not failures, "\n  ".join(["deadlines:"] + failures)
+
+
 def _selftest():
     failures = []
     for check in (_check_chebyshev_solo_refused_on_the_front, _check_fetch_binary_answers_in_four_codes,
-                  _check_a_plugin_copy_has_no_sdk_route, _check_an_archive_that_times_out_is_unreachable):
+                  _check_a_plugin_copy_has_no_sdk_route, _check_an_archive_that_times_out_is_unreachable,
+                  _check_every_child_has_its_deadline):
         try:
             check()
         except AssertionError as exc:

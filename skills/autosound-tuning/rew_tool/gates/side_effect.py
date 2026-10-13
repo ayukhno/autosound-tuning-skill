@@ -92,8 +92,29 @@ class SideEffectRefused(RuntimeError):
     action was never allowed to run at all (an upload nobody consented to)."""
 
 
+#: How long `gh` may take (#146, audit K-5): a `gh` waiting on a network that answers nothing held the post -- and the
+#: window that asked for it -- for ever. An image upload carries the picture itself, so it gets longer.
+GH_TIMEOUT_S = 60
+GH_UPLOAD_TIMEOUT_S = 300
+
+
+def _gh_timeout(argv):
+    """The deadline for one `gh` command: an upload to the asset branch (`gh api -X PUT .../contents/...`) 300 s, any
+    other 60 s."""
+    upload = len(argv) > 3 and list(argv[1:4]) == ["api", "-X", "PUT"] and any("/contents/" in a for a in argv)
+    return GH_UPLOAD_TIMEOUT_S if upload else GH_TIMEOUT_S
+
+
 def _subprocess_runner(argv):
-    proc = subprocess.run(argv, capture_output=True, text=True, encoding="utf-8", errors="replace")
+    """`(returncode, stdout, stderr)` of `argv`. A child past its deadline is `(124, "", "no answer in N s")`, as
+    `upkeep.run` answers it: a return code the verifier refuses, never an exception (#146). The name and the shape
+    `runner(argv)` are contract 1's -- the default of `upload_issue_asset(..., runner=_subprocess_runner)`."""
+    timeout = _gh_timeout(argv)
+    try:
+        proc = subprocess.run(argv, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                              timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return 124, "", f"no answer in {timeout} s"
     return proc.returncode, proc.stdout, proc.stderr
 
 
@@ -297,6 +318,12 @@ def method_version():
     import os
     root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))))
     try:
+        # Only the copy's OWN repository answers (T-42): git asked in a copy with no `.git` -- a plugin copy -- walks up
+        # into any repository around it (a git-tracked home folder), whose `describe` no copy of the method ever had.
+        top = subprocess.run(["git", "-C", root, "rev-parse", "--show-toplevel"], capture_output=True, text=True,
+                             encoding="utf-8", errors="replace", timeout=10)
+        if top.returncode != 0 or not _same_folder(top.stdout.strip(), root):
+            return "unknown"
         proc = subprocess.run(["git", "-C", root, "describe", "--tags", "--always"], capture_output=True, text=True,
                               encoding="utf-8", errors="replace", timeout=10)
         if proc.returncode == 0 and proc.stdout.strip():
@@ -304,6 +331,16 @@ def method_version():
     except (OSError, subprocess.SubprocessError):
         pass
     return "unknown"
+
+
+def _same_folder(a, b):
+    """True when `a` and `b` name one folder on disk (`os.path.samefile`, as `provenance._same_folder`): git's `C:/...`
+    on Windows, a path in another letter case, a link. A path that cannot be read is not the same folder."""
+    import os
+    try:
+        return bool(a) and os.path.samefile(a, b)
+    except OSError:
+        return False
 
 
 def versions_line(lang, channel="skill", version=None, system=None):
@@ -950,6 +987,14 @@ def _selftest():
     # Dry-run prints the exact command and publishes nothing.
     assert upload_issue_asset(shot, "shot.png", consented=True, dry_run=True)["dry_run"]
 
+    failures = []
+    for check in (_check_gh_answers_within_its_deadline, _check_method_version_reads_its_own_repository):
+        try:
+            check()
+        except AssertionError as exc:
+            failures.append(f"{check.__name__}: {exc}")
+    assert not failures, "\n".join(failures)
+
     print("selftest OK — verified good post; dedup guard skips a <24h duplicate (stale + broken "
           "list still post); FAIL LOUD on wrong-repo / confabulated-success / gh-failure / "
           "look-alike host; refused missing body-file + shell-string argv; dry-run safe. "
@@ -963,8 +1008,88 @@ def _selftest():
           "kept as provenance and cut to length -- two findings from one car are two titles, so "
           "the dedup guard compares something distinguishing (#49). Comment: a finding lands on an "
           "issue that already exists through the SAME rail -- repo from CHANNELS, URL verified, "
-          "and a comment that went to another issue or another repo refused (S-034).")
+          "and a comment that went to another issue or another repo refused (S-034). Deadlines: gh answers in "
+          "60 s, an upload in 300 s, or the runner says it did not, as a return code (#146); the method's version "
+          "is its own repository's, never one around a copy (T-42).")
     return 0
+
+
+def _check_gh_answers_within_its_deadline():
+    """#146 (K-5): the default runner -- the one every `gh` call goes through, a frozen default of contract 1 -- gives a
+    child its deadline and answers one that runs past it as `upkeep.run` does, `(124, "", "no answer in N s")`: a `gh`
+    that waits on a network answering nothing held the feedback post, and TCC's window, for ever. 60 s for gh, 300 s for
+    an image upload (`gh api -X PUT .../contents/...`). A real child, run past a deadline shortened here."""
+    import sys
+    upload = ["gh", "api", "-X", "PUT", f"repos/{FEEDBACK_REPO}/contents/issues/a.png", "-F", "content=@x"]
+    timeouts = globals().get("_gh_timeout")
+    assert timeouts, "no _gh_timeout: the runner gives gh no deadline"
+    assert (timeouts(["gh", "issue", "list"]), timeouts(upload)) == (60, 300), \
+        (timeouts(["gh", "issue", "list"]), timeouts(upload))
+    saved = globals().get("GH_TIMEOUT_S")
+    globals()["GH_TIMEOUT_S"] = 1
+    try:
+        got = _subprocess_runner([sys.executable, "-c", "import time; time.sleep(8)"])
+    finally:
+        globals()["GH_TIMEOUT_S"] = saved
+    assert got == (124, "", "no answer in 1 s"), f"a child past its deadline: {got!r}"
+    try:
+        guarded_run(["gh", "issue", "list"], verify_feedback_url, runner=lambda argv: got)
+        raise AssertionError("a gh that did not answer was taken as a post")
+    except SideEffectRefused as exc:
+        assert "gh exited 124" in str(exc) and "no answer in 1 s" in str(exc), str(exc)
+
+
+def _check_method_version_reads_its_own_repository():
+    """T-42: `method_version()` is the version of the copy's OWN repository. A copy with no `.git` of its own -- a plugin
+    copy -- inside another repository (a git-tracked home folder) answered that repository's `describe`, a version no
+    copy of the method ever had; it is `unknown` there, as for a copy in no repository. This file, copied into that
+    layout and run by a fresh interpreter: the function as it ships, not a stand-in."""
+    import os
+    import shutil
+    import sys
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_method_version_")
+    env = dict(os.environ, GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1", GIT_AUTHOR_NAME="t",
+               GIT_AUTHOR_EMAIL="t@t", GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t",
+               GIT_CEILING_DIRECTORIES=os.path.dirname(os.path.realpath(top)))
+
+    def git(cwd, *args):
+        done = subprocess.run(["git", "-C", cwd, *args], capture_output=True, text=True, encoding="utf-8",
+                              errors="replace", env=env, timeout=60)
+        assert done.returncode == 0, (args, done.stderr)
+
+    def version_of(copy):
+        here = os.path.join(copy, "skills", "autosound-tuning", "rew_tool", "gates")
+        os.makedirs(here, exist_ok=True)
+        shutil.copy(os.path.realpath(__file__), os.path.join(here, "side_effect.py"))
+        probe = ("import importlib.util, sys; spec = importlib.util.spec_from_file_location('se', sys.argv[1]); "
+                 "m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m); print(m.method_version())")
+        done = subprocess.run([sys.executable, "-c", probe, os.path.join(here, "side_effect.py")],
+                              capture_output=True, text=True, encoding="utf-8", errors="replace", env=env, timeout=60)
+        assert done.returncode == 0, done.stderr
+        return done.stdout.strip()
+
+    try:
+        home = os.path.join(top, "home")
+        os.makedirs(home)
+        git(home, "init", "-q")
+        with open(os.path.join(home, "notes.txt"), "w", encoding="utf-8") as fh:
+            fh.write("a home folder kept in git\n")
+        git(home, "add", "-A")
+        git(home, "commit", "-q", "-m", "home")
+        git(home, "tag", "v9.9.9")
+        copy = os.path.join(home, ".claude", "plugins", "cache", "m", "autosound-tuning", "3.1.0")
+        got = version_of(copy)
+        assert got == "unknown", f"a plugin copy inside a repository took its version: {got!r}"
+        # The copy's own repository answers for it, at its own tag.
+        git(copy, "init", "-q")
+        git(copy, "add", "-A")
+        git(copy, "commit", "-q", "-m", "copy")
+        git(copy, "tag", "v3.1.0")
+        got = version_of(copy)
+        assert got == "v3.1.0", f"a checkout of its own: {got!r}"
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
 
 
 def _selftest_dsp_profile():
