@@ -553,10 +553,11 @@ def _propose(history, delta, note, provenance, registry, allow_nonactive, eviden
                 if (row or {}).get("status") == "proposed" and row != ((current.get(tier) or {}).get(ch)):
                     row["status"] = "candidate"
         proposed["variant"] = "candidate"
+    # The samples follow the profile's rate, said which (#147, item 2) -- not the snapshot's recorded one. Read before
+    # the bank, so nothing it raises can leave a version banked with no sheet.
+    rate, rate_said = sheet_rate(project_dir, proposed["sample_rate"])
     version = history.snapshot(proposed, note=note or ("candidate" if candidate else "proposed change"),
                                place=not candidate)   # validates again + versions
-    # The samples follow the profile's rate, said which (#147, item 2) -- not the snapshot's recorded one.
-    rate, rate_said = sheet_rate(project_dir, proposed["sample_rate"])
     sheet = settings_sheet({**d, "to": version}, rate, history.preset, version, slot_note=slot_note,
                            rate_said=rate_said)
     write_delta(history, {**d, "to": version}, rate, version, note=note, advisories=adv, rate_said=rate_said)
