@@ -11,7 +11,8 @@
 #   * a check that could not run (ruff absent, a module printing SKIPPED) is NOT RUN: counted, printed, and a
 #     failure under CI;
 #   * each check runs under a TMPDIR of its own, made empty for it and removed after it; one that exits 0 and leaves
-#     anything there fails, the count named (#148).
+#     anything there fails, the count named (#148) -- counted after the runner gives back what the check took away,
+#     and a TMPDIR the count cannot list fails, find's own line said.
 # REW is pointed at a dead port (T-30): a selftest must never reach a REW that happens to be open on this machine.
 #
 #   scripts/run-selftests.sh              # everything; the LAST line is the verdict (`| tail -1`)
@@ -113,6 +114,18 @@ if [ "${1:-}" = "--selftest" ]; then
                 '    sys.exit("TMPDIR is no empty folder of its own: %s holds %s" % (here, os.listdir(here)))' \
                 'os.rmdir(tempfile.mkdtemp())' \
                 'print("selftest OK -- an empty TMPDIR of its own, left empty")' > "$tmp/t/fresh.py"
+  # ...counted after the runner gives back what a check took away (group fix 1, item 21): locked.py leaves a file and
+  # takes its TMPDIR's permissions, which hid the file from the count -- it passed. And what the count cannot read is
+  # said, never read as empty: selfremoved.py removes its TMPDIR, and the runner cannot tell what it left.
+  printf '%s\n' 'import os, tempfile' \
+                'here = tempfile.gettempdir()' \
+                'open(os.environ["SELFTEST_TMPDIRS"], "a").write(here + "\n")' \
+                'tempfile.mkstemp()' \
+                'os.chmod(here, 0)' \
+                'print("selftest OK -- and locked a file in its TMPDIR")' > "$tmp/t/locked.py"
+  printf '%s\n' 'import os, tempfile' \
+                'os.rmdir(tempfile.gettempdir())' \
+                'print("selftest OK -- and removed its TMPDIR")' > "$tmp/t/selfremoved.py"
   printf 'print("selftest OK")\n'                           > "$tmp/t/noreason.py"
   # A skip line cannot hide a module that has a selftest of its own.
   printf 'def _selftest():\n    print("selftest OK")\n\n\nif __name__ == "__main__":\n    _selftest()\n' \
@@ -125,7 +138,8 @@ if [ "${1:-}" = "--selftest" ]; then
   # A skip line names a file on disk and gives a reason; the manifest's last line counts without its newline.
   { printf '%s\n' "$tmp/t/good.py" "$tmp/t/usage.py" "$tmp/t/skipped.py" "$tmp/t/slow.py" "$tmp/t/spawner.py" \
                   "$tmp/t/leaver.py" "$tmp/t/deaf.py" "$tmp/t/exit3.py" "$tmp/t/okrc1.py" "$tmp/t/oknotlast.py" \
-                  "$tmp/t/deadport.py" "$tmp/t/optimize.py" "$tmp/t/leaves.py" "$tmp/t/fresh.py" \
+                  "$tmp/t/deadport.py" "$tmp/t/optimize.py" "$tmp/t/leaves.py" "$tmp/t/fresh.py" "$tmp/t/locked.py" \
+                  "$tmp/t/selfremoved.py" \
                   "skip $tmp/t/vanished.py gone from disk" \
                   "skip $tmp/t/noreason.py" "skip $tmp/t/hidden.py a reason that hides a selftest"
     printf '%s' "$tmp/t/gone.py"; } > "$tmp/m.txt"
@@ -162,14 +176,17 @@ if [ "${1:-}" = "--selftest" ]; then
   want '^  FAIL sub/unlisted2\.py .*not in '
   want '^  FAIL leaves\.py +left 2 in its TMPDIR'      # the count named
   want '^  ok   fresh\.py'
-  # Three folders, three checks, and none of them left behind: the runner removed each, the timed-out one's too.
-  [ "$(sort -u "$tmp/tmpdirs" 2>/dev/null | wc -l | tr -d ' ')" = 3 ] || {
-    printf 'runner selftest: want three TMPDIRs, one per check (slow, leaves, fresh), got:\n%s\n' \
+  want '^  FAIL locked\.py +left 1 in its TMPDIR'
+  want '^  FAIL selfremoved\.py +its TMPDIR could not be listed after it ran'
+  # Four folders, four checks, and none of them left behind: the runner removed each, the timed-out one's and the
+  # locked one's too.
+  [ "$(sort -u "$tmp/tmpdirs" 2>/dev/null | wc -l | tr -d ' ')" = 4 ] || {
+    printf 'runner selftest: want four TMPDIRs, one per check (slow, leaves, fresh, locked), got:\n%s\n' \
       "$(cat "$tmp/tmpdirs" 2>&1)"; exit 1; }
   while IFS= read -r d || [ -n "$d" ]; do
     [ ! -e "$d" ] || { printf 'runner selftest: a check'"'"'s TMPDIR is still there after the run: %s\n' "$d"; exit 1; }
   done < "$tmp/tmpdirs"
-  last_is "FAILED: 14 of 20 -- usage.py slow.py spawner.py deaf.py exit3.py okrc1.py oknotlast.py leaves.py vanished.py noreason.py hidden.py gone.py sub/unlisted2.py unlisted.py; NOT RUN: skipped.py"
+  last_is "FAILED: 16 of 22 -- usage.py slow.py spawner.py deaf.py exit3.py okrc1.py oknotlast.py leaves.py locked.py selfremoved.py vanished.py noreason.py hidden.py gone.py sub/unlisted2.py unlisted.py; NOT RUN: skipped.py"
   # Under CI a NOT RUN alone fails the run; locally it is counted and the run passes. A valid skip line -- a file
   # with no selftest, and the reason -- fails nothing, and is printed.
   cp "$tmp/t/good.py" "$tmp/t/skipped.py" "$tmp/t2/"
@@ -188,7 +205,7 @@ if [ "${1:-}" = "--selftest" ]; then
          echo "pass=$pass fail=$fail notrun=$notrun skipped=${skipped[*]:-}")"
   want '^  --   ruff +NOT RUN: no uvx and no ruff here$'
   last_is "pass=0 fail=0 notrun=1 skipped=ruff"
-  ok_line="runner selftest OK -- every failure is named and counted in the verdict: a usage text, rc 1 under an OK line, an OK line not last, rc 3, a module that prints it skipped, a timeout, a missing or unlisted module (one in a subfolder too), a bad skip line or one hiding a selftest; no ruff anywhere is NOT RUN; a child left behind, or deaf to TERM, is stopped; checks see REW at the dead port, with asserts on, each in an empty TMPDIR of its own that one leaving anything there fails, the count named, and that the runner removes"
+  ok_line="runner selftest OK -- every failure is named and counted in the verdict: a usage text, rc 1 under an OK line, an OK line not last, rc 3, a module that prints it skipped, a timeout, a missing or unlisted module (one in a subfolder too), a bad skip line or one hiding a selftest; no ruff anywhere is NOT RUN; a child left behind, or deaf to TERM, is stopped; checks see REW at the dead port, with asserts on, each in an empty TMPDIR of its own that one leaving anything there fails, the count named (a TMPDIR locked by its check counted too, one it removed said), and that the runner removes"
   # In a full run this line is the runner's own last line, read by the same rules as every check's: it must read as a
   # pass. One that named the NOT RUN word counted the runner itself as NOT RUN -- and failed CI -- while all passed.
   if says_not_run "$ok_line" || ! says_ok "$ok_line"; then
@@ -234,7 +251,7 @@ GROUP_TIMEOUT='
 # runner removes the folder after every check -- one that failed, timed out or was interrupted too.
 run_one() {
   local name="$1" mode="$2"; shift 2
-  local out rc last tdir left names
+  local out rc last tdir left names listing lrc
   if ! tdir="$(mktemp -d)" || [ ! -d "$tdir" ]; then
     fail=$((fail + 1)); failed+=("$name")
     printf '  FAIL %-24s no TMPDIR of its own could be made (mktemp -d)\n' "$name"
@@ -245,13 +262,26 @@ run_one() {
   else
     out="$(TMPDIR="$tdir" perl -e "$GROUP_TIMEOUT" "$LIMIT" "$PY" "$@" 2>&1 </dev/null)"; rc=$?
   fi
-  left="$(find "$tdir" -mindepth 1 -maxdepth 1 2>/dev/null | wc -l | tr -d ' ')"
-  names="$(find "$tdir" -mindepth 1 -maxdepth 1 2>/dev/null | sed 's|.*/||' | sort | head -n 5 | paste -sd ' ' -)"
-  chmod -R u+rwx "$tdir" 2>/dev/null; rm -rf "$tdir"     # a check that took a folder's permissions away, too
+  # What a check took away is given back BEFORE the count (group fix 1, item 21): a TMPDIR it made unreadable hid what
+  # it left, and passed. find's own error is said, never read as an empty folder -- a TMPDIR the check removed, too.
+  chmod -R u+rwx "$tdir" 2>/dev/null
+  listing="$(find "$tdir" -mindepth 1 -maxdepth 1 2>&1)"; lrc=$?
+  if [ "$lrc" -eq 0 ]; then
+    left="$(printf '%s\n' "$listing" | sed '/^$/d' | wc -l | tr -d ' ')"
+    names="$(printf '%s\n' "$listing" | sed '/^$/d' | sed 's|.*/||' | sort | head -n 5 | paste -sd ' ' -)"
+  else
+    left=0 names=""
+  fi
+  rm -rf "$tdir"
   last="$(printf '%s\n' "$out" | sed '/^[[:space:]]*$/d' | tail -n1)"
   if [ "$rc" -eq 142 ]; then                                   # 128 + SIGALRM
     fail=$((fail + 1)); failed+=("$name"); printf '  FAIL %-24s timeout after %ss\n' "$name" "$LIMIT"
     [ -z "$out" ] || printf '%s\n' "$out" | tail -n 12 | sed 's/^/         /'
+  elif [ "$lrc" -ne 0 ]; then                                  # what it left cannot be known: said, whatever its verdict
+    fail=$((fail + 1)); failed+=("$name")
+    printf '  FAIL %-24s its TMPDIR could not be listed after it ran (%s) -- a selftest leaves its TMPDIR in place\n' \
+      "$name" "$(printf '%s' "$listing" | head -n 1 | cut -c1-120)"
+    printf '         its last line: %s\n' "$(printf '%s' "$last" | cut -c1-100)"
   elif [ "$rc" -eq 0 ] && [ "$left" -ne 0 ]; then              # its verdict aside: a pass, a NOT RUN, a usage text
     fail=$((fail + 1)); failed+=("$name")
     printf '  FAIL %-24s left %s in its TMPDIR (%s%s) -- a selftest removes what it makes\n' "$name" "$left" "$names" \
