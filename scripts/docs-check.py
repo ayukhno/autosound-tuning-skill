@@ -1246,9 +1246,13 @@ def _sections(text: str) -> list:
     return out
 
 
+#: The line under the open mark: the head of the index's list.
+INDEX_HEAD = "**Sections** — `§N` is this file's `## N.` heading:"
+
+
 def _index_text(sections: list, newline: str = "\n") -> str:
     """The index `--write-index` writes for `sections`, its two marks included."""
-    lines = [INDEX_OPEN, "**Sections** — `§N` is this file's `## N.` heading:", ""]
+    lines = [INDEX_OPEN, INDEX_HEAD, ""]
     lines += [f"- §{n} {title}" if n is not None else f"- {title}" for n, title in sections]
     return newline.join(lines + ["", INDEX_CLOSE])
 
@@ -1303,8 +1307,8 @@ def rule_section_index(root: str) -> list[str]:
             bad.append(f"{rel}: no section index — a session reads the whole file to find one section; write it with "
                        f"`scripts/docs-check.py --write-index`")
         elif has_open != has_close or text.index(INDEX_OPEN) > text.index(INDEX_CLOSE):
-            bad.append(f"{rel}: its section index has one mark of two — `scripts/docs-check.py --write-index` writes "
-                       f"both")
+            bad.append(f"{rel}: its section index has one mark of two — `scripts/docs-check.py --write-index` takes "
+                       f"the lone mark and the stale lines beside it out, and writes the index whole")
         else:
             start = text.index(INDEX_OPEN)
             found = text[start:text.index(INDEX_CLOSE) + len(INDEX_CLOSE)]
@@ -1346,9 +1350,56 @@ def rule_section_index(root: str) -> list[str]:
     return bad
 
 
+def _index_line(line: str) -> bool:
+    """A line an index is made of, between its marks: its head, a blank one, an entry (`- §N title`, `- title`)."""
+    return line == INDEX_HEAD or not line.strip() or line.startswith("- ")
+
+
+def _strip_index(text: str) -> str:
+    """`text` with every section index taken out (#148): each block from an open mark to the close mark after it, and a
+    mark standing alone with the stale index lines beside it -- after a lone open mark, its head and entries when the
+    head follows it; before a lone close mark, the entries up to the head when the head is there, and a blank line an
+    erased open mark left. Without the head, the lone mark alone. The blank lines after what is taken go with it, as
+    they go after a whole block; the file's last line end stays."""
+    lines = text.split("\n")
+    drop = set()
+    i = 0
+    while i < len(lines):
+        mark = lines[i].strip()
+        if mark == INDEX_OPEN:
+            j = next((k for k in range(i + 1, len(lines)) if lines[k].strip() in (INDEX_OPEN, INDEX_CLOSE)), None)
+            if j is not None and lines[j].strip() == INDEX_CLOSE:
+                start, end = i, j + 1                     # a whole block: what stands between the marks is the writer's
+            else:
+                start, end = i, i + 1                     # a lone open mark, and the index lines that follow it
+                head = next((k for k in range(i + 1, len(lines)) if lines[k].strip()), None)
+                if head is not None and lines[head] == INDEX_HEAD:
+                    while end < len(lines) and _index_line(lines[end]) and lines[end].strip() != INDEX_OPEN:
+                        end += 1
+        elif mark == INDEX_CLOSE:
+            start, end = i, i + 1                         # a lone close mark, and the index lines before it, up to the head
+            k = i - 1
+            while k >= 0 and k not in drop and _index_line(lines[k]) and lines[k] != INDEX_HEAD:
+                k -= 1
+            if k >= 0 and k not in drop and lines[k] == INDEX_HEAD:
+                start = k
+                while start >= 2 and not lines[start - 1].strip() and not lines[start - 2].strip() \
+                        and start - 1 not in drop:
+                    start -= 1                            # the blank line an erased open mark left
+        else:
+            i += 1
+            continue
+        while end < len(lines) - 1 and lines[end] == "":
+            end += 1                                      # the blank lines after it, as `\n*` after a whole block
+        drop.update(range(start, end))
+        i = end
+    return "\n".join(line for n, line in enumerate(lines) if n not in drop)
+
+
 def write_index(root: str) -> list[str]:
     """Write each file's section index from its headings (`--write-index`): after the intro, before the first `##`,
-    an old one taken out first, the file's line ends kept. Returns the files it changed."""
+    every old one taken out first -- a lone mark with its stale lines too (`_strip_index`) --, the file's line ends
+    kept. Returns the files it changed."""
     changed = []
     for rel in SECTION_INDEX_FILES:
         path = os.path.join(root, rel)
@@ -1356,7 +1407,7 @@ def write_index(root: str) -> list[str]:
             raw = fh.read()
         newline = "\r\n" if "\r\n" in raw else "\n"
         text = raw.replace("\r\n", "\n")
-        bare = re.sub(re.escape(INDEX_OPEN) + r".*?" + re.escape(INDEX_CLOSE) + r"\n*", "", text, flags=re.S)
+        bare = _strip_index(text)
         at = _first_heading(bare)
         new = bare[:at] + _index_text(_sections(bare)) + "\n\n" + bare[at:]
         if new != text:
@@ -2134,6 +2185,35 @@ def _check_section_index():
         assert len(half) == 1 and "one mark of two" in half[0], half
 
 
+def _check_section_index_repairs_a_lone_mark():
+    """Rule 18 (#148): `--write-index` repairs an index with one mark of two, as the rule's line says it does -- the
+    lone mark and the stale index lines beside it go, one index is written from the headings, and a second write
+    changes nothing. With the close mark gone it left the open mark and the stale lines and added a second index; with
+    the open mark gone it added the block again. Each mark, its line deleted or its text erased."""
+    with _scratch() as tmp:
+        renamed = _INDEXED_TEXT.replace("## 2. Peak or null", "## 2. Peak, or null")
+        fresh = _fixture(tmp, {_INDEXED: renamed})
+        write_index(fresh)
+        want = _read(fresh, _INDEXED)                        # what a clean write makes of the renamed headings
+        root = _fixture(tmp, {_INDEXED: _INDEXED_TEXT})
+        write_index(root)
+        stale = _read(root, _INDEXED).replace("## 2. Peak or null", "## 2. Peak, or null")
+        path = os.path.join(root, _INDEXED)
+        for mark, gone in ((INDEX_OPEN, "open"), (INDEX_CLOSE, "close")):
+            for how, broken in (("its line deleted", stale.replace(mark + "\n", "")),
+                                ("its text erased", stale.replace(mark, ""))):
+                case = f"the {gone} mark, {how}"
+                with open(path, "w", encoding="utf-8") as fh:
+                    fh.write(broken)
+                said = rule_section_index(root)
+                assert len(said) == 1 and "one mark of two" in said[0], (case, said)
+                assert write_index(root) == [_INDEXED], case
+                text = _read(root, _INDEXED)
+                assert text == want, (case, text)
+                assert rule_section_index(root) == [], (case, rule_section_index(root))
+                assert write_index(root) == [] and _read(root, _INDEXED) == text, (case, "a second write changed it")
+
+
 def _check_section_index_pointers():
     """Rule 18 (#145, I-25): a `§N` pointer to the indexed file names a section it has -- read in every .md and .py of
     the skill: a list (`§3, §2, §50`), a range (`§2–4`), after a slash, behind a link's bracket, wrapped onto the next
@@ -2369,7 +2449,8 @@ def _selftest() -> int:
                       _check_slot_names, _check_reviewer_at_desk, _check_skill_budget,
                       _check_skill_budget_clip_newline, _check_skill_budget_crlf, _check_skill_budget_inputs,
                       _check_skill_budget_description_folds, _check_skill_budget_rules_after_frontmatter,
-                      _check_section_index, _check_section_index_pointers, _check_section_index_inputs,
+                      _check_section_index, _check_section_index_repairs_a_lone_mark,
+                      _check_section_index_pointers, _check_section_index_inputs,
                       _check_section_index_crlf):
             try:
                 check()
@@ -2427,8 +2508,9 @@ def _selftest() -> int:
           "measured as its LF text; "
           "a file with no section index, one whose index a renamed or added heading, a hand edit, a move below the "
           "first section or a lost mark parted from its headings, a § number two headings hold and the file gone are "
-          "named, while --write-index writes it after the intro (in CRLF for a CRLF checkout) and a second write "
-          "changes nothing; a § pointer to the file landing on no section -- in a list, a range, after a slash, wrapped, "
+          "named, while --write-index writes it after the intro (in CRLF for a CRLF checkout), repairs one with a lone "
+          "mark -- either mark, its line deleted or its text erased -- taking the stale lines with it, and a second "
+          "write changes nothing; a § pointer to the file landing on no section -- in a list, a range, after a slash, wrapped, "
           "in code, bare in the file itself -- is named by file and line, while another file's § and a § with no "
           "file named are not; "
           "the tree is clean but for the rules red in it by design, each still red; the rules' "
