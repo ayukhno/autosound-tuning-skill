@@ -7,6 +7,7 @@ Usage: python3 rew_tool.py [--curves-dir PATH]
 import sys
 import os
 import argparse
+import glob
 import cmath
 import math
 
@@ -17,7 +18,7 @@ import analysis as an
 import joint_analysis as ja
 import naming
 import verdict as verdict_block
-from target_curves import explain_target_curve, find_target_curve, interpolate_target
+from target_curves import TARGET_SUFFIX, explain_target_curve, find_target_curve, interpolate_target
 
 #: Where a project keeps its target curves, a folder per curve (naming-and-structure.md). No folder is a default in
 #: the code (F8): the default was one only the author's machine had, and every other machine read its targets from a
@@ -28,13 +29,29 @@ NO_CURVES = ("targets: none — pass --curves-dir <folder> (the intake writes th
 
 
 def curves_dir_for(given, project):
-    """The folder the targets are read from: `given` (`--curves-dir`) as it is; else the project's
-    `rew_analitic/target-curves/` when `project` names one that has it; else None, and the caller says NO_CURVES."""
+    """`(folder, None)`, the folder the targets are read from, or `(None, line)`, the line to say instead. `given`
+    (`--curves-dir`) as it is; else the project's `rew_analitic/target-curves/` read as the method lays it out (R57): a
+    folder per curve, so its own `<code>_target.txt` files (an older, flat project) make it the folder, and otherwise
+    its one curve's folder is. Several curves, or none, is the line naming what to pass -- with the curves listed, and
+    none guessed: the README that marks the active one is the session's to read, not this tool's."""
     if given:
-        return given
-    if project and os.path.isdir(os.path.join(project, PROJECT_CURVES)):
-        return os.path.join(project, PROJECT_CURVES)
-    return None
+        return given, None
+    folder = os.path.join(project, PROJECT_CURVES) if project else None
+    if not folder or not os.path.isdir(folder):
+        return None, NO_CURVES
+    if glob.glob(os.path.join(glob.escape(folder), "*" + TARGET_SUFFIX)):
+        return folder, None
+    try:
+        curves = sorted(name for name in os.listdir(folder)
+                        if not name.startswith(".") and os.path.isdir(os.path.join(folder, name)))
+    except OSError as exc:
+        return None, f"{NO_CURVES} -- {folder} cannot be listed ({exc})"
+    if len(curves) == 1:
+        return os.path.join(folder, curves[0]), None
+    if curves:
+        return None, (f"{NO_CURVES} -- {folder} holds {len(curves)} curves, "
+                      f"{', '.join(name + '/' for name in curves)}: pass the one you mean; none is guessed")
+    return None, NO_CURVES
 
 SEP = "─" * 70
 
@@ -1808,27 +1825,29 @@ def _selftest():
     print("selftest[journal] OK — analyze-joints --process refuses a journal it cannot read in one line, exit 1, "
           "never as REW's failure (#134, R53).")
     failures = []
-    for check in (_check_no_folder_is_the_curves_default,):
+    for check in (_check_no_folder_is_the_curves_default, _check_the_default_reads_the_methods_layout):
         try:
             check()
         except AssertionError as exc:
             failures.append(f"{check.__name__}: {exc}")
     assert not failures, "\n".join(failures)
-    print("selftest[curves-dir] OK — no folder is the curves' default: a project's rew_analitic/target-curves/ when it "
-          "has one, --curves-dir as given, otherwise one line saying to pass it and a table without targets (F8).")
+    print("selftest[curves-dir] OK — no folder is the curves' default: --curves-dir as given; else the project's "
+          "rew_analitic/target-curves/ as the method lays it out -- its own targets, or its one curve's folder, each "
+          "matched; several curves listed and none guessed; otherwise one line saying what to pass and a table "
+          "without targets (F8, R57).")
 
 
 def _check_no_folder_is_the_curves_default():
     """F8: `--curves-dir` defaulted to a folder only the author's machine had, under his Documents. On every other
     machine `analyze-batch` read its targets from a folder that was not there and printed a row "no target" each, the
-    folder never named as the cause. No folder is a default in the code: a project (`--project`, else
-    $AUTOSOUND_PROJECT_DIR) that has `rew_analitic/target-curves/` gives it; `--curves-dir` is taken as given;
-    otherwise the run says once what to pass and goes on without targets. REW is a stand-in."""
+    folder never named as the cause. No folder is a default in the code: `--curves-dir` is taken as given; a project
+    (`--project`, else $AUTOSOUND_PROJECT_DIR) without `rew_analitic/target-curves/`, or none, makes the run say once
+    what to pass and go on without targets (the folder's layout: `_check_the_default_reads_the_methods_layout`). REW is
+    a stand-in."""
     import contextlib
     import io
     import shutil
     import tempfile
-    import target_bands
     with open(os.path.abspath(__file__), encoding="utf-8") as fh:
         src = fh.read()
     none_line = ("targets: none — pass --curves-dir <folder> (the intake writes them to "
@@ -1857,16 +1876,12 @@ def _check_no_folder_is_the_curves_default():
         api.get_fr = lambda mid, smoothing=None: ([100, 500, 1000, 5000], [82, 84, 83, 80], None)
         bare = os.path.join(top, "bare")
         os.makedirs(os.path.join(bare, "rew_analitic"))
-        curves = os.path.join(top, "car", "rew_analitic", "target-curves")
-        os.makedirs(curves)
-        target_bands.write_targets({"m-L": [(100, 80), (500, 80), (1000, 80), (5000, 80)]}, curves)
         given = os.path.join(top, "given")
         os.makedirs(given)
         home_docs = os.path.join(os.path.expanduser("~"), "Documents")
         for label, argv, env, want in (
                 ("a project without target-curves/", ["--project", bare], None, None),
                 ("no project at all", [], None, None),
-                ("a project with target-curves/, by $AUTOSOUND_PROJECT_DIR", [], os.path.join(top, "car"), curves),
                 ("--curves-dir given", ["--curves-dir", given, "--project", bare], None, given)):
             code, out = batch(*argv, project_env=env)
             if want is None:
@@ -1885,6 +1900,85 @@ def _check_no_folder_is_the_curves_default():
             os.environ["AUTOSOUND_PROJECT_DIR"] = saved[3]
         shutil.rmtree(top, ignore_errors=True)
     assert not failures, "\n  ".join(["the curves' folder:"] + failures)
+
+
+def _check_the_default_reads_the_methods_layout():
+    """R57 (Task 16's review): the default reads `rew_analitic/target-curves/` as the method lays it out -- a folder per
+    curve (naming-and-structure.md §6), the active one marked in a README for the session, not for this tool. The folder
+    itself as the default never matched a target in an intake-made project: every row said "no <code>_target.txt".
+    Targets right in the folder (an older, flat project): that folder. One curve's folder: that one, named in the
+    `Цілі з:` line. Several: the line naming what to pass lists them, and none is guessed. None: the line as it was.
+    Each case through `analyze-batch` against a stand-in REW, the targets written by the real writer."""
+    import contextlib
+    import io
+    import shutil
+    import tempfile
+    import target_bands
+    none_line = ("targets: none — pass --curves-dir <folder> (the intake writes them to "
+                 "rew_analitic/target-curves/<name>/)")
+    flat_target = {"m-L": [(100, 80), (500, 80), (1000, 80), (5000, 80)]}
+    top = tempfile.mkdtemp(prefix="autosound_curves_layout_")
+    saved = api.get_measurements, api.get_fr, sys.argv, os.environ.get("AUTOSOUND_PROJECT_DIR")
+    failures = []
+
+    def project(name, curves):
+        """A project whose `rew_analitic/target-curves/` holds `curves`: a curve folder's name -> True (m-L's target
+        written in it) or False (empty); `""` writes the target in the folder itself."""
+        folder = os.path.join(top, name, "rew_analitic", "target-curves")
+        os.makedirs(folder)
+        for curve, written in curves.items():
+            os.makedirs(os.path.join(folder, curve), exist_ok=True)
+            if written:
+                target_bands.write_targets(flat_target, os.path.join(folder, curve))
+        return os.path.join(top, name), folder
+
+    def batch(*argv, project_env=None):
+        sys.argv = ["rew_tool.py", "analyze-batch", "_2 (rta)", *argv]
+        os.environ.pop("AUTOSOUND_PROJECT_DIR", None)
+        if project_env:
+            os.environ["AUTOSOUND_PROJECT_DIR"] = project_env
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
+            try:
+                main()
+                code = 0
+            except SystemExit as stop:
+                code = stop.code
+        return code, out.getvalue()
+
+    def matched(out, folder):
+        rows = [line for line in out.splitlines() if line.startswith("  m-L_2 (rta)")]
+        return (f"Цілі з: {folder}\n" in out and len(rows) == 1 and "+2.0" in rows[0] and "немає цілі" not in out
+                and none_line not in out)
+    try:
+        api.get_measurements = lambda: {"1": {"title": "m-L_2 (rta)"}}
+        api.get_fr = lambda mid, smoothing=None: ([100, 500, 1000, 5000], [82, 84, 83, 80], None)
+        one, curves = project("one", {"house": True})
+        code, out = batch(project_env=one)
+        if code or not matched(out, os.path.join(curves, "house")):
+            failures.append(f"one curve's folder, by $AUTOSOUND_PROJECT_DIR: exit {code}, said {out.strip()[-400:]!r}")
+        flat, curves = project("flat", {"": True})
+        code, out = batch("--project", flat)
+        if code or not matched(out, curves):
+            failures.append(f"targets right in target-curves/: exit {code}, said {out.strip()[-400:]!r}")
+        several, curves = project("several", {"house": True, "studio": True})
+        code, out = batch("--project", several)
+        said = [line for line in out.splitlines() if line.startswith(none_line)]
+        if code or len(said) != 1 or "house/" not in said[0] or "studio/" not in said[0] or "Цілі з:" in out \
+                or "(без цілі)" not in out:
+            failures.append(f"several curves' folders: exit {code}, said {out.strip()[-400:]!r}")
+        empty, curves = project("empty", {})
+        code, out = batch("--project", empty)
+        if code or out.count(none_line) != 1 or any(line.startswith(none_line) and line != none_line
+                                                    for line in out.splitlines()) or "Цілі з:" in out:
+            failures.append(f"an empty target-curves/: exit {code}, said {out.strip()[-400:]!r}")
+    finally:
+        api.get_measurements, api.get_fr, sys.argv = saved[:3]
+        os.environ.pop("AUTOSOUND_PROJECT_DIR", None)
+        if saved[3] is not None:
+            os.environ["AUTOSOUND_PROJECT_DIR"] = saved[3]
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["the default's layout:"] + failures)
 
 
 def _check_joints_refuse_an_unreadable_journal():
@@ -2010,9 +2104,9 @@ def main():
     if args.cmd == "analyze-batch":
         import naming                    # the grammar's one reader, and the project's codes
         glossary = naming.Glossary.for_project(args.project) if args.project else None
-        curves_dir, vs_targets = curves_dir_for(args.curves_dir, args.project), not args.no_targets
+        (curves_dir, no_curves), vs_targets = curves_dir_for(args.curves_dir, args.project), not args.no_targets
         if vs_targets and curves_dir is None:
-            print(NO_CURVES)
+            print(no_curves)
             vs_targets = False
         try:
             analyze_batch(args.pattern, curves_dir,
@@ -2110,9 +2204,9 @@ def main():
         print(f"Помилка підключення до REW API: {e}")
         print("Переконайся що REW запущений з -api і API сервер увімкнений.")
         sys.exit(1)
-    curves_dir = curves_dir_for(args.curves_dir, os.environ.get("AUTOSOUND_PROJECT_DIR"))
+    curves_dir, no_curves = curves_dir_for(args.curves_dir, os.environ.get("AUTOSOUND_PROJECT_DIR"))
     if curves_dir is None:
-        print(NO_CURVES)
+        print(no_curves)
 
     while True:
         print()
