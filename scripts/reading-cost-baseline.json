@@ -72,15 +72,15 @@
       }
     },
     "4": {
-      "tokens": 30358,
-      "chars": 121431,
+      "tokens": 30381,
+      "chars": 121525,
       "files": {
         "SKILL.md": 23277,
         "references/phases/phase_4_listening.md": 11371,
         "references/phases/phase_5_variations.md (to its Goal-node)": 1802,
         "references/patterns/listening-cheat-sheet.md": 14627,
         "references/patterns/test-tracks.md": 24264,
-        "references/core/feedback-loop.md": 19981,
+        "references/core/feedback-loop.md": 20075,
         "references/patterns/staging-depth.md": 8742,
         "references/core/analysis-playbook.md": 17367
       }
@@ -98,5 +98,5 @@
       }
     }
   },
-  "full_tune_tokens": 275160
+  "full_tune_tokens": 275183
 }

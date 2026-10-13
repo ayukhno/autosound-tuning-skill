@@ -23,6 +23,12 @@ home (#143, I-21; an older project's in `rew_analitic/` are read too, each with 
   harvest_inbox.py <project> [--out FILE] [--check] [--json]
   harvest_inbox.py --selftest
 
+A source that is there and cannot be read (not UTF-8, a permission refused) stops the harvest, named with its repair
+(W-8 #136's rule): a package without it would be one the person never sees is short.
+
+Exit codes: 0 done (`--check`: nothing looks personal) · 1 `--check` found something to look at · 2 refused, nothing
+written -- no inbox, a source that cannot be read, or a usage error. A refusal is 2, not 1: under `--check` a 1 says
+"look before you send", and a refusal must not read as that.
 stdlib only.
 """
 import argparse
@@ -70,11 +76,37 @@ PERSONAL = [
 ]
 
 
+def _siblings():
+    """`rew_tool/siblings.py`, by its path: how this module reaches a sibling (skill #137).
+
+    The same text in every module that loads a sibling -- only the `here` line differs with the file's folder;
+    scripts/contract-guard.py holds the copies identical.
+    """
+    import hashlib
+    import importlib.util
+    here = os.path.realpath(os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "rew_tool"))
+    name = "_autosound_" + hashlib.sha1(here.encode("utf-8")).hexdigest()[:8] + "_siblings"
+    module = sys.modules.get(name)
+    if module is None:
+        spec = importlib.util.spec_from_file_location(name, os.path.join(here, "siblings.py"))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        # Published only once it has run: a thread racing this first call never gets a half-run siblings.py.
+        module = sys.modules.setdefault(name, module)
+    return module
+
+
 def _read(path):
+    """`(text, None)`, or `(None, "<path> <reason> -- <repair>")` for a file that is there and cannot be read: not
+    UTF-8, or refused (group fix 1, I3; W-8 #136). The repair of a refusal is its cause's, `project_io.repair_for` --
+    a permission on POSIX, what holds the file on Windows. It was None, and the file was read as absent."""
     try:
-        return io.open(path, encoding="utf-8").read()
-    except (OSError, UnicodeDecodeError):
-        return None
+        with io.open(path, encoding="utf-8") as fh:
+            return fh.read(), None
+    except UnicodeDecodeError:
+        return None, f"{path} is not UTF-8 -- save it as UTF-8 and run this again"
+    except OSError as exc:
+        return None, f"{path} cannot be opened ({exc}) -- {_siblings().load('project_io.py').repair_for(exc)}"
 
 
 def inbox_sections(text):
@@ -92,9 +124,14 @@ def inbox_sections(text):
 
 
 def _moved(project, path):
-    """The warning for a prose file read from `rew_analitic/`: it names the file and its home, the project root."""
-    return f"{path} is read from {OLD_HOME}/: its home is the project root — move it to " \
-           f"{os.path.join(project, os.path.basename(path))}"
+    """The warning for a prose file read from `rew_analitic/`: it names the file and its home, the project root. Where
+    the root holds a file of that name already, the copy is merged into it and deleted -- "move it" there invites the
+    `mv` that writes over the root's notes (group fix 1, I3), as `process.py`'s `handoff` says of a changelog copy."""
+    home = os.path.join(project, os.path.basename(path))
+    if os.path.exists(home):
+        return f"{path} is read from {OLD_HOME}/, and the project root holds {home}, its home — merge what it adds " \
+               f"there and delete the copy"
+    return f"{path} is read from {OLD_HOME}/: its home is the project root — move it to {home}"
 
 
 def _inboxes(project):
@@ -127,14 +164,27 @@ def _changelogs(project):
     return paths, warnings
 
 
-def lessons(project):
-    """Every `Lesson:` line from the project's changelog, in file order."""
-    found = []
+def _lessons(project):
+    """`(lessons, unreadable)`: every `Lesson:` line from the project's changelogs, in file order, and the line naming
+    each changelog that cannot be read, with its repair (`_read`)."""
+    found, unreadable = [], []
     for path in _changelogs(project)[0]:
-        for line in (_read(path) or "").splitlines():
+        text, why = _read(path)
+        if why:
+            unreadable.append(why)
+        for line in (text or "").splitlines():
             m = LESSON.match(line)
             if m:
                 found.append(m.group("text"))
+    return found, unreadable
+
+
+def lessons(project):
+    """Every `Lesson:` line from the project's changelog, in file order. A changelog that cannot be read raises
+    `ValueError` naming it and its repair: it was read as one with no lessons."""
+    found, unreadable = _lessons(project)
+    if unreadable:
+        raise ValueError("; ".join(unreadable))
     return found
 
 
@@ -148,16 +198,19 @@ def personal_hits(text):
 
 
 def build(project, skill_version="unknown"):
-    """The package as text, plus what a reader must look at before sending it."""
+    """The package as text, plus what a reader must look at before sending it -- and, in `unreadable`, the line naming
+    each source that is there and cannot be read: a package built without it is not one to send (`_main` refuses)."""
     inbox_paths, warnings = _inboxes(project)
-    texts = [text for text in (_read(path) for path in inbox_paths) if text is not None]
+    read = [_read(path) for path in inbox_paths]
+    texts = [text for text, _why in read if text is not None]
+    found_lessons, unreadable = _lessons(project)
+    unreadable = [why for _text, why in read if why] + unreadable
     warnings = warnings + _changelogs(project)[1]
     # Both inboxes add up, the root's first: a heading in both carries both bodies.
     sections = {}
     for text in texts:
         for name, body in inbox_sections(text).items():
             sections[name] = f"{sections[name]}\n\n{body}" if name in sections else body
-    found_lessons = lessons(project)
     body = [f"# Feedback: <car/body> · <DSP> · <date> · skill {skill_version}", ""]
     for name in SECTIONS:
         body.append(f"## {name}")
@@ -174,6 +227,7 @@ def build(project, skill_version="unknown"):
         "lessons": found_lessons,
         "personal": personal_hits(text),
         "warnings": warnings,
+        "unreadable": unreadable,
     }
 
 
@@ -190,6 +244,12 @@ def _main(argv=None):
     if not args.project:
         p.error("a project directory is required (or --selftest)")
     text, report = build(args.project)
+    unreadable = report.pop("unreadable")
+    if unreadable:
+        # Before "no inbox": a root inbox that cannot be read is no missing one (group fix 1, I3).
+        for line in unreadable:
+            print(f"error: {line}", file=sys.stderr)
+        return 2
     if not report["inbox_found"]:
         print(f"error: no {INBOX} at {args.project} (nor in {OLD_HOME}/) — its home, where the intake creates it; "
               f"nothing to harvest", file=sys.stderr)
@@ -346,12 +406,89 @@ def _check_no_inbox_names_the_root():
     assert not failures, "\n  ".join(["no inbox:"] + failures)
 
 
+def _check_a_file_that_cannot_be_read_stops_the_harvest():
+    """Group fix 1, I3 (W-8 #136's rule): an inbox or a changelog that is there and cannot be read -- not UTF-8, a
+    permission refused -- stops the harvest: one `error: <file> <reason> -- <repair>` line each, exit 2 (the module's
+    refusal, as for no inbox; 1 is `--check`'s "something to look at"), nothing written, nothing on stdout. It was read
+    as absent and left out of the package unsaid -- a root inbox that could not be read was "no inbox", a changelog's
+    lessons simply missing."""
+    import shutil
+    import stat
+    import tempfile
+    top = tempfile.mkdtemp(prefix="harvest_inbox_unreadable_")
+    failures = []
+    try:
+        cases = [("the root's inbox", "", "skill-inbox.md"), ("the copy's inbox", "rew_analitic", "skill-inbox.md"),
+                 ("a changelog", "", "tuning-changelog.md"), ("the copy's changelog", "rew_analitic", "tuning-changelog.md")]
+        for n, (label, folder, name) in enumerate(cases):
+            proj = _project(top, f"car{n}", inbox_in="", changelog_in="")
+            bad = os.path.join(proj, folder, name)
+            with open(bad, "wb") as fh:
+                fh.write(b"## What worked\n\xff\xfe a note in another encoding\n")
+            for argv in ([proj], [proj, "--json"], [proj, "--check"]):
+                code, out, err = _run(argv)
+                said = [ln for ln in err.splitlines() if ln.startswith("error: ")]
+                if code != 2 or out.strip() or os.path.exists(os.path.join(proj, "feedback-package.md")) \
+                        or [ln for ln in said if bad in ln] != [f"error: {bad} is not UTF-8 -- save it as UTF-8 and "
+                                                                f"run this again"]:
+                    failures.append(f"{label}, not UTF-8, {argv[1:]}: exit {code}, out {out.strip()[:80]!r}, "
+                                    f"said {err.strip()!r}")
+        if os.name == "posix" and os.geteuid() != 0:
+            proj = _project(top, "car-locked", inbox_in="", changelog_in="")
+            locked = os.path.join(proj, "skill-inbox.md")
+            os.chmod(locked, 0)
+            try:
+                code, out, err = _run([proj])
+            finally:
+                os.chmod(locked, stat.S_IRUSR | stat.S_IWUSR)
+            said = [ln for ln in err.splitlines() if ln.startswith(f"error: {locked} cannot be opened (")]
+            if code != 2 or len(said) != 1 or "give it access" not in said[0] \
+                    or os.path.exists(os.path.join(proj, "feedback-package.md")):
+                failures.append(f"a root inbox this user may not read: exit {code}, said {err.strip()!r}")
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["a file the harvest cannot read:"] + failures)
+
+
+def _check_a_copy_beside_the_roots_is_merged_not_moved():
+    """Group fix 1, I3: a `rew_analitic/` inbox or changelog whose name the project root holds already is told to be
+    merged into the root's and deleted -- "move it to <root>/<name>" there invites the `mv` that writes over the root's
+    notes. As `process.py`'s `handoff` says of a changelog copy. "Move it" stays for a copy the root has no file of."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="harvest_inbox_merge_")
+    failures = []
+    try:
+        proj = _project(top, "car", inbox_in="", changelog_in="")
+        old = os.path.join(proj, "rew_analitic")
+        for name in ("skill-inbox.md", "tuning-changelog.md"):
+            io.open(os.path.join(old, name), "w", encoding="utf-8").write("## What worked\n- Lesson: the copy's\n")
+        code, out, err = _run([proj, "--json"])
+        said = [ln for ln in err.splitlines() if ln.startswith("warning: ")]
+        for name in ("skill-inbox.md", "tuning-changelog.md"):
+            copy, home = os.path.join(old, name), os.path.join(proj, name)
+            mine = [ln for ln in said if copy in ln]
+            if code != 0 or len(mine) != 1 or home not in mine[0] or "merge what it adds there and delete the copy" \
+                    not in mine[0] or "move it" in mine[0]:
+                failures.append(f"{name}, the root's beside it: exit {code}, said {mine or said!r}")
+        os.remove(os.path.join(proj, "tuning-changelog.md"))
+        code, out, err = _run([proj, "--json"])
+        copy = os.path.join(old, "tuning-changelog.md")
+        mine = [ln for ln in err.splitlines() if ln.startswith("warning: ") and copy in ln]
+        if code != 0 or len(mine) != 1 or f"move it to {os.path.join(proj, 'tuning-changelog.md')}" not in mine[0]:
+            failures.append(f"a changelog copy, none at the root: exit {code}, said {mine!r}")
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["a copy in rew_analitic/ beside the root's:"] + failures)
+
+
 def _selftest():
     import shutil
     import tempfile
     failures = []
     for check in (_check_the_inbox_at_the_root, _check_the_old_home_is_read_and_said, _check_both_inboxes_are_harvested,
-                  _check_no_inbox_names_the_root):
+                  _check_no_inbox_names_the_root, _check_a_file_that_cannot_be_read_stops_the_harvest,
+                  _check_a_copy_beside_the_roots_is_merged_not_moved):
         try:
             check()
         except AssertionError as exc:
@@ -404,8 +541,8 @@ def _selftest():
         shutil.rmtree(tmp, ignore_errors=True)
     print("selftest OK — inbox sections and changelog `Lesson:` lines land in the fixed package "
           "shape, read at the project root and, added after them, an older project's in rew_analitic/ "
-          "with a warning naming the move, a missing inbox is refused rather than answered with an empty "
-          "package, and an "
+          "with a warning naming the move (a merge where the root holds the file), a missing inbox and a source "
+          "that cannot be read are refused rather than answered with an empty or a short package, and "
           "an API KEY in any of the four shapes, an e-mail, a home path and a phone are NAMED "
           "while ordinary tuning numbers are not — a key that leaves the machine once has left "
           "it for good")

@@ -124,8 +124,8 @@ The skill is organically co-developed with the project. **On a refactor request 
 1. **Harvest — one command:** `python3 scripts/harvest_inbox.py <project>` reads the project's
    `skill-inbox.md` section by section, picks up every `Lesson:` line from the changelog — both at
    the project root, an older project's in `rew_analitic/` added after them with a warning to move
-   them — and
-   writes the package below in its fixed shape. It **posts nothing**: it prints the
+   them (or merge, where the root holds one) — and
+   writes the package below in its fixed shape. A source it cannot read stops it, named with its repair. It **posts nothing**: it prints the
    path and NAMES anything that looks personal (an e-mail, a home path, a phone, a plate) so the
    Arbiter decides what is public. `--check` runs only that pass. Until 2026-09-09 this step was
    prose, and the inbox it describes was read by nobody — which is how a file that four documents
