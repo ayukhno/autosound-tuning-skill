@@ -217,8 +217,8 @@ showed `2.ResoNix` numbers, so proposed HF filters were computed off a baseline 
 a different slot. Each preset's snapshots are **already** physically isolated under `<root>/<preset>/`;
 the registry adds the one missing thing — an explicit, machine-checked pointer to the **live** slot.
 ```
-<root>/slots.json         # per-project line: {"active": "<preset>", "slots": {"<preset>": {"version": "v_063", "label": "Slot 3", …}}}
-<root>/registry.json      # per-preset layout: {"active": "<preset>", "slots": {"<preset>": {"label": "Slot 3", "note": "…"}}, "updated": "…"}
+<root>/slots.json         # per-project line: {"active": "<preset>", "slots": {"<preset>": {"version": "v_063", "label": "3.SQ-Comp-Ref", …}}}
+<root>/registry.json      # per-preset layout: {"active": "<preset>", "slots": {"<preset>": {"label": "3.SQ-Comp-Ref", "note": "…"}}, "updated": "…"}
 ```
 - **`set_active(preset)`** — deterministic guard: the preset must already have a snapshot history.
 - **`render()`** — the generated multi-slot `dsp-state-current` view: a **LOUD active-slot banner**
@@ -231,14 +231,14 @@ the registry adds the one missing thing — an explicit, machine-checked pointer
 from state import Registry
 reg = Registry(root)
 reg.set_active("SQ_Comp_Ref")                 # which slot is loaded in the DSP right now
-reg.describe_slot("SQ_Comp_Ref", label="Slot 3")
+reg.describe_slot("SQ_Comp_Ref", label="3.SQ-Comp-Ref")  # number.configuration, the slot rule
 print(reg.render())                           # banner + per-slot table (generated dsp-state-current)
 apply.propose(h, delta, registry=reg)         # refuses if h.preset != active slot
 ```
 ```
 python3 state.py --root <dir> registry show|render
 python3 state.py --root <dir> registry set-active <preset>
-python3 state.py --root <dir> registry describe <preset> --label "Slot 3" --note "SQ-Comp-Ref"
+python3 state.py --root <dir> registry describe <preset> --label "3.SQ-Comp-Ref" --note "…"
 python3 state.py --root <dir> variant new <preset> <name> [--from v_NNN] [--delta change.json]
 python3 state.py --root <dir> variant list <preset>
 python3 state.py --root <dir> variant switch <preset> <v_NNN>   # the slot's pointer moves; nothing is copied
