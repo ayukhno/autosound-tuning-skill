@@ -105,6 +105,9 @@ Rules 9-12 and 15-17 read a phrase as a reader does (`_phrase`): across a wrappe
 letter in either case (a sentence's head, a clause's middle) and the rest in the case it is given, as whole words.
 Their cases, and rules 13's, 14's and 18's, are `_check_*` functions, run through one loop that collects every failure.
 
+A file a rule reads that cannot be read as UTF-8 is a finding of that rule, naming the file and the repair -- never a
+traceback that stops the rules after it (#148); rule 18 says it per file and reads on.
+
 Run: `scripts/docs-check.py` (from anywhere), `--selftest` for the checker's own mechanics, `--write-index` to write
 rule 18's indexes from the headings.
 stdlib only.
@@ -206,16 +209,36 @@ SKILL_RULE_PHRASES = (
 )
 
 
+class Unreadable(Exception):
+    """A file a rule reads that cannot be read as UTF-8 (#148): a finding naming the file and the repair -- `run` says
+    it for the rule that met it, `rule_section_index` for each file it reads -- never a traceback that stops every
+    rule after it. `.path` is the file."""
+
+    def __init__(self, path: str, exc: Exception):
+        self.path = path
+        super().__init__(f"cannot be read as UTF-8 ({exc.__class__.__name__}: {exc}) — save it as UTF-8, or make it "
+                         f"readable")
+
+
+def _text(path: str) -> str:
+    """The file at `path`, read as UTF-8 and closed; `Unreadable` when it cannot be."""
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return fh.read()
+    except (OSError, UnicodeDecodeError) as exc:
+        raise Unreadable(path, exc) from exc
+
+
 def _read(root: str, rel: str) -> str | None:
     path = os.path.join(root, rel)
     if not os.path.isfile(path):
         return None
-    return open(path, encoding="utf-8").read()
+    return _text(path)
 
 
 def _head(path: str) -> str:
     """The first lines of a file — where a reader starts, so where a declaration has to be."""
-    return "\n".join(open(path, encoding="utf-8").read().splitlines()[:ORPHAN_HEAD_LINES])
+    return "\n".join(_text(path).splitlines()[:ORPHAN_HEAD_LINES])
 
 
 def _section(text: str, heading: str) -> str:
@@ -252,7 +275,7 @@ def _phrase(phrase: str) -> re.Pattern:
 
 def _hits(path: str, phrase: str) -> list[int]:
     """The line numbers where `phrase` starts in the file at `path`, read as `_phrase` reads it."""
-    text = open(path, encoding="utf-8").read()
+    text = _text(path)
     return [text.count("\n", 0, m.start()) + 1 for m in _phrase(phrase).finditer(text)]
 
 
@@ -315,7 +338,7 @@ def rule_phase_source(root: str) -> list[str]:
     # instruct the reader to use another harness's tool by name
     for path in _md_files(root):
         rel = os.path.relpath(path, root)
-        for n, line in enumerate(open(path, encoding="utf-8").read().splitlines(), 1):
+        for n, line in enumerate(_text(path).splitlines(), 1):
             low = line.lower()
             if ("tuning-changelog" in low and re.search(r"(active|current) phase", low)
                     and "cross-check" not in low and "human-readable" not in low):
@@ -395,7 +418,7 @@ def rule_capture_round_opened(root: str) -> list[str]:
         if not name.endswith(".md"):
             continue
         path = os.path.join(phases, name)
-        src = open(path, encoding="utf-8").read()
+        src = _text(path)
         ordered = [c for c in CAPTURE_CHILDREN if c in src]
         if ordered and "capture-start" not in src:
             bad.append(f"{os.path.relpath(path, root)}: orders {', '.join(ordered)} but never "
@@ -421,7 +444,7 @@ def rule_state_source(root: str) -> list[str]:
         r"|source of truth\s*(?:is|=)\s*`?dsp-state-current", re.I)
     for path in _md_files(root):
         rel = os.path.relpath(path, root)
-        for n, line in enumerate(open(path, encoding="utf-8").read().splitlines(), 1):
+        for n, line in enumerate(_text(path).splitlines(), 1):
             if "dsp-state-current" not in line:
                 continue
             if called_source.search(line):
@@ -447,7 +470,7 @@ def rule_ledger_root(root: str) -> list[str]:
     call = re.compile(r"state\.py[^`\n]*?\bregistry\b[^`\n]*")
     for path in _md_files(root):
         rel = os.path.relpath(path, root)
-        for n, line in enumerate(open(path, encoding="utf-8").read().splitlines(), 1):
+        for n, line in enumerate(_text(path).splitlines(), 1):
             for m in call.finditer(line):
                 if "--root" not in m.group() and "AUTOSOUND_" not in m.group():
                     bad.append(f"{rel}:{n}: prints `{m.group().strip()}` with no --root — from "
@@ -471,7 +494,7 @@ def rule_install_ref(root: str) -> list[str]:
     for name in sorted(os.listdir(root)):
         if not (name.startswith(("README", "FAQ")) and name.endswith(".md")):
             continue
-        for n, line in enumerate(open(os.path.join(root, name), encoding="utf-8").read()
+        for n, line in enumerate(_text(os.path.join(root, name))
                                  .splitlines(), 1):
             for m in ref_re.finditer(line):
                 found.setdefault(m.group(1), []).append(f"{name}:{n}")
@@ -525,7 +548,7 @@ def rule_protective_floor(root: str) -> list[str]:
                 continue
             path = os.path.join(dirpath, name)
             rel = os.path.relpath(path, root)
-            for n, line in enumerate(open(path, encoding="utf-8").read().splitlines(), 1):
+            for n, line in enumerate(_text(path).splitlines(), 1):
                 for m in _FS_MULT.finditer(line):
                     value = float(m.group(1))
                     if value not in (margin, _FS_RANGE_TOP):
@@ -679,7 +702,7 @@ def rule_one_path_banner(root: str) -> list[str]:
         if not os.path.isfile(path):
             bad.append(f"{rel}: missing — it is one of the four phase files that open with the one-path banner")
             continue
-        rows = open(path, encoding="utf-8").read().splitlines()
+        rows = _text(path).splitlines()
         line = rows[ONE_PATH_LINE - 1] if len(rows) >= ONE_PATH_LINE else ""
         if ONE_PATH_BANNER in line:
             lines[rel] = line
@@ -815,7 +838,7 @@ def _step_named(steps: dict, sid: str, word: str) -> str | None:
 def _route_cells(path: str):
     """The cheat sheet's characteristics table as [(line, row id, route cell)] -- the table whose header names the
     column a failed verdict is routed by; None when the file has no such table."""
-    lines = open(path, encoding="utf-8").read().splitlines()
+    lines = _text(path).splitlines()
     for i, line in enumerate(lines):
         cells = [c.strip() for c in line.strip().strip("|").split("|")]
         if line.lstrip().startswith("|") and CHEAT_ROUTE in cells:
@@ -875,7 +898,7 @@ def rule_step_ids(root: str) -> list[str]:
         if not os.path.isfile(path):
             continue
         rel = os.path.relpath(path, root)
-        for n, line in enumerate(open(path, encoding="utf-8").read().splitlines(), 1):
+        for n, line in enumerate(_text(path).splitlines(), 1):
             if re.match(r"#{1,6} ", line):
                 continue                   # a heading numbers its own file's sections (`### 2.5 Prepare …`)
             for m in _STEP_REF.finditer(line):
@@ -962,7 +985,7 @@ def rule_no_capture_start_literal(root: str) -> list[str]:
         if not name.endswith(".md"):
             continue
         path = os.path.join(phases, name)
-        text = open(path, encoding="utf-8").read()
+        text = _text(path)
         for m in CAPTURE_START_LITERAL.finditer(text):
             n = text.count("\n", 0, m.start()) + 1
             bad.append(f"{os.path.relpath(path, root)}:{n}: opens a capture round at a series written into it "
@@ -1013,7 +1036,7 @@ def rule_slot_names(root: str) -> list[str]:
                    f"rule's one home is gone, and every pointer to it lands on nothing")
     for path in _md_files(root):
         rel = os.path.relpath(path, root)
-        text = open(path, encoding="utf-8").read()
+        text = _text(path)
         masked, spans = _prose(text)
         for m in _SLOT_BARE.finditer(masked):
             if any(a <= m.start() < b for a, b in spans):
@@ -1294,7 +1317,11 @@ def rule_section_index(root: str) -> list[str]:
     """
     bad = []
     for rel in SECTION_INDEX_FILES:
-        text = _read(root, rel)
+        try:
+            text = _read(root, rel)
+        except Unreadable as exc:
+            bad.append(f"{rel}: {exc}; its index and the pointers into it are not checked")
+            continue
         if text is None:
             bad.append(f"{rel}: missing — it carries a section index, and the pointers into it land on nothing")
             continue
@@ -1345,7 +1372,11 @@ def rule_section_index(root: str) -> list[str]:
         pointer = re.compile(r"(?<![\w-])" + re.escape(stem) + _NAME_GAP + r"(" + _SECTION_LIST.pattern + r")")
         for path in _skill_sources(root):
             other = os.path.relpath(path, root)
-            body = open(path, encoding="utf-8").read()
+            try:
+                body = _text(path)
+            except Unreadable as exc:
+                bad.append(f"{other}: {exc}; its pointers to {stem}.md are not checked")
+                continue
             for m in pointer.finditer(body):
                 line = body.count("\n", 0, m.start()) + 1
                 for n in _numbers(m.group(1)):
@@ -1418,8 +1449,11 @@ def write_index(root: str) -> list[str]:
     changed = []
     for rel in SECTION_INDEX_FILES:
         path = os.path.join(root, rel)
-        with open(path, encoding="utf-8", newline="") as fh:
-            raw = fh.read()
+        try:
+            with open(path, encoding="utf-8", newline="") as fh:
+                raw = fh.read()
+        except (OSError, UnicodeDecodeError) as exc:
+            raise Unreadable(path, exc) from exc
         newline = "\r\n" if "\r\n" in raw else "\n"
         text = raw.replace("\r\n", "\n")
         bare = _strip_index(text)
@@ -1460,7 +1494,11 @@ RED_IN_TREE = {}                       # section-index left it with the index an
 def run(root: str) -> int:
     total = 0
     for name, fn in RULES:
-        for complaint in fn(root):
+        try:
+            complaints = fn(root)
+        except Unreadable as exc:                  # what the rule could not read is said, and the next rule runs
+            complaints = [f"{os.path.relpath(exc.path, root)}: {exc}; the rule stopped there"]
+        for complaint in complaints:
             total += 1
             print(f"[{name}] {complaint}")
     if total:
@@ -2260,6 +2298,51 @@ def _check_section_index_one_of_each_mark():
         assert len(said) == 1 and f"{_INDEXED}:" in said[0] and "shares its line with text" in said[0], said
 
 
+def _check_section_index_unreadable_file():
+    """Rule 18 (#148): a .md or .py of the skill that cannot be read as UTF-8 is a finding naming the file and the
+    repair, and the files after it are still read -- the rule read each with a bare open(), and one such file stopped
+    the whole run with a traceback. The indexed file itself too, in the rule and in `--write-index` (exit 1). And the
+    whole run: a reference in another code page is a finding of each rule that meets it, never a traceback."""
+    import io
+    cp1251 = "# Перевірка, див. `diagnostic-techniques.md` §50\n".encode("cp1251")
+    phase = os.path.join(SKILL, "references", "phases", "p.md")
+    others = (os.path.join(SKILL, "references", "core", "a-notes.md"), os.path.join(SKILL, "rew_tool", "a.py"))
+    with _scratch() as tmp:
+        root = _fixture(tmp, {_INDEXED: _INDEXED_TEXT, phase: "see `diagnostic-techniques.md` §50\n"})
+        write_index(root)
+        for rel in others:
+            os.makedirs(os.path.dirname(os.path.join(root, rel)), exist_ok=True)
+            with open(os.path.join(root, rel), "wb") as fh:
+                fh.write(cp1251)
+        said = rule_section_index(root)
+        for rel in others:
+            assert any(c.startswith(f"{rel}: cannot be read as UTF-8 (UnicodeDecodeError") and "save it as UTF-8" in c
+                       for c in said), (rel, said)
+        assert any(c.startswith(f"{phase}:1: points to diagnostic-techniques.md §50") for c in said), \
+            ("the files after it are still read", said)
+        assert len(said) == 3, said
+        with open(os.path.join(root, _INDEXED), "wb") as fh:
+            fh.write(_INDEXED_TEXT.encode("cp1251"))           # its em dash is no UTF-8 there
+        said = rule_section_index(root)
+        assert any(c.startswith(f"{_INDEXED}: cannot be read as UTF-8") for c in said), said
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
+            rc = main(["--root", root, "--write-index"])
+        assert rc == 1 and f"{_INDEXED}: cannot be read as UTF-8" in out.getvalue(), (rc, out.getvalue())
+    with _scratch() as tmp:
+        root = _fixture(tmp, {os.path.join(SKILL, "SKILL.md"): "# S\n", _INDEXED: _INDEXED_TEXT})
+        write_index(root)
+        ref = os.path.join(SKILL, "references", "patterns", "x.md")
+        os.makedirs(os.path.dirname(os.path.join(root, ref)))
+        with open(os.path.join(root, ref), "wb") as fh:
+            fh.write(cp1251)
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
+            rc = run(root)
+        assert rc == 1 and f"[references-orphans] {ref}: cannot be read as UTF-8" in out.getvalue() \
+            and f"[section-index] {ref}: cannot be read as UTF-8" in out.getvalue(), out.getvalue()
+
+
 def _check_section_index_pointers():
     """Rule 18 (#145, I-25): a `§N` pointer to the indexed file names a section it has -- read in every .md and .py of
     the skill: a list (`§3, §2, §50`), a range (`§2–4`), after a slash, behind a link's bracket, wrapped onto the next
@@ -2496,7 +2579,7 @@ def _selftest() -> int:
                       _check_skill_budget_clip_newline, _check_skill_budget_crlf, _check_skill_budget_inputs,
                       _check_skill_budget_description_folds, _check_skill_budget_rules_after_frontmatter,
                       _check_section_index, _check_section_index_repairs_a_lone_mark,
-                      _check_section_index_one_of_each_mark,
+                      _check_section_index_one_of_each_mark, _check_section_index_unreadable_file,
                       _check_section_index_pointers, _check_section_index_inputs,
                       _check_section_index_crlf):
             try:
@@ -2561,7 +2644,9 @@ def _selftest() -> int:
           "write changes nothing; a § pointer to the file landing on no section -- in a list, a range, after a "
           "slash, wrapped, in code, bare in the file itself -- is named by file and line, while another file's § and "
           "a § with no "
-          "file named are not; "
+          "file named are not; a .md or .py of the skill, or the indexed file, that is no UTF-8 is a finding naming "
+          "it and the repair, the files after it still read, in the rule, in --write-index (exit 1) and in a whole "
+          "run, never a traceback; "
           "the tree is clean but for the rules red in it by design, each still red; the rules' "
           "checks report every failure in one run")
     return 0
@@ -2577,7 +2662,11 @@ def main(argv=None) -> int:
     if args.selftest:
         return _selftest()
     if args.write_index:
-        changed = write_index(args.root)
+        try:
+            changed = write_index(args.root)
+        except Unreadable as exc:
+            print(f"{os.path.relpath(exc.path, args.root)}: {exc}; no index is written", file=sys.stderr)
+            return 1
         for rel in SECTION_INDEX_FILES:
             print(f"{rel}: section index {'written' if rel in changed else 'already what its headings make'}")
         return 0
