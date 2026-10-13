@@ -276,6 +276,10 @@ if [ -z "${SELFTEST_ONLY_TOOL:-}" ]; then
   # their reasons. The check's own mechanics in a throwaway tree, then this tree (its success line says OK).
   run_one "subprocess-check" ok scripts/subprocess-check.py --selftest
   run_one "subprocess-in-tree" ok scripts/subprocess-check.py
+  # #148: every `_check_*` a module defines is called by it -- one outside its selftest's loop passes for ever (W-8
+  # had two). The check's own mechanics in a throwaway tree, then this tree (its success line says OK).
+  run_one "reach-check"     ok scripts/selftest-reach-check.py --selftest
+  run_one "reach-in-tree"   ok scripts/selftest-reach-check.py
   # HUB-044: README and FAQ live in four languages. The guard compares what can be compared without
   # knowing them -- the heading skeleton and the commands -- and says out loud that it cannot see all
   # four lagging the code together.

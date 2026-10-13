@@ -69,6 +69,8 @@ NOT_ON_BOARD = {
                              "place it does not see: a maintainer's check, not a tuner's step",
     "subprocess-check.py": "every production subprocess and download under the skill has its timeout (skill #146): "
                            "a maintainer's check, not a tuner's step",
+    "selftest-reach-check.py": "every `_check_*` a module defines is called by it, so no check sits outside its "
+                               "selftest's loop (skill #148): a maintainer's check, not a tuner's step",
     "encoding-check.py": "the checker that keeps issue #21 from coming back",
     "changelog-index.py": "generates the CHANGELOG's index table from the version headings "
                           "(HUB-043); --check fails the suite on a stale one. Repo hygiene, not a "
