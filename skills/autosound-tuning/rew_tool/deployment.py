@@ -529,9 +529,20 @@ def _check_a_plugin_copy_inside_a_repository_is_its_record():
         git(own, "add", "-A")
         git(own, "commit", "-q", "-m", "own")
         own_head = git(own, "rev-parse", "HEAD")
-        d = describe(os.path.join(own, "skills", SKILL_DIRNAME), plugins)
-        assert d["sha"] == own_head and d["ref"] == own_head[:7] and d["branch"] and not d.get("plugin"), \
-            f"a checkout of its own inside the home: {d}"
+        # `describe()` asks git as this process does, with the person's config: a `core.abbrev` of their own makes the
+        # ref longer than 7 (group fix 1, item 15), so it is matched by prefix -- and asked here with one of 12.
+        abbrev = {"GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "core.abbrev", "GIT_CONFIG_VALUE_0": "12"}
+        saved = {name: os.environ.get(name) for name in abbrev}
+        os.environ.update(abbrev)
+        try:
+            d = describe(os.path.join(own, "skills", SKILL_DIRNAME), plugins)
+        finally:
+            for name, value in saved.items():
+                os.environ.pop(name, None)
+                if value is not None:
+                    os.environ[name] = value
+        assert d["sha"] == own_head and len(d["ref"]) >= 7 and own_head.startswith(d["ref"]) and d["branch"] \
+            and not d.get("plugin"), f"a checkout of its own inside the home: {d}"
     finally:
         shutil.rmtree(top, ignore_errors=True)
 
