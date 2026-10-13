@@ -79,12 +79,25 @@ reconciles against what is not there:
   transcript, which is exactly what `decision` was built to stop;
 * **a change agreed and not banked**, and **a session with no handoff line.**
 
+### The order — its one home
+
+SKILL.md's Pre-Session item 4 keeps the rule and the order's one line; the order itself is here. **Stopping is an
+event, not a pause in the conversation.** It fires the moment the user says they are done for now — in any of the session's languages: *stop here · that's it for today · let's wrap up · good night* · **«добраніч» · «на сьогодні досить» · «стоп» · «зупиняємось»** · *gute Nacht · Feierabend · Schluss für heute* · *dobranoc · kończymy na dziś*. Read intent, not a keyword list: this is the list a session has met, and one more phrasing means the same thing.
+
+**This is the one home of the stop's order.** **The record closes first, and one command says what is still open:** `python3 rew_tool/state/process.py <project>/process session-close --check` — it names the open capture round and every step left in progress, exits non-zero while either stands, and writes nothing. It reports; it never closes anything itself, because which evidence ends a step and whether a capture was skipped or is still owed are decisions. Then the record, in this order: **(a)** the round — `capture-skip <title> <reason>` for each one not coming, then `capture-close` (an open round's status lives in REW's measurement list and goes when REW does); **(b)** the step — `done <id> <evidence that RESOLVES>`, or `block <id> <reason>`, or `skip`; **(c)** any ruling the Arbiter made out loud — `decision <question> <answer>`, so a constraint set by voice is not invisible next session; **(d)** anything agreed and not yet banked (🟡) — `apply.propose`; **(e)** the ▶️ CONTINUE line in `tuning-changelog`, the handoff. **Then `session-close`**: with nothing open it RECORDS the stop (`session_closed`), so it is never run to look, and a close recorded by mistake is taken back with `session-reopen <reason>` (S-084). No new file for any of it: these are the carriers that already exist.
+
+**Then the car — EXIT CHECKLIST** (only what THIS session touched): revert test-only values (A/B gains, level-match trims, mutes), remote-knob positions back, back up the DSP config after hardware-state changes.
+
+**Then the GitHub issue, if there is one** — the experience a satisfied user agreed to share, or a defect of the method (`feedback-loop.md`).
+
+**And after that, start nothing new** — even if something looks unfinished. If something genuinely cannot be left overnight, **say so** rather than quietly doing it (why → [`why-these-rules.md`](references/core/why-these-rules.md)).
+
+### Why it is built so
+
 `process.py <project>/process session-close --check` is the one question — what is still open —
 and it answers with the commands that close each thing. It deliberately **reports and does not
 close**: which evidence ends a step, and whether a capture is skipped or still owed, are judgements
-with an argument behind them, and a tool that guessed would write a plausible wrong record. The
-trigger words, the order and the in-car half have one home, `SKILL.md`'s Pre-Session & Resume item
-4, beside the checklist that already existed for the hardware.
+with an argument behind them, and a tool that guessed would write a plausible wrong record.
 
 With nothing open, `session-close` **records** the stop (`session_closed`) — it is the stop, not a
 look. A session reconciling state on a Windows VM ran it to look and wrote the close (S-084, hub

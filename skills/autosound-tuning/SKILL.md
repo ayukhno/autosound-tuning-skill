@@ -27,28 +27,15 @@ description: >
 
 You orchestrate an iterative, "token-smart" car-audio tuning process. The method lives in this skill; the specific car (drivers, anomalies, state) lives in the project's `autosound_context.md`.
 
+**After a context summary, read this file again before the next step — the summary keeps only its first part.**
+
 ## 📍 Resolving paths in this skill
 
 Every path below — references, `rew_tool/`, `scripts/` — is relative to the **skill root**: the
-directory holding this SKILL.md. Not to the file you are currently reading, and not to the
-project's working directory (which is the car's project folder, a different place entirely).
-
-To find that root, in order: the directory your harness loaded this SKILL.md from; else
-`$AUTOSOUND_SKILL_ROOT` if a front-end set it; else `<project>/.claude/skills/autosound-tuning`
-or `~/.claude/skills/autosound-tuning`.
-
-**Do not search the disk for it** — the skill is normally installed as a symlink, and `find` does
-not descend into one.
-
-**More than one candidate can exist, at different versions, and that is not rare** — a plugin
-install, a developer symlink, a per-project pin, all legitimate and none announcing itself. **Say
-which one you loaded, and check it against the project's, before proposing anything**:
-`python3 rew_tool/deployment.py <project>` (exit 0 one method, 3 they disagree, 4 cannot tell). A
-front-end that runs a copy of its own (TCC's beta channel) declares it in `$AUTOSOUND_SKILL_ROOT`;
-the personal copy then counts as another channel, and the check holds this copy and the project's to
-the declared one. A disagreement is a **finding for the user**, never something to resolve by picking — the maths behind
-their numbers and the method behind your advice are different versions, and which is right is their
-call. Why this is silent by construction → [`why-these-rules.md`](references/core/why-these-rules.md).
+directory holding this SKILL.md. Not the project's working directory. To find that root, in order: the directory your
+harness loaded this SKILL.md from; else `$AUTOSOUND_SKILL_ROOT` if a front-end set it; else
+`<project>/.claude/skills/autosound-tuning` or `~/.claude/skills/autosound-tuning`. **Do not search the disk for it** —
+the skill is normally installed as a symlink, and `find` does not descend into one.
 
 ---
 
@@ -64,33 +51,13 @@ Tone: equal colleagues. Accept a correct critique fully; argue disagreements in 
 
 ## 🔄 Pre-Session & Resume (every start)
 
-**Before the first reply — WHICH LANGUAGE.** You write in the **interface** language, always (the
-Arbiter, 2026-09-22): the language the front-end was started in — TCC's, or the intake form's
-`--lang`. A front-end's report of it wins; else `project.json`'s `language.reply`, where it is
-recorded — `python3 rew_tool/project.py <project> language` says which and where from, and
-`contract.py check` prints it above everything else. Nothing recorded and no interface to read →
-**ask**, and record the answer (`intake.save(<project>, 'project.language', '<code>')`) and the
-ruling (`process.py <project>/process decision "dialogue language" "<code>" -1.1`). The
-**user's** own language (`language.user`, optional) is recorded and switches nothing. The **input**
-language — whatever the person happened to type — changes nothing either: on a Windows VM with no Ukrainian layout he
-typed English while the tune stayed Ukrainian, and a session that takes its language from the last
-message flips the whole project on one sentence forced by a missing keyboard. Reading the value and
-answering in another language is the same failure as not reading it: one session named the mismatch
-out loud, replied in English anyway, and advised him to go fix it in the app.
+**Before the first reply — WHICH LANGUAGE.** You write in the **interface** language, always: the language the front-end was started in — TCC's, or the intake form's `--lang`. A front-end's report of it wins; else `project.json`'s `language.reply` (`python3 rew_tool/project.py <project> language`); nothing recorded → **ask**, and record the answer and the ruling (`project-intake.md` §0). The **user's** own language (`language.user`) and the language the person happens to type switch nothing. Reading the value and answering in another language is the same failure as not reading it (why → [`why-these-rules.md`](references/core/why-these-rules.md)).
 
-0. **Which method is this:** `python3 rew_tool/deployment.py <project>` — state the version you are running. A refusal (exit 3/4) is named to the user before step 1, not worked around; see `📍 Resolving paths` above.
-1. **Hardware:** mic connected, REW API on :4735, cabin closed, active DSP input matches the task — and re-check it after every configuration write or reconnect and before every series: some processors drop the measurement input back to another one (a Helix: AUX → BT, `knowledge/dsp/helix-dsp-ultra-s.md` Presets).
-2. **Reconcile state from disk — MACHINE FILES FIRST, prose second.** One call for the whole picture: `python3 rew_tool/contract.py check <project>`. **If that report says the project predates a schema field, run `python3 rew_tool/project.py <project> catch-up` there and then — do not ask, and do not carry it as a to-do.** It is additive and idempotent: legacy names, `tier` read off the ledger, and a marked `DRAFT:` symptom on owner-facing flaw rows that have none. It invents no fact. The owner's symptom line is optional — a communication line for the finished tune; nothing about it gates phase 0 (the Arbiter's ruling, 2026-09-08). Concretely: `process/process-state.json` for the active phase + plan (`python3 rew_tool/state/process.py <project>/process show`) is where the phase/plan actually live now — **not** `tuning-changelog`'s ▶️ CONTINUE block, which is a human-readable cross-check, not the source. Then the ledger HEAD (multi-slot DSP → the active-slot banner first, `python3 rew_tool/state/state.py --root <project>/state registry render`) and `project.json` (car/equipment/glossary/hardware facts, `python3 rew_tool/project.py <project> show`). Read `audit-trail.md`/`tuning-changelog` alongside for the human narrative, but if prose and the machine files disagree, **the machine files win** — that divergence is itself worth flagging to the user. Ask what the user changed manually. **Reporting all of this costs one word** — *checks: done* — and only a check that FAILED is spoken in sentences (`✍️ Output Style`).
+0. **Which method is this:** `python3 rew_tool/deployment.py <project>` — say which copy you loaded and its version before proposing anything. A disagreement (exit 3; 4: cannot tell) is a **finding for the user**, named before step 1 and never resolved by picking (→ [`installation.md`](references/tooling/installation.md)).
+1. **Hardware:** mic connected, REW API on :4735, cabin closed, active DSP input matches the task — re-checked after every configuration write or reconnect and before every series: some processors drop the measurement input back to another one (the DSP's `knowledge/dsp/` file says which).
+2. **Reconcile state from disk — MACHINE FILES FIRST, prose second.** One call for the whole picture: `python3 rew_tool/contract.py check <project>`. **If that report says the project predates a schema field, run `python3 rew_tool/project.py <project> catch-up` there and then — do not ask, and do not carry it as a to-do.** Then the phase and plan (`python3 rew_tool/state/process.py <project>/process show`), the ledger HEAD (multi-slot DSP → the active-slot banner first, `python3 rew_tool/state/state.py --root <project>/state registry render`) and `project.json` (`python3 rew_tool/project.py <project> show`). If prose and the machine files disagree, **the machine files win** — that divergence is itself worth flagging to the user. Ask what the user changed manually. **Reporting all of this costs one word** — *checks: done* — and only a check that FAILED is spoken in sentences (`✍️ Output Style`).
 3. **Banked decisions:** 🟡 items agreed earlier but not yet applied → prompt to apply before proposing anything new.
-4. **STOPPING IS AN EVENT, not a pause in the conversation.** It fires the moment the user says they are done for now — in any of the session's languages: *stop here · that's it for today · let's wrap up · good night* · **«добраніч» · «на сьогодні досить» · «стоп» · «зупиняємось»** · *gute Nacht · Feierabend · Schluss für heute* · *dobranoc · kończymy na dziś*. Read intent, not a keyword list: this is the list a session has met, and one more phrasing means the same thing.
-
-   **This is the one home of the stop's order.** **The record closes first, and one command says what is still open:** `python3 rew_tool/state/process.py <project>/process session-close --check` — it names the open capture round and every step left in progress, exits non-zero while either stands, and writes nothing. It reports; it never closes anything itself, because which evidence ends a step and whether a capture was skipped or is still owed are decisions. Then the record, in this order: **(a)** the round — `capture-skip <title> <reason>` for each one not coming, then `capture-close` (an open round's status lives in REW's measurement list and goes when REW does); **(b)** the step — `done <id> <evidence that RESOLVES>`, or `block <id> <reason>`, or `skip`; **(c)** any ruling the Arbiter made out loud — `decision <question> <answer>`, so a constraint set by voice is not invisible next session; **(d)** anything agreed and not yet banked (🟡) — `apply.propose`; **(e)** the ▶️ CONTINUE line in `tuning-changelog`, the handoff. **Then `session-close`**: with nothing open it RECORDS the stop (`session_closed`), so it is never run to look, and a close recorded by mistake is taken back with `session-reopen <reason>` (S-084). No new file for any of it: these are the carriers that already exist.
-
-   **Then the car — EXIT CHECKLIST** (only what THIS session touched): revert test-only values (A/B gains, level-match trims, mutes), remote-knob positions back, back up the DSP config after hardware-state changes.
-
-   **Then the GitHub issue, if there is one** — the experience a satisfied user agreed to share, or a defect of the method (`feedback-loop.md`).
-
-   **And after that, start nothing new** — even if something looks unfinished. If something genuinely cannot be left overnight, **say so** rather than quietly doing it (why → [`why-these-rules.md`](references/core/why-these-rules.md)).
+4. **STOPPING IS AN EVENT, not a pause in the conversation.** It fires the moment the user says they are done for now, in any language (*good night*, «добраніч»): read intent, not a keyword. The order: `session-close --check` → the record (round, step, rulings, 🟡, ▶️ CONTINUE) → `session-close` → the car's **EXIT CHECKLIST** → the GitHub issue, if any → then start nothing new. Its one home → [`process-control.md`](references/core/process-control.md) § Stopping.
 
 ---
 

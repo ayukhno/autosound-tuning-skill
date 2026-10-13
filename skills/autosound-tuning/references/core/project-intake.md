@@ -83,15 +83,13 @@ numbers did not change, so a `project-intake.md §3` or `§4` pointer still land
 >
 > **Order:** a front-end's report (`get_tcc_state.language`) wins, because it IS the interface; else the stored `language.reply` (`python3 rew_tool/project.py <project> language`, and
 > `contract.py check` prints it above everything else); else ASK — *"English, or your native
-> language? (supported: **EN · UK · DE · PL**)"* — and record the answer, so the next clean session
-> reads it instead of asking again.
+> language? (supported: **EN · UK · DE · PL**)"* — and record the answer,
+> `intake.save(<project>, "project.language", "<code>")`, and the ruling,
+> `process.py <project>/process decision "dialogue language" "<code>" -1.1`,
+> so the next clean session reads it instead of asking again.
 >
-> **The input language is the trap.** On a Windows VM with no Ukrainian keyboard he typed English
-> while the interface and the reply were Ukrainian; a session that takes its language from the last
-> message flips the whole tune on one sentence forced by a missing layout. And reading the value
-> without acting on it is the same failure as not reading it — one session named the mismatch out
-> loud, answered in English anyway, and advised him to go fix it in the app. A read value that
-> changes nothing is not a setting, it is trivia.
+> The rule — the interface language always, read before it is asked, the input language switching nothing — has one
+> home, SKILL.md's Pre-Session (*WHICH LANGUAGE*); what it cost when it was missing → `why-these-rules.md`.
 >
 > The skill body stays English — it is the method skeleton. Claude will manage other languages too;
 > EN/UK/DE/PL are the officially checked ones.

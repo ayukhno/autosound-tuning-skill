@@ -55,6 +55,10 @@ prose reads as though the work is captured; the machine record is empty.
 four were one machine. A schema change reaches the model at once and the projects on disk never,
 unless something asks. That is why `catch-up` is run there and then rather than carried as a to-do.
 
+It is additive and idempotent: legacy names, `tier` read off the ledger, and a marked `DRAFT:` symptom on owner-facing
+flaw rows that have none. It invents no fact. The owner's symptom line is optional — a communication line for the
+finished tune; nothing about it gates phase 0 (the Arbiter's ruling, 2026-09-08).
+
 ## Stopping as an event
 
 `HUB-023`: the next session resumes from what is on disk, so work done after the record was closed
@@ -99,7 +103,8 @@ what it had just read about the person it was talking to. The damage is out of p
 because the first reply is already wrong and the person's first act after a clean start is to correct
 the machine about himself. The input language is the other trap: on a Windows VM with no Ukrainian
 layout he typed English, and a session taking its language from the last message flips a whole tune
-on one sentence forced by a missing keyboard (S-045).
+on one sentence forced by a missing keyboard (S-045). The rule itself has one home: SKILL.md's Pre-Session, *WHICH
+LANGUAGE*.
 
 ## A fact whose origin is not written
 
@@ -117,3 +122,11 @@ fine and the label was missing, which is worse than missing data: nobody goes lo
 
 "Remove the +3" once landed 3 dB off intent: the Arbiter and the model disagreed about what the
 current value was, and a relative instruction hides that disagreement instead of surfacing it.
+
+## Where each always-on rule came from
+
+SKILL.md keeps each rule and none of its history (#145, 2026-10-13: what a session keeps after a context summary is
+SKILL.md's first part, and a date or an issue number there is paid for in every phase). The history is here, rule by
+rule.
+
+- **The interface language, always** — the Arbiter, 2026-09-22 (S-045 before it; the story above).
