@@ -130,7 +130,7 @@ Update inside TCC, or run the installation command again: it installs the newest
 ### What does the method categorically refuse to do?
 - **Writing parameters directly into your DSP** — entering values into the processor software always remains your action.
 - **Calculating delays based on auto-delay tools or cross-correlation** — acoustic delays are inspected manually from the initial rise of the impulse response ($t_0$). Auto-delay estimation tools in REW are strictly forbidden.
-- **Boosting frequencies in acoustic nulls (cancellation zones)** — cancellation dips are caused by boundary reflections, not the speaker itself. Filling them with EQ is futile: a boost only loads the amplifier and speaker and changes nothing at the listening position. The method caps any boost at +6 dB, and a dip that would need more is almost certainly a cancellation. Dips that are safe to correct are identified using *Excess phase* analysis in REW.
+- **Boosting frequencies in acoustic nulls (cancellation zones)** — cancellation dips are caused by boundary reflections, not the speaker itself. Filling them with EQ is futile: a boost only loads the amplifier and speaker and changes nothing at the listening position. The method's EQ only cuts — at most 6 dB per band — and leaves a dip alone: a dip that would need a boost is almost certainly a cancellation. Dips that are safe to correct are identified using *Excess phase* analysis in REW.
 - **Proceeding with compromised measurements** — detected timing drift or missing protective filters will be flagged before proceeding.
 
 ---
