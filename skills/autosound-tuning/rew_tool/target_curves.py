@@ -124,10 +124,19 @@ def explain_target_curve(measurement_title, curves_dir, glossary=None):
         return None, None, str(exc)
     path = os.path.join(curves_dir, name)
     if not os.path.isfile(path):
+        if not os.path.isdir(curves_dir):
+            # F8: a folder that is not there is the folder's fault, not a project without targets.
+            return None, None, f"no folder {curves_dir}"
         why = f"no `{name}` in {curves_dir}"
+        # A project's `rew_analitic/target-curves/` keeps each curve in a folder of its own: the file in one of them is
+        # read with that folder as --curves-dir (F8; the tool no longer picks a curve for the person).
+        held = sorted(glob.glob(os.path.join(glob.escape(curves_dir), "*", glob.escape(name))))
+        if held:
+            why += "; " + "; ".join(f"`{os.path.basename(os.path.dirname(h))}/{name}` is read with --curves-dir "
+                                    f"{os.path.dirname(h)}" for h in held)
         if glob.glob(os.path.join(glob.escape(curves_dir), "*_REW.txt")):
-            # The retired spelling is still on disk in real projects (an NTT export directory is
-            # the CLI's default). Saying so turns a table of blanks into one step to take.
+            # The retired spelling is still on disk in real projects (an NTT export directory).
+            # Saying so turns a table of blanks into one step to take.
             why += ("; its `*_REW.txt` files are in the retired spelling (`w_60`, `m_250`: no "
                     "side, their own crossovers) and are not read -- `target_bands.write_targets` "
                     "writes this project's")
@@ -157,6 +166,28 @@ def interpolate_target(target_freqs, target_mags, query_freqs):
                 result.append(target_mags[i] + t * (target_mags[i + 1] - target_mags[i]))
                 break
     return result
+
+
+def _check_the_reason_names_the_folder(car):
+    """F8: a row with no target names the folder's own fault. A folder that is not there said "no `<code>_target.txt`
+    in <folder>" -- read as a project with no targets, as on every machine but the author's, whose folder the default
+    named. A project's `rew_analitic/target-curves/` -- the folder `--curves-dir` now defaults to -- keeps each curve in
+    a folder of its own (naming-and-structure.md), so a file there is named with the `--curves-dir` that reads it."""
+    import tempfile
+    with tempfile.TemporaryDirectory() as d:
+        gone = os.path.join(d, "not-there")
+        got, data, why = explain_target_curve("m-L_2 (sw)", gone, car)
+        assert got is None and data is None and why == f"no folder {gone}", why
+        curves = os.path.join(d, "rew_analitic", "target-curves")
+        for curve in ("house", "studio"):
+            os.makedirs(os.path.join(curves, curve))
+        with open(os.path.join(curves, "house", "m-L_target.txt"), "w", encoding="utf-8") as fh:
+            fh.write("20 0.0\n20000 0.0\n")
+        got, _, why = explain_target_curve("m-L_2 (sw)", curves, car)
+        assert got is None and f"no `m-L_target.txt` in {curves}" in why \
+            and f"--curves-dir {os.path.join(curves, 'house')}" in why and "studio" not in why, why
+        got, _, why = explain_target_curve("w-L_2 (sw)", curves, car)
+        assert got is None and why == f"no `w-L_target.txt` in {curves}", why
 
 
 def _selftest():
@@ -251,6 +282,14 @@ def _selftest():
         got, _, why = explain_target_curve("L m+tw_50 (sw)", d, car)
         assert got is None and "`L m+tw_target.txt`" in why, why
         assert find_target_curve("xyz_1 (sw)", d, car) == (None, None)
+
+    failures = []
+    for check in (_check_the_reason_names_the_folder,):
+        try:
+            check(car)
+        except AssertionError as exc:
+            failures.append(f"{check.__name__}: {exc}")
+    assert not failures, "\n".join(failures)
 
     # ── interpolation: inside, on the knots, and clamped outside ─────────────────────────────
     tf, tm = [100.0, 200.0, 400.0], [0.0, 10.0, 0.0]

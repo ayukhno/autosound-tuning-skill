@@ -19,9 +19,22 @@ import naming
 import verdict as verdict_block
 from target_curves import explain_target_curve, find_target_curve, interpolate_target
 
-DEFAULT_CURVES_DIR = os.path.expanduser(
-    "~/Documents/home/EMMA_2026-05/7. HelixDSP v4 ResoNix_ACС/ResoNix_Accurate_50db_REW 2"
-)
+#: Where a project keeps its target curves, a folder per curve (naming-and-structure.md). No folder is a default in
+#: the code (F8): the default was one only the author's machine had, and every other machine read its targets from a
+#: folder that was not there.
+PROJECT_CURVES = os.path.join("rew_analitic", "target-curves")
+NO_CURVES = ("targets: none — pass --curves-dir <folder> (the intake writes them to "
+             "rew_analitic/target-curves/<name>/)")
+
+
+def curves_dir_for(given, project):
+    """The folder the targets are read from: `given` (`--curves-dir`) as it is; else the project's
+    `rew_analitic/target-curves/` when `project` names one that has it; else None, and the caller says NO_CURVES."""
+    if given:
+        return given
+    if project and os.path.isdir(os.path.join(project, PROJECT_CURVES)):
+        return os.path.join(project, PROJECT_CURVES)
+    return None
 
 SEP = "─" * 70
 
@@ -1278,8 +1291,8 @@ def run(mid, curves_dir, show_all=True):
     dist = api.get_distortion(mid)
     print_distortion(dist)
 
-    # Target curve
-    target_file, target_data = find_target_curve(title, curves_dir)
+    # Target curve -- none when no folder was given or found (F8): said once, when the session started.
+    target_file, target_data = find_target_curve(title, curves_dir) if curves_dir else (None, None)
     if target_data:
         t_freqs, t_mag = target_data
         print_deviation(freqs, mag, t_freqs, t_mag, target_file)
@@ -1292,7 +1305,7 @@ def run(mid, curves_dir, show_all=True):
             print(f"  {'-'*10}  {'-'*10}  {'-'*6}  {'-'*6}")
             for s in suggestions:
                 print(f"  {s['freq']:>10.1f}  {s['gain']:>+10.1f}  {s['Q']:>6.1f}  {s['type']}")
-    else:
+    elif curves_dir:
         print(f"\n  Цільова крива: не знайдено для '{title}' в {curves_dir}")
 
     print(f"\n{SEP}\n")
@@ -1794,6 +1807,84 @@ def _selftest():
     _check_joints_refuse_an_unreadable_journal()
     print("selftest[journal] OK — analyze-joints --process refuses a journal it cannot read in one line, exit 1, "
           "never as REW's failure (#134, R53).")
+    failures = []
+    for check in (_check_no_folder_is_the_curves_default,):
+        try:
+            check()
+        except AssertionError as exc:
+            failures.append(f"{check.__name__}: {exc}")
+    assert not failures, "\n".join(failures)
+    print("selftest[curves-dir] OK — no folder is the curves' default: a project's rew_analitic/target-curves/ when it "
+          "has one, --curves-dir as given, otherwise one line saying to pass it and a table without targets (F8).")
+
+
+def _check_no_folder_is_the_curves_default():
+    """F8: `--curves-dir` defaulted to a folder only the author's machine had, under his Documents. On every other
+    machine `analyze-batch` read its targets from a folder that was not there and printed a row "no target" each, the
+    folder never named as the cause. No folder is a default in the code: a project (`--project`, else
+    $AUTOSOUND_PROJECT_DIR) that has `rew_analitic/target-curves/` gives it; `--curves-dir` is taken as given;
+    otherwise the run says once what to pass and goes on without targets. REW is a stand-in."""
+    import contextlib
+    import io
+    import shutil
+    import tempfile
+    import target_bands
+    with open(os.path.abspath(__file__), encoding="utf-8") as fh:
+        src = fh.read()
+    none_line = ("targets: none — pass --curves-dir <folder> (the intake writes them to "
+                 "rew_analitic/target-curves/<name>/)")
+    top = tempfile.mkdtemp(prefix="autosound_curves_default_")
+    saved = api.get_measurements, api.get_fr, sys.argv, os.environ.get("AUTOSOUND_PROJECT_DIR")
+    failures = []
+    if ("EMMA" + "_2026") in src or ('expanduser("~/' + "Documents") in src:
+        failures.append("an author's folder is still in rew_tool.py")
+
+    def batch(*argv, project_env=None):
+        sys.argv = ["rew_tool.py", "analyze-batch", "_2 (rta)", *argv]
+        os.environ.pop("AUTOSOUND_PROJECT_DIR", None)
+        if project_env:
+            os.environ["AUTOSOUND_PROJECT_DIR"] = project_env
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
+            try:
+                main()
+                code = 0
+            except SystemExit as stop:
+                code = stop.code
+        return code, out.getvalue()
+    try:
+        api.get_measurements = lambda: {"1": {"title": "m-L_2 (rta)"}}
+        api.get_fr = lambda mid, smoothing=None: ([100, 500, 1000, 5000], [82, 84, 83, 80], None)
+        bare = os.path.join(top, "bare")
+        os.makedirs(os.path.join(bare, "rew_analitic"))
+        curves = os.path.join(top, "car", "rew_analitic", "target-curves")
+        os.makedirs(curves)
+        target_bands.write_targets({"m-L": [(100, 80), (500, 80), (1000, 80), (5000, 80)]}, curves)
+        given = os.path.join(top, "given")
+        os.makedirs(given)
+        home_docs = os.path.join(os.path.expanduser("~"), "Documents")
+        for label, argv, env, want in (
+                ("a project without target-curves/", ["--project", bare], None, None),
+                ("no project at all", [], None, None),
+                ("a project with target-curves/, by $AUTOSOUND_PROJECT_DIR", [], os.path.join(top, "car"), curves),
+                ("--curves-dir given", ["--curves-dir", given, "--project", bare], None, given)):
+            code, out = batch(*argv, project_env=env)
+            if want is None:
+                ok = code == 0 and out.count(none_line) == 1 and "Цілі з:" not in out and "(без цілі)" in out
+            else:
+                ok = code == 0 and none_line not in out and f"Цілі з: {want}" in out
+            if not ok or home_docs in out:
+                failures.append(f"{label}: exit {code}, said {out.strip()[-400:]!r}")
+        code, out = batch("--no-targets")
+        if code != 0 or none_line in out:
+            failures.append(f"--no-targets: exit {code}, said {out.strip()[-300:]!r}")
+    finally:
+        api.get_measurements, api.get_fr, sys.argv = saved[:3]
+        os.environ.pop("AUTOSOUND_PROJECT_DIR", None)
+        if saved[3] is not None:
+            os.environ["AUTOSOUND_PROJECT_DIR"] = saved[3]
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["the curves' folder:"] + failures)
 
 
 def _check_joints_refuse_an_unreadable_journal():
@@ -1846,13 +1937,16 @@ def _check_joints_refuse_an_unreadable_journal():
 
 def main():
     parser = argparse.ArgumentParser(description="REW Analysis Tool")
-    parser.add_argument("--curves-dir", default=DEFAULT_CURVES_DIR,
-                        help="Шлях до папки з цільовими кривими")
+    parser.add_argument("--curves-dir", default=None,
+                        help="Шлях до папки з цільовими кривими (default: $AUTOSOUND_PROJECT_DIR's "
+                             "rew_analitic/target-curves/ when it has one; else none)")
     sub = parser.add_subparsers(dest="cmd")
     pb = sub.add_parser("analyze-batch",
                         help="Масовий аналіз усіх замірів за патерном → одна таблиця")
     pb.add_argument("pattern", help="Підрядок у назві заміру, напр. '_2 (rta)'")
-    pb.add_argument("--curves-dir", default=DEFAULT_CURVES_DIR)
+    pb.add_argument("--curves-dir", default=None,
+                    help="the folder of the <code>_target.txt files (default: the project's "
+                         "rew_analitic/target-curves/ when it has one; else the table has no targets)")
     pb.add_argument("--project", default=os.environ.get("AUTOSOUND_PROJECT_DIR"), metavar="DIR",
                     help="the project whose glossary names each title's code, and so its "
                          "<code>_target.txt (default: $AUTOSOUND_PROJECT_DIR)")
@@ -1916,9 +2010,13 @@ def main():
     if args.cmd == "analyze-batch":
         import naming                    # the grammar's one reader, and the project's codes
         glossary = naming.Glossary.for_project(args.project) if args.project else None
+        curves_dir, vs_targets = curves_dir_for(args.curves_dir, args.project), not args.no_targets
+        if vs_targets and curves_dir is None:
+            print(NO_CURVES)
+            vs_targets = False
         try:
-            analyze_batch(args.pattern, args.curves_dir,
-                          vs_targets=not args.no_targets, glossary=glossary)
+            analyze_batch(args.pattern, curves_dir,
+                          vs_targets=vs_targets, glossary=glossary)
         except Exception as e:
             print(f"Помилка підключення до REW API: {e}")
             print("Переконайся що REW запущений з -api і API сервер увімкнений.")
@@ -2012,6 +2110,9 @@ def main():
         print(f"Помилка підключення до REW API: {e}")
         print("Переконайся що REW запущений з -api і API сервер увімкнений.")
         sys.exit(1)
+    curves_dir = curves_dir_for(args.curves_dir, os.environ.get("AUTOSOUND_PROJECT_DIR"))
+    if curves_dir is None:
+        print(NO_CURVES)
 
     while True:
         print()
@@ -2031,7 +2132,7 @@ def main():
                 print(f"  {e}")
                 continue
         try:
-            run(mid, args.curves_dir)
+            run(mid, curves_dir)
         except Exception as e:
             print(f"  Помилка: {e}")
 

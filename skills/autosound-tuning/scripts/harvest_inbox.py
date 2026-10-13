@@ -23,8 +23,9 @@ home (#143, I-21; an older project's in `rew_analitic/` are read too, each with 
   harvest_inbox.py <project> [--out FILE] [--check] [--json]
   harvest_inbox.py --selftest
 
-A source that is there and cannot be read (not UTF-8, a permission refused) stops the harvest, named with its repair
-(W-8 #136's rule): a package without it would be one the person never sees is short.
+A source that is there and cannot be read (not UTF-8, a permission refused) -- or a folder of them it cannot list or
+search -- stops the harvest, named with its repair (W-8 #136's rule): a package without it would be one the person
+never sees is short.
 
 Exit codes: 0 done (`--check`: nothing looks personal) · 1 `--check` found something to look at · 2 refused, nothing
 written -- no inbox, a source that cannot be read, or a usage error. A refusal is 2, not 1: under `--check` a 1 says
@@ -36,6 +37,7 @@ import io
 import json
 import os
 import re
+import stat
 import sys
 
 INBOX = "skill-inbox.md"
@@ -134,14 +136,27 @@ def _moved(project, path):
     return f"{path} is read from {OLD_HOME}/: its home is the project root — move it to {home}"
 
 
+def _is_file(path):
+    """True when `path` is a file, False when it is not there or is no file, None when that cannot be told -- the folder
+    it is in may not be searched (R56). `os.path.isfile` read the last as absent, and the file went unsaid; a caller
+    takes a None as a file, so that `_read` names what refused it."""
+    try:
+        return stat.S_ISREG(os.stat(path).st_mode)
+    except (FileNotFoundError, NotADirectoryError):
+        return False
+    except OSError:
+        return None
+
+
 def _inboxes(project):
     """`(paths, warnings)`: the project root's `skill-inbox.md`, then an older project's in `rew_analitic/` with the
     line naming the move -- both, when both are there: an older project's root inbox is often the intake's rules header
-    alone, its lessons in the copy, and reading the root's only came back empty."""
+    alone, its lessons in the copy, and reading the root's only came back empty. One that cannot be told from absent
+    -- its folder may not be searched -- is listed too, and `_read` says what refused it (R56)."""
     paths, warnings = [], []
     for folder in (project, os.path.join(project, OLD_HOME)):
         path = os.path.join(folder, INBOX)
-        if os.path.isfile(path):
+        if _is_file(path) is not False:
             paths.append(path)
             if folder != project:
                 warnings.append(_moved(project, path))
@@ -149,26 +164,34 @@ def _inboxes(project):
 
 
 def _changelogs(project):
-    """`(paths, warnings)`: every `tuning-changelog*` at the project root, then those an older project keeps in
-    `rew_analitic/`, each of these with the line naming the move."""
-    paths, warnings = [], []
+    """`(paths, warnings, unreadable)`: every `tuning-changelog*` at the project root, then those an older project keeps
+    in `rew_analitic/`, each of these with the line naming the move -- and the line naming each folder that is there
+    and cannot be listed, with its repair: it was skipped unsaid, its lessons with it (R56). A folder that is not there
+    has nothing to say."""
+    paths, warnings, unreadable = [], [], []
     for folder in (project, os.path.join(project, OLD_HOME)):
         try:
-            names = sorted(n for n in os.listdir(folder)
-                           if n.startswith(CHANGELOG_GLOB) and os.path.isfile(os.path.join(folder, n)))
-        except OSError:
+            entries = os.listdir(folder)
+        except (FileNotFoundError, NotADirectoryError):
             continue
+        except OSError as exc:
+            unreadable.append(f"{folder} cannot be listed ({exc}) -- "
+                              f"{_siblings().load('project_io.py').repair_for(exc)}")
+            continue
+        names = sorted(n for n in entries if n.startswith(CHANGELOG_GLOB) and _is_file(os.path.join(folder, n))
+                       is not False)
         paths += [os.path.join(folder, n) for n in names]
         if folder != project:
             warnings += [_moved(project, os.path.join(folder, n)) for n in names]
-    return paths, warnings
+    return paths, warnings, unreadable
 
 
 def _lessons(project):
     """`(lessons, unreadable)`: every `Lesson:` line from the project's changelogs, in file order, and the line naming
-    each changelog that cannot be read, with its repair (`_read`)."""
-    found, unreadable = [], []
-    for path in _changelogs(project)[0]:
+    each changelog that cannot be read, or folder that cannot be listed, with its repair (`_read`, `_changelogs`)."""
+    paths, _warnings, unreadable = _changelogs(project)
+    found = []
+    for path in paths:
         text, why = _read(path)
         if why:
             unreadable.append(why)
@@ -450,6 +473,63 @@ def _check_a_file_that_cannot_be_read_stops_the_harvest():
     assert not failures, "\n  ".join(["a file the harvest cannot read:"] + failures)
 
 
+def _check_a_folder_that_cannot_be_read_is_said():
+    """R56 (group fix 1's leftover, the class of I3): a folder the harvest cannot list or search is said, not skipped.
+    `_changelogs` skipped a folder it could not list (`except OSError: continue`), and `_inboxes` asked `isfile`, which
+    reads a file in a folder it may not search as absent: an older project's `rew_analitic/` with its mode wrong left
+    its inbox and its lessons out of the package, unsaid. Each is one `error: <what> ... -- <repair>` line, exit 2, as
+    a file that cannot be read. A folder that is not there is still nothing to say. POSIX only, and not as root (a mode
+    is no refusal to root)."""
+    if os.name != "posix" or os.geteuid() == 0:
+        return
+    import shutil
+    import stat
+    import tempfile
+    top = tempfile.mkdtemp(prefix="harvest_inbox_folder_")
+    failures = []
+    try:
+        # A folder this user may neither list nor search (mode 0), and one it may list but not search (r--).
+        for label, mode, want in (("rew_analitic/ unlistable", 0, ("rew_analitic cannot be listed (",
+                                                                   "skill-inbox.md cannot be opened (")),
+                                  ("rew_analitic/ unsearchable", stat.S_IRUSR,
+                                   ("tuning-changelog.md cannot be opened (", "skill-inbox.md cannot be opened ("))):
+            proj = _project(top, label.split()[1], inbox_in="rew_analitic", changelog_in="rew_analitic")
+            io.open(os.path.join(proj, "skill-inbox.md"), "w", encoding="utf-8").write("## What worked\nthe root's\n")
+            old = os.path.join(proj, "rew_analitic")
+            os.chmod(old, mode)
+            try:
+                code, out, err = _run([proj])
+            finally:
+                os.chmod(old, stat.S_IRWXU)
+            said = [ln for ln in err.splitlines() if ln.startswith("error: ")]
+            missing = [w for w in want if not any(w in ln and "give it access" in ln for ln in said)]
+            if code != 2 or missing or out.strip() or os.path.exists(os.path.join(proj, "feedback-package.md")):
+                failures.append(f"{label}: exit {code}, not said {missing}, said {err.strip()!r}")
+        # The project root itself, unsearchable: its inbox is not "no inbox".
+        proj = _project(top, "root", inbox_in="", changelog_in="")
+        os.chmod(proj, stat.S_IRUSR)
+        try:
+            code, out, err = _run([proj])
+        finally:
+            os.chmod(proj, stat.S_IRWXU)
+        said = [ln for ln in err.splitlines() if ln.startswith("error: ")]
+        if code != 2 or not any("skill-inbox.md cannot be opened (" in ln for ln in said) \
+                or any(f"no {INBOX}" in ln for ln in said):
+            failures.append(f"the root unsearchable: exit {code}, said {err.strip()!r}")
+        # No rew_analitic/ at all: nothing to say, the root's inbox harvested.
+        proj = os.path.join(top, "fresh")
+        os.makedirs(proj)
+        io.open(os.path.join(proj, "skill-inbox.md"), "w", encoding="utf-8").write("## What worked\nthe root's\n")
+        code, out, err = _run([proj, "--json"])
+        if code != 0 or err.strip():
+            failures.append(f"no rew_analitic/: exit {code}, said {err.strip()!r}")
+    finally:
+        for folder, _dirs, _files in os.walk(top):
+            os.chmod(folder, stat.S_IRWXU)
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["a folder the harvest cannot read:"] + failures)
+
+
 def _check_a_copy_beside_the_roots_is_merged_not_moved():
     """Group fix 1, I3: a `rew_analitic/` inbox or changelog whose name the project root holds already is told to be
     merged into the root's and deleted -- "move it to <root>/<name>" there invites the `mv` that writes over the root's
@@ -488,7 +568,7 @@ def _selftest():
     failures = []
     for check in (_check_the_inbox_at_the_root, _check_the_old_home_is_read_and_said, _check_both_inboxes_are_harvested,
                   _check_no_inbox_names_the_root, _check_a_file_that_cannot_be_read_stops_the_harvest,
-                  _check_a_copy_beside_the_roots_is_merged_not_moved):
+                  _check_a_copy_beside_the_roots_is_merged_not_moved, _check_a_folder_that_cannot_be_read_is_said):
         try:
             check()
         except AssertionError as exc:
@@ -542,7 +622,7 @@ def _selftest():
     print("selftest OK — inbox sections and changelog `Lesson:` lines land in the fixed package "
           "shape, read at the project root and, added after them, an older project's in rew_analitic/ "
           "with a warning naming the move (a merge where the root holds the file), a missing inbox and a source "
-          "that cannot be read are refused rather than answered with an empty or a short package, and "
+          "or a folder that cannot be read are refused rather than answered with an empty or a short package, and "
           "an API KEY in any of the four shapes, an e-mail, a home path and a phone are NAMED "
           "while ordinary tuning numbers are not — a key that leaves the machine once has left "
           "it for good")
