@@ -164,7 +164,8 @@ if [ "${1:-}" = "--selftest" ]; then
   want '^  ok   fresh\.py'
   # Three folders, three checks, and none of them left behind: the runner removed each, the timed-out one's too.
   [ "$(sort -u "$tmp/tmpdirs" 2>/dev/null | wc -l | tr -d ' ')" = 3 ] || {
-    printf 'runner selftest: want three TMPDIRs, one per check (slow, leaves, fresh), got:\n%s\n' "$(cat "$tmp/tmpdirs" 2>&1)"; exit 1; }
+    printf 'runner selftest: want three TMPDIRs, one per check (slow, leaves, fresh), got:\n%s\n' \
+      "$(cat "$tmp/tmpdirs" 2>&1)"; exit 1; }
   while IFS= read -r d || [ -n "$d" ]; do
     [ ! -e "$d" ] || { printf 'runner selftest: a check'"'"'s TMPDIR is still there after the run: %s\n' "$d"; exit 1; }
   done < "$tmp/tmpdirs"
@@ -227,15 +228,16 @@ GROUP_TIMEOUT='
 # run_one NAME MODE ARGV...   MODE: "ok" = exit 0 AND a last line saying OK; "rc" = exit 0, for a tree check whose
 # success line says no OK (secret-scan's "clean"). Every check that does end its success with an OK line is `ok`.
 #
-# Each check runs under a TMPDIR of its own, made empty for it, and must leave it empty (#148): what a selftest leaves in
-# the shared temp folder piles up run after run (hundreds of autosound_* folders on the author's Mac), and nobody can
-# see whose it is. A check that exits 0 and leaves anything there fails, the count and the first names said; the runner
-# removes the folder after every check -- one that failed, timed out or was interrupted too.
+# Each check runs under a TMPDIR of its own, made empty for it, and must leave it empty (#148): what a selftest leaves
+# in the shared temp folder piles up run after run (hundreds of autosound_* folders on the author's Mac), and nobody
+# can see whose it is. A check that exits 0 and leaves anything there fails, the count and the first names said; the
+# runner removes the folder after every check -- one that failed, timed out or was interrupted too.
 run_one() {
   local name="$1" mode="$2"; shift 2
   local out rc last tdir left names
   if ! tdir="$(mktemp -d)" || [ ! -d "$tdir" ]; then
-    fail=$((fail + 1)); failed+=("$name"); printf '  FAIL %-24s no TMPDIR of its own could be made (mktemp -d)\n' "$name"
+    fail=$((fail + 1)); failed+=("$name")
+    printf '  FAIL %-24s no TMPDIR of its own could be made (mktemp -d)\n' "$name"
     return
   fi
   if [[ "$1" == *.sh ]]; then

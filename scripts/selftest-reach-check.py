@@ -173,8 +173,8 @@ def _selftest():
         assert checks == 13, f"{checks} _check_* read, want 13 (none from the two files it could not read)"
     finally:
         shutil.rmtree(root, ignore_errors=True)
-    print("selftest-reach-check selftest OK -- named: a _check_ the loop does not hold (by file and line), one nested in "
-          "a selftest, one that takes a fixture, one only its own body reads, one only a string, a comment or its "
+    print("selftest-reach-check selftest OK -- named: a _check_ the loop does not hold (by file and line), one nested "
+          "in a selftest, one that takes a fixture, one only its own body reads, one only a string, a comment or its "
           "docstring names, one a name is bound over, one in the repo's scripts/, a file not UTF-8 and one that does "
           "not parse; passed: the same function once in the loop, production helpers their module calls (with "
           "parameters too, and a method), a read through an attribute; a file outside the two folders is not read")

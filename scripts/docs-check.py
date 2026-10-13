@@ -97,9 +97,9 @@ Rules:
 18. **`section-index`** (#145, audit I-25). `diagnostic-techniques.md` is 66 KB in 35 numbered sections, cited by
     number; with no contents a session read the whole file for one section, and `phase_2_eq.md` cited a §50 it never
     had. Each file of `SECTION_INDEX_FILES` opens, after its intro, with an index of its `##` sections (`§N title`, in
-    order) that `--write-index` writes and the rule holds to the headings, so it is never typed; no § number is two
-    headings; and every `§N` pointer to the file -- in the skill's .md and .py files, or bare in the file itself --
-    names a section it has.
+    order) that `--write-index` writes and the rule holds to the headings, so it is never typed -- one index, one mark
+    of each; no § number is two headings; and every `§N` pointer to the file -- in the skill's .md and .py files, or
+    bare in the file itself -- names a section it has.
 
 Rules 9-12 and 15-17 read a phrase as a reader does (`_phrase`): across a wrapped line and inline markup, its first
 letter in either case (a sentence's head, a clause's middle) and the rest in the case it is given, as whole words.
@@ -1287,10 +1287,10 @@ def rule_section_index(root: str) -> list[str]:
     the code; with no contents a session read the whole file to find one section, or guessed -- and
     `phase_2_eq.md` cited a §50 the file never had. So each file of `SECTION_INDEX_FILES` carries, after its intro and
     before its first section, the index `--write-index` writes between `INDEX_OPEN` and `INDEX_CLOSE`: one line per
-    `##`, `§N title` for a numbered one, in order -- held to the headings line for line, so it is never typed. No §
-    number is two headings. And every `§N` pointer to the file in the skill's .md and .py files -- the file named,
-    then a `§` list -- and every bare `§N` in the file itself, but one after another file's name, names a section
-    it has.
+    `##`, `§N title` for a numbered one, in order -- held to the headings line for line, so it is never typed; one
+    index, one mark of each, each on a line of its own (#148). No § number is two headings. And every `§N` pointer
+    to the file in the skill's .md and .py files -- the file named, then a `§` list -- and every bare `§N` in the
+    file itself, but one after another file's name, names a section it has.
     """
     bad = []
     for rel in SECTION_INDEX_FILES:
@@ -1302,10 +1302,26 @@ def rule_section_index(root: str) -> list[str]:
         numbered = [n for n, _ in sections if n is not None]
         for n in sorted({n for n in numbered if numbered.count(n) > 1}):
             bad.append(f"{rel}: §{n} is held by two headings — a pointer to §{n} lands on either")
-        has_open, has_close = INDEX_OPEN in text, INDEX_CLOSE in text
-        if not (has_open or has_close):
+        # Each mark on a line of its own, counted (#148): the first open mark alone was read, and a second, stale
+        # index after it passed. A mark sharing its line with text is one the writer cannot take out.
+        lines = text.split("\n")
+        n_open = sum(line.strip() == INDEX_OPEN for line in lines)
+        n_close = sum(line.strip() == INDEX_CLOSE for line in lines)
+        inline = [n for n, line in enumerate(lines, 1) if (INDEX_OPEN in line or INDEX_CLOSE in line)
+                  and line.strip() not in (INDEX_OPEN, INDEX_CLOSE)]
+        has_open, has_close = n_open > 0, n_close > 0
+        for n in inline:
+            bad.append(f"{rel}:{n}: a mark of its section index shares its line with text — `scripts/docs-check.py "
+                       f"--write-index` reads a mark on a line of its own: put it on one, or delete it")
+        if inline:
+            pass                              # named above: the writer cannot take such a mark out, so no more is read
+        elif not (has_open or has_close):
             bad.append(f"{rel}: no section index — a session reads the whole file to find one section; write it with "
                        f"`scripts/docs-check.py --write-index`")
+        elif n_open > 1 or n_close > 1:
+            bad.append(f"{rel}: its section index has {n_open} open and {n_close} close marks — one index, one mark of "
+                       f"each: a second index is never held to the headings, and a reader takes either; "
+                       f"`scripts/docs-check.py --write-index` takes them all out and writes one")
         elif has_open != has_close or text.index(INDEX_OPEN) > text.index(INDEX_CLOSE):
             bad.append(f"{rel}: its section index has one mark of two — `scripts/docs-check.py --write-index` takes "
                        f"the lone mark and the stale lines beside it out, and writes the index whole")
@@ -1336,9 +1352,8 @@ def rule_section_index(root: str) -> list[str]:
                     if n not in have:
                         bad.append(f"{other}:{line}: points to {stem}.md §{n}, and it has no §{n} — {where}")
         own = _FENCED.sub(lambda m: re.sub(r"[^\n]", " ", m.group()), text)
-        if has_open and has_close and text.index(INDEX_OPEN) < text.index(INDEX_CLOSE):
-            a, b = own.index(INDEX_OPEN), own.index(INDEX_CLOSE)
-            own = own[:a] + re.sub(r"[^\n]", " ", own[a:b]) + own[b:]
+        own = re.sub(re.escape(INDEX_OPEN) + r".*?" + re.escape(INDEX_CLOSE),   # every index: its lines are no pointers
+                     lambda m: re.sub(r"[^\n]", " ", m.group()), own, flags=re.S)
         for m in re.finditer(r"(?<![\w§])" + _SECTION_LIST.pattern, own):
             head = own[own.rfind("\n", 0, m.start()) + 1:m.start()]
             if _FOREIGN_NAME.search(head) or re.search(re.escape(stem) + _NAME_GAP + r"$", head):
@@ -1377,7 +1392,7 @@ def _strip_index(text: str) -> str:
                     while end < len(lines) and _index_line(lines[end]) and lines[end].strip() != INDEX_OPEN:
                         end += 1
         elif mark == INDEX_CLOSE:
-            start, end = i, i + 1                         # a lone close mark, and the index lines before it, up to the head
+            start, end = i, i + 1                         # a lone close mark, and the index lines up to the head
             k = i - 1
             while k >= 0 and k not in drop and _index_line(lines[k]) and lines[k] != INDEX_HEAD:
                 k -= 1
@@ -2214,6 +2229,37 @@ def _check_section_index_repairs_a_lone_mark():
                 assert write_index(root) == [] and _read(root, _INDEXED) == text, (case, "a second write changed it")
 
 
+def _check_section_index_one_of_each_mark():
+    """Rule 18 (#148): one index, one mark of each. The rule read the first open mark only, so a second, stale index
+    after the first passed -- right after it or inside the file -- and so did a stray mark. Each is named with the
+    count of each mark, and `--write-index` leaves one index: the file as a clean write makes it. A mark that shares
+    its line with text is named by its line: the writer reads a mark on a line of its own."""
+    with _scratch() as tmp:
+        root = _fixture(tmp, {_INDEXED: _INDEXED_TEXT})
+        write_index(root)
+        clean = _read(root, _INDEXED)
+        block = _index_block(clean)
+        stale = block.replace("- §3 Summation", "- §3 Summed")
+        path = os.path.join(root, _INDEXED)
+        for case, broken, counts in (
+                ("a second index right after the first", clean.replace(block, block + "\n\n" + stale),
+                 "2 open and 2 close"),
+                ("a second index inside the file", clean.replace("## 3. Summation", stale + "\n\n## 3. Summation"),
+                 "2 open and 2 close"),
+                ("a stray open mark", clean.replace("## 3. Summation", INDEX_OPEN + "\n\n## 3. Summation"),
+                 "2 open and 1 close")):
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write(broken)
+            said = rule_section_index(root)
+            assert len(said) == 1 and f"{counts} marks" in said[0] and "--write-index" in said[0], (case, said)
+            assert write_index(root) == [_INDEXED] and _read(root, _INDEXED) == clean, (case, _read(root, _INDEXED))
+            assert rule_section_index(root) == [], (case, rule_section_index(root))
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(clean.replace("- text, see §2.", f"- text, see §2. {INDEX_CLOSE}"))
+        said = rule_section_index(root)
+        assert len(said) == 1 and f"{_INDEXED}:" in said[0] and "shares its line with text" in said[0], said
+
+
 def _check_section_index_pointers():
     """Rule 18 (#145, I-25): a `§N` pointer to the indexed file names a section it has -- read in every .md and .py of
     the skill: a list (`§3, §2, §50`), a range (`§2–4`), after a slash, behind a link's bracket, wrapped onto the next
@@ -2450,6 +2496,7 @@ def _selftest() -> int:
                       _check_skill_budget_clip_newline, _check_skill_budget_crlf, _check_skill_budget_inputs,
                       _check_skill_budget_description_folds, _check_skill_budget_rules_after_frontmatter,
                       _check_section_index, _check_section_index_repairs_a_lone_mark,
+                      _check_section_index_one_of_each_mark,
                       _check_section_index_pointers, _check_section_index_inputs,
                       _check_section_index_crlf):
             try:
@@ -2507,11 +2554,13 @@ def _selftest() -> int:
           "(a `>` block's last line break counted, as the Agent Skills validator counts it) and a CRLF checkout "
           "measured as its LF text; "
           "a file with no section index, one whose index a renamed or added heading, a hand edit, a move below the "
-          "first section or a lost mark parted from its headings, a § number two headings hold and the file gone are "
+          "first section or a lost mark parted from its headings, a second index or a stray mark, a mark sharing its "
+          "line with text, a § number two headings hold and the file gone are "
           "named, while --write-index writes it after the intro (in CRLF for a CRLF checkout), repairs one with a lone "
           "mark -- either mark, its line deleted or its text erased -- taking the stale lines with it, and a second "
-          "write changes nothing; a § pointer to the file landing on no section -- in a list, a range, after a slash, wrapped, "
-          "in code, bare in the file itself -- is named by file and line, while another file's § and a § with no "
+          "write changes nothing; a § pointer to the file landing on no section -- in a list, a range, after a "
+          "slash, wrapped, in code, bare in the file itself -- is named by file and line, while another file's § and "
+          "a § with no "
           "file named are not; "
           "the tree is clean but for the rules red in it by design, each still red; the rules' "
           "checks report every failure in one run")
