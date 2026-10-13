@@ -439,6 +439,51 @@ def _check_a_failed_comment_or_label_is_said():
     assert not failures, "\n  ".join(["a refused post:"] + failures)
 
 
+def _check_a_missing_gh_is_exit_1():
+    """`gh` not on this machine is exit 1, said with how to install it (group fix 1, item 13; the CHANGELOG's claim for
+    T-50, untested): it exited 0. `shutil.which` is a stand-in answering no `gh`, so a runner that has one -- GitHub's
+    have it in /usr/bin -- still meets none; no program is started."""
+    import contextlib
+    import io
+    real = autosound_ai.shutil.which
+    autosound_ai.shutil.which = lambda name, *a, **k: None if name == "gh" else real(name, *a, **k)
+    out, err = io.StringIO(), io.StringIO()
+    try:
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            try:
+                code = main()
+            except SystemExit as stop:
+                code = stop.code
+            except Exception as exc:  # noqa: BLE001 -- an escape is the check's finding
+                code = f"raised {exc!r}"
+    finally:
+        autosound_ai.shutil.which = real
+    assert code == 1 and "(gh) не знайдено" in err.getvalue() and "Нічого нового" not in out.getvalue(), \
+        (code, out.getvalue()[-200:], err.getvalue())
+
+
+def _check_a_post_that_lands_later_is_posted():
+    """A reply or a label `gh` refused once and that lands when sent again is posted: it leaves the list of what was
+    not, and the run exits 0 (group fix 1, item 13). Only what is still unposted at the end makes it exit 1. A stand-in
+    `gh` that refuses each post the first time (POSIX only: a shell script)."""
+    if os.name != "posix":
+        return
+    import shutil
+    top = tempfile.mkdtemp(prefix="issue_triage_later_")
+    failures = []
+    try:
+        once = ('if [ -f "$0.$2" ]; then exit 0; fi; : > "$0.$2"; echo "gh refused $2 once" >&2; exit 1 ;;')
+        run = _gh_scene(top, '"auth status") exit 0 ;;\n"issue list") echo ' + _ONE_ISSUE + ' ;;\n'
+                             '"issue comment") ' + once + '\n"issue edit") ' + once)
+        code, out, err = run(["3", "bug", "3", "bug", "1", "1"])
+        if code != 0 or "gh refused comment once" not in err or "gh refused edit once" not in err \
+                or "not posted" in err:
+            failures.append(f"a reply and a label that land the second time: exit {code}, err {err.strip()!r}")
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["a post that lands later:"] + failures)
+
+
 def _check_a_failing_editor_is_one_line():
     """T-50: an editor that fails -- exits non-zero, or names no program there is -- ended the triage in a traceback
     (`check=True`, nothing caught). It is one line now, and the draft stays as it was. The editor has no deadline on
@@ -481,7 +526,8 @@ def _selftest():
     """Форма промпту, без ключа й без мережі: чуже лежить в огорожі, застереження — перед нею."""
     failures = []
     for check in (_check_a_failed_gh_is_not_nothing_new, _check_a_failed_comment_or_label_is_said,
-                  _check_a_failing_editor_is_one_line):
+                  _check_a_failing_editor_is_one_line, _check_a_missing_gh_is_exit_1,
+                  _check_a_post_that_lands_later_is_posted):
         try:
             check()
         except AssertionError as exc:
