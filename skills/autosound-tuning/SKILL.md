@@ -42,10 +42,10 @@ the skill is normally installed as a symlink, and `find` does not descend into o
 ## 🏛️ Three Roles
 
 * **Generator / Orchestrator AI:** steers the session, reads REW data, proposes values, packages them for review.
-* **Reviewer AI — one channel, one model, three tasks:** **Critic** (check a proposal), **Advisor** (search for a solution to an open question) — both tuning, regulated by the tuning contract — and **Ask** (any plain question: a translation, a letter's wording; only the interaction contract `assets/interaction-contract.md`). The tasks differ in the question and its wording, not in the implementation. Independent challenger + co-builder; a **stateless on-demand call that re-reads state from disk** (never a background agent — the ladder in `setup-critic-channel.md` §7 says what to do instead when no channel answers); ideally a different vendor (cross-vendor anti-anchoring). A cold-start audit by another model at a milestone (`review-loop.md` Wing 1) is a DIFFERENT practice and does not stand in for a round's review.
+* **Reviewer AI — one channel, one model, three tasks:** **Critic** (check a proposal), **Advisor** (search for a solution to an open question), **Ask** (a plain question); ideally a different vendor → [`review-loop.md`](references/core/review-loop.md) Wing 2.
 * **Arbiter (human tuner):** final call on disagreements, runs measurements, enters DSP values.
 
-Tone: equal colleagues. Accept a correct critique fully; argue disagreements in cabin physics and psychoacoustics; state your confidence plainly. Full protocol → `assets/data-contract-template.md` — the same file the wrapper scripts inject into the reviewer, so what you read is what it was told.
+Tone: equal colleagues. Accept a correct critique fully; argue disagreements in cabin physics and psychoacoustics; state your confidence plainly. Full protocol → `assets/data-contract-template.md`.
 
 ---
 
@@ -102,6 +102,42 @@ Read the active phase from `process/process-state.json` (`python3 rew_tool/state
 
 ---
 
+## 🛠️ Review Channel
+
+Any reviewer is a **stateless on-demand call** that re-reads state from disk — running clean each call, it doubles as a **drift-watchdog** (`assets/data-contract-template.md` §0).
+
+* **Which mode this session?** The Arbiter picks A / B / C → `process-control.md` §1.
+* **Cadence: ONE reviewer call per round**, on the round's whole batch, then the Arbiter; TWO-PASS and the ceiling → `review-loop.md`.
+* The reviewer is called **at the desk by default**, not from inside a car session: the car session measures and listens, and what needs a verdict goes into the next desk round. When the user wants a verdict in the car, it is called there — say first that the car session will wait for the reviewer.
+* **How to run:** one door — `python3 scripts/autosound_ai.py critic|advisor <package.md> --record` (`ask` for a plain question); under TCC, its `call_critic` tool; `doctor` checks the channel → [`setup-critic-channel.md`](references/tooling/setup-critic-channel.md).
+* **Reviewer unavailable?** Descend THE ladder — one list, in `setup-critic-channel.md` §7. Never silently solo, and **never a background sub-agent as reviewer** — with nothing on the ladder reachable, the round is blocked and says so.
+
+---
+
+## ✍️ Output Style
+
+**A step reply is THREE things, and a passed check costs ONE WORD.**
+
+1. **Where we are** — one line, with the whole reconcile folded into it as a single clause: *checks: done* («перевірки: зроблено»), in the session's reply language. Not silence, and not a sentence per check.
+2. **What is next and what it needs** — one line. Desk work or a new measurement, and what it asks of the Arbiter.
+3. **The one question that actually needs the Arbiter** — if there is one.
+
+**A FAILED check replaces line 2, and is the only thing that gets sentences**: what it blocks and what to do about it — or the options, with **the one you recommend named first, and why**.
+
+Everything else — the inventory, the caveats, the previews, the reasoning, the full list of open steps — is **available on request** and lives in the files it came from. A tool run to SEE is not a tool run to REPORT.
+
+* **A verdict is not re-derived in prose.** After a check, say what THE CHECK said — how many captures are usable, what is flagged, what could not be checked and why — and stop. Reading the arrivals is Phase 1's work, by its tools.
+* **Name the thing, not the metaphor.** The vocabulary is fixed and has one home — [`naming-and-structure.md §1a`](references/core/naming-and-structure.md) — speak those words, not synonyms for them.
+* **The questioning MECHANISM is never retold, and its outcome is never attributed to the user.** A question that did not arrive goes into the text, with no claim about why (`feedback-loop.md`).
+* **Copy-paste-ready specifics:** exact save PATH, short measurement lists, direct targets.
+* **Every number in a proposal names where it came from**: a measurement title, `project.json`, `dsp_profile.json`, the Arbiter's word, or ASSUMPTION. An assumption is never written to state, and a feature the processor's profile does not list does not exist on this car.
+* **What the Arbiter types, they get as a table**: measurement TITLES, not curve ids; the quantity beside every number (an RMS says over which band and at which smoothing); no emoji in a table of values to type; no praise; one screen, then «деталі?».
+* **A reply after a desk computation ends with one of two things**: «введи це» (the sheet), or «виміряй ці N кривих» (N from `state.py … verification-set`, never "re-measure the series"). A defect of the method found mid-session gets one line in the pool, and the tuning goes on.
+* **Where a session's transcript lives, and where a request goes.** A request for a front-end goes to that product's tracker, in English (`post_feedback(channel="tcc")`), never into the tuning dialogue. The transcript's path → `feedback-loop.md`.
+* **The `🔍 What I see` · `⚠️ Main problems` · `✅ Fixable / ❌ Not fixable` · `🔧 Next steps` · `❓ One question` headings are for an ANALYSIS that was asked for** — a phase verdict, a flaw-map read — not for a step reply.
+
+---
+
 ## 📁 Reference Map (read on-demand)
 
 | Reference | Read when |
@@ -145,40 +181,3 @@ Read the active phase from `process/process-state.json` (`python3 rew_tool/state
 | [tooling/setup-critic-channel.md](references/tooling/setup-critic-channel.md) | CLI setup, .critic-env, models, `--doctor`, ladder. |
 | [core/feedback-loop.md](references/core/feedback-loop.md) | Session-close feedback ritual (issues in English). |
 | [core/why-these-rules.md](references/core/why-these-rules.md) | What each always-on rule cost when it was missing — read when a rule looks like ceremony. |
-
----
-
-## 🛠️ Review Channel
-
-A second, independent reviewer prevents single-perspective bias — strongest cross-vendor (**default: Claude drives + Gemini reviews**), but it works with a single AI too. Any reviewer is a **stateless on-demand call** that re-reads state from disk — running clean each call, it doubles as a **drift-watchdog** (proposal contradicts disk state / re-opens a banked decision / wrong phase → likely Generator drift → re-anchor from disk or `/clear` + resume).
-
-* **Which mode this session?** The Arbiter picks A / B / C → [`process-control.md`](references/core/process-control.md). Modes B/C additionally load `driver-discipline.md`.
-* **Cadence: ONE reviewer call per round** — package the round's whole batch (crossovers+levels, or the full EQ plan), one critique pass, then the Arbiter. **TWO-PASS (open question first) only at phase gates** (Phase-1 strategy, Phase-3 verdict) **or when the reviewer has fully agreed twice in a row** (the anchoring symptom). Up to 3 rounds is a ceiling, not a norm → [`review-loop.md`](references/core/review-loop.md).
-* The reviewer is called **at the desk by default**, not from inside a car session: the car session measures and listens, and what needs a verdict goes into the next desk round. When the user wants a verdict in the car, it is called there — say first that the car session will wait for the reviewer.
-* **How to run:** one door — `python3 scripts/autosound_ai.py critic|advisor <package.md> --record` (`ask` for a plain question; any vendor: its key, its CLI, or `--mode clipboard`); `doctor` checks the channel → [`setup-critic-channel.md`](references/tooling/setup-critic-channel.md). **Under TCC, call its `call_critic` tool:** it runs the reviewer outside the session, with the Arbiter's picked model and binary. From any other agent session the CLI runs too, with the session's markers stripped and a bounded wait that is announced before it starts; `--via api|cli|clipboard` picks the route for one run. The bound exists because a reviewer CLI used to hang inside a session, and a hang turned into "did it manually".
-* **Reviewer unavailable?** Descend THE ladder — one list, in `setup-critic-channel.md` §7 (wait → other vendor's CLI → clipboard into any desktop chat → same vendor higher tier, said out loud → a separate Claude session → the human). Never silently solo, and **never a background sub-agent as reviewer** — with nothing on the ladder reachable, the round is blocked and says so.
-* **Models:** a name is the Arbiter's pick and no file keeps a table of them — the shape (a heavier model for search and verdicts, a lighter one for routine, another VENDOR for the reviewer) → [`process-control.md`](references/core/process-control.md) §1; the reviewer's own model → [`setup-critic-channel.md`](references/tooling/setup-critic-channel.md) §2.
-
----
-
-## ✍️ Output Style
-
-**A step reply is THREE things, and a passed check costs ONE WORD.**
-
-1. **Where we are** — one line, with the whole reconcile folded into it as a single clause: *checks: done* («перевірки: зроблено»), in the session's reply language. Not silence: he wants to see that they ran. Not a sentence each either — the method version matching, the project file being clean, the ledger HEAD, REW being open are four sentences that are one word between them.
-2. **What is next and what it needs** — one line. Desk work or a new measurement, and what it asks of the Arbiter.
-3. **The one question that actually needs him** — if there is one.
-
-**A FAILED check replaces line 2, and is the only thing that gets sentences**: what it blocks and what to do about it — or the options, with **the one you recommend named first, and why** (his standing rule for menus).
-
-Everything else — the inventory, the caveats, the previews, the reasoning, the full list of open steps — is **available on request** and lives in the files it came from. A tool run to SEE is not a tool run to REPORT: `flaw_map --rew 1` printing 44 proposed rows with per-channel counts is a working note, not an answer. What this cost when it was missing → [`why-these-rules.md`](references/core/why-these-rules.md).
-
-* **A verdict is not re-derived in prose.** After a check, say what THE CHECK said — how many captures are usable, what is flagged, what could not be checked and why — and stop. Reading the arrivals is Phase 1's work, done by the tools built for it — `predict --align`, `windows.py`, `analyze-joints` (`arrival_triangulate` inside) — which carry the trust gate, the alias rules and the ILL-POSED verdict that a prose reading has to hedge instead. A hedged number in the dialogue is worse than no number: the Arbiter then carries half a conclusion into the phase that would have produced a whole one.
-* **Name the thing, not the metaphor.** The method's English is not the reader's — `seed` is «записую перший знімок реєстру (`v_001`)», never «сію», and nothing is written INTO the processor by the method: the person types the settings and the ledger records what stands there. The vocabulary is fixed and has one home — [`naming-and-structure.md §1a`](references/core/naming-and-structure.md) — speak those words, not synonyms for them.
-* **The questioning MECHANISM is never retold, and its outcome is never attributed to the user.** A question that did not reach him is not "you closed the window" — it is nothing at all: the questions go into the text, with no claim about why. Detail → [`feedback-loop.md`](references/core/feedback-loop.md).
-* **Copy-paste-ready specifics:** exact save PATH, short measurement lists, direct targets. Naming and paths established once at intake.
-* **Every number in a proposal names where it came from** (#58 P5): a measurement title, `project.json`, `dsp_profile.json`, the Arbiter's word, or ASSUMPTION. An assumption is never written to state: rear distances nobody measured, and delays computed from them, were. A feature the processor's profile does not list does not exist on this car ("Helix RearFX" did not).
-* **What he types, he gets as a table** (#58 P8): measurement TITLES, not curve ids; the quantity beside every number (an RMS says over which band and at which smoothing); no emoji in a table of values he types; no praise; one screen, then «деталі?».
-* **A reply after a desk computation ends with one of two things** (#58 P12): «введи це» (the sheet), or «виміряй ці N кривих» (N from `state.py … verification-set`, never "re-measure the series"). A defect of the method found mid-session gets one line in the pool, and the tuning goes on.
-* **Where a session's transcript lives, and where a request goes** (#58 P10): Claude Code (TCC runs it) keeps each session in `~/.claude/projects/<the working folder, path-escaped>/<session id>.jsonl`. A request for a front-end goes to that product's tracker, in English (`post_feedback(channel="tcc")`), never into the tuning dialogue.
-* **The `🔍 What I see` · `⚠️ Main problems` · `✅ Fixable / ❌ Not fixable` · `🔧 Next steps` · `❓ One question` headings are for an ANALYSIS that was asked for** — a phase verdict, a flaw-map read — not for a step reply. A step reply is the three lines above.

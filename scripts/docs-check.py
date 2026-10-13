@@ -174,9 +174,11 @@ SKILL_RULE_PHRASES = (
     # 🧭 Phase Sliding Window
     "A PHASE BOUNDARY is where a chat gets cleared",
     "Load ONLY the active phase's reference file",
-    # 🛠️ Review Channel: the cadence, where the reviewer is called, the ladder
+    # 🛠️ Review Channel: the cadence, where the reviewer is called (at the desk; in the car when asked, said first), the
+    # ladder
     "ONE reviewer call per round",
     "at the desk by default",
+    "say first that the car session will wait for the reviewer",
     "Descend THE ladder",
     # ✍️ Output Style: each rule
     "A step reply is THREE things, and a passed check costs ONE WORD",
@@ -187,7 +189,7 @@ SKILL_RULE_PHRASES = (
     "The questioning MECHANISM is never retold",
     "Copy-paste-ready specifics",
     "Every number in a proposal names where it came from",
-    "What he types, he gets as a table",
+    "What the Arbiter types, they get as a table",
     "A reply after a desk computation ends with one of two things",
     "Where a session's transcript lives, and where a request goes",
     "headings are for an ANALYSIS that was asked for",

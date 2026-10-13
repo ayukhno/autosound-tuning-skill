@@ -64,6 +64,9 @@ Presents it as **a list where EACH item is already PRE-SELECTED (☑)**. The use
    - `channel="skill"` (default) → `ayukhno/autosound-tuning-skill`: the method, its scripts (`rew_tool/`, `scripts/`), its documents, the reviewer channel.
    - `channel="tcc"` → `ayukhno/autosound-tcc`: the front-end window itself — what TCC shows, its buttons, its own calls.
 
+   **A session's transcript**, when a finding needs it: Claude Code (TCC runs it) keeps each session in
+   `~/.claude/projects/<the working folder, path-escaped>/<session id>.jsonl`.
+
    Unsure which — show the person both and let them pick; do not guess. A finding with a part on each side is two issues, each on its own channel, each linking the other. Any other channel name, or a repo written out by hand, is refused before anything runs.
 
    **Without GitHub — the Arbiter's form** (hub TCC-017, his decision 2026-09-17). When `gh` is missing or not signed in, or when the person prefers it, the same text goes to the Arbiter's Google Form: `post_feedback(…, via="form")`, or `via="auto"`, which picks the form when GitHub is not at hand. The address and the questions are fixed in the gate; **"sent" is only what the form confirms**, never what the request did. Before the consent, the session asks what the form asks, in the person's own words:
