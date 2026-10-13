@@ -843,12 +843,15 @@ def _route_line(project_dir):
 
     The route changes what the next session does in Phase 0 (block X) and at the desk (`run --current`), and
     the mode lives in `project.json`, which a resumed session may not open before it acts. A UTF-8 BOM is read (#147,
-    item 6)."""
+    item 6). A `project.json` that is no object, or whose `goal` is none, is no route (group fix 1, item 4), as one it
+    cannot read: `.get` raised `AttributeError` out of handoff's success path."""
     try:
         with open(os.path.join(project_dir, "project.json"), encoding="utf-8-sig") as fh:
-            mode = ((json.load(fh) or {}).get("goal") or {}).get("mode")
+            data = json.load(fh)
     except (OSError, ValueError):
         return ""
+    goal = data.get("goal") if isinstance(data, dict) else None
+    mode = goal.get("mode") if isinstance(goal, dict) else None
     if isinstance(mode, dict):
         mode = mode.get("value")
     if mode != "improve_existing":
@@ -6297,6 +6300,52 @@ def _check_route_line_reads_a_bom():
         shutil.rmtree(d, ignore_errors=True)
 
 
+def _check_route_line_over_a_project_json_no_object():
+    """`_route_line` over a `project.json` that is valid JSON and no object -- an array, a string, a number -- or whose
+    `goal` is none, is no route (group fix 1, item 4), as one it cannot read: `.get` raised `AttributeError` out of
+    handoff's success path."""
+    import shutil
+    import tempfile
+    d = tempfile.mkdtemp(prefix="autosound_process_route_shape_")
+    failures = []
+    try:
+        for raw in ("[1, 2]", '"text"', "42", "null", '{"goal": [1]}', '{"goal": "improve_existing"}'):
+            with open(os.path.join(d, "project.json"), "w", encoding="utf-8") as fh:
+                fh.write(raw)
+            try:
+                got = _route_line(d)
+            except Exception as exc:  # noqa: BLE001 -- the failure under test
+                got = f"raised {type(exc).__name__}: {exc}"
+            if got != "":
+                failures.append(f"{raw}: {got!r}")
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+    assert not failures, "\n  ".join(["the route over a project.json no object:"] + failures)
+
+
+def _check_plan_over_a_word_says_neither():
+    """`capture-start <word> --plan` -- a version that is neither a series number nor a ledger version, nor `final` --
+    is refused saying so (#147, item 1's third branch; group fix 1, item 14): exit 1, nothing written, and neither the
+    ledger's sentence nor `final`'s."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_process_plan_word_")
+    try:
+        root = tempfile.mkdtemp(dir=top)
+        _seed_intake(root)
+        d = os.path.join(root, "process")
+        Process(d).enter_phase("-1")
+        before = _project_bytes(d)
+        rc, out, err = _run_main(["process.py", d, "capture-start", "abc", "--plan", "--phase", "3"])
+        text = (err or out).strip()
+        assert rc == EXIT_NO and ("--plan builds titles from a SERIES number (`capture-start 55 --plan`); 'abc' is "
+                                  "neither a series number nor a ledger version") in text \
+            and "a ledger version names no" not in text and "closing round" not in text, (rc, text[-300:])
+        assert _project_bytes(d) == before, "refused, and wrote"
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
 def _check_handoff_says_a_cut_changelog_as_cut():
     """`handoff` says a `tuning-changelog` cut inside a character as cut (#147, item 4): "is cut off inside a character:
     a write was cut off", mended by "restore it from git (`<restore line>`)" -- it was "is not UTF-8", mended by saving
@@ -8206,6 +8255,7 @@ def _selftest():
                   _check_value_flag_last, _check_help_writes_nothing, _check_usage_before_the_read,
                   _check_handoff_says_an_unreadable_changelog, _check_handoff_reads_the_changelog_at_the_root,
                   _check_handoff_says_a_cut_changelog_as_cut, _check_route_line_reads_a_bom,
+                  _check_route_line_over_a_project_json_no_object, _check_plan_over_a_word_says_neither,
                   _check_handoff_names_a_changelog_copy_that_differs, _check_superseded_not_taken,
                   _check_check_never_invents_taken, _check_close_says_what_rew_did,
                   _check_listing_never_read_as_rew, _check_ambiguous_capture, _check_close_swallows_only_rew,
