@@ -36,6 +36,22 @@ python3.12 evals/run_trigger_eval.py --eval-set evals/trigger-eval-set.json \
   --skill-name autosound-tuning --model claude-sonnet-4-6 --workers 5
 ```
 
+**What every run checks (#145, 2026-10-09).** Each `claude -p` prints an init event listing the skills it sees. The
+runner reads it before anything else: `--skill-name` must be in it (a run that cannot see the skill measures nothing —
+the old false 0%), and every `--absent` skill must not be (another skill on the same subject competes for the same
+queries); a run that ends in an error result — a model that is not available, no access — is no "not triggered"
+either. Any of the three voids the run, and so does a query that could not start (no `claude` on PATH): the query is
+named with what was wrong, the queries not started are cancelled, the runner prints no score (`no score: the run is
+void`; in the JSON `"void": true, "passed": null`) and exits 1 — what ran before the void is not a sample. With
+nothing wrong it prints `init skill list: <skill> in all N runs, <absent> in none`, the score and the duration; the
+JSON on stdout carries the `claude` command line, the duration and, per query, what its init list held.
+
+- `--settings <json-or-file>` and `--no-session-persistence` are handed to every `claude -p` as they are.
+- `--absent <skill>` (repeatable): a skill that must not be in a run's list (a plugin's or a synced copy's
+  `<prefix>:<skill>` counts).
+- `--selftest`: the runner's own mechanics against a stand-in `claude` on PATH, offline (it is in
+  `scripts/run-selftests.sh`).
+
 Validated 2026-07-01 on the v2.0.1 description (added casual-EN + create-a-curve triggers):
 **9/9** on a focused set — all casual-EN / create-curve queries fire; near-misses
 (home-theater, studio monitors, sub-buying, door-rattle) correctly do not.
@@ -103,3 +119,33 @@ stopped being 200 characters too long to be shown in full, which was costing the
 Baselines on the 2026-09-09 set (`--model claude-sonnet-4-6`): the long description scored 15/22
 with 3 false positives; a full rewrite 12/22; a minimal reorder 13/22 with 1. The rewrites were
 discarded — no measured gain, and a run-to-run spread of 2-3 on 22 queries is not a result.
+
+## The baseline before the SKILL.md cut — 2026-10-13 (#145, I-4's "before")
+
+Three runs on the description as `8ab9133` left it (its last change; the tree at `2e46e12`), the 34-query set,
+Claude Code 2.1.296, each from an empty folder outside any repository — no project `CLAUDE.md`, no project settings,
+no copy of the skill but the `~/.claude/skills/autosound-tuning` link:
+
+```
+python3 evals/run_trigger_eval.py --eval-set evals/trigger-eval-set.json --model claude-sonnet-4-6 --workers 4 \
+  --settings '{"skillOverrides":{"rew-car-audio-tuning":"off"},"disableAllHooks":true}' \
+  --absent rew-car-audio-tuning --no-session-persistence
+```
+
+`skillOverrides` hides the other car-audio skill, which answers the same queries: `rew-car-audio-tuning`, synced from
+claude.ai, listed as `anthropic-skills:rew-car-audio-tuning`. `disableAllHooks` keeps the account's session hooks from
+running 34 times a run. Every run printed `init skill list: autosound-tuning in all 34 runs, rew-car-audio-tuning in
+none`.
+
+| run (UTC) | score | should fire, fired | should not, fired |
+|---|---|---|---|
+| 1 · 13:27 | **29/34** | 13/15 | 3/19 |
+| 2 · 13:30 | **29/34** | 12/15 | 2/19 |
+| 3 · 13:33 | **29/34** | 12/15 | 2/19 |
+
+In all three: a miss on «на чому ми зупинились у тюні авто минулого разу? який зараз стан DSP?» (the pure status
+question, the limit documented above) and a false positive on "a flat reference target curve for my studio nearfield
+monitors". In two: a miss on «продовжуємо тюн авто, нагадай на чому зупинились — …» and a false positive on „mein
+Wohnzimmer-Heimkino und die HiFi-Anlage einzustellen". Once each: the EMMA, MMM-sweep and resume-my-helix misses, and
+the living-room subwoofer and Dolby Atmos false positives. The runs after the cut use the same command, settings and
+kind of folder, so the two compare like with like.

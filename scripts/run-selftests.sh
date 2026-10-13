@@ -246,6 +246,14 @@ if [ -z "${SELFTEST_ONLY_TOOL:-}" ]; then
   # the session READS is data, not instructions, and the inbox page must say it too.
   run_one "docs-check"      ok scripts/docs-check.py --selftest
   run_one "docs-in-tree"    ok scripts/docs-check.py
+  # #145: what a session reads per phase, in tokens -- the script's mechanics on throwaway trees, then this tree held
+  # to scripts/reading-cost-baseline.json: a phase that reads more fails; a growth that is meant writes a new baseline.
+  run_one "reading-cost"    ok scripts/reading-cost.py --selftest
+  run_one "reading-cost-in-tree" ok scripts/reading-cost.py --check
+  # The trigger runs' harness: the init skill-list check (this skill in, a hidden one out) and the arguments handed to
+  # every `claude -p`, against a stand-in claude on PATH, offline. The real runs spend an account's usage and are run
+  # by hand (skills/autosound-tuning/evals/README.md).
+  run_one "trigger-eval"    ok skills/autosound-tuning/evals/run_trigger_eval.py --selftest
   # The same rule where a stranger's text meets a model: the issue body travels inside a fence with
   # a random marker, and the warning stands before it. Offline -- the prompt is built, not sent.
   run_one "issue-triage"    ok skills/autosound-tuning/scripts/issue_triage.py --selftest

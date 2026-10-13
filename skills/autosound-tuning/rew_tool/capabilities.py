@@ -73,6 +73,8 @@ NOT_ON_BOARD = {
                           "decision a tuner makes",
     "docs-check.py": "the checker that keeps a rule which lives only in prose from being "
                      "deleted by a tidy-up (HUB-029). Repo hygiene, not a decision a tuner makes",
+    "reading-cost.py": "what a session reads per phase, in tokens, held to its baseline (skill #145): a "
+                       "maintainer's check, not a tuner's step",
     "i18n-check.py": "the checker that keeps README/FAQ from diverging between their four "
                      "languages silently (HUB-044). Repo hygiene, not a decision a tuner makes",
     "html-data-check.py": "the checker that keeps a dropped file's name from becoming markup "
@@ -114,7 +116,6 @@ NOT_ON_BOARD = {
     "run_trigger_eval.py": "an eval harness under evals/, not a tuning tool",
     "doc-commands-check.py": "a repo-side guard: runs every documented command and reports an argparse refusal as a documentation bug",
     "tool-docs-check.py": "a repo-side guard: each module entry's dependency line and own flags, against the module",
-    "skill_metrics.sh": "a maintainer's usage-metrics script",
     "make-macos-app.sh": "the app bundle builder, called by the installers",
     "run-selftests.sh": "on the board", "tag-check.sh": "on the board",
 }

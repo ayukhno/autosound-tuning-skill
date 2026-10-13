@@ -1,0 +1,102 @@
+{
+  "what": "scripts/reading-cost.py's baseline: what a session reads per phase (#145); --check fails a phase that reads more, and --write-baseline writes this file",
+  "unit": "tokens = characters / 4",
+  "next_phase": "whole",
+  "phases": {
+    "-1": {
+      "tokens": 70826,
+      "chars": 283304,
+      "files": {
+        "SKILL.md": 37282,
+        "references/phases/phase_-1_intake.md": 33586,
+        "references/phases/phase_0_baseline.md (next)": 26431,
+        "references/core/project-intake.md": 28168,
+        "references/phases/virtual-first.md": 39814,
+        "references/phases/capture-session-sheet.md": 9119,
+        "references/tooling/setup-critic-channel.md": 39998,
+        "references/core/naming-and-structure.md": 35577,
+        "references/core/review-loop.md": 10613,
+        "knowledge/dsp/helix-dsp-ultra-s.md": 22716
+      }
+    },
+    "0": {
+      "tokens": 44350,
+      "chars": 177401,
+      "files": {
+        "SKILL.md": 37282,
+        "references/phases/phase_0_baseline.md": 26431,
+        "references/phases/phase_1_foundation.md (next)": 20550,
+        "references/phases/virtual-first.md": 39814,
+        "references/phases/capture-session-sheet.md": 9119,
+        "references/core/naming-and-structure.md": 35577,
+        "references/core/project-intake.md § ## 3.": 8628
+      }
+    },
+    "1": {
+      "tokens": 45177,
+      "chars": 180706,
+      "files": {
+        "SKILL.md": 37282,
+        "references/phases/phase_1_foundation.md": 20550,
+        "references/phases/phase_2_eq.md (next)": 20070,
+        "references/phases/virtual-first.md": 39814,
+        "references/core/project-intake.md § ## 3.": 8628,
+        "references/tooling/rew-api-quirks.md": 37947,
+        "references/core/filter-types-car-audio.md": 16415
+      }
+    },
+    "2": {
+      "tokens": 50593,
+      "chars": 202371,
+      "files": {
+        "SKILL.md": 37282,
+        "references/phases/phase_2_eq.md": 20070,
+        "references/phases/phase_3_control.md (next)": 7877,
+        "references/phases/virtual-first.md": 39814,
+        "references/core/diagnostic-techniques.md": 65334,
+        "references/patterns/listening-cheat-sheet.md": 14627,
+        "references/core/analysis-playbook.md": 17367
+      }
+    },
+    "3": {
+      "tokens": 37150,
+      "chars": 148601,
+      "files": {
+        "SKILL.md": 37282,
+        "references/phases/phase_3_control.md": 7877,
+        "references/phases/phase_4_listening.md (next)": 11384,
+        "references/phases/virtual-first.md": 39814,
+        "references/core/review-loop.md": 10613,
+        "references/core/analysis-playbook.md": 17367,
+        "references/patterns/test-tracks.md": 24264
+      }
+    },
+    "4": {
+      "tokens": 35399,
+      "chars": 141594,
+      "files": {
+        "SKILL.md": 37282,
+        "references/phases/phase_4_listening.md": 11384,
+        "references/phases/phase_5_variations.md (next)": 8235,
+        "references/patterns/listening-cheat-sheet.md": 14627,
+        "references/patterns/test-tracks.md": 24264,
+        "references/core/feedback-loop.md": 19693,
+        "references/patterns/staging-depth.md": 8742,
+        "references/core/analysis-playbook.md": 17367
+      }
+    },
+    "5": {
+      "tokens": 32209,
+      "chars": 128837,
+      "files": {
+        "SKILL.md": 37282,
+        "references/phases/phase_5_variations.md": 8235,
+        "references/patterns/voicing-by-ear.md": 10755,
+        "references/core/preference-profile.md": 2369,
+        "references/core/preset-strategy.md": 4862,
+        "references/core/diagnostic-techniques.md": 65334
+      }
+    }
+  },
+  "full_tune_tokens": 315704
+}
