@@ -3409,8 +3409,8 @@ def _check_sheet_says_a_rate_it_cannot_use():
 
 def _check_project_json_read_with_a_bom():
     """`_project_json` -- the sheet's join of `project.json`'s channels (`project_channels`) -- gives the same answer
-    with and without a UTF-8 BOM (#147, item 6): an editor's marker, read as `project_io.read_json` reads it. It
-    opened the file as `utf-8`, the BOM failed the JSON, and the sheet's Slot column went blank."""
+    with and without a UTF-8 BOM (#147, item 6): an editor's marker, read as `project_io.read_json` reads it. It opened
+    the file as `utf-8`, the BOM failed the JSON, and the sheet's Slot column went blank."""
     import shutil
     import tempfile
     d = tempfile.mkdtemp(prefix="autosound_state_project_bom_")

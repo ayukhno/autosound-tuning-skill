@@ -824,9 +824,9 @@ def _check_claude_md_loads_the_skill():
 
 
 def _check_read_project_reads_a_bom():
-    """`_read_project` -- a source project's facts, for the picker and the seed -- gives the same answer
-    with and without a UTF-8 BOM (#147, item 6): an editor's marker, read as `project_io.read_json` reads it. It opened `project.json` as `utf-8`, the BOM failed the JSON, and a project worth seeding from
-    read as none."""
+    """`_read_project` -- a source project's facts, for the picker and the seed -- gives the same answer with and
+    without a UTF-8 BOM (#147, item 6): an editor's marker, read as `project_io.read_json` reads it. It opened
+    `project.json` as `utf-8`, the BOM failed the JSON, and a project worth seeding from read as none."""
     import shutil
     import tempfile
     d = tempfile.mkdtemp(prefix="autosound_seed_bom_")

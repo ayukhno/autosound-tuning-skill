@@ -261,8 +261,9 @@ def _main(argv):
 
 def _check_project_json_read_with_a_bom():
     """`car_identity` and `_flaw_rows` -- what body a project says it is, and the flaw rows it offers -- give the same
-    answers with and without a UTF-8 BOM (#147, item 6): an editor's marker, read as `project_io.read_json` reads it. They opened `project.json` as `utf-8`, the BOM failed the JSON, and a previous build
-    of the same body read as "not a readable project", its flaw map with it."""
+    answers with and without a UTF-8 BOM (#147, item 6): an editor's marker, read as `project_io.read_json` reads it.
+    They opened `project.json` as `utf-8`, the BOM failed the JSON, and a previous build of the same body read as "not a
+    readable project", its flaw map with it."""
     import shutil
     import tempfile
     d = tempfile.mkdtemp(prefix="autosound_car_profile_bom_")

@@ -2930,8 +2930,9 @@ def _check_predict_refusals_are_one_line():
 
 def _check_own_rew_project_reads_a_bom():
     """`_own_rew_project` -- the `.mdat` the project's own measurements live in, which a solo from another build's file
-    is refused against (#58 P4) -- gives the same answer with and without a UTF-8 BOM (#147, item 6): an editor's marker, read as `project_io.read_json` reads it. The run opened `project.json` as `utf-8`,
-    the BOM failed the JSON, and the check against another build's solos was skipped without a word."""
+    is refused against (#58 P4) -- gives the same answer with and without a UTF-8 BOM (#147, item 6): an editor's
+    marker, read as `project_io.read_json` reads it. The run opened `project.json` as `utf-8`, the BOM failed the JSON,
+    and the check against another build's solos was skipped without a word."""
     import shutil
     import tempfile
     d = tempfile.mkdtemp(prefix="autosound_predict_rew_project_bom_")

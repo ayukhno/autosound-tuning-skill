@@ -6279,8 +6279,9 @@ def _check_handoff_says_an_unreadable_changelog():
 
 
 def _check_route_line_reads_a_bom():
-    """`_route_line` -- the route a tuned car takes, said at handoff -- gives the same answer with and without a UTF-8 BOM (#147, item 6): an editor's marker, read as `project_io.read_json` reads it. It
-    opened `project.json` as `utf-8`, the BOM failed the JSON, and the route went unsaid."""
+    """`_route_line` -- the route a tuned car takes, said at handoff -- gives the same answer with and without a UTF-8
+    BOM (#147, item 6): an editor's marker, read as `project_io.read_json` reads it. It opened `project.json` as
+    `utf-8`, the BOM failed the JSON, and the route went unsaid."""
     import shutil
     import tempfile
     d = tempfile.mkdtemp(prefix="autosound_process_route_bom_")
