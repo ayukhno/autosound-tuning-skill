@@ -103,6 +103,21 @@ jobs:
       - name: install.sh parses
         run: bash -n install.sh
 
+      # The Trap tests on Python 3.11 (#148). An `HTTPError` built without a body raises for an attribute it lacks on
+      # 3.9 and answers None from 3.12; the Trap tests hold `rew_state` to the exception's class with an instance that
+      # raises for any attribute, on every Python -- and 3.11, between the two, ran nowhere. These two selftests need
+      # no numpy. Last in the job: the steps above ran on 3.12. REW at the dead port, as the runner points it.
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.11"
+      - name: the Trap tests on Python 3.11 (rew_api's and process.py's selftests)
+        env:
+          REW_API_URL: "http://127.0.0.1:1"
+        run: |
+          python --version
+          python skills/autosound-tuning/rew_tool/rew_api.py --selftest
+          python skills/autosound-tuning/rew_tool/state/process.py selftest
+
   # Resonalyze's engines through the skill's wrapper (docs/DESIGN-2026-09-17-phase1-variants.md §3). The fork is
   # a submodule with `update = none` -- a recursive clone of the skill does not fetch it -- so this job asks for it
   # by name, and the SDK is exactly the one the wrapper's global.json names. The run is the SYNTHETIC set: the
