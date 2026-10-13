@@ -85,7 +85,8 @@ call path; the difference is the question and its wording — the TASK block of 
 
 `--record` (critic, advisor) records the review it files as the process's reviewer step (`critic_called`); without
 it the run prints the line that records it by hand, runnable as it stands. TCC's `call_critic` does not pass it: TCC
-records the call it ran itself, with its step. An `ask` is no review step, and `ask --record` is refused.
+records the call it ran itself, with its step, and that line says so -- a session that reads it in `call_critic`'s
+answer runs nothing. An `ask` is no review step, and `ask --record` is refused.
 
 Nothing in the
 script names a model: with `GEMINI_CRITIC_MODEL` unset it prints `agy models` and stops (exit 3)

@@ -165,12 +165,15 @@ under `<project>/process/reviews/`.
 
 `--record` (W-9, #143) asks `critic` and `advisor` to record the review they file as the process's reviewer step --
 `critic_called` through `Process.record_reviewer`, under the project's writer lock, none added when a `critic_called`
-names the file already -- and to say so on stderr. Without it nothing is recorded, and stderr carries the line that
-records it by hand, runnable as it stands: `>> Запиши посилання: python3 <process.py> <project>/process reviewer
-<vendor> <model> --review <rel> --mode <mode>`. TCC's `call_critic` passes no `--record`: it records the call it ran,
-with its step, as before. With `--record`, a record the project refuses (the lock held past the wait, a file that
-cannot be read) is said with that line and the exit stays 0; a fault of the code while recording prints its
-traceback, that line and `>> The review above stands: ...`, and exits 70 -- the review is filed and printed by then.
+names the file already -- and to say so on stderr. Without it nothing is recorded, and the last line on stderr is the
+one that records it by hand: `>> Not recorded (no --record). A front-end that ran this call records it itself (TCC's
+call_critic does): run nothing then. From a terminal, run once -- Запиши посилання: <command>`, the command runnable
+as it stands (`python3 <process.py> <project>/process reviewer <vendor> <model> --review <rel> --mode <mode>`). TCC's
+`call_critic` passes no `--record`: it records the call it ran, with its step, as before, and that line, in its
+six-line `detail`, tells the session to run nothing. With `--record`, a record the project refuses (the lock held past
+the wait, a file that cannot be read) is said with `>> Запиши посилання: <command>` and the exit stays 0; a fault of
+the code while recording prints its traceback, that line and `>> The review above stands: ...`, and exits 70 -- the
+review is filed and printed by then.
 
 `key move-shell`'s "no export found" is a stdout line that ends `у профілях оболонки не знайдено`:
 `· <VAR> у профілях оболонки не знайдено` with a provider, `· ключів у профілях оболонки не знайдено` without one

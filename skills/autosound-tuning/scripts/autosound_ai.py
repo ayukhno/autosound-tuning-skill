@@ -2320,6 +2320,52 @@ def _check_the_door_records_the_review():
     assert not failures, "\n  ".join(["the door's record of its review:"] + failures)
 
 
+def _check_the_unasked_line_leaves_tcc_its_record():
+    """#143, R46 (group fix 1, I1): a run not asked to record -- TCC's `call_critic` is one, and records the call itself
+    -- ends its stderr with the line that records the review by hand, and TCC hands a session the last six lines as
+    `detail`. A session that ran it put the review in the journal twice: `record_reviewer` adds whatever it is given.
+    So that one line says, before its `Запиши посилання: <command>` tail, that a front-end that ran this call records
+    it itself -- naming TCC's `call_critic` -- and stays the last line said. A run asked to record that could not (the
+    ledger another project's) is a terminal's own run: its line says nothing of a front-end."""
+    process_mod = _siblings().load("state/process.py")
+    top = tempfile.mkdtemp(prefix="autosound_ai_unasked_line_")
+    marker = "Запиши посилання: "
+    failures = []
+    try:
+        project = os.path.join(top, "car")
+        os.makedirs(os.path.join(project, "process"))
+        with open(os.path.join(project, "project.json"), "w", encoding="utf-8") as fh:
+            fh.write("{}")
+        other = os.path.join(top, "other-car")
+        os.makedirs(os.path.join(other, "rew_analitic"))
+        state = process_mod._empty_state()
+        state["active_phase"] = "1"
+        with open(os.path.join(project, "process", "process-state.json"), "w", encoding="utf-8") as fh:
+            json.dump(state, fh)
+        with _DoorScene() as scene:
+            os.environ["AUTOSOUND_PROJECT_DIR"] = project
+            _rel, err = scene.persist("critic", "an unrecorded critique", "m", "api", vendor="gemini")
+        said = err.strip().splitlines()
+        lines = [ln for ln in said if marker in ln]
+        head = lines[0].split(marker, 1)[0] if len(lines) == 1 else ""
+        if len(lines) != 1:
+            failures.append(f"not asked: {len(lines)} line(s) holding {marker.strip()!r}, not 1: {said[-4:]!r}")
+        elif "records it itself" not in head or "call_critic" not in head:
+            failures.append(f"not asked: the line does not say a front-end that ran the call (TCC's call_critic) "
+                            f"records it itself: {lines[0]!r}")
+        elif said[-1] != lines[0]:
+            failures.append(f"not asked: the line is not the last one said: {said[-2:]!r}")
+        with _DoorScene(PROJECT_MIRROR=os.path.join(other, "rew_analitic"), CWD=project) as scene:
+            _rel, err = scene.persist("critic", "a split review", "m", "api", vendor="gemini", record=True)
+        lines = [ln for ln in err.splitlines() if marker in ln]
+        if len(lines) != 1 or "call_critic" in lines[0].split(marker, 1)[0]:
+            failures.append(f"asked, not recorded: the line should be a terminal's, with no word of a front-end: "
+                            f"{lines!r}")
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["the line a run not asked to record ends with:"] + failures)
+
+
 def _check_the_clipboard_line_runs():
     """#143, R46 (the review's item 6): the clipboard rung's line, which records the answer once it comes back, is
     runnable as printed -- this copy's `process.py`, the project the package went into, the reviewer this run would
@@ -2749,7 +2795,8 @@ def _selftest():
                   _check_private_writer_goes_through_the_move, _check_receipt_says_how_the_install_ended,
                   _check_the_machine_files_win_once, _check_the_ledger_head_rides_in_the_prompt,
                   _check_the_template_teaches_titles_that_resolve, _check_the_door_records_the_review,
-                  _check_the_clipboard_line_runs, _check_a_fault_in_the_record_is_not_a_refusal,
+                  _check_the_unasked_line_leaves_tcc_its_record, _check_the_clipboard_line_runs,
+                  _check_a_fault_in_the_record_is_not_a_refusal,
                   _check_an_omp_review_names_its_vendor, _check_the_contract_is_the_skills_own,
                   _check_the_context_is_the_roots, _check_another_folders_context_is_never_read,
                   _check_the_audit_trail_is_the_projects):
@@ -4372,7 +4419,9 @@ def _persist_review(role, text, model, mode, vendor=None, record=False):
     A tuning review is the process's reviewer step. Asked to (`record`, the command line's `--record`; #143, G1, R46),
     the door records it itself (`_record_review_step`). Not asked, it prints the line that records it by hand
     (`_record_line`), runnable as printed: TCC's `call_critic` records the call it ran, with its step, and does not
-    ask -- the door cannot tell it runs under TCC, and both recording put every review in the journal twice. The door
+    ask -- the door cannot tell it runs under TCC, and both recording put every review in the journal twice. That line
+    is the last one said, and TCC hands a session the last six as `detail`: so it says, before the command, that a
+    front-end that ran the call (TCC's `call_critic`) records it itself (group fix 1, I1). The door
     printed `process.py <project>/process reviewer <vendor> ...`, placeholders left in. `vendor` is the provider's name
     as `process.py reviewer` takes it (`provider_for` of the model when not given). A review filed in one project while
     the ledger in its prompt was another's (`review_project_dir`) is not recorded: the line names where it was filed.
@@ -4407,7 +4456,9 @@ def _persist_review(role, text, model, mode, vendor=None, record=False):
     vendor = vendor or provider_for(model)
     by_hand = f">> Запиши посилання: {_record_line(project, vendor, model, rel, mode)}"
     if not record:
-        print(by_hand, file=sys.stderr)
+        # One line, the last: TCC's `detail` is the last six lines of stderr, and TCC has recorded this call already.
+        print(">> Not recorded (no --record). A front-end that ran this call records it itself (TCC's call_critic "
+              "does): run nothing then. From a terminal, run once -- " + by_hand[len(">> "):], file=sys.stderr)
         return rel
     ledger_of = review_project_dir()
     if os.path.normcase(os.path.realpath(ledger_of)) != os.path.normcase(os.path.realpath(project)):

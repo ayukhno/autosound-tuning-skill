@@ -100,7 +100,7 @@ Any reviewer is a **stateless on-demand call** that re-reads state from disk —
 * **Which mode this session?** The Arbiter picks A / B / C → `process-control.md` §1.
 * **Cadence: ONE reviewer call per round**, on the round's whole batch, then the Arbiter; TWO-PASS and the ceiling → `review-loop.md`.
 * The reviewer is called **at the desk by default**, not from inside a car session: the car session measures and listens, and what needs a verdict goes into the next desk round. When the user wants a verdict in the car, it is called there — say first that the car session will wait for the reviewer.
-* **How to run:** one door — `python3 scripts/autosound_ai.py critic|advisor <package.md> --record` (`ask` for a plain question); under TCC, its `call_critic` tool; `doctor` checks the channel → [`setup-critic-channel.md`](references/tooling/setup-critic-channel.md).
+* **How to run:** one door — `python3 scripts/autosound_ai.py critic|advisor <package.md> --record` (`ask` for a plain question); under TCC, its `call_critic` tool, which records the step itself; `doctor` checks the channel → [`setup-critic-channel.md`](references/tooling/setup-critic-channel.md).
 * **Reviewer unavailable?** Descend THE ladder — one list, in `setup-critic-channel.md` §7. Never silently solo, and **never a background sub-agent as reviewer** — with nothing on the ladder reachable, the round is blocked and says so.
 
 ---

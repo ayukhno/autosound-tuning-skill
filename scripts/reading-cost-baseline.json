@@ -4,26 +4,26 @@
   "next_phase": "to its Goal-node",
   "phases": {
     "-1": {
-      "tokens": 61997,
-      "chars": 247987,
+      "tokens": 62027,
+      "chars": 248107,
       "files": {
-        "SKILL.md": 23174,
+        "SKILL.md": 23205,
         "references/phases/phase_-1_intake.md": 33177,
         "references/phases/phase_0_baseline.md (to its Goal-node)": 2375,
         "references/core/project-intake.md": 28005,
         "references/phases/virtual-first.md": 39814,
         "references/phases/capture-session-sheet.md": 10425,
-        "references/tooling/setup-critic-channel.md": 39998,
+        "references/tooling/setup-critic-channel.md": 40087,
         "references/core/naming-and-structure.md": 37409,
         "references/core/review-loop.md": 10613,
         "knowledge/dsp/helix-dsp-ultra-s.md": 22997
       }
     },
     "0": {
-      "tokens": 37746,
-      "chars": 150985,
+      "tokens": 37754,
+      "chars": 151016,
       "files": {
-        "SKILL.md": 23174,
+        "SKILL.md": 23205,
         "references/phases/phase_0_baseline.md": 26431,
         "references/phases/phase_1_foundation.md (to its Goal-node)": 5104,
         "references/phases/virtual-first.md": 39814,
@@ -33,10 +33,10 @@
       }
     },
     "1": {
-      "tokens": 37316,
-      "chars": 149263,
+      "tokens": 37324,
+      "chars": 149294,
       "files": {
-        "SKILL.md": 23174,
+        "SKILL.md": 23205,
         "references/phases/phase_1_foundation.md": 20550,
         "references/phases/phase_2_eq.md (to its Goal-node)": 2735,
         "references/phases/virtual-first.md": 39814,
@@ -46,10 +46,10 @@
       }
     },
     "2": {
-      "tokens": 46653,
-      "chars": 186611,
+      "tokens": 46661,
+      "chars": 186642,
       "files": {
-        "SKILL.md": 23174,
+        "SKILL.md": 23205,
         "references/phases/phase_2_eq.md": 20108,
         "references/phases/phase_3_control.md (to its Goal-node)": 2680,
         "references/phases/virtual-first.md": 39814,
@@ -59,10 +59,10 @@
       }
     },
     "3": {
-      "tokens": 31353,
-      "chars": 125411,
+      "tokens": 31361,
+      "chars": 125442,
       "files": {
-        "SKILL.md": 23174,
+        "SKILL.md": 23205,
         "references/phases/phase_3_control.md": 7877,
         "references/phases/phase_4_listening.md (to its Goal-node)": 2302,
         "references/phases/virtual-first.md": 39814,
@@ -72,10 +72,10 @@
       }
     },
     "4": {
-      "tokens": 30332,
-      "chars": 121328,
+      "tokens": 30340,
+      "chars": 121359,
       "files": {
-        "SKILL.md": 23174,
+        "SKILL.md": 23205,
         "references/phases/phase_4_listening.md": 11371,
         "references/phases/phase_5_variations.md (to its Goal-node)": 1802,
         "references/patterns/listening-cheat-sheet.md": 14627,
@@ -86,10 +86,10 @@
       }
     },
     "5": {
-      "tokens": 29559,
-      "chars": 118236,
+      "tokens": 29567,
+      "chars": 118267,
       "files": {
-        "SKILL.md": 23174,
+        "SKILL.md": 23205,
         "references/phases/phase_5_variations.md": 8235,
         "references/patterns/voicing-by-ear.md": 10755,
         "references/core/preference-profile.md": 2369,
@@ -98,5 +98,5 @@
       }
     }
   },
-  "full_tune_tokens": 274956
+  "full_tune_tokens": 275034
 }
