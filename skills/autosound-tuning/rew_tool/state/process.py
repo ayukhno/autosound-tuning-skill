@@ -842,9 +842,10 @@ def _route_line(project_dir):
     """" The route: …" when the project is a car that is already tuned (`goal.mode`, skill #105), else "".
 
     The route changes what the next session does in Phase 0 (block X) and at the desk (`run --current`), and
-    the mode lives in `project.json`, which a resumed session may not open before it acts."""
+    the mode lives in `project.json`, which a resumed session may not open before it acts. A UTF-8 BOM is read (#147,
+    item 6)."""
     try:
-        with open(os.path.join(project_dir, "project.json"), encoding="utf-8") as fh:
+        with open(os.path.join(project_dir, "project.json"), encoding="utf-8-sig") as fh:
             mode = ((json.load(fh) or {}).get("goal") or {}).get("mode")
     except (OSError, ValueError):
         return ""
@@ -6277,6 +6278,24 @@ def _check_handoff_says_an_unreadable_changelog():
         shutil.rmtree(top, ignore_errors=True)
 
 
+def _check_route_line_reads_a_bom():
+    """`_route_line` -- the route a tuned car takes, said at handoff -- gives the same answer with and without a UTF-8 BOM (#147, item 6): an editor's marker, read as `project_io.read_json` reads it. It
+    opened `project.json` as `utf-8`, the BOM failed the JSON, and the route went unsaid."""
+    import shutil
+    import tempfile
+    d = tempfile.mkdtemp(prefix="autosound_process_route_bom_")
+    try:
+        text = json.dumps({"goal": {"mode": "improve_existing"}})
+        got = []
+        for raw in (text.encode("utf-8"), b"\xef\xbb\xbf" + text.encode("utf-8")):
+            with open(os.path.join(d, "project.json"), "wb") as fh:
+                fh.write(raw)
+            got.append(_route_line(d))
+        assert got[0] == got[1] and "Two ways in" in got[0], got
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+
+
 def _check_handoff_says_a_cut_changelog_as_cut():
     """`handoff` says a `tuning-changelog` cut inside a character as cut (#147, item 4): "is cut off inside a character:
     a write was cut off", mended by "restore it from git (`<restore line>`)" -- it was "is not UTF-8", mended by saving
@@ -8157,7 +8176,7 @@ def _selftest():
                   _check_flag_values_as_they_stand, _check_autocorrected_dashes, _check_too_few_arguments,
                   _check_value_flag_last, _check_help_writes_nothing, _check_usage_before_the_read,
                   _check_handoff_says_an_unreadable_changelog, _check_handoff_reads_the_changelog_at_the_root,
-                  _check_handoff_says_a_cut_changelog_as_cut,
+                  _check_handoff_says_a_cut_changelog_as_cut, _check_route_line_reads_a_bom,
                   _check_handoff_names_a_changelog_copy_that_differs, _check_superseded_not_taken,
                   _check_check_never_invents_taken, _check_close_says_what_rew_did,
                   _check_listing_never_read_as_rew, _check_ambiguous_capture, _check_close_swallows_only_rew,

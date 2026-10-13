@@ -281,8 +281,10 @@ MOVED_TO_PROJECT_JSON = {
 
 
 def _project_json(project_dir):
+    """`project.json`'s object, leniently: `{}` when it is not there or cannot be read. A UTF-8 BOM is read (#147,
+    item 6), as `project_io.read_json` reads one."""
     try:
-        with open(os.path.join(project_dir, "project.json"), encoding="utf-8") as f:
+        with open(os.path.join(project_dir, "project.json"), encoding="utf-8-sig") as f:
             data = json.load(f)
     except (OSError, ValueError):
         return {}
@@ -3405,6 +3407,25 @@ def _check_sheet_says_a_rate_it_cannot_use():
         shutil.rmtree(top, ignore_errors=True)
 
 
+def _check_project_json_read_with_a_bom():
+    """`_project_json` -- the sheet's join of `project.json`'s channels (`project_channels`) -- gives the same answer
+    with and without a UTF-8 BOM (#147, item 6): an editor's marker, read as `project_io.read_json` reads it. It
+    opened the file as `utf-8`, the BOM failed the JSON, and the sheet's Slot column went blank."""
+    import shutil
+    import tempfile
+    d = tempfile.mkdtemp(prefix="autosound_state_project_bom_")
+    try:
+        text = json.dumps({"channels": [{"code": "w-L", "slot": "A", "descr": "Низ ліво"}]}, ensure_ascii=False)
+        got = []
+        for raw in (text.encode("utf-8"), b"\xef\xbb\xbf" + text.encode("utf-8")):
+            with open(os.path.join(d, "project.json"), "wb") as fh:
+                fh.write(raw)
+            got.append((_project_json(d), project_channels(d)))
+        assert got[0] == got[1] and got[0][0].get("channels"), got
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+
+
 def _check_a_cut_version_said_as_cut():
     """A ledger version cut inside a character is said as cut (#147, item 4): "is cut off inside a character: a write
     was cut off; restore it from git (`<restore line>`)". It was called "not UTF-8" and sent to `repair-encoding`, which
@@ -3748,7 +3769,7 @@ def _selftest():
                   _check_a_held_lock_answers_75, _check_a_bad_timeout_is_a_usage_error,
                   _check_no_load_and_save_outside_update, _check_ledger_writers_read_with_the_lock_held,
                   _check_the_repairs_name_their_project, _check_a_pointer_file_of_another_shape_refused,
-                  _check_a_cut_version_said_as_cut):
+                  _check_a_cut_version_said_as_cut, _check_project_json_read_with_a_bom):
         try:
             check()
         except AssertionError as exc:

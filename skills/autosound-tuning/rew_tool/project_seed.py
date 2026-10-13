@@ -161,11 +161,12 @@ class Seeded:
 
 
 def _read_project(source):
+    """A source project's `project.json` object, or None; a UTF-8 BOM is read (#147, item 6)."""
     path = os.path.join(source, "project.json")
     if not os.path.isfile(path):
         return None
     try:
-        with open(path, encoding="utf-8") as f:
+        with open(path, encoding="utf-8-sig") as f:
             data = json.load(f)
     except (OSError, ValueError):
         return None
@@ -822,6 +823,25 @@ def _check_claude_md_loads_the_skill():
             assert fh.read() == "# their own\n", "a CLAUDE.md already there was rewritten"
 
 
+def _check_read_project_reads_a_bom():
+    """`_read_project` -- a source project's facts, for the picker and the seed -- gives the same answer
+    with and without a UTF-8 BOM (#147, item 6): an editor's marker, read as `project_io.read_json` reads it. It opened `project.json` as `utf-8`, the BOM failed the JSON, and a project worth seeding from
+    read as none."""
+    import shutil
+    import tempfile
+    d = tempfile.mkdtemp(prefix="autosound_seed_bom_")
+    try:
+        text = json.dumps({"schema_version": 3, "car": {"make": "Škoda", "model": "Octavia"}}, ensure_ascii=False)
+        got = []
+        for raw in (text.encode("utf-8"), b"\xef\xbb\xbf" + text.encode("utf-8")):
+            with open(os.path.join(d, "project.json"), "wb") as fh:
+                fh.write(raw)
+            got.append(_read_project(d))
+        assert got[0] == got[1] and got[0] and got[0]["car"]["make"] == "Škoda", got
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+
+
 def _selftest():
     os.environ["AUTOSOUND_NO_GH"] = "1"          # a seed makes a repository; the test never reaches GitHub
     import tempfile
@@ -829,7 +849,7 @@ def _selftest():
     failures = []
     for check in (_check_a_held_lock_said_in_the_result, _check_a_seed_makes_its_new_folder,
                   _check_a_bad_wait_is_a_usage_error, _check_a_context_in_rew_analitic_travels,
-                  _check_claude_md_loads_the_skill):
+                  _check_claude_md_loads_the_skill, _check_read_project_reads_a_bom):
         try:
             check()
         except AssertionError as exc:

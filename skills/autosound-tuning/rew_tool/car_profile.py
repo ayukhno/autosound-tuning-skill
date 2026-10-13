@@ -141,10 +141,12 @@ def car_identity(project_dir):
     Old projects slug from their combined `model` ("Passat B8"), so they still match — but with no
     `body` recorded there is nothing to tell a sedan from a wagon, and this refuses rather than
     guessing. A wrong "yes" here hands another cabin's flaw map to a build it does not describe.
+
+    A UTF-8 BOM is read (#147, item 6), as `project_io.read_json` reads one: it read as "not a readable project".
     """
     path = os.path.join(project_dir, "project.json")
     try:
-        with open(path, encoding="utf-8") as f:
+        with open(path, encoding="utf-8-sig") as f:
             data = json.load(f)
     except (OSError, ValueError):
         return {"slug": None, "car": "", "why": "not a readable project"}
@@ -199,8 +201,9 @@ def find_prior_projects(dirs, make, model, generation="", body=""):
 
 
 def _flaw_rows(project_dir):
+    """`acoustics.flaws[]` of a project, leniently; a UTF-8 BOM is read (#147, item 6)."""
     try:
-        with open(os.path.join(project_dir, "project.json"), encoding="utf-8") as f:
+        with open(os.path.join(project_dir, "project.json"), encoding="utf-8-sig") as f:
             rows = ((json.load(f).get("acoustics") or {}).get("flaws")) or []
     except (OSError, ValueError, AttributeError):
         return []
@@ -256,8 +259,36 @@ def _main(argv):
     return 2
 
 
+def _check_project_json_read_with_a_bom():
+    """`car_identity` and `_flaw_rows` -- what body a project says it is, and the flaw rows it offers -- give the same
+    answers with and without a UTF-8 BOM (#147, item 6): an editor's marker, read as `project_io.read_json` reads it. They opened `project.json` as `utf-8`, the BOM failed the JSON, and a previous build
+    of the same body read as "not a readable project", its flaw map with it."""
+    import shutil
+    import tempfile
+    d = tempfile.mkdtemp(prefix="autosound_car_profile_bom_")
+    try:
+        text = json.dumps({"car": {"make": "VW", "model": "Passat", "generation": "B8", "body": "sedan"},
+                           "acoustics": {"flaws": [{"f_hz": 150.0, "kind": "cabin_null", "evidence": ["w-L_1 (sw)"]}]}})
+        got = []
+        for raw in (text.encode("utf-8"), b"\xef\xbb\xbf" + text.encode("utf-8")):
+            with open(os.path.join(d, "project.json"), "wb") as fh:
+                fh.write(raw)
+            got.append((car_identity(d), _flaw_rows(d)))
+        assert got[0] == got[1] and got[0][0]["slug"] == "vw-passat-b8-sedan" and len(got[0][1]) == 1, got
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+
+
 def _selftest():
     import tempfile
+
+    failures = []
+    for check in (_check_project_json_read_with_a_bom,):
+        try:
+            check()
+        except AssertionError as exc:
+            failures.append(f"{check.__name__}: {exc}")
+    assert not failures, "\n".join(failures)
 
     lib = tempfile.mkdtemp(prefix="autosound_cars_")
     with open(os.path.join(lib, "vw-passat-b8-sedan.md"), "w", encoding="utf-8") as f:

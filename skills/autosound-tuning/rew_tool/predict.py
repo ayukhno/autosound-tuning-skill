@@ -2074,6 +2074,16 @@ def main(argv=None):
         return 1
 
 
+def _own_rew_project(project_dir):
+    """`paths.rew_project` of the project's `project.json` -- the `.mdat` its own measurements live in (#58 P4) -- or
+    None when it records none. A UTF-8 BOM is read (#147, item 6): read as `utf-8`, the BOM failed the JSON, and the
+    run's check against another build's solos was skipped without a word. Raises as `open` and `json` raise; the run
+    reads a failure as no answer."""
+    with open(os.path.join(project_dir, "project.json"), encoding="utf-8-sig") as fh:
+        data = json.load(fh)
+    return (data.get("paths") or {}).get("rew_project") if isinstance(data, dict) else None
+
+
 def ladder_edges(specs):
     """`--ladder-edge KIND=F:TYPESLOPE` specs as `[(kind, leg)]`, each in a family the method models -- or a
     `PredictError` naming the spec (#134, batch 4's re-review N6). Read before anything is printed: an edge in another
@@ -2267,8 +2277,7 @@ def _main(argv=None):
         if args.project and not args.allow_foreign:
             try:
                 import rew_api as _rew
-                with open(os.path.join(args.project, "project.json"), encoding="utf-8") as _fh:
-                    _own = ((json.load(_fh).get("paths") or {}).get("rew_project"))
+                _own = _own_rew_project(args.project)
                 _foreign = _rew.foreign_measurements(_rew.get_measurements().values(), _own)
                 _mine = {f"{c}_{args.ver} (sw)" for c in codes}
                 _hit = {t_: f_ for t_, f_ in _foreign.items() if t_ in _mine}
@@ -2917,6 +2926,28 @@ def _check_predict_refusals_are_one_line():
     finally:
         if saved_env is not None:
             os.environ["AUTOSOUND_PROJECT_DIR"] = saved_env
+
+
+def _check_own_rew_project_reads_a_bom():
+    """`_own_rew_project` -- the `.mdat` the project's own measurements live in, which a solo from another build's file
+    is refused against (#58 P4) -- gives the same answer with and without a UTF-8 BOM (#147, item 6): an editor's marker, read as `project_io.read_json` reads it. The run opened `project.json` as `utf-8`,
+    the BOM failed the JSON, and the check against another build's solos was skipped without a word."""
+    import shutil
+    import tempfile
+    d = tempfile.mkdtemp(prefix="autosound_predict_rew_project_bom_")
+    try:
+        text = json.dumps({"paths": {"rew_project": "C:/Авто/passat.mdat"}}, ensure_ascii=False)
+        got = []
+        for raw in (text.encode("utf-8"), b"\xef\xbb\xbf" + text.encode("utf-8")):
+            with open(os.path.join(d, "project.json"), "wb") as fh:
+                fh.write(raw)
+            try:
+                got.append(_own_rew_project(d))
+            except Exception as exc:  # noqa: BLE001 -- the failure under test
+                got.append(f"raised {type(exc).__name__}: {exc}")
+        assert got[0] == got[1] == "C:/Авто/passat.mdat", got
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
 
 
 def _check_predict_error_says_it_is_a_refusal():
@@ -3638,7 +3669,8 @@ def _selftest():
     _check_predict_refusals_are_one_line()
     _check_refused_notes_never_cut()
     failures = []
-    for check in (_check_says_what_it_did_not_check, _check_predict_error_says_it_is_a_refusal):
+    for check in (_check_says_what_it_did_not_check, _check_predict_error_says_it_is_a_refusal,
+                  _check_own_rew_project_reads_a_bom):
         try:
             check()
         except AssertionError as exc:
