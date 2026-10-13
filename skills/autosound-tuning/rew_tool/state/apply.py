@@ -324,7 +324,8 @@ def gain_grid_advisories(project_dir, current, proposed):
 
 def _fmt_val(field, val, rate):
     if field == "ta_ms" and isinstance(val, (int, float)):
-        return f"{val:g} ms ({_state.samples_for(val, rate)} smp)"
+        # No rate -- a profile nobody could read (#147, item 2) -- is no samples: `—`, never the snapshot's guess.
+        return f"{val:g} ms ({_state.samples_for(val, rate) if rate else '—'} smp)"
     if field in ("hp", "lp"):
         return _state._fmt_filter(val)
     if field == "gain_db" and isinstance(val, (int, float)):
@@ -355,20 +356,23 @@ def _row_label(tier, ch):
     return ch if tier == "channels" else f"{tier}:{ch}"
 
 
-def settings_sheet(diff, rate, preset, version, slot_note=None):
+def settings_sheet(diff, rate, preset, version, slot_note=None, rate_said=None):
     """The compact 'APPLY THIS at the PC-Tool screen' table — only the changed fields, old→new,
     across EVERY tier the diff touched (schema v2 — a virtual-tier change used to be invisible here).
 
     This is the artifact the Arbiter keys in; ms is the source of truth, samples shown for the rate.
     Generated-only — it is a view of the diff, never edited by hand. `slot_note` (issue #5) stamps
     the header with the preset's active-slot status so the human never keys a change into the wrong slot.
+    `rate_said` (`sheet_rate`'s line) says which rate the samples are for, under the header (#147, item 2).
     """
     header = f"## APPLY THIS in Helix PC-Tool — {preset} · {version} (proposed)"
     if slot_note:
         header += f" · {slot_note}"
     lines = [header,
-             "Enter only these. ms is the source of truth; samples shown for the active rate.", "",
-             "| Channel | Param | Old → New |", "|---|---|---|"]
+             "Enter only these. ms is the source of truth; samples shown for the active rate."]
+    if rate_said:
+        lines.append(rate_said)
+    lines += ["", "| Channel | Param | Old → New |", "|---|---|---|"]
     any_row = False
     for tier in sorted(k for k in diff if k not in _DIFF_RESERVED_KEYS):
         for ch, fields in diff[tier].items():
@@ -425,7 +429,33 @@ def delta_rows(diff, rate):
     return rows
 
 
-def write_delta(history, diff, rate, version, note=None, advisories=()):
+def sheet_rate(project_dir, snapshot_rate):
+    """`(rate, said)`: the rate the settings sheet derives its samples from, and the line that says which (#147, item
+    2). The PROFILE's processing rate when the project's profile states one -- the Arbiter's ruling of 2026-08-25
+    (`state.processing_rate`): the sheet is what he types into the DSP, and the DSP runs at the profile's rate --
+    else the snapshot's, said as the snapshot's. A profile that is there and cannot be read (`is_unreadable`) is
+    `(None, ...)`: no samples are derived, and the line says the file, why and its repair, as `PresetHistory.render`
+    says it. The delta rows took the snapshot's rate whatever the profile said."""
+    if project_dir:
+        try:
+            rate = _state.processing_rate(project_dir)
+        except Exception as exc:  # noqa: BLE001 -- matched by its attribute; anything else still raises
+            if not getattr(type(exc), "is_unreadable", False):
+                raise
+            return None, (f"processing rate: NOT READ — {exc} — so no samples are derived (ms is canonical; the "
+                          f"snapshot recorded {snapshot_rate:g}, and the sheet follows the profile's rate)")
+        if rate:
+            return rate, (f"processing rate: {rate:g} Hz, the profile's (samples derived; ms is canonical)"
+                          + (f" — the snapshot recorded {snapshot_rate:g}; samples follow the PROFILE rate"
+                             if rate != snapshot_rate else ""))
+        why = "the project's profile states none"
+    else:
+        why = "no project given"
+    return snapshot_rate, (f"processing rate: {snapshot_rate:g} Hz, the snapshot's -- {why} (samples derived; ms is "
+                           f"canonical)")
+
+
+def write_delta(history, diff, rate, version, note=None, advisories=(), rate_said=None):
     """Bank the change beside the snapshot: `proposals/<v_NNN>.json` (SCR-026), under the preset
     on the old layout and under `state/` on the per-project line (W-2 R).
 
@@ -435,7 +465,8 @@ def write_delta(history, diff, rate, version, note=None, advisories=()):
     generated rather than hand-written, applied to the sheet.
 
     Best effort by design: a proposal that is banked but whose delta file could not be written must
-    not fail the proposal. The snapshot is the source of truth; this is a view.
+    not fail the proposal. The snapshot is the source of truth; this is a view. `rate` and `rate_said` are
+    `sheet_rate`'s: the rate the rows' samples are for, None when none was read, and the line that says which.
     """
     out = {
         "schema_version": _state.SCHEMA_VERSION,
@@ -446,6 +477,9 @@ def write_delta(history, diff, rate, version, note=None, advisories=()):
         "note": note,
         "preset_changes": diff.get("preset") or {},
         "settings": delta_rows(diff, rate),
+        # Which rate the samples in `settings` are for (#147, item 2): the profile's, the snapshot's, or none read.
+        "processing_rate_hz": rate,
+        "processing_rate": rate_said,
         "advisories": list(advisories or ()),
     }
     path = os.path.join(getattr(history, "proposals_dir", os.path.join(history.dir, "proposals")),
@@ -521,9 +555,11 @@ def _propose(history, delta, note, provenance, registry, allow_nonactive, eviden
         proposed["variant"] = "candidate"
     version = history.snapshot(proposed, note=note or ("candidate" if candidate else "proposed change"),
                                place=not candidate)   # validates again + versions
-    rate = proposed["sample_rate"]
-    sheet = settings_sheet({**d, "to": version}, rate, history.preset, version, slot_note=slot_note)
-    write_delta(history, {**d, "to": version}, rate, version, note=note, advisories=adv)
+    # The samples follow the profile's rate, said which (#147, item 2) -- not the snapshot's recorded one.
+    rate, rate_said = sheet_rate(project_dir, proposed["sample_rate"])
+    sheet = settings_sheet({**d, "to": version}, rate, history.preset, version, slot_note=slot_note,
+                           rate_said=rate_said)
+    write_delta(history, {**d, "to": version}, rate, version, note=note, advisories=adv, rate_said=rate_said)
     if adv:
         sheet += "\n\n⚠️ **Advisories (double-check, not blocking):**\n" + "\n".join("- " + a for a in adv)
     if candidate:
@@ -778,6 +814,44 @@ def _check_a_missing_project_makes_nothing():
         shutil.rmtree(top, ignore_errors=True)
 
 
+def _check_sheet_samples_follow_the_profile():
+    """The "APPLY THIS" rows and `proposals/<v>.json` derive their samples from the PROFILE's processing rate, the
+    Arbiter's ruling of 2026-08-25 (`state.processing_rate`), and say which rate they took (#147, item 2): they took
+    the snapshot's, so a snapshot recorded at 96 kHz on a DSP its profile says runs at 48 kHz put 523 samples where
+    the DSP needs 262 -- while the full sheet (`PresetHistory.render`) said 262. No profile keeps the snapshot's rate,
+    said as the snapshot's; a profile that cannot be read leaves the samples empty and says why, with its repair."""
+    import shutil
+    import tempfile
+    failures = []
+    for label, profile, row, said in (
+            ("a profile at 48 kHz", {"dsp_profile": {"dsp_processing_rate_hz": 48000}},
+             "5.38 ms (258 smp) → 5.45 ms (262 smp)", "processing rate: 48000 Hz, the profile's"),
+            ("no profile", None, "5.38 ms (516 smp) → 5.45 ms (523 smp)", "processing rate: 96000 Hz, the snapshot's"),
+            ("a profile cut off", b'{"dsp_profile": {"dsp_processing_rate_hz": 480',
+             "5.38 ms (— smp) → 5.45 ms (— smp)", "checkout HEAD -- dsp_profile.json")):
+        top = tempfile.mkdtemp(prefix="autosound_apply_rate_")
+        try:
+            h = _state.PresetHistory(os.path.join(top, "state"), "SQ", project_dir=top)
+            h.snapshot(_state._sample_state(), note="baseline")          # recorded at 96000 Hz
+            if profile is not None:
+                with open(os.path.join(top, "dsp_profile.json"), "wb") as fh:
+                    fh.write(profile if isinstance(profile, bytes) else json.dumps(profile).encode("utf-8"))
+            r = propose(h, {"w-L": {"ta_ms": 5.45}}, note="w-L delay")
+            sheet = r["sheet"]
+            if f"| w-L | TA | {row} |" not in sheet or said not in sheet:
+                failures.append(f"{label}: the sheet said {sheet[:600]!r}")
+            path = os.path.join(getattr(h, "proposals_dir", os.path.join(h.dir, "proposals")), f"{r['version']}.json")
+            with open(path, encoding="utf-8") as fh:
+                delta = json.load(fh)
+            ta = [s for s in delta.get("settings") or [] if s.get("field") == "ta_ms"]
+            if not ta or f"{ta[0]['was']} → {ta[0]['value']}" != row or said not in str(delta.get("processing_rate")):
+                failures.append(f"{label}: {os.path.basename(path)} holds {ta!r}, rate "
+                                f"{delta.get('processing_rate_hz')!r} {delta.get('processing_rate')!r}")
+        finally:
+            shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["the sheet's samples:"] + failures)
+
+
 def _check_no_load_and_save_outside_update():
     """No function here loads `project.json` and saves it itself (#141, J2b): a writer of the project's facts goes
     through `Project.update`, which holds the lock across the read and the write (`project._load_and_save_paths`)."""
@@ -793,7 +867,7 @@ def _selftest():
     for check in (_check_cli_refuses_unreadable, _check_gain_grid_says_an_unreadable_profile,
                   _check_a_held_lock_answers_75, _check_one_hold_over_the_bank,
                   _check_a_missing_project_makes_nothing, _check_a_bad_timeout_is_a_usage_error,
-                  _check_no_load_and_save_outside_update):
+                  _check_no_load_and_save_outside_update, _check_sheet_samples_follow_the_profile):
         try:
             check()
         except AssertionError as exc:
