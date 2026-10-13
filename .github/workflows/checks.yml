@@ -107,16 +107,30 @@ jobs:
       # 3.9 and answers None from 3.12; the Trap tests hold `rew_state` to the exception's class with an instance that
       # raises for any attribute, on every Python -- and 3.11, between the two, ran nowhere. These two selftests need
       # no numpy. Last in the job: the steps above ran on 3.12. REW at the dead port, as the runner points it.
+      # Both steps run whatever came before (`!cancelled()`), so a red step above does not hide them -- and the second
+      # holds itself to what it claims (group fix 1, item 20): the interpreter IS 3.11, or the step fails (a skipped
+      # setup left 3.12 on PATH), and each selftest's last line says OK, the runner's rule -- exit 0 alone is not one.
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        if: ${{ !cancelled() }}
         with:
           python-version: "3.11"
       - name: the Trap tests on Python 3.11 (rew_api's and process.py's selftests)
+        if: ${{ !cancelled() }}
         env:
           REW_API_URL: "http://127.0.0.1:1"
         run: |
-          python --version
-          python skills/autosound-tuning/rew_tool/rew_api.py --selftest
-          python skills/autosound-tuning/rew_tool/state/process.py selftest
+          python -c 'import sys; v = sys.version_info[:2]; print("Python", sys.version.split()[0]); sys.exit(0 if v == (3, 11) else "this step is the Trap tests on Python 3.11, and python here is %d.%d" % v)'
+          for t in "skills/autosound-tuning/rew_tool/rew_api.py --selftest" "skills/autosound-tuning/rew_tool/state/process.py selftest"; do
+            rc=0
+            out="$(python $t 2>&1)" || rc=$?
+            last="$(printf '%s\n' "$out" | sed '/^[[:space:]]*$/d' | tail -n 1)"
+            if [ "$rc" != 0 ] || ! printf '%s\n' "$last" | grep -w OK >/dev/null; then
+              printf '%s\n' "$out" | tail -n 20
+              echo "::error::python $t on 3.11: exit $rc, its last line not an OK line"
+              exit 1
+            fi
+            echo "ok   $t: $(printf '%s' "$last" | cut -c1-100)"
+          done
 
   # Resonalyze's engines through the skill's wrapper (docs/DESIGN-2026-09-17-phase1-variants.md §3). The fork is
   # a submodule with `update = none` -- a recursive clone of the skill does not fetch it -- so this job asks for it
@@ -308,3 +322,30 @@ jobs:
       # scripts/run-selftests.sh's; stdlib only.
       - name: the update path on Windows (upkeep's selftest)
         run: python skills/autosound-tuning/scripts/upkeep.py selftest
+      # The children the method starts, on Windows (#146; group fix 1, item 20): `gh` and an image upload past their
+      # deadline -- a real child, killed -- answered `(124, "", "no answer in N s")` by `side_effect._subprocess_runner`,
+      # and git's HEAD only of the copy's own repository. Its argv is scripts/selftests.txt's; stdlib only.
+      - name: the side effects' gate on Windows (side_effect's selftest)
+        run: python skills/autosound-tuning/rew_tool/gates/side_effect.py selftest
+      # The key guard against Git for Windows (#146, T-41; group fix 1, items 7-9): a key file git would add, one it
+      # tracks, a repository it will not read ("dubious ownership", its repair kept), `ls-files` answering neither, and a
+      # git that cannot run. Its four checks inline, as the DPAPI step: `autosound_ai.py selftest` as a whole has parts
+      # that start shell scripts, which Windows cannot. stdlib only.
+      - name: the key guard on Windows (autosound_ai's key-guard checks)
+        shell: python
+        run: |
+          import os, sys
+          sys.path.insert(0, os.path.join("skills", "autosound-tuning", "scripts"))
+          import autosound_ai as a
+          checks = (a._check_the_key_guard_says_when_git_cannot, a._check_the_key_guard_refuses_what_git_would_take,
+                    a._check_the_key_guard_keeps_gits_repair, a._check_a_git_that_cannot_run_is_no_git)
+          failures = []
+          for check in checks:
+              try:
+                  check()
+              except AssertionError as exc:
+                  failures.append(f"{check.__name__}: {exc}")
+          if failures:
+              print("\n".join(failures))
+              sys.exit(1)
+          print(f"the key guard on Windows: {len(checks)} checks OK")
