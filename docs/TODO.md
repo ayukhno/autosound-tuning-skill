@@ -1629,13 +1629,14 @@ four assessment lines, and nothing is built before his `ok` on that task. Resume
 
 ## S-103 · W-9's reviews: the pool for the next collection
 
-**Status**: open 2026-10-14 · recorded, not diagnosed; each waits for its wave (a finding ships earlier only on the Arbiter's «терміново»)
+**Status**: open 2026-10-13 · recorded, not diagnosed; each waits for its wave (a finding ships earlier only on the Arbiter's «терміново»)
 
 From W-9's task, group and final reviews (the ledger `.superpowers/sdd/PLAN-W-9/progress.md` holds the evidence until the wave closes):
 - **SKILL.md has 10 bytes of headroom**: 17,490 of 17,500 before the Reference Map (`skill-budget`). The next change to SKILL.md must cut first — one more history or mechanics sentence to its home.
 - **Ubuntu installs end "NOT ready: Claude Code"**: `install.sh` runs Claude Code's installer as `curl -fsSL https://claude.ai/install.sh | sh`; on Ubuntu `sh` is dash and the installer is bash (`Syntax error: "(" unexpected`). The `installers-ubuntu` CI job asserts only `numpy` in `missing`, so it does not show. A one-word fix (`| bash`) — for the Arbiter, with the candidate.
 - `install.ps1` started as Windows PowerShell 5.1 from a process tree under pwsh 7 inherits pwsh 7's `PSModulePath` (the plugin's `/setup` from a pwsh 7 window): gh's `Get-FileHash` and the upstream installers' `Expand-Archive` can fail.
 - A `--skill-ref <branch>` run says "is not a release: it is installed UNSIGNED, unchecked" twice (the pick and the signature step), in both installers. W-9's final fix (`d9a9e5e`) said it once but made a dry run that cannot read the tags say the placeholders `v3.*`/`v*` are installed UNSIGNED; it was reverted. A fix keeps the "would …" wording for the dry-run placeholders (`SKILL_TAG_GLOB`/`TCC_TAG_GLOB`), with an installer-consistency case for them.
+- `install.cmd` started from PowerShell (`& install.cmd`) reads as double-clicked — PowerShell starts cmd with `/c` and the command line names the file — so it prints "Finished with exit code N" and waits on `pause` (seen on the W-9 VM run).
 - Stable picks keep `beta-…-rcN` out by the `v3.*`/`v*` globs alone; a `^v` filter would make it explicit.
 - `json_str` (install.sh) passes invalid UTF-8 through on the shell builder (no python3, non-UTF-8 bytes in `--skill-ref`).
 - A stop before anything changed (a declined consent included) replaces the last real install's receipt: doctor no longer says what the last install did about the engine.
