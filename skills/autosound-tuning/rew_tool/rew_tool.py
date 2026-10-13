@@ -452,7 +452,7 @@ def _glossary_channels(code, glossary, _seen=()):
     return {code}
 
 
-def _pair_for_joint(lo, hi, fc, ver, glossary, held):
+def _pair_for_joint(lo, hi, fc, ver, glossary, held, project_given=False):
     """The measured pair that verifies the junction lo↔hi of series `ver`: found in REW, or named.
 
     #56 item 1, #57 P1. The pair used to be an optional fourth part of `--joint`, and a joint typed
@@ -472,6 +472,10 @@ def _pair_for_joint(lo, hi, fc, ver, glossary, held):
     `SW+Ws` carries the other side's woofer too -- is named, never attached: the trust gate compares
     the pair against the sum of TWO solos, and a pair with a third driver in it is not that sum. The
     method still measures `SW+Ws` for the sub junction, so the row says how to attach it by hand.
+
+    `project_given`: a project was named (`--project`, `$AUTOSOUND_PROJECT_DIR`, the `--process` folder's parent). A
+    glossary with no group then is the project's own lack, said with where a glossary comes from -- the row said "give
+    --project DIR" over a project given (group fix 1, item 11).
     """
     want = _glossary_channels(lo, glossary) | _glossary_channels(hi, glossary)
     groups, seen = [], set()
@@ -481,6 +485,11 @@ def _pair_for_joint(lo, hi, fc, ver, glossary, held):
                 seen.add(code)
                 groups.append((code, _glossary_channels(code, glossary)))
     by_hand = f"--joint \"{lo},{hi},{fc:g},PAIR\""
+    if not groups and project_given:
+        return {"title": None, "code": None, "measure": None,
+                "why": ("pair missing — the project has no glossary to name it by (no glossary.json, no `glossary` "
+                        "in project.json; the intake's channel map agrees one): agree it there, or attach a pair by "
+                        f"hand, {by_hand}")}
     if not groups:
         return {"title": None, "code": None, "measure": None,
                 "why": ("pair missing — no project glossary to name it by: give --project DIR (or "
@@ -1038,6 +1047,7 @@ def _joint_table(joint_specs, ver, band_oct, candidates, protective_record, base
 
     rows = []
     touched = set()
+    project_given = glossary is not None
     glossary = glossary or naming.Glossary()
     rew_held = {}
 
@@ -1091,7 +1101,7 @@ def _joint_table(joint_specs, ver, band_oct, candidates, protective_record, base
         # looked up; nowhere → no verdict, unless the pair-less reading was asked for by name.
         found = None
         if not pair_name:
-            found = _pair_for_joint(lo, hi, fc, ver, glossary, held)
+            found = _pair_for_joint(lo, hi, fc, ver, glossary, held, project_given=project_given)
             pair_name = found["title"]
             if pair_name is None and not no_pair:
                 refuse(jl, fc, band_s, lo, hi, found["why"], found["measure"])
@@ -1854,7 +1864,8 @@ def _selftest():
           "never as REW's failure (#134, R53).")
     failures = []
     for check in (_check_no_folder_is_the_curves_default, _check_the_default_reads_the_methods_layout,
-                  _check_the_glossary_read_strictly):
+                  _check_the_glossary_read_strictly, _check_only_rews_failure_is_said_as_rews,
+                  _check_joints_with_a_project_name_the_pair):
         try:
             check()
         except AssertionError as exc:
@@ -2062,6 +2073,170 @@ def _check_the_glossary_read_strictly():
     assert not failures, "\n  ".join(["the glossary's read:"] + failures)
 
 
+def _run_main(*argv):
+    """`main()` with `argv`: `(exit code, stdout, stderr)`; an exception other than `SystemExit` is the code, as
+    `raised <class>: <words>`, so a check can name the traceback it met."""
+    import contextlib
+    import io
+    saved = sys.argv
+    sys.argv = ["rew_tool.py", *argv]
+    out, err = io.StringIO(), io.StringIO()
+    code = 0
+    try:
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            main()
+    except SystemExit as stop:
+        code = stop.code
+    except Exception as exc:  # noqa: BLE001 -- a traceback is the failure under test
+        code = f"raised {type(exc).__name__}: {exc}"
+    finally:
+        sys.argv = saved
+    return code, out.getvalue(), err.getvalue()
+
+
+def _check_only_rews_failure_is_said_as_rews():
+    """`analyze-batch` and `analyze-joints` say REW's sentence ("Помилка підключення до REW API … Переконайся що REW
+    запущений") for REW's own failure only -- an exception whose class carries `rew_state`, or REW's error answer
+    (group fix 1, item 1). A target file it cannot open (mode 0; Windows' held file) is its own line, `error: <file>
+    cannot be read (<why>) -- <repair>`, exit 1, and one in another code page `error: <file> is not UTF-8 ...`: both
+    were "start REW", which mends neither. A bug is raised as itself, never said as REW down. REW is a stand-in."""
+    import builtins
+    import shutil
+    import tempfile
+    rew_line = "Переконайся що REW запущений"
+
+    def said_as_rews(text):
+        return rew_line in text or "REW API" in text
+    top = tempfile.mkdtemp(prefix="autosound_rew_tool_not_rews_")
+    saved = api.get_measurements, api.get_fr, os.environ.get("AUTOSOUND_PROJECT_DIR")
+    real_open, real_joints = builtins.open, globals()["analyze_joints"]
+    failures = []
+
+    class Down(OSError):
+        """REW not answering, as any copy of `rew_api` raises it: matched by `rew_state`, never by the class."""
+        rew_state = "unavailable"
+    try:
+        os.environ.pop("AUTOSOUND_PROJECT_DIR", None)
+        api.get_measurements = lambda: {"1": {"title": "m-L_2 (rta)"}}
+        api.get_fr = lambda mid, smoothing=None: ([100, 500, 1000, 5000], [82, 84, 83, 80], None)
+        held_dir, cp_dir = os.path.join(top, "held"), os.path.join(top, "cp1251")
+        for d in (held_dir, cp_dir):
+            os.makedirs(d)
+        held = os.path.join(held_dir, "m-L_target.txt")
+        with open(held, "w", encoding="utf-8") as fh:
+            fh.write("100 80\n1000 80\n")
+        foreign = os.path.join(cp_dir, "m-L_target.txt")
+        with open(foreign, "wb") as fh:
+            fh.write("# ціль\n100 80\n1000 80\n".encode("cp1251"))
+
+        def holding(file, *args, **kwargs):
+            if isinstance(file, str) and os.path.abspath(file) == held:
+                raise PermissionError(13, "Permission denied", file)
+            return real_open(file, *args, **kwargs)
+        builtins.open = holding
+        try:
+            code, out, err = _run_main("analyze-batch", "_2 (rta)", "--curves-dir", held_dir)
+        finally:
+            builtins.open = real_open
+        said = err.strip().splitlines()
+        if code != 1 or len(said) != 1 or not said[0].startswith(f"error: {held} cannot be read (") \
+                or " -- " not in said[0] or said_as_rews(out + err):
+            failures.append(f"a target file it cannot open: exit {code!r}, out {out.strip()[-200:]!r}, err {err!r}")
+        code, out, err = _run_main("analyze-batch", "_2 (rta)", "--curves-dir", cp_dir)
+        said = err.strip().splitlines()
+        if code != 1 or len(said) != 1 or not said[0].startswith(f"error: {foreign} is not UTF-8") \
+                or said_as_rews(out + err):
+            failures.append(f"a target file in cp1251: exit {code!r}, out {out.strip()[-200:]!r}, err {err!r}")
+
+        def down():
+            raise Down(61, "Connection refused")
+        api.get_measurements = down
+        code, out, err = _run_main("analyze-batch", "_2 (rta)", "--no-targets")
+        if code != 1 or rew_line not in out or "Помилка підключення до REW API" not in out:
+            failures.append(f"REW down, analyze-batch: exit {code!r}, said {out.strip()[-300:]!r} {err!r}")
+        globals()["analyze_joints"] = lambda *args, **kwargs: down()
+        code, out, err = _run_main("analyze-joints", "--joint", "w-L,m-L,400", "--ver", "2")
+        if code != 1 or rew_line not in out:
+            failures.append(f"REW down, analyze-joints: exit {code!r}, said {out.strip()[-300:]!r} {err!r}")
+
+        def bug():
+            raise AttributeError("'NoneType' object has no attribute 'items'")
+        api.get_measurements = bug
+        code, out, err = _run_main("analyze-batch", "_2 (rta)", "--no-targets")
+        if not str(code).startswith("raised AttributeError") or said_as_rews(out + err):
+            failures.append(f"a bug in analyze-batch said as REW's: exit {code!r}, said {out.strip()[-300:]!r}")
+
+        def journal_gone(*args, **kwargs):
+            raise PermissionError(13, "Permission denied", os.path.join(top, "state", "v_001.json"))
+        globals()["analyze_joints"] = journal_gone
+        code, out, err = _run_main("analyze-joints", "--joint", "w-L,m-L,400", "--ver", "2")
+        said = err.strip().splitlines()
+        if code != 1 or len(said) != 1 or not said[0].startswith(
+                f"error: {os.path.join(top, 'state', 'v_001.json')} cannot be read (") or said_as_rews(out + err):
+            failures.append(f"a file analyze-joints cannot open: exit {code!r}, out {out.strip()[-200:]!r}, "
+                            f"err {err!r}")
+
+        def joints_bug(*args, **kwargs):
+            raise AttributeError("'NoneType' object has no attribute 'get'")
+        globals()["analyze_joints"] = joints_bug
+        code, out, err = _run_main("analyze-joints", "--joint", "w-L,m-L,400", "--ver", "2")
+        if not str(code).startswith("raised AttributeError") or said_as_rews(out + err):
+            failures.append(f"a bug in analyze-joints said as REW's: exit {code!r}, said {out.strip()[-300:]!r}")
+    finally:
+        builtins.open = real_open
+        globals()["analyze_joints"] = real_joints
+        api.get_measurements, api.get_fr = saved[:2]
+        os.environ.pop("AUTOSOUND_PROJECT_DIR", None)
+        if saved[2] is not None:
+            os.environ["AUTOSOUND_PROJECT_DIR"] = saved[2]
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["only REW's failure is REW's:"] + failures)
+
+
+def _check_joints_with_a_project_name_the_pair():
+    """`analyze-joints` through `main()` with a project given -- the path that hid `naming` unbound ("local variable
+    'naming' referenced before assignment", said as REW's failure). A project whose `glossary.json` holds the joint
+    `L w+m` and a stand-in REW holding no pair: exit 0, the row says `pair missing — measure <the grammar's title>`
+    (group fix 1, item 11). A project given with no glossary says so and where one comes from -- never "give
+    --project DIR", which was given."""
+    import json
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_rew_tool_joints_project_")
+    saved = api.get_measurements, os.environ.get("AUTOSOUND_PROJECT_DIR")
+    failures = []
+    try:
+        os.environ.pop("AUTOSOUND_PROJECT_DIR", None)
+        api.get_measurements = lambda: {}
+        with_glossary, without = os.path.join(top, "glossary"), os.path.join(top, "bare")
+        for d in (with_glossary, without):
+            os.makedirs(d)
+            with open(os.path.join(d, "project.json"), "w", encoding="utf-8") as fh:
+                json.dump({"schema_version": 3, "channels": [{"code": "w-L"}, {"code": "m-L"}]}, fh)
+        with open(os.path.join(with_glossary, "glossary.json"), "w", encoding="utf-8") as fh:
+            json.dump({"channels": [{"code": "w-L"}, {"code": "m-L"}], "joints": {"L w+m": ["w-L", "m-L"]}}, fh)
+        measure = naming.generate_name("L w+m", "2", PAIR_METHODS[0])
+        code, out, err = _run_main("analyze-joints", "--joint", "w-L,m-L,400", "--ver", "2",
+                                   "--project", with_glossary)
+        if code != 0 or f"pair missing — measure `{measure}`" not in out or "referenced before assignment" in out + err \
+                or "REW API" in out + err:
+            failures.append(f"a project with a glossary: exit {code!r}, out {out.strip()[-400:]!r}, err {err!r}")
+        code, out, err = _run_main("analyze-joints", "--joint", "w-L,m-L,400", "--ver", "2", "--project", without)
+        if code != 0 or "give --project" in out or "the project has no glossary" not in out \
+                or "glossary.json" not in out:
+            failures.append(f"a project with no glossary: exit {code!r}, out {out.strip()[-400:]!r}, err {err!r}")
+        code, out, err = _run_main("analyze-joints", "--joint", "w-L,m-L,400", "--ver", "2")
+        if code != 0 or "give --project DIR" not in out:
+            failures.append(f"no project at all: exit {code!r}, out {out.strip()[-400:]!r}, err {err!r}")
+    finally:
+        api.get_measurements = saved[0]
+        os.environ.pop("AUTOSOUND_PROJECT_DIR", None)
+        if saved[1] is not None:
+            os.environ["AUTOSOUND_PROJECT_DIR"] = saved[1]
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["analyze-joints with a project:"] + failures)
+
+
 def _check_joints_refuse_an_unreadable_journal():
     """`analyze-joints --process` refuses a journal it cannot read in one line, `error: <file> <reason> -- <repair>`,
     exit 1, and never a traceback (#134, R53). The round's protective record is read as the method reads the journal,
@@ -2108,6 +2283,35 @@ def _check_joints_refuse_an_unreadable_journal():
     finally:
         builtins.open, sys.argv = real_open, real_argv
         shutil.rmtree(top, ignore_errors=True)
+
+
+def _say_batch_or_joints_failure(exc, rew_words):
+    """Say what stopped `analyze-batch` or `analyze-joints`, exit 1 -- or raise `exc` as itself, a bug.
+
+    REW's sentence ("start REW") only for REW's own failure (group fix 1, item 1): an exception whose class carries
+    `rew_state` (any copy of `rew_api`; the attribute, never the class), or REW's error answer, an `HTTPError` (the
+    stdlib's one class). Every other failure was said as REW's too -- a target file this user may not open, one in
+    another code page -- and starting REW mends none of them. A project file this reads and cannot (`is_unreadable`,
+    which names its file, the reason and the repair) and an `OSError` naming a file are one line on stderr, `error:
+    <file> ... -- <repair>`; an `OSError` naming none (a ledger with no snapshot yet) is its own words. Anything else
+    is a bug: raised, its traceback shown."""
+    import urllib.error
+    if getattr(type(exc), "is_unreadable", False):
+        print(f"error: {exc}", file=sys.stderr)
+        sys.exit(1)
+    if api.rew_state(exc) is not None or isinstance(exc, urllib.error.HTTPError):
+        print(f"{rew_words}: {exc}")
+        print("Переконайся що REW запущений з -api і API сервер увімкнений.")
+        sys.exit(1)
+    if isinstance(exc, OSError):
+        if exc.filename:
+            import project_io
+            print(f"error: {exc.filename} cannot be read ({exc.strerror or exc}) -- {project_io.repair_for(exc)}",
+                  file=sys.stderr)
+        else:
+            print(f"error: {exc}", file=sys.stderr)
+        sys.exit(1)
+    raise exc
 
 
 def main():
@@ -2203,13 +2407,9 @@ def main():
             analyze_batch(args.pattern, curves_dir,
                           vs_targets=vs_targets, glossary=glossary)
         except Exception as e:
-            # Not every failure is REW's (#147, item 5): a project file this reads and cannot is its own line first.
-            if getattr(type(e), "is_unreadable", False):
-                print(f"error: {e}", file=sys.stderr)
-                sys.exit(1)
-            print(f"Помилка підключення до REW API: {e}")
-            print("Переконайся що REW запущений з -api і API сервер увімкнений.")
-            sys.exit(1)
+            # Not every failure is REW's (#147, item 5; group fix 1, item 1): a file this reads and cannot is its own
+            # line, REW's sentence is for REW's own failure, and a bug is raised as itself.
+            _say_batch_or_joints_failure(e, "Помилка підключення до REW API")
         return
     if args.cmd == "analyze-joints":
         if not args.joint and not args.from_state:
@@ -2283,15 +2483,10 @@ def main():
             print(f"Помилка: {e}")
             sys.exit(1)
         except Exception as e:
-            if getattr(type(e), "is_unreadable", False):
-                # A project file this reads and cannot -- the journal held, a line in it in another code page (#134,
-                # R53): its own refusal in one line, `error: <file> <reason> -- <repair>`. Said as REW's, it sent the
-                # person to start REW, which cannot mend it.
-                print(f"error: {e}", file=sys.stderr)
-                sys.exit(1)
-            print(f"Помилка підключення до REW API / state: {e}")
-            print("Переконайся що REW запущений з -api і API сервер увімкнений.")
-            sys.exit(1)
+            # A project file this reads and cannot -- the journal held, a line in it in another code page (#134, R53):
+            # its own refusal in one line, `error: <file> <reason> -- <repair>`. Said as REW's, it sent the person to
+            # start REW, which cannot mend it.
+            _say_batch_or_joints_failure(e, "Помилка підключення до REW API / state")
         return
 
     try:

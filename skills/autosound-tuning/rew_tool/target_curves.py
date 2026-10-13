@@ -17,20 +17,34 @@ import naming
 TARGET_SUFFIX = "_target.txt"
 
 
+#: The repair for a target file in another code page: `target_bands.write_targets` writes UTF-8.
+REPAIR_ENCODING = "save it as UTF-8, or write it again (target_bands.py)"
+
+
 def load_target_curve(filepath):
+    """`(freqs, mags)` from a per-band target file; comments, blanks and junk rows skipped.
+
+    A file in another code page raises `project_io.Unreadable` (`is_unreadable` on its class) naming it, where and
+    what to do (group fix 1, item 1): its `UnicodeDecodeError` named no file, and `analyze-batch` said it as REW's
+    failure. A file that cannot be opened raises its `OSError`, which names it."""
     freqs, mags = [], []
-    with open(filepath, encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line or line.startswith("#"):
+    try:
+        with open(filepath, encoding="utf-8") as f:
+            lines = f.readlines()
+    except UnicodeDecodeError as exc:
+        import project_io
+        raise project_io.Unreadable(filepath, f"is not UTF-8 (byte {exc.start})", REPAIR_ENCODING) from exc
+    for line in lines:
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = line.split()
+        if len(parts) >= 2:
+            try:
+                freqs.append(float(parts[0]))
+                mags.append(float(parts[1]))
+            except ValueError:
                 continue
-            parts = line.split()
-            if len(parts) >= 2:
-                try:
-                    freqs.append(float(parts[0]))
-                    mags.append(float(parts[1]))
-                except ValueError:
-                    continue
     return freqs, mags
 
 
@@ -190,6 +204,23 @@ def _check_the_reason_names_the_folder(car):
         assert got is None and why == f"no `w-L_target.txt` in {curves}", why
 
 
+def _check_a_target_in_another_code_page(car):
+    """A target file in another code page names itself (group fix 1, item 1): its `UnicodeDecodeError` named no file,
+    and `analyze-batch` said it as REW's failure. `project_io.Unreadable`, matched by `is_unreadable`."""
+    import tempfile
+    with tempfile.TemporaryDirectory() as d:
+        path = os.path.join(d, "m-L_target.txt")
+        with open(path, "wb") as fh:
+            fh.write("# ціль\n20 0.0\n20000 0.0\n".encode("cp1251"))
+        try:
+            explain_target_curve("m-L_2 (sw)", d, car)
+        except Exception as exc:  # noqa: BLE001 -- matched by its attribute, as every copy's
+            assert getattr(type(exc), "is_unreadable", False) and str(exc).startswith(f"{path} is not UTF-8 (byte ") \
+                and REPAIR_ENCODING in str(exc), repr(exc)
+        else:
+            raise AssertionError("a target in cp1251 was read")
+
+
 def _selftest():
     """The mapping, the file name and the interpolation, offline. First written for HUB-037.
 
@@ -284,7 +315,7 @@ def _selftest():
         assert find_target_curve("xyz_1 (sw)", d, car) == (None, None)
 
     failures = []
-    for check in (_check_the_reason_names_the_folder,):
+    for check in (_check_the_reason_names_the_folder, _check_a_target_in_another_code_page):
         try:
             check(car)
         except AssertionError as exc:
