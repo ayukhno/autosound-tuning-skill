@@ -242,9 +242,38 @@ def _check_cli_refuses_unreadable_profile() -> None:
         shutil.rmtree(d, ignore_errors=True)
 
 
+def _check_predict_refusals_are_one_line():
+    """predict's own refusal (`PredictError`, `is_refusal` on its class) reaches this command line in its one form,
+    `refusing: <why>`, exit 3 (#147, item 3): a slot nobody made active, met reading the ledger's bands, ended in a
+    traceback."""
+    import contextlib
+    import io
+    import shutil
+    import tempfile
+    import os
+    import predict as _predict
+    saved_env = os.environ.pop("AUTOSOUND_PROJECT_DIR", None)
+    top = tempfile.mkdtemp(prefix="autosound_level_offsets_refusal_")
+    try:
+        proj, solos = _predict._two_way_fixture(top, active=False)
+        out, err = io.StringIO(), io.StringIO()
+        try:
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                rc = _main(["--solos", solos, "--ver", "1", "--levels-fixed", "--project", proj])
+        except BaseException as exc:  # noqa: BLE001 -- a traceback is the failure under test
+            rc = f"raised {type(exc).__name__}: {exc}"
+        said = err.getvalue().strip().splitlines()
+        assert rc == 3 and not out.getvalue().strip() and len(said) == 1 \
+            and said[0].startswith("refusing: no active slot in "), (rc, said[-2:])
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+        if saved_env is not None:
+            os.environ["AUTOSOUND_PROJECT_DIR"] = saved_env
+
+
 def _selftest() -> None:
     failures = []
-    for check in (_check_cli_refuses_unreadable_profile,):
+    for check in (_check_cli_refuses_unreadable_profile, _check_predict_refusals_are_one_line):
         try:
             check()
         except AssertionError as exc:
@@ -321,8 +350,21 @@ def _main(argv=None):
     already in the ledger — it is not applied by anything here.
 
     Every refusal is one line, `refusing: <why>`, exit 3: no `--levels-fixed`, no solos, a
-    `dsp_profile.json` it cannot read or whose `channel_gain.range_db` is no `[low, high]` (#134).
+    `dsp_profile.json` it cannot read or whose `channel_gain.range_db` is no `[low, high]` (#134),
+    and predict's own refusal (`PredictError`, `is_refusal` on its class; #147, item 3) -- a slot
+    nobody made active, met reading the ledger's bands, ended in a traceback.
     """
+    try:
+        return _cli(argv)
+    except Exception as exc:  # noqa: BLE001 -- matched by its attribute; anything else still raises
+        if not getattr(type(exc), "is_refusal", False):
+            raise
+        print(f"refusing: {exc}", file=sys.stderr)
+        return 3
+
+
+def _cli(argv=None):
+    """`_main`'s work; its refusals are `_main`'s to say."""
     import argparse
     ap = argparse.ArgumentParser(description="levels read off the measurement (second estimate)")
     ap.add_argument("--solos", required=True, help="directory of Resonalyze v7 solo files")

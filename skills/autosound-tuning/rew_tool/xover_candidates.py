@@ -311,9 +311,48 @@ def _check_unmodelled_protective_said():
         shutil.rmtree(d, ignore_errors=True)
 
 
+def _check_predict_refusals_are_one_line():
+    """predict's own refusals (`PredictError`, `is_refusal` on its class) reach this command line in its one form,
+    `refusing: <why>`, exit 3 (#147, item 3): a slot nobody made active, a solo folder with no solo in it. They ended
+    in a traceback."""
+    import contextlib
+    import io
+    import shutil
+    import tempfile
+    saved_env = os.environ.pop("AUTOSOUND_PROJECT_DIR", None)
+    failures = []
+    try:
+        for label, active, empty, said_in in (("no active slot", False, False, "refusing: no active slot in "),
+                                              ("a solo folder with no solo", True, True, "refusing: ")):
+            top = tempfile.mkdtemp(prefix="autosound_xover_refusal_")
+            try:
+                proj, solos = P._two_way_fixture(top, active=active)
+                if empty:
+                    solos = os.path.join(top, "empty")
+                    os.makedirs(solos)
+                    said_in = f"refusing: {solos}: no Resonalyze impulse-response files (v4..v8) found"
+                out, err = io.StringIO(), io.StringIO()
+                try:
+                    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                        rc = _main(["--solos", solos, "--project", proj, "--house", os.path.join(top, "house.txt"),
+                                    "--channel", "m-L", "--hp", "200:400:10"])
+                except BaseException as exc:  # noqa: BLE001 -- a traceback is the failure under test
+                    rc = f"raised {type(exc).__name__}: {exc}"
+                said = [ln for ln in err.getvalue().strip().splitlines() if not ln.strip().startswith("\u26a0")]
+                if rc != 3 or out.getvalue().strip() or len(said) != 1 or not said[0].startswith(said_in):
+                    failures.append(f"{label}: rc {rc!r}, said {said[-2:]!r}")
+            finally:
+                shutil.rmtree(top, ignore_errors=True)
+        assert not failures, "\n  ".join(["a refusal of predict's, not this tool's one line:"] + failures)
+    finally:
+        if saved_env is not None:
+            os.environ["AUTOSOUND_PROJECT_DIR"] = saved_env
+
+
 def _selftest():
     failures = []
-    for check in (_check_cli_refuses_unreadable_profile, _check_unmodelled_protective_said):
+    for check in (_check_cli_refuses_unreadable_profile, _check_unmodelled_protective_said,
+                  _check_predict_refusals_are_one_line):
         try:
             check()
         except AssertionError as exc:
@@ -379,6 +418,20 @@ def _slot(spec):
 
 
 def _main(argv=None):
+    """The command line. Every refusal is one line, `refusing: <why>`, exit 3 (`rew-tool-docs.md`) -- predict's own
+    (`PredictError`, `is_refusal` on its class; #147, item 3) too: a slot nobody made active, a solo folder with no solo
+    in it ended in a traceback."""
+    try:
+        return _cli(argv)
+    except Exception as exc:  # noqa: BLE001 -- matched by its attribute; anything else still raises
+        if not getattr(type(exc), "is_refusal", False):
+            raise
+        print(f"refusing: {exc}", file=sys.stderr)
+        return 3
+
+
+def _cli(argv=None):
+    """`_main`'s work; its refusals are `_main`'s to say."""
     import argparse
     from eq_propose import channel_targets, _load_house
     import project as _project

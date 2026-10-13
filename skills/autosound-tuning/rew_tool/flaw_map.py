@@ -509,13 +509,42 @@ def _check_write_waits_for_the_lock():
     assert not failures, "\n  ".join(["--write and the project's lock:"] + failures)
 
 
+def _check_predict_refusals_are_one_line():
+    """predict's own refusal (`PredictError`, `is_refusal` on its class) reaches flaw_map's command line as one line,
+    `error: <words>`, exit 1 (#147, item 3): a solo folder with no solo in it -- `load_solos_dir`'s refusal -- ended in
+    a traceback, `_main` matching `is_busy`, a usage error and `is_unreadable` alone."""
+    import contextlib
+    import io
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_flaw_map_refusal_")
+    try:
+        proj = os.path.join(top, "project")
+        os.makedirs(proj)
+        pj = _project.Project(proj)
+        pj.save(pj.load())
+        empty = os.path.join(top, "solos")
+        os.makedirs(empty)
+        out, err = io.StringIO(), io.StringIO()
+        try:
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                rc = _main(["--project", proj, "--solos", empty])
+        except BaseException as exc:  # noqa: BLE001 -- a traceback is the failure under test
+            rc = f"raised {type(exc).__name__}: {exc}"
+        said = err.getvalue().strip().splitlines()
+        assert rc == 1 and not out.getvalue().strip() and said == [
+            f"error: {empty}: no Resonalyze impulse-response files (v4..v8) found"], (rc, said[-2:])
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
 def _selftest():
     import shutil
     import tempfile
 
     failures = []
     for check in (_check_refusal_names_its_reason, _check_rew_reads_the_glossary_strictly,
-                  _check_write_waits_for_the_lock):
+                  _check_write_waits_for_the_lock, _check_predict_refusals_are_one_line):
         try:
             check()
         except AssertionError as exc:
@@ -687,8 +716,9 @@ def _main(argv=None):
             return 2
         # A project file this reads and cannot -- the journal held, a line in it in another code page (#134, R53) --
         # or a project folder the lock cannot be made in (#141, `write_lock.Unwritable`): one line, `error: <file>
-        # <reason> -- <repair>`, exit 1, never a traceback.
-        if not getattr(type(exc), "is_unreadable", False):
+        # <reason> -- <repair>`, exit 1, never a traceback. So is predict's own refusal (`PredictError`, `is_refusal`;
+        # #147, item 3) -- a solo folder with no solo in it ended in a traceback.
+        if not (getattr(type(exc), "is_unreadable", False) or getattr(type(exc), "is_refusal", False)):
             raise
         print(f"error: {exc}", file=sys.stderr)
         return 1

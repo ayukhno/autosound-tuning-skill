@@ -952,11 +952,13 @@ def load_part2_rew(codes, ver, f, api=None):
 
 def main(argv=None):
     """The command line (`_main`), and its refusal of a project file it reads and cannot (#134, R53): the journal held,
-    a line in it in another code page -- one line, `error: <file> <reason> -- <repair>`, exit 1, never a traceback."""
+    a line in it in another code page -- one line, `error: <file> <reason> -- <repair>`, exit 1, never a traceback. So
+    is predict's own refusal (`PredictError`, `is_refusal`; #147, item 3): a slot nobody made active, a `--route` to a
+    row the ledger does not have, a solo folder with no solo in it -- they ended in a traceback."""
     try:
         return _main(argv)
     except Exception as exc:  # noqa: BLE001 -- matched by its attribute below; anything else still raises
-        if not getattr(type(exc), "is_unreadable", False):
+        if not (getattr(type(exc), "is_unreadable", False) or getattr(type(exc), "is_refusal", False)):
             raise
         print(f"error: {exc}", file=sys.stderr)
         return 1
@@ -1293,6 +1295,46 @@ def _check_no_boost_path_said():
         assert (note in err.getvalue()) is said, (argv, err.getvalue()[-300:])
 
 
+def _check_predict_refusals_are_one_line():
+    """predict's own refusals (`PredictError`, `is_refusal` on its class) reach eq_propose's command line as one line,
+    `error: <words>`, exit 1 (#147, item 3): a slot nobody made active, a `--route` to a row the ledger does not have,
+    a solo folder with no solo in it. `main` matched `is_unreadable` alone, and they ended in a traceback."""
+    import contextlib
+    import io as _io
+    import shutil
+    import tempfile
+    saved_env = os.environ.pop("AUTOSOUND_PROJECT_DIR", None)
+    failures = []
+    try:
+        for label, active, empty, extra, said_in in (
+                ("no active slot", False, False, [], "no active slot in "),
+                ("a route to no row", True, False, ["--route", "VFX=w-L"], "--route VFX: no such row"),
+                ("a solo folder with no solo", True, True, [], "no Resonalyze impulse-response files")):
+            top = tempfile.mkdtemp(prefix="autosound_eq_propose_refusal_")
+            try:
+                proj, solos = P._two_way_fixture(top, active=active)
+                if empty:
+                    solos = os.path.join(top, "empty")
+                    os.makedirs(solos)
+                out, err = _io.StringIO(), _io.StringIO()
+                try:
+                    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                        rc = main(["--project", proj, "--house", os.path.join(top, "house.txt"), "--solos", solos]
+                                  + extra)
+                except BaseException as exc:  # noqa: BLE001 -- a traceback is the failure under test
+                    rc = f"raised {type(exc).__name__}: {exc}"
+                said = err.getvalue().strip().splitlines()
+                if rc != 1 or out.getvalue().strip() or not said or not said[-1].startswith("error: ") \
+                        or said_in not in said[-1]:
+                    failures.append(f"{label}: rc {rc!r}, said {said[-1:]!r}")
+            finally:
+                shutil.rmtree(top, ignore_errors=True)
+        assert not failures, "\n  ".join(["a refusal of predict's, not one line:"] + failures)
+    finally:
+        if saved_env is not None:
+            os.environ["AUTOSOUND_PROJECT_DIR"] = saved_env
+
+
 def _selftest():
     """Anchored to the definitions: a driver resonance is cut where it is, a comb is not boosted,
     a moving peak is not proposed, an L/R shelf difference goes to the pair package, a tonal
@@ -1301,7 +1343,8 @@ def _selftest():
     import ellipsoid as E
     failures = []
     for check in (_check_profile_read_strictly, _check_refusal_names_its_reason, _check_refused_notes_never_cut,
-                  _check_junction_band_names_its_step, _check_no_boost_path_said):
+                  _check_junction_band_names_its_step, _check_no_boost_path_said,
+                  _check_predict_refusals_are_one_line):
         try:
             check()
         except AssertionError as exc:

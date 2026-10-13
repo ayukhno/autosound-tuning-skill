@@ -85,7 +85,12 @@ LR_BANDS = ((20, 60), (60, 120), (120, 250), (250, 500), (500, 1000),
 
 
 class PredictError(ValueError):
-    pass
+    """This module's own refusal: a fact the run cannot go on without, said in words (a slot nobody made active, a
+    `--route` to a row the ledger does not have, a solo folder with no solo in it).
+
+    `is_refusal` on the class is how a command line that loads this module says it as its one refusal line (#147,
+    item 3): matched by the attribute, never the class -- a module loaded by path twice is two classes."""
+    is_refusal = True
 
 
 #: How many cycles OF THE JUNCTION FREQUENCY the window must hold for a gated junction to mean
@@ -2914,6 +2919,14 @@ def _check_predict_refusals_are_one_line():
             os.environ["AUTOSOUND_PROJECT_DIR"] = saved_env
 
 
+def _check_predict_error_says_it_is_a_refusal():
+    """`PredictError` carries `is_refusal = True` on its class (#147, item 3): the command lines that load this module
+    (eq_propose, flaw_map, level_offsets, xover_candidates) say it as their one refusal line by the attribute -- two
+    copies of this module are two classes, and a match by class misses the other copy's."""
+    assert getattr(PredictError, "is_refusal", False) is True, "PredictError has no is_refusal"
+    assert getattr(type(PredictError("x")), "is_refusal", False) is True, "an instance's class has no is_refusal"
+
+
 def _check_refused_notes_never_cut():
     """A channel's refusal is never compacted away (#134, batch 4's re-review, Out of Scope 5). The run shows five notes
     unless `--verbose`, and a `<ch>: REFUSED -- <why>` past the fifth was cut with the rest -- the one note that says
@@ -3625,7 +3638,7 @@ def _selftest():
     _check_predict_refusals_are_one_line()
     _check_refused_notes_never_cut()
     failures = []
-    for check in (_check_says_what_it_did_not_check,):
+    for check in (_check_says_what_it_did_not_check, _check_predict_error_says_it_is_a_refusal):
         try:
             check()
         except AssertionError as exc:
