@@ -3055,6 +3055,49 @@ def _check_cut_file_named_in_check():
         shutil.rmtree(d, ignore_errors=True)
 
 
+def _check_cut_version_and_project_json_said_as_cut():
+    """`check` says a ledger version and a `project.json` cut inside a character as cut, in their rows (#147, item 4):
+    "is cut off inside a character: a write was cut off; restore it from git (...)". The rows said "not UTF-8" and
+    named `repair-encoding`, beside an `encoding_cut` that named the restore -- the survey had them right and the rows
+    did not. A version in another code page keeps `repair-encoding` (the TCC-007 case in `_selftest`)."""
+    import shutil
+    import tempfile
+    state_mod = _load_vendored("state")
+    top = tempfile.mkdtemp(prefix="autosound_contract_cut_rows_")
+    failures = []
+    try:
+        root = os.path.join(top, "version")
+        os.makedirs(root)
+        with open(os.path.join(root, "project.json"), "w", encoding="utf-8") as fh:
+            json.dump({"schema_version": project.SCHEMA_VERSION}, fh)
+        hist = state_mod.PresetHistory(os.path.join(root, "state"), "FULL")
+        hist.snapshot(state_mod._sample_state(), note="нуль — Phase 0 §2.5")
+        snap = hist._path("v_001")
+        with open(snap, "rb") as fh:
+            whole = fh.read()
+        with open(snap, "wb") as fh:
+            fh.write(whole[: whole.index("нуль".encode("utf-8")) + 1])
+        other = os.path.join(top, "facts")
+        os.makedirs(other)
+        whole = json.dumps({"schema_version": project.SCHEMA_VERSION, "car": {"make": "Шкода"}},
+                           ensure_ascii=False).encode("utf-8")
+        with open(os.path.join(other, "project.json"), "wb") as fh:
+            fh.write(whole[: whole.index("Ш".encode("utf-8")) + 1])
+        for d, rel, name in ((root, "state/versions/v_001.json", "v_001.json"), (other, "project.json", "project.json")):
+            report = check_project(d, skip_rew=True)
+            row = [f for f in report["files"] if f["file"] == rel]
+            issue = (row[0]["issues"] or [""])[0] if row else ""
+            if "is cut off inside a character: a write was cut off; restore it from git (`" not in issue or f"checkout HEAD -- {name}" not in issue \
+                    or "repair-encoding" in issue or "not UTF-8" in issue or report["encoding_damaged"]:
+                failures.append(f"{rel}: the row said {issue[:300]!r}, damaged {report['encoding_damaged']}")
+            shown = [ln for ln in render_report(report).splitlines() if ln.startswith(f"| {rel}")]
+            if not shown or "repair-encoding" in shown[0]:
+                failures.append(f"{rel}: the report's row {shown[:1]!r}")
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["a file cut inside a character, said in its row:"] + failures)
+
+
 def _check_phase0_gate_exit_over_an_unreadable_glossary():
     """`--phase0-gate` exits by the rule its last line states (#134, batch 4's re-review I1): a standalone
     `glossary.json` that is there and cannot be read is named first by both gates' last lines (CONTRACT §3), and
@@ -3259,6 +3302,7 @@ def _selftest():
                   _check_ledger_file_that_cannot_be_read, _check_says_what_it_did_not_check,
                   _check_glossary_read_strictly,
                   _check_cut_file_named_in_check, _check_phase0_gate_exit_over_an_unreadable_glossary,
+                  _check_cut_version_and_project_json_said_as_cut,
                   _check_intake_line_over_an_unreadable_project_json, _check_bom_glossary_is_a_glossary,
                   _check_bom_project_json_one_verdict, _check_dangling_glossary_link_refused,
                   _check_repair_encoding_waits_for_the_lock, _check_a_missing_project_makes_nothing,

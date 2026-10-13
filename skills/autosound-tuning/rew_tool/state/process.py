@@ -735,9 +735,11 @@ def changelog_copies_that_differ(project_dir):
 
 def _changelog_read(project_dir):
     """`(path, text, why, mend)` for `tuning-changelog` (`_changelog_path`'s): its text, or why it cannot be read --
-    `cannot be opened (...)`, `is not UTF-8` -- and what mends that, with the text None; `(None, None, None, None)` when
-    there is no such file. The mend for a file that cannot be opened is its cause's (m2, `project_io.repair_for`):
-    "close what holds it" where something can hold it, Windows -- closing an editor cannot mend a permission."""
+    `cannot be opened (...)`, `is cut off inside a character: ...`, `is not UTF-8` -- and what mends that, with the text
+    None; `(None, None, None, None)` when there is no such file. The mend for a file that cannot be opened is its
+    cause's (m2, `project_io.repair_for`): "close what holds it" where something can hold it, Windows -- closing an
+    editor cannot mend a permission. One cut inside a character is a write cut off, mended from git, not by saving it
+    as UTF-8 (#147, item 4; `project_io.cut_inside_a_character`)."""
     path, _moved = _changelog_path(project_dir)
     if path is None:
         return None, None, None, None
@@ -745,6 +747,15 @@ def _changelog_read(project_dir):
         with open(path, encoding="utf-8") as fh:
             return path, fh.read(), None, None
     except UnicodeDecodeError:
+        io_ = _project_io()
+        try:
+            with open(path, "rb") as fh:
+                cut = io_.cut_inside_a_character(fh.read())
+        except OSError:
+            cut = False
+        if cut:
+            return (path, None, "is cut off inside a character: a write was cut off",
+                    f"restore it from git (`{io_.restore_line(path)}`)")
         return path, None, "is not UTF-8", "save it as UTF-8 and run this again"
     except OSError as exc:
         return path, None, f"cannot be opened ({exc})", _project_io().repair_for(exc)
@@ -6266,6 +6277,40 @@ def _check_handoff_says_an_unreadable_changelog():
         shutil.rmtree(top, ignore_errors=True)
 
 
+def _check_handoff_says_a_cut_changelog_as_cut():
+    """`handoff` says a `tuning-changelog` cut inside a character as cut (#147, item 4): "is cut off inside a character:
+    a write was cut off", mended by "restore it from git (`<restore line>`)" -- it was "is not UTF-8", mended by saving
+    it as UTF-8, which a cut write cannot be. One in another code page keeps its sentence."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_process_cut_changelog_")
+    failures = []
+    try:
+        root = tempfile.mkdtemp(dir=top)
+        _seed_intake(root)
+        p = Process(os.path.join(root, "process"))
+        p.enter_phase("-1")
+        p.enter_phase("0")
+        path = os.path.join(root, "tuning-changelog.md")
+        text = "# Журнал налаштування\n\n## CONTINUE\n- HEAD v_001, далі A/B\n"      # cp1251 has no ▶️
+        whole = text.encode("utf-8")
+        for label, raw, said, never in (
+                ("cut inside a character", whole[: whole.index("далі".encode("utf-8")) + 1],
+                 ["is cut off inside a character: a write was cut off",
+                  f"restore it from git (`{_project_io().restore_line(path)}`)"], ["not UTF-8", "save it as UTF-8"]),
+                ("in another code page", text.encode("cp1251"), ["is not UTF-8", "save it as UTF-8"], ["cut off"])):
+            with open(path, "wb") as fh:
+                fh.write(raw)
+            got = p.handoff()
+            item = [m for m in got["missing"] if path in m]
+            if got["ok"] is not False or not item or not all(s in item[0] for s in said) \
+                    or any(n in item[0] for n in never):
+                failures.append(f"{label}: ok {got['ok']}, said {item[:1]!r}")
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["a tuning-changelog that does not decode:"] + failures)
+
+
 def _check_handoff_reads_the_changelog_at_the_root():
     """#143, I-21: `tuning-changelog`'s home is the project root. One only in `rew_analitic/` (an older project's) is
     read -- its ▶️ CONTINUE block checked, its HEAD compared with the ledger's -- and `handoff --json` has one warning
@@ -8112,6 +8157,7 @@ def _selftest():
                   _check_flag_values_as_they_stand, _check_autocorrected_dashes, _check_too_few_arguments,
                   _check_value_flag_last, _check_help_writes_nothing, _check_usage_before_the_read,
                   _check_handoff_says_an_unreadable_changelog, _check_handoff_reads_the_changelog_at_the_root,
+                  _check_handoff_says_a_cut_changelog_as_cut,
                   _check_handoff_names_a_changelog_copy_that_differs, _check_superseded_not_taken,
                   _check_check_never_invents_taken, _check_close_says_what_rew_did,
                   _check_listing_never_read_as_rew, _check_ambiguous_capture, _check_close_swallows_only_rew,

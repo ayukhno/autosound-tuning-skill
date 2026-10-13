@@ -530,11 +530,24 @@ def _read_snapshot_json(path):
 
     A version a newer method wrote (`schema_version` above this copy's) is refused here too, with the way to a newer
     method (#136, audit T-21): the ledger's own check wanted only an int, so it was read as this copy's own.
+
+    A version cut inside a character -- UTF-8 up to an unfinished last character, `project_io.cut_inside_a_character`
+    -- is a write cut off, not another code page: said as cut, with its restore (#147, item 4). It was called "not
+    UTF-8" and sent to `repair-encoding`, which no page answers.
     """
     try:
         with open(path, encoding="utf-8") as f:
             data = json.load(f)
     except UnicodeDecodeError as exc:
+        io_ = _project_io()
+        try:
+            with open(path, "rb") as f:
+                cut = io_.cut_inside_a_character(f.read())
+        except OSError:
+            cut = False
+        if cut:
+            raise SnapshotError(f"{path} is cut off inside a character: a write was cut off; restore it from git "
+                                f"(`{io_.restore_line(path)}`)") from exc
         raise SnapshotError(
             f"{path}: not UTF-8 -- byte {exc.object[exc.start]:#04x} at position {exc.start} "
             f"({exc.reason}). Written by a machine whose default code page was not UTF-8 -- a "
@@ -3392,6 +3405,40 @@ def _check_sheet_says_a_rate_it_cannot_use():
         shutil.rmtree(top, ignore_errors=True)
 
 
+def _check_a_cut_version_said_as_cut():
+    """A ledger version cut inside a character is said as cut (#147, item 4): "is cut off inside a character: a write
+    was cut off; restore it from git (`<restore line>`)". It was called "not UTF-8" and sent to `repair-encoding`, which
+    no page answers -- the survey already leaves such a file out. A version in another code page keeps the
+    `repair-encoding` sentence."""
+    import shutil
+    import tempfile
+    root = tempfile.mkdtemp(prefix="autosound_state_cut_version_")
+    failures = []
+    try:
+        h = PresetHistory(os.path.join(root, "state"), "FULL", project_dir=root)
+        h.snapshot(_sample_state(), note="нуль — Phase 0 §2.5")
+        path = h._path("v_001")
+        with open(path, "rb") as fh:
+            whole = fh.read()
+        cut_said = f"{path} is cut off inside a character: a write was cut off; restore it from git (`{_project_io().restore_line(path)}`)"
+        for label, raw, said, never in (
+                ("cut inside a character", whole[: whole.index("нуль".encode("utf-8")) + 1], [cut_said],
+                 ["repair-encoding", "not UTF-8"]),
+                ("in another code page", whole.decode("utf-8").encode("cp1251"), ["not UTF-8", "repair-encoding"],
+                 ["cut off"])):
+            with open(path, "wb") as fh:
+                fh.write(raw)
+            try:
+                h.load("v_001")
+                failures.append(f"{label}: read")
+            except SnapshotError as exc:
+                if not all(s in str(exc) for s in said) or any(n in str(exc) for n in never):
+                    failures.append(f"{label}: {str(exc)[:300]}")
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+    assert not failures, "\n  ".join(["a version that does not decode:"] + failures)
+
+
 def _check_survey_names_a_cut_file():
     """A file cut inside its last character is named by the survey, under "cut off", with its restore (#134, batch 4's
     re-review N4). Batch 2's re-review took it out of the damaged files -- no code page mends a cut write -- and then
@@ -3700,7 +3747,8 @@ def _selftest():
                   _check_survey_names_a_cut_file, _check_writers_go_through_the_move,
                   _check_a_held_lock_answers_75, _check_a_bad_timeout_is_a_usage_error,
                   _check_no_load_and_save_outside_update, _check_ledger_writers_read_with_the_lock_held,
-                  _check_the_repairs_name_their_project, _check_a_pointer_file_of_another_shape_refused):
+                  _check_the_repairs_name_their_project, _check_a_pointer_file_of_another_shape_refused,
+                  _check_a_cut_version_said_as_cut):
         try:
             check()
         except AssertionError as exc:

@@ -859,6 +859,20 @@ class Project:
             with open(self.path, encoding="utf-8-sig") as f:
                 data = json.load(f)
         except UnicodeDecodeError as exc:
+            # Cut inside a character -- UTF-8 up to an unfinished last character -- is a write cut off, not another
+            # code page (#147, item 4): its repair is its history, and `repair-encoding` finds no page for it.
+            io_ = _project_io()
+            try:
+                with open(self.path, "rb") as f:
+                    cut = io_.cut_inside_a_character(f.read())
+            except OSError:
+                cut = False
+            if cut:
+                raise ProjectError(
+                    f"{self.path} is cut off inside a character: a write was cut off; restore it from git "
+                    f"(`{io_.restore_line(self.path)}`). Refusing to treat it as an empty project — the next write "
+                    "would replace it."
+                ) from exc
             # Told apart from the rest because the repair is a DIFFERENT one and it exists
             # (TCC-007): the file is whole, its numbers are untouched, and only the bytes carrying
             # the words are from another code page. Sending the owner to their editor's backups for
@@ -2052,6 +2066,36 @@ def _check_save_refuses_newer():
         shutil.rmtree(top, ignore_errors=True)
 
 
+def _check_load_says_a_cut_file_as_cut():
+    """`Project.load` says a `project.json` cut inside a character as cut (#147, item 4): "is cut off inside a character:
+    a write was cut off; restore it from git (`<restore line>`)". It was called "not UTF-8" and sent to
+    `repair-encoding`, which no page answers. One in another code page keeps the `repair-encoding` sentence."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_project_cut_")
+    failures = []
+    try:
+        proj = Project(top)
+        text = json.dumps({"schema_version": SCHEMA_VERSION, "car": {"make": "Шкода"}}, ensure_ascii=False)
+        whole = text.encode("utf-8")
+        cut_said = f"{proj.path} is cut off inside a character: a write was cut off; restore it from git (`{_project_io().restore_line(proj.path)}`)"
+        for label, raw, said, never in (
+                ("cut inside a character", whole[: whole.index("Ш".encode("utf-8")) + 1], [cut_said],
+                 ["repair-encoding", "not UTF-8"]),
+                ("in another code page", text.encode("cp1251"), ["is not UTF-8", "repair-encoding"], ["cut off"])):
+            with open(proj.path, "wb") as fh:
+                fh.write(raw)
+            try:
+                proj.load()
+                failures.append(f"{label}: read")
+            except ProjectError as exc:
+                if not all(s in str(exc) for s in said) or any(n in str(exc) for n in never):
+                    failures.append(f"{label}: {str(exc)[:300]}")
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["a project.json that does not decode:"] + failures)
+
+
 def _check_load_reads_a_bom():
     """`Project.load` reads a `project.json` saved with a UTF-8 BOM, as `project_io.read_json` reads it (#134, batch 4's
     third re-review, Out of Scope 2): it raised `ProjectError`, "exists and cannot be read" -- the one reader of the
@@ -2855,6 +2899,7 @@ def _selftest():
 
     failures = []
     for check in (_check_record_change_refuses_unreadable, _check_save_refuses_newer, _check_load_reads_a_bom,
+                  _check_load_says_a_cut_file_as_cut,
                   _check_two_writers_lose_nothing, _check_save_counts_from_the_disk,
                   _check_update_changes_under_the_lock, _check_update_writes_only_whole_facts,
                   _check_a_held_lock_answers_75, _check_catch_up_holds_once, _check_a_missing_project_makes_nothing,
