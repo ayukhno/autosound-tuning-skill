@@ -1723,9 +1723,18 @@ class Process:
                 raise ProcessError("--plan needs the project's glossary (project.json `glossary`, or glossary.json): "
                                    "the list is what the method says this phase measures, for the channels the "
                                    "project has -- with no glossary there is nothing to derive it from")
-            if kind != "series":
+            if kind == "ledger":
                 raise ProcessError("--plan builds titles from a SERIES number (`capture-start 55 --plan`); a ledger "
                                    "version names no `_N` (naming-and-structure.md §3)")
+            if kind != "series":
+                # `final` is the closing round's label, not a ledger version (#147, item 1): said as the one it is,
+                # with the way its round is opened -- by its titles.
+                if str(version).strip() == "final":
+                    raise ProcessError("--plan builds titles from a SERIES number (`capture-start 55 --plan`); "
+                                       "`final` is the closing round's label — start it with its titles "
+                                       "(`capture-start final \"<title>\" …`, phase_3_control.md:35)")
+                raise ProcessError(f"--plan builds titles from a SERIES number (`capture-start 55 --plan`); "
+                                   f"{str(version).strip()!r} is neither a series number nor a ledger version")
             if phase_key is None:
                 raise ProcessError("--plan needs the phase the round measures for: `enter-phase <N>` first, or "
                                    "`--phase <N>`")
@@ -5492,6 +5501,39 @@ def _check_refused_capture_writes_nothing():
     assert not failures, f"{len(failures)} refused capture verb(s) wrote:\n  " + "\n  ".join(failures)
 
 
+def _check_plan_over_final_says_its_label():
+    """`capture-start final --plan` is refused with `final`'s own reason (#147, item 1): `final` is the closing round's
+    label, opened with its titles (`phase_3_control.md`), and the refusal said "a ledger version names no `_N`" -- a
+    ledger version nobody typed. A ledger version keeps that sentence. Exit 1, nothing written, either way."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_process_plan_final_")
+    failures = []
+    final_said = ("--plan builds titles from a SERIES number (`capture-start 55 --plan`); `final` is the closing "
+                  "round's label — start it with its titles (`capture-start final \"<title>\" …`, "
+                  "phase_3_control.md:35)")
+    try:
+        root = tempfile.mkdtemp(dir=top)
+        _seed_intake(root)
+        d = os.path.join(root, "process")
+        Process(d).enter_phase("-1")
+        for argv, said, never in (
+                (["capture-start", "final", "--plan", "--phase", "3"], final_said, "a ledger version"),
+                (["capture-start", "v_001", "--plan", "--phase", "3"],
+                 "--plan builds titles from a SERIES number (`capture-start 55 --plan`); a ledger version names no "
+                 "`_N` (naming-and-structure.md §3)", "closing round")):
+            before = _project_bytes(d)
+            rc, out, err = _run_main(["process.py", d, *argv])
+            text = (err or out).strip()
+            if rc != EXIT_NO or said not in text or never in text:
+                failures.append(f"{' '.join(argv)}: rc {rc}, said {text[-260:]!r}")
+            if _project_bytes(d) != before:
+                failures.append(f"{' '.join(argv)}: refused, and wrote")
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["--plan over a version that is no series:"] + failures)
+
+
 def _check_import_of_a_whole_series():
     """`capture-import <N>` with no titles imports what REW holds of series N and this project has not on record
     (#134, R47a). REW holding nothing of series N is exit 1, `REW holds no measurement of series _N; nothing was
@@ -8064,6 +8106,7 @@ def _selftest():
                   _check_every_writer_refuses_unreadable, _check_write_guard_catches_damage_after_the_read,
                   _check_writers_read_strictly, _check_gates_refuse_unreadable, _check_newer_state_refused,
                   _check_exit_table, _check_typed_values_refused, _check_refused_capture_writes_nothing,
+                  _check_plan_over_final_says_its_label,
                   _check_import_of_a_whole_series, _check_catch_all_reads_the_type, _check_unknown_flags,
                   _check_flags_tcc_sends,
                   _check_flag_values_as_they_stand, _check_autocorrected_dashes, _check_too_few_arguments,
