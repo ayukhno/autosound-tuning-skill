@@ -89,9 +89,9 @@ Rules:
 17. **`skill-budget`** (#145, audit I-3, I-4). After a context summary Claude Code re-attaches the first 5,000 tokens
     of a skill; its listing shows 1,536 characters of the description, and the Agent Skills spec allows 1,024. So the
     description folds to at most 1,024 characters, the Reference Map is SKILL.md's last `##` section with at most
-    17,500 bytes before it, and every rule of the manifest `SKILL_RULE_PHRASES` stands before it. A rule moved out of
-    SKILL.md leaves the manifest in the same commit, and that commit names where it went. Red in the tree by design
-    until SKILL.md is cut (`RED_IN_TREE`).
+    17,500 bytes before it, and every rule of the manifest `SKILL_RULE_PHRASES` stands before it, in the body (a phrase
+    only the description carries is not the rule). A rule moved out of SKILL.md leaves the manifest in the same commit,
+    and that commit names where it went. Red in the tree by design until SKILL.md is cut (`RED_IN_TREE`).
 
 Rules 9-12 and 15-17 read a phrase as a reader does (`_phrase`): across a wrapped line and inline markup, its first
 letter in either case (a sentence's head, a clause's middle) and the rest in the case it is given, as whole words.
@@ -1133,7 +1133,9 @@ def rule_skill_budget(root: str) -> list[str]:
     (a) the description folds to at most 1,024 characters, the Agent Skills limit, counted as its validator counts
     (skills-ref: the value as YAML gives it, a `>` block's last line break included -- `>-` drops it);
     (b) the Reference Map is the last `##` section; (c) at most 17,500 bytes come before it; (d) every rule of the
-    manifest, `SKILL_RULE_PHRASES`, stands before it. A heading inside a fenced block is not a section.
+    manifest, `SKILL_RULE_PHRASES`, stands before it in the body -- the frontmatter is not read for them, so a phrase
+    the description carries does not stand for a rule cut from the body. A heading inside a fenced block is not a
+    section.
     """
     path = os.path.join(root, SKILL_MD)
     if not os.path.isfile(path):
@@ -1168,10 +1170,15 @@ def rule_skill_budget(root: str) -> list[str]:
             bad.append(f"{SKILL_MD}: {size:,} bytes before the {SKILL_MAP}, over {SKILL_BEFORE_MAP_MAX:,} — Claude "
                        f"Code re-attaches the first 5,000 tokens of a skill after a context summary and drops the "
                        f"rest (#145, I-3)")
+    # The manifest is read in the body: a phrase the description happens to carry is not the rule (W-9's R53).
+    front = _FRONTMATTER.match(text)
+    head, body = (text[:front.end()], before[front.end():]) if front else ("", before)
     for rule in SKILL_RULE_PHRASES:
-        if _phrase(rule).search(before):
+        if _phrase(rule).search(body):
             continue
-        where = f"stands after the {SKILL_MAP}" if _phrase(rule).search(after) else "is nowhere in the file"
+        where = (f"stands after the {SKILL_MAP}" if _phrase(rule).search(after)
+                 else "stands only in the frontmatter, which is not the rule" if _phrase(rule).search(head)
+                 else "is nowhere in the file")
         bad.append(f"{SKILL_MD}: the rule '{rule}' {where} — every rule of SKILL_RULE_PHRASES stands before the Map; "
                    f"a rule moved out of SKILL.md leaves the list in the same commit, which names where it went")
     return bad
@@ -1822,6 +1829,22 @@ def _check_skill_budget_crlf():
         assert rule_skill_budget(root) == [], rule_skill_budget(root)
 
 
+def _check_skill_budget_rules_after_frontmatter():
+    """Rule 17 (W-9's R53): the manifest is read in the body before the Map, never in the frontmatter -- a phrase that
+    survives only in the description, while the rule itself was cut from the body, is named; the same phrase in the
+    description AND in the body passes."""
+    rule = "Descend THE ladder"
+    rules = [p for p in SKILL_RULE_PHRASES if p != rule]
+    with _scratch() as tmp:
+        only_described = rule_skill_budget(_budget_tree(tmp, _budget_skill_md(
+            f"Tune a car audio DSP; {rule} when no reviewer answers.", rules=rules)))
+        assert len(only_described) == 1 and f"'{rule}'" in only_described[0], only_described
+        assert "only in the frontmatter" in only_described[0], only_described
+        both = rule_skill_budget(_budget_tree(tmp, _budget_skill_md(
+            f"Tune a car audio DSP; {rule} when no reviewer answers.")))
+        assert both == [], both
+
+
 def _check_skill_budget_inputs():
     """Rule 17: a check whose input is missing fails -- no SKILL.md, no frontmatter or no description, no Map (the
     rules then read in the whole file, so a rule gone is still named)."""
@@ -2036,7 +2059,7 @@ def _selftest() -> int:
                       _check_step_ids_unnamed_step_says_whose_word, _check_no_capture_start_literal,
                       _check_slot_names, _check_reviewer_at_desk, _check_skill_budget,
                       _check_skill_budget_clip_newline, _check_skill_budget_crlf, _check_skill_budget_inputs,
-                      _check_skill_budget_description_folds):
+                      _check_skill_budget_description_folds, _check_skill_budget_rules_after_frontmatter):
             try:
                 check()
             except AssertionError as exc:
@@ -2085,7 +2108,8 @@ def _selftest() -> int:
           "REW's 'EQ slot' and the rule's own quoted wrong forms are not; a Review Channel or a review-loop.md that "
           "does not say the reviewer is called at the desk by default, and either gone, are named; a SKILL.md one "
           "over its budget -- a description of 1,025 characters, 17,501 bytes before the Map, a section after the "
-          "Map, a rule of the manifest gone or under the Map -- and one with no SKILL.md, no description or no Map "
+          "Map, a rule of the manifest gone, under the Map or only in the description -- and one with no SKILL.md, no "
+          "description or no Map "
           "are named, while one at 1,024 characters and 17,500 bytes passes, its description read as YAML folds it "
           "(a `>` block's last line break counted, as the Agent Skills validator counts it) and a CRLF checkout "
           "measured as its LF text; "
