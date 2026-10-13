@@ -284,6 +284,10 @@ class Glossary:
                     data = json.load(f) or {}
             except (OSError, ValueError):
                 data = {}
+            if not isinstance(data, dict):
+                # Valid JSON and no object -- an array, a string, a number -- is no glossary, as one it cannot read
+                # (#147, item 7): `data.get` raised `AttributeError` out of TCC's read of a screen.
+                data = {}
             glossary = cls.load(standalone) if os.path.isfile(standalone) else cls(data.get("glossary") or {})
         glossary.follow_project_channels(data.get("channels") or [])
         return glossary
@@ -892,6 +896,37 @@ def _check_bom_glossary_read():
         shutil.rmtree(d, ignore_errors=True)
 
 
+def _check_lenient_read_of_a_project_json_not_an_object():
+    """The lenient `Glossary.for_project` over a `project.json` that is valid JSON and not an object -- an array, a
+    string, a number -- is no glossary, as one it cannot read (#147, item 7): `data.get` raised `AttributeError`, out of
+    TCC's read of a screen. A `glossary.json` beside it is still the glossary."""
+    import shutil
+    import tempfile
+    d = tempfile.mkdtemp(prefix="autosound_naming_not_object_")
+    failures = []
+    try:
+        for raw in ("[1, 2]", '"text"', "42", "null"):
+            with open(os.path.join(d, "project.json"), "w", encoding="utf-8") as fh:
+                fh.write(raw)
+            for label, standalone in (("alone", None), ("beside a glossary.json", {"channels": [{"code": "w-L"}]})):
+                path = os.path.join(d, "glossary.json")
+                if standalone is None:
+                    if os.path.exists(path):
+                        os.remove(path)
+                else:
+                    with open(path, "w", encoding="utf-8") as fh:
+                        json.dump(standalone, fh)
+                try:
+                    got = Glossary.for_project(d).channel_codes()
+                except Exception as exc:  # noqa: BLE001 -- the failure under test
+                    got = f"raised {type(exc).__name__}: {exc}"
+                if got != ([] if standalone is None else ["w-L"]):
+                    failures.append(f"project.json {raw} {label}: {got}")
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+    assert not failures, "\n  ".join(["the lenient read over a project.json that is no object:"] + failures)
+
+
 def _check_for_project_strict():
     """`Glossary.for_project(project_dir, strict=True)` -- the method's own readers' -- refuses a file it cannot read
     (#134, batch 4's re-review, Out of Scope 6): a `glossary.json` or a `project.json` that is there and cannot be read
@@ -1102,7 +1137,7 @@ def _selftest():
     failures = []
     for check in (_check_productions, _check_bom_glossary_read, _check_for_project_strict,
                   _check_cli_reads_the_glossary_strictly, _check_dangling_glossary_link,
-                  _check_dangling_link_repair_fits):
+                  _check_dangling_link_repair_fits, _check_lenient_read_of_a_project_json_not_an_object):
         try:
             check()
         except AssertionError as exc:
