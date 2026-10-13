@@ -911,14 +911,21 @@ def _choice(f, value, ui, cls="", key=""):
 LOCKED_ONCE_SET = {"goal.reference_seat": "seat_locked"}
 
 
+def _unread_html(f, ui):
+    """The line a question carries when its home is there and cannot be read: the file, why and its repair."""
+    if not f.get("unreadable"):
+        return ""
+    return f'<div class="meta gate-shut">{_esc(ui.get("unreadable", "Not read:"))} {_esc(f["unreadable"])}</div>'
+
+
 def _field_html(f, ui):
     """One question as a UNIT the page's single Save reads: its control, and what it started as."""
     mark = (f' <span class="meta">({_esc(ui.get("required", "required"))})</span>'
             if f["required"] and f["place"] == "now" else "")
     writes = f["writes"] or ""
-    # Its home is there and cannot be read (#147, item 5): said on the question, the file, why and its repair.
-    unread = (f'<div class="meta gate-shut">{_esc(ui.get("unreadable", "Not read:"))} {_esc(f["unreadable"])}</div>'
-              if f.get("unreadable") else "")
+    # Its home is there and cannot be read (#147, item 5): said on the question, the file, why and its repair -- on
+    # every kind of question (group fix 1, item 2): a `project.json` that cannot be read is the home of most of them.
+    unread = _unread_html(f, ui)
     if writes.startswith("glossary:") or writes.startswith("dsp_profile.draft:") or f["per"] or not writes:
         note = ui.get("glossary_note", "") if writes.startswith("glossary:") else ""
         return (f'<div class="f s-{f["state"]}" id="f-{_esc(f["id"])}">'
@@ -932,7 +939,7 @@ def _field_html(f, ui):
                 f'<div class="q"><span class="dot d-have"></span>{_esc(f["ask"])}</div>'
                 f'<div class="row"><b>{_esc(label)}</b> <span class="lock">· {_esc(ui.get("fixed", "fixed"))}</span></div>'
                 f'<div class="meta">{_esc(ui.get(LOCKED_ONCE_SET[f["id"]], ""))}</div>'
-                f'<div class="meta howto">{_esc(ui.get("seat_howto", ""))}</div></div>')
+                f'<div class="meta howto">{_esc(ui.get("seat_howto", ""))}</div>{unread}</div>')
     # `data-orig` is what is ON DISK, not what is shown: a pre-filled value that is not stored yet
     # is a change like any other, and Save writes it (round 5 -- no confirm ticks).
     unit_id = ' id="tiers-unit"' if f["id"] == "dsp.tiers_used" else ""
@@ -950,7 +957,7 @@ def _field_html(f, ui):
             f"data-orig='{_esc(_orig(f['value']))}'{unit_id}>"
             f'<span id="f-{_esc(f["id"])}"></span>'
             f'<div class="q"><span class="dot d-{f["state"]}"></span>{_esc(f["ask"])}{mark}</div>'
-            f'{control}</div>')
+            f'{control}{unread}</div>')
 
 
 #: The page's own refusals (round 6), in English for a language whose file lacks them.
@@ -1002,7 +1009,8 @@ def _car_block(m, fields):
         orig[key] = value.strip() or None
         inputs.append(f'<div class="f s-{f["state"]}" id="f-{_esc(fid)}"><div class="q">'
                       f'<span class="dot d-{f["state"]}"></span>{_esc(f["ask"])}</div>'
-                      f'<div class="row">{_choice(f, value, ui, cls="car-part", key=key)}</div></div>')
+                      f'<div class="row">{_choice(f, value, ui, cls="car-part", key=key)}</div>'
+                      f'{_unread_html(f, ui)}</div>')
     couple = m["couplings"].get("car_identity", {})
     return (f"<div class=\"couple unit\" data-kind=\"car\" data-orig='{_esc(json.dumps(orig))}'>"
             f'<div class="t">{_esc(couple.get("title", "car"))}</div>{pick}' + "".join(inputs) + "</div>")
@@ -1896,6 +1904,35 @@ def _check_unreadable_glossary_field_said():
         shutil.rmtree(root, ignore_errors=True)
 
 
+def _check_unreadable_project_said_on_each_question():
+    """A `project.json` that cannot be read is said on every question it is the home of (group fix 1, item 2):
+    `intake.missing` put each `project:` field in `unreadable`, and `_field_html` showed the file, why and its repair
+    only on the glossary's kind of question -- a question with a control (the car's parts, the processor, the seat)
+    was drawn as unanswered, its reason nowhere on it."""
+    import shutil
+    import tempfile
+    root = tempfile.mkdtemp(prefix="autosound_form_project_field_")
+    try:
+        project.Project(root).save({"schema_version": project.SCHEMA_VERSION, "car": {"make": "VW", "model": "Passat"},
+                                    "channels": [{"code": "w-L", "tier": "channels"}]})
+        path = os.path.join(root, "project.json")
+        with open(path, "rb") as fh:
+            raw = fh.read()
+        with open(path, "wb") as fh:
+            fh.write(raw[: len(raw) // 2])
+        m = model(root, "uk")
+        homes = [f for f in m["fields"] if (f["writes"] or "").startswith("project:")]
+        unsaid = [f["id"] for f in homes
+                  if f["state"] != UNREAD or not str(f.get("unreadable") or "").startswith(f"{path} ")
+                  or _esc(f["unreadable"]) not in _field_html(f, m["ui"])]
+        assert homes and not unsaid, unsaid
+        car = _car_block(m, m["fields"])
+        assert car.count(_esc(homes[0]["unreadable"])) == sum(1 for _, fid in CAR_PARTS
+                                                              if any(f["id"] == fid for f in m["fields"])), car[:400]
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def _own_tempdir(selftest):
     """`selftest` run with tempfile's folder -- and TMPDIR, for the children it starts -- set to one folder of its own,
     removed with everything in it when the selftest ends, passed or failed, both put back (#148): a check that forgets
@@ -1931,7 +1968,7 @@ def _selftest():
     failures = []
     for check in (_check_unreadable_profile_shown_and_refused, _check_unreadable_gate_file_named,
                   _check_save_answers_under_a_held_lock, _check_an_answer_holds_once, _check_a_busy_batch_waits_once,
-                  _check_unreadable_glossary_field_said):
+                  _check_unreadable_glossary_field_said, _check_unreadable_project_said_on_each_question):
         try:
             check()
         except Exception as exc:  # noqa: BLE001 -- a check that raises is reported by name, like one that fails

@@ -1467,6 +1467,21 @@ def _read_project(project_dir):
         return None
 
 
+def _read_project_strictly(project_dir):
+    """`(facts, None)` -- `project.json`'s object, None when there is none -- or `(None, issue)`: the file is there and
+    cannot be read, and `issue` names it, why and the repair (`project_io.read_json`, as the glossary's strict read
+    names it). A UTF-8 BOM is read."""
+    import project_io
+    path = os.path.join(project_dir, "project.json")
+    try:
+        return project_io.read_json(path, None, repair=project_io.restore_line(path),
+                                    repair_encoding=project_io.reencode_line(project_dir)), None
+    except Exception as exc:  # noqa: BLE001 -- matched by its attribute; anything else still raises
+        if not getattr(type(exc), "is_unreadable", False):
+            raise
+        return None, str(exc)
+
+
 def _dig(data, dotted):
     node = data
     for part in dotted.split("."):
@@ -1520,11 +1535,18 @@ def missing(project_dir):
     A fourth, `unreadable`, holds a field whose home is there and cannot be read (#147, item 5), each row with its
     `issue` -- the file, why and the repair. It is not missing: the answer may be in that file, and asking it again
     would write past it.
+
+    `project.json` is read once, strictly (group fix 1, item 2): one that is there and cannot be read puts every
+    `project:` field in `unreadable`, with that file's issue. Read leniently, a cut one was no project, and the car's
+    make and model, the channel map's code and tier were asked again over a file that holds them.
     """
-    data = _read_project(project_dir)
+    data, unread = _read_project_strictly(project_dir)
     out = {"project_dir": project_dir, "answered": [], "missing": [], "not_machine_readable": [], "unreadable": []}
     for f in FIELDS:
-        state = _answered(f, data, project_dir)
+        if unread is not None and (f["writes"] or "").startswith("project:"):
+            state = {"unreadable": unread}
+        else:
+            state = _answered(f, data, project_dir)
         row = {"id": f["id"], "group": f["group"], "required": f["required"],
                "ask": f["ask"], "enum": f["enum"], "lands": f["lands"] or f["writes"],
                "when": f["when"], "default": f["default"], "derive": f["derive"]}
@@ -1935,6 +1957,47 @@ def _check_an_unreadable_glossary_is_not_unanswered():
         shutil.rmtree(top, ignore_errors=True)
 
 
+def _check_an_unreadable_project_is_not_unanswered():
+    """`missing` tells a `project.json` that cannot be read from one that holds no answers (group fix 1, item 2): read
+    leniently, a cut one was no project, and every `project:` field went to `missing` -- the car's make and model, the
+    channel map's code and tier asked again over a file that holds them, `intake.py missing` exit 0. Now each
+    `project:` field is in `unreadable`, with the file, why and its repair, and out of `missing` and
+    `required_missing*`; the command line says each, `! <id> cannot be read: <file> ...`."""
+    import contextlib
+    import io
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_intake_project_unreadable_")
+    try:
+        project.Project(top).save({"schema_version": project.SCHEMA_VERSION, "car": {"make": "VW", "model": "Passat"},
+                                   "channels": [{"code": "w-L", "tier": "channels"}]})
+        whole = missing(top)
+        assert {"car.make", "car.model", "channel_map.code"} <= {r["id"] for r in whole["answered"]}, whole["answered"]
+        path = os.path.join(top, "project.json")
+        with open(path, "rb") as fh:
+            raw = fh.read()
+        with open(path, "wb") as fh:
+            fh.write(raw[: len(raw) // 2])
+        got = missing(top)
+        homes = [f["id"] for f in FIELDS if (f["writes"] or "").startswith("project:")]
+        rows = {r["id"]: r for r in got["unreadable"]}
+        stray = [fid for fid in homes if fid not in rows]
+        asked = [fid for fid in homes if fid in {r["id"] for r in got["missing"]} or fid in got["required_missing"]
+                 or fid in got["required_missing_now"]]
+        wrong = [fid for fid in homes if fid in rows and not (rows[fid]["issue"].startswith(f"{path} ")
+                                                              and "checkout HEAD -- project.json" in rows[fid]["issue"])]
+        assert not stray and not asked and not wrong, (stray, asked, wrong)
+        assert len(got["required_missing"]) < len(whole["required_missing"]), (got["required_missing"],
+                                                                                whole["required_missing"])
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            code = _main(["missing", top])
+        said = out.getvalue()
+        assert f"  ! {'car.make':<34} cannot be read: {path} " in said and "  * car.make " not in said, (code, said)
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
 def _check_gate_shut_over_an_unreadable_file():
     """`gate_requirements` keeps the gate shut while a gate file is there and cannot be read, and names it (#134, batch
     4's re-review N4 / Out of Scope 4): `gate_open` was "no file missing", so a `project.json` cut off opened the gate
@@ -2260,7 +2323,7 @@ def _selftest():
 
     failures = []
     for check in (_check_change_dsp_sets_an_unreadable_profile_aside, _check_gate_shut_over_an_unreadable_file,
-                  _check_an_unreadable_glossary_is_not_unanswered,
+                  _check_an_unreadable_glossary_is_not_unanswered, _check_an_unreadable_project_is_not_unanswered,
                   _check_set_car_waits_for_the_lock, _check_a_bad_timeout_is_a_usage_error,
                   _check_composite_writers_hold_once, _check_save_controls_holds_once,
                   _check_save_new_dsp_holds_once, _check_a_missing_project_makes_nothing,
