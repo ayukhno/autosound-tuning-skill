@@ -448,14 +448,16 @@ def sheet_rate(project_dir, snapshot_rate):
             return rate, (f"processing rate: {rate:g} Hz, the profile's (samples derived; ms is canonical)"
                           + (f" — the snapshot recorded {snapshot_rate:g}; samples follow the PROFILE rate"
                              if rate != snapshot_rate else ""))
-        why = "the project's profile states none"
+        # The cause said as it is (group fix 1, item 12): no profile at all is not a profile that states none.
+        why = ("the project's profile states none" if os.path.lexists(os.path.join(project_dir, "dsp_profile.json"))
+               else "the project has no dsp_profile.json")
     else:
         why = "no project given"
     return snapshot_rate, (f"processing rate: {snapshot_rate:g} Hz, the snapshot's -- {why} (samples derived; ms is "
                            f"canonical)")
 
 
-def write_delta(history, diff, rate, version, note=None, advisories=(), rate_said=None):
+def write_delta(history, diff, rate, version, note=None, advisories=(), rate_said=None, unwritten=None):
     """Bank the change beside the snapshot: `proposals/<v_NNN>.json` (SCR-026), under the preset
     on the old layout and under `state/` on the per-project line (W-2 R).
 
@@ -467,6 +469,8 @@ def write_delta(history, diff, rate, version, note=None, advisories=(), rate_sai
     Best effort by design: a proposal that is banked but whose delta file could not be written must
     not fail the proposal. The snapshot is the source of truth; this is a view. `rate` and `rate_said` are
     `sheet_rate`'s: the rate the rows' samples are for, None when none was read, and the line that says which.
+    `unwritten`, a list, gets the line that says a file that could not be written, and why (group fix 1, item 6):
+    `propose` puts it on the sheet -- TCC reads this file, and it went missing with nothing said.
     """
     out = {
         "schema_version": _state.SCHEMA_VERSION,
@@ -488,7 +492,11 @@ def write_delta(history, diff, rate, version, note=None, advisories=(), rate_sai
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w", encoding="utf-8") as f:
             json.dump(out, f, ensure_ascii=False, indent=2)
-    except OSError:
+    except OSError as exc:
+        if unwritten is not None:
+            repair = _state._project_io().repair_for(exc, writing=True)
+            unwritten.append(f"⚠️ {path} was not written ({exc.strerror or exc}) -- the version is banked; the change "
+                             f"file beside it is not: {repair}")
         return None
     return path
 
@@ -560,7 +568,11 @@ def _propose(history, delta, note, provenance, registry, allow_nonactive, eviden
                                place=not candidate)   # validates again + versions
     sheet = settings_sheet({**d, "to": version}, rate, history.preset, version, slot_note=slot_note,
                            rate_said=rate_said)
-    write_delta(history, {**d, "to": version}, rate, version, note=note, advisories=adv, rate_said=rate_said)
+    unwritten = []
+    write_delta(history, {**d, "to": version}, rate, version, note=note, advisories=adv, rate_said=rate_said,
+                unwritten=unwritten)
+    if unwritten:
+        sheet += "\n\n" + "\n".join(unwritten)
     if adv:
         sheet += "\n\n⚠️ **Advisories (double-check, not blocking):**\n" + "\n".join("- " + a for a in adv)
     if candidate:
@@ -853,6 +865,74 @@ def _check_sheet_samples_follow_the_profile():
     assert not failures, "\n  ".join(["the sheet's samples:"] + failures)
 
 
+def _check_an_unwritten_delta_is_said():
+    """A `proposals/<v>.json` that could not be written is said on the sheet, the file and why (group fix 1, item 6):
+    `write_delta` answered None and `propose` dropped it, so the file TCC reads -- with `processing_rate_hz` in it now
+    -- could be missing with nothing said. The version is banked either way: the snapshot is the record. A file stands
+    where the proposals' folder belongs, which no `makedirs` can make a folder of."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_apply_unwritten_delta_")
+    try:
+        h = _state.PresetHistory(os.path.join(top, "state"), "SQ", project_dir=top)
+        h.snapshot(_state._sample_state(), note="baseline")
+        folder = getattr(h, "proposals_dir", os.path.join(h.dir, "proposals"))
+        os.makedirs(os.path.dirname(folder), exist_ok=True)
+        with open(folder, "w", encoding="utf-8") as fh:
+            fh.write("a file where the folder belongs\n")
+        r = propose(h, {"w-L": {"gain_db": -7.5}}, note="a trim")
+        path = os.path.join(folder, f"{r['version']}.json")
+        said = [line for line in r["sheet"].splitlines() if path in line]
+        assert r["version"] == "v_002" and h.head() == "v_002", (r["version"], h.head())
+        assert len(said) == 1 and "was not written (" in said[0], r["sheet"][-600:]
+        with open(r["sheet_path"], encoding="utf-8") as fh:
+            assert path in fh.read(), "the sheet's file does not say it"
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_the_sheet_rate_is_read_first_and_said_by_cause():
+    """`sheet_rate` is read before the bank (`a42c473`), and says the cause of the snapshot's rate (group fix 1, item
+    12). A rate read that fails with what is no refusal of the profile's -- a stand-in `processing_rate` raising
+    `RuntimeError` -- raises out of `propose`, and the version list is as it was: nothing banked with no sheet. A
+    profile that states no rate says so; no `dsp_profile.json` at all says there is none -- it said "the project's
+    profile states none", a profile nobody wrote."""
+    import shutil
+    import tempfile
+    failures = []
+    real = _state.processing_rate
+    top = tempfile.mkdtemp(prefix="autosound_apply_rate_first_")
+    try:
+        h = _state.PresetHistory(os.path.join(top, "state"), "SQ", project_dir=top)
+        h.snapshot(_state._sample_state(), note="baseline")
+        before = h.versions()
+
+        def broken(project_dir):
+            raise RuntimeError("a rate read that broke")
+        _state.processing_rate = broken
+        try:
+            propose(h, {"w-L": {"ta_ms": 5.45}}, note="w-L delay")
+            failures.append("a broken rate read banked")
+        except RuntimeError:
+            pass
+        finally:
+            _state.processing_rate = real
+        if h.versions() != before:
+            failures.append(f"versions {before} became {h.versions()}")
+        r = propose(h, {"w-L": {"ta_ms": 5.45}}, note="no profile")
+        if "processing rate: 96000 Hz, the snapshot's -- the project has no dsp_profile.json" not in r["sheet"]:
+            failures.append(f"no profile: the sheet said {r['sheet'][:400]!r}")
+        with open(os.path.join(top, "dsp_profile.json"), "w", encoding="utf-8") as fh:
+            json.dump({"dsp_profile": {}}, fh)
+        r = propose(h, {"w-L": {"ta_ms": 5.5}}, note="a profile with no rate")
+        if "processing rate: 96000 Hz, the snapshot's -- the project's profile states none" not in r["sheet"]:
+            failures.append(f"a profile with no rate: the sheet said {r['sheet'][:400]!r}")
+    finally:
+        _state.processing_rate = real
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["the sheet's rate:"] + failures)
+
+
 def _check_no_load_and_save_outside_update():
     """No function here loads `project.json` and saves it itself (#141, J2b): a writer of the project's facts goes
     through `Project.update`, which holds the lock across the read and the write (`project._load_and_save_paths`)."""
@@ -896,7 +976,8 @@ def _selftest():
     for check in (_check_cli_refuses_unreadable, _check_gain_grid_says_an_unreadable_profile,
                   _check_a_held_lock_answers_75, _check_one_hold_over_the_bank,
                   _check_a_missing_project_makes_nothing, _check_a_bad_timeout_is_a_usage_error,
-                  _check_no_load_and_save_outside_update, _check_sheet_samples_follow_the_profile):
+                  _check_no_load_and_save_outside_update, _check_sheet_samples_follow_the_profile,
+                  _check_an_unwritten_delta_is_said, _check_the_sheet_rate_is_read_first_and_said_by_cause):
         try:
             check()
         except AssertionError as exc:
