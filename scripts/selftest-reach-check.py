@@ -100,10 +100,46 @@ def check(root=ROOT):
             if name not in reads.reads:
                 problems.append(f"{rel}:{line}: {name}() is defined and nothing in its module calls it -- a check "
                                 f"that never runs passes for ever: put it in its _selftest()'s loop, or delete it")
+    # A floor (group fix 1, item 17): a run that read no file, or no check, looked at nothing, and passed.
+    if not files:
+        problems.append(f"no .py file read under {' or '.join(s + '/' for s in SCAN)} in {root} -- a check that "
+                        f"reads nothing passes for ever: run it in the repository")
+    elif not checks:
+        problems.append(f"no _check_* read in {len(files)} file(s) under {' or '.join(s + '/' for s in SCAN)} -- the "
+                        f"selftests' checks are not where this looks: nothing it could pass was read")
     return problems, checks, len(files)
 
 
+def _check_nothing_read_is_no_pass():
+    """A tree where it reads no file, or no `_check_*`, is a complaint, not the OK line (group fix 1, item 17): run
+    from somewhere else, or over a tree whose checks were renamed away, it said "each of the 0 _check_* functions in 0
+    files ... is called by its module" -- a pass for a check that looked at nothing."""
+    import shutil
+    import tempfile
+    root = tempfile.mkdtemp(prefix="selftest_reach_floor_")
+    try:
+        problems, checks, files = check(root)
+        assert (checks, files) == (0, 0) and len(problems) == 1 and problems[0].startswith("no .py file read under "), \
+            problems
+        path = os.path.join(root, *SCAN[1].split("/"), "plain.py")
+        os.makedirs(os.path.dirname(path))
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("def helper():\n    return 1\n")
+        problems, checks, files = check(root)
+        assert (checks, files) == (0, 1) and len(problems) == 1 and problems[0].startswith("no _check_* read in 1 "), \
+            problems
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def _selftest():
+    failures = []
+    for check_ in (_check_nothing_read_is_no_pass,):
+        try:
+            check_()
+        except AssertionError as exc:
+            failures.append(f"{check_.__name__}: {exc}")
+    assert not failures, "\n".join(failures)
     import shutil
     import tempfile
     root = tempfile.mkdtemp(prefix="selftest_reach_")
