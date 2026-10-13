@@ -75,6 +75,8 @@ NOT_ON_BOARD = {
                      "deleted by a tidy-up (HUB-029). Repo hygiene, not a decision a tuner makes",
     "reading-cost.py": "what a session reads per phase, in tokens, held to its baseline (skill #145): a "
                        "maintainer's check, not a tuner's step",
+    "move-check.py": "every sentence that left SKILL.md between two commits is in a file of the skill or dropped "
+                     "by name in a commit message (skill #145): a maintainer's check, not a tuner's step",
     "i18n-check.py": "the checker that keeps README/FAQ from diverging between their four "
                      "languages silently (HUB-044). Repo hygiene, not a decision a tuner makes",
     "html-data-check.py": "the checker that keeps a dropped file's name from becoming markup "

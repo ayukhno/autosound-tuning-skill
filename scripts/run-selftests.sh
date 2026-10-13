@@ -250,6 +250,9 @@ if [ -z "${SELFTEST_ONLY_TOOL:-}" ]; then
   # to scripts/reading-cost-baseline.json: a phase that reads more fails; a growth that is meant writes a new baseline.
   run_one "reading-cost"    ok scripts/reading-cost.py --selftest
   run_one "reading-cost-in-tree" ok scripts/reading-cost.py --check
+  # #145: a sentence that leaves SKILL.md goes to a file of the skill or is dropped by name in a commit message. The
+  # check's own mechanics in a throwaway git repository; the range itself is run by the review (`<base> HEAD`).
+  run_one "move-check"      ok scripts/move-check.py --selftest
   # The trigger runs' harness: the init skill-list check (this skill in, a hidden one out) and the arguments handed to
   # every `claude -p`, against a stand-in claude on PATH, offline. The real runs spend an account's usage and are run
   # by hand (skills/autosound-tuning/evals/README.md).
