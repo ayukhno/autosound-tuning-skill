@@ -13,9 +13,10 @@ symlink or installed plugin). Tests the LIVE description.
 
 Every run checks the skill list in `claude -p`'s init event: `--skill-name` must be in it (a run that cannot see the
 skill measures nothing -- the old false 0%), and each `--absent` skill must not be (another skill on the same subject
-competes for the same queries). A run that fails either, ends in an error result (a model that is not there) or could
-not start is void: it is named, the rest are cancelled, no score is printed, and the runner exits 1. `--settings` and
-`--no-session-persistence` are handed to every `claude -p`; e.g. hide a synced skill with
+competes for the same queries). A run that fails either, ends in an error result (a model that is not there), ends --
+or is cut off at `--timeout` -- without a result event (the problem carries the last lines `claude -p` wrote to
+stderr), or could not start is void: it is named, the rest are cancelled, no score is printed, and the runner exits
+1. `--settings` and `--no-session-persistence` are handed to every `claude -p`; e.g. hide a synced skill with
 `--settings '{"skillOverrides":{"rew-car-audio-tuning":"off"}}' --absent rew-car-audio-tuning` (#145).
 `--selftest` runs the mechanics against a stand-in `claude` on PATH, offline.
 """
@@ -59,30 +60,51 @@ def init_check(event: dict, skill_name: str, absent=()) -> tuple:
                                            "model": event.get("model")}
 
 
+#: How many of the last lines `claude -p` wrote to stderr a problem carries.
+STDERR_LINES = 5
+
+
 def run_one(query: str, skill_name: str, model: str, timeout: int, settings=None, no_persist=False,
             absent=()) -> dict:
-    """{"triggered", "problem", "init"} for one query. A problem with the init skill list ends the run at once."""
+    """{"triggered", "problem", "init"} for one query. A problem with the init skill list ends the run at once. A run
+    that ends -- or that `timeout` cuts off -- without a result event measured nothing: a problem too, carrying the
+    last lines `claude -p` wrote to stderr, never a "not triggered" (#148)."""
+    import tempfile
     cmd = claude_argv(query, model, settings, no_persist)
     env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
-    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, env=env)
+    err = tempfile.TemporaryFile()                       # its stderr: a file, so no pipe fills while it runs
+    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=err, env=env)
     buf = ""
     pending = False   # inside a Skill tool_use block
     acc = ""
     init = None       # what the init event's skill list held, once it is read
     start = time.time()
 
+    def said() -> str:
+        """`; its stderr: <its last lines>` -- what claude -p said of why it stopped -- or that it said nothing."""
+        try:
+            err.seek(0)
+            lines = [ln.strip() for ln in err.read().decode("utf-8", "replace").splitlines() if ln.strip()]
+        except OSError as exc:
+            return f"; its stderr could not be read ({exc})"
+        return f"; its stderr: {' | '.join(lines[-STDERR_LINES:])[-600:]}" if lines else "; it wrote nothing to stderr"
+
     def done(triggered: bool, problem=None) -> dict:
         if init is None and problem is None:             # what was seen without the list is not a result
-            triggered, problem = False, "no init event from claude -p (it ended or timed out before one)"
+            triggered, problem = False, "no init event from claude -p (it ended or timed out before one)" + said()
         return {"triggered": triggered, "problem": problem, "init": init}
 
     try:
+        ended = False     # it has exited, and everything it wrote is in `buf`
         while time.time() - start < timeout:
             if p.poll() is not None:
-                rem = p.stdout.read()
+                rem = p.stdout.read()                    # to the end: nothing it wrote is left in the pipe
                 if rem:
                     buf += rem.decode("utf-8", "replace")
-            r, _, _ = select.select([p.stdout], [], [], 1.0) if p.poll() is None else ([p.stdout], [], [])
+                if buf and not buf.endswith("\n"):
+                    buf += "\n"                          # its last line, with no line end after it, is read too
+                ended = True
+            r, _, _ = select.select([p.stdout], [], [], 1.0) if not ended else ([], [], [])
             if r:
                 chunk = os.read(p.stdout.fileno(), 8192)
                 if chunk:
@@ -125,12 +147,19 @@ def run_one(query: str, skill_name: str, model: str, timeout: int, settings=None
                     if ev.get("is_error"):                # no model, no access: an error, never a "not triggered"
                         return done(False, f"claude -p ended in an error: {str(ev.get('result'))[:300]}")
                     return done(False)
-            if p.poll() is not None and "\n" not in buf:
-                break
-        return done(False)
+            if ended:                                    # read to its end, and no result in it
+                if init is None:
+                    return done(False)
+                return done(False, f"claude -p ended (exit {p.returncode}) after its init without a result event: "
+                                   f"a run cut short measured nothing" + said())
+        if init is None:
+            return done(False, f"no init event from claude -p within {timeout} s" + said())
+        return done(False, f"claude -p gave no result within {timeout} s after its init, and was stopped: a run cut "
+                           f"short measured nothing" + said())
     finally:
         if p.poll() is None:
             p.kill(); p.wait()
+        err.close()
 
 
 # --------------------------------------------------------------------------------------------------- selftest
@@ -144,8 +173,21 @@ lists = {{"ok": ["autosound-tuning", "anthropic-skills:pdf"], "plugin": ["autoso
          "other": ["autosound-tuning", "anthropic-skills:rew-car-audio-tuning"], "ours-missing": ["anthropic-skills:pdf"]}}
 def say(ev):
     print(json.dumps(ev), flush=True)
+key = mode.split("-", 1)[1] if mode.startswith(("fire-", "quiet-", "error-", "die-", "hang-", "tail-")) else mode
 if mode != "no-init":
-    say({{"type": "system", "subtype": "init", "skills": lists[mode.split("-", 1)[1] if mode.startswith(("fire-", "quiet-", "error-")) else mode]}})
+    say({{"type": "system", "subtype": "init", "skills": lists[key]}})
+if mode.startswith("die-"):                     # its init, then dead: no result event
+    sys.stderr.write("Error: the session ended unexpectedly\nAPI connection lost after 3 retries\n")
+    sys.exit(3)
+if mode.startswith("hang-"):                    # its init, then nothing until the timeout
+    sys.stderr.write("waiting for the API...\n")
+    sys.stderr.flush()
+    import time
+    time.sleep(30)
+if mode.startswith("tail-"):                    # a result as the last line, with no line end after it
+    sys.stdout.write(json.dumps({{"type": "result", "subtype": "success"}}))
+    sys.stdout.flush()
+    sys.exit(0)
 if mode.startswith("fire-") or mode in ("other", "ours-missing"):
     say({{"type": "stream_event", "event": {{"type": "content_block_start",
                                          "content_block": {{"type": "tool_use", "name": "Skill"}}}}}})
@@ -198,6 +240,36 @@ def _selftest() -> int:
             got = one("error-ok")                       # a model that is not there is no "not triggered"
             assert got["triggered"] is False and "404 model: claude-sonnet-4-6 not found" in got["problem"], got
             assert one("quiet-ok")["init"]["model"] is None, "the init's model is recorded as it says it"
+
+        def _check_a_run_cut_short_is_a_problem():
+            # A claude -p that prints its init and dies without a result, and one its timeout cuts off, measured
+            # nothing: each is a problem, with the last lines it wrote to stderr -- they read as "not triggered", no
+            # problem recorded, stderr thrown away (#148). A result with no line end after it is still read.
+            got = one("die-ok")
+            assert got["triggered"] is False and got["problem"] and got["init"] is not None, got
+            assert "without a result" in got["problem"] and "exit 3" in got["problem"], got
+            assert "the session ended unexpectedly" in got["problem"] and "lost after 3 retries" in got["problem"], got
+            os.environ["FAKE_CLAUDE_MODE"] = "hang-ok"
+            started = time.time()
+            got = run_one("q", "autosound-tuning", "m", 2, absent=("rew-car-audio-tuning",))
+            assert time.time() - started < 15, "the timeout did not stop it"
+            assert got["triggered"] is False and got["problem"] and got["init"] is not None, got
+            assert "no result within 2 s" in got["problem"] and "waiting for the API" in got["problem"], got
+            got = one("tail-ok")
+            assert got["triggered"] is False and got["problem"] is None, got
+
+        def _check_a_run_cut_short_voids_the_run():
+            sets = os.path.join(tmp, "set3.json")
+            with open(sets, "w", encoding="utf-8") as fh:
+                json.dump([{"query": f"q{i}", "should_trigger": False} for i in range(3)], fh)
+            env = dict(os.environ, FAKE_CLAUDE_MODE="die-ok")
+            done = subprocess.run([sys.executable, os.path.abspath(__file__), "--eval-set", sets, "--model", "m",
+                                   "--workers", "1"], capture_output=True, text=True, encoding="utf-8", timeout=120,
+                                  env=env)
+            assert done.returncode == 1, (done.returncode, done.stderr[-800:])
+            out = json.loads(done.stdout)
+            assert out.get("void") is True and out["passed"] is None, out
+            assert "no score" in done.stderr and "the session ended unexpectedly" in done.stderr, done.stderr
 
         def _check_arguments_reach_claude():
             open(argv_log, "w").close()
@@ -254,6 +326,7 @@ def _selftest() -> int:
                     assert len(out["results"]) < 6, "every query ran: none was cancelled"
 
         for check in (_check_trigger_read_with_the_list_seen, _check_init_list_named,
+                      _check_a_run_cut_short_is_a_problem, _check_a_run_cut_short_voids_the_run,
                       _check_arguments_reach_claude, _check_a_void_run_exits_1, _check_a_void_run_has_no_score):
             try:
                 check()
@@ -269,7 +342,9 @@ def _selftest() -> int:
         shutil.rmtree(tmp, ignore_errors=True)
     print("selftest OK -- a trigger is read with the skill seen in the init list (a plugin's copy too); an init list "
           "holding the hidden skill, one without this skill, no init event and an error result (a model that is not "
-          "there) each void the run, by name; "
+          "there) each void the run, by name, and so do a run that dies after its init without a result and one its "
+          "timeout cuts off, with the last lines claude -p wrote to stderr (a last line with no line end is still "
+          "read); "
           "--settings and --no-session-persistence reach every claude -p; a void run exits 1 and prints no score, "
           "a query it cancelled is not counted, and a query that could not start voids it")
     return 0

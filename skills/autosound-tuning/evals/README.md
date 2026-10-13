@@ -43,11 +43,13 @@ python3.12 evals/run_trigger_eval.py --eval-set evals/trigger-eval-set.json \
 runner reads it before anything else: `--skill-name` must be in it (a run that cannot see the skill measures nothing —
 the old false 0%), and every `--absent` skill must not be (another skill on the same subject competes for the same
 queries); a run that ends in an error result — a model that is not available, no access — is no "not triggered"
-either. Any of the three voids the run, and so does a query that could not start (no `claude` on PATH): the query is
-named with what was wrong, the queries not started are cancelled, the runner prints no score (`no score: the run is
-void`; in the JSON `"void": true, "passed": null`) and exits 1 — what ran before the void is not a sample. With
-nothing wrong it prints `init skill list: <skill> in all N runs, <absent> in none`, the score and the duration; the
-JSON on stdout carries the `claude` command line, the duration and, per query, what its init list held.
+either, nor is one that ends after its init without a result, or that `--timeout` cuts off: that problem carries the
+last lines `claude -p` wrote to stderr. Any of these voids the run, and so does a query that could not start (no
+`claude` on PATH): the query is named with what was wrong, the queries not started are cancelled, the runner prints no
+score (`no score: the run is void`; in the JSON `"void": true, "passed": null`) and exits 1 — what ran before the void
+is not a sample. With nothing wrong it prints `init skill list: <skill> in all N runs, <absent> in none`, the score and
+the duration; the JSON on stdout carries the `claude` command line, the duration and, per query, what its init list
+held.
 
 - `--settings <json-or-file>` and `--no-session-persistence` are handed to every `claude -p` as they are.
 - `--absent <skill>` (repeatable): a skill that must not be in a run's list (a plugin's or a synced copy's
