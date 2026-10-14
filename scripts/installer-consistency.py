@@ -2081,12 +2081,14 @@ def claude_step_problems(sh):
     if not bash:
         return [f"{why} -- install.sh's Claude Code step cannot be run, and unrun is not agreed (#160)"]
     out = []
+    # The stand-in binary carries a #! line: Git for Windows' bash (MSYS) takes a file with no extension as executable
+    # by that line alone, so an empty one read as absent there (CI 38547555900).
     tmp = tempfile.mkdtemp(prefix="autosound_claude_step_")
     try:
         for case, run_body, want in (("the download fails, nothing left", "return 1", False),
-                                     ("it fails, its binary left", ': > "$LOCAL_BIN/claude"; chmod +x "$LOCAL_BIN/claude"; return 1',
+                                     ("it fails, its binary left", "printf '#!/bin/sh\\n' > \"$LOCAL_BIN/claude\"; chmod +x \"$LOCAL_BIN/claude\"; return 1",
                                       True),
-                                     ("it installs", ': > "$LOCAL_BIN/claude"; chmod +x "$LOCAL_BIN/claude"; return 0', True)):
+                                     ("it installs", "printf '#!/bin/sh\\n' > \"$LOCAL_BIN/claude\"; chmod +x \"$LOCAL_BIN/claude\"; return 0", True)):
             home = Path(tmp, str(len(os.listdir(tmp))))
             (home / "bin").mkdir(parents=True)
             script = ('set -euo pipefail\n' + functions + f'LOCAL_BIN="{(home / "bin").as_posix()}"\n'
