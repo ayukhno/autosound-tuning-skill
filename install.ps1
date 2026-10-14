@@ -491,6 +491,7 @@ function Set-LocalBinFirst {
         $parts = @($raw -split ";" | Where-Object { $_ -ne "" })
         if ($parts.Count -gt 0 -and (& $same $parts[0])) { return $false }
         $rest = @($parts | Where-Object { -not (& $same $_) })
+        Enter-Change   # the user PATH is written next; it is not when ~\.local\bin leads already (#160)
         $key.SetValue("Path", ((@($LocalBin) + $rest) -join ";"), [Microsoft.Win32.RegistryValueKind]::ExpandString)
     } finally { $key.Close() }
     [Environment]::SetEnvironmentVariable("AUTOSOUND_PATH_CHANGED", "1", "User")
@@ -1178,7 +1179,6 @@ if (Test-Path $Py3) {
         $was = if ($NewPy) { $NewPy } else { "nothing" }
         if ($DryRun) { Say "would move $(Pretty $LocalBin) to the front of your user PATH: a new window's python3 is $was" }
         else {
-            Enter-Change
             if (Set-LocalBinFirst) { Say "OK   $(Pretty $LocalBin) now leads your user PATH -- a new window's python3 was $was" }
         }
     }

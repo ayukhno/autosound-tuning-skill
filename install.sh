@@ -1173,7 +1173,6 @@ if on_mac && [ "$HAVE_CLT" = 0 ]; then
     if ! clt_present; then
       say "  Apple's own installer window opens now. Click Install, then Agree, and let it finish —"
       say "  this waits for it. (Do not pick \"Get Xcode\": that is 12 GB and not needed.)"
-      changing
       xcode-select --install >/dev/null 2>&1 || true
       _waited=0
       until clt_present; do
@@ -1184,6 +1183,8 @@ if on_mac && [ "$HAVE_CLT" = 0 ]; then
                  "install line again — everything already downloaded stays."
         fi
       done
+      # Apple's tools are there now: the machine has changed (#160) -- not before, the window may have been closed.
+      changing
     fi
     say "  ✓ installed"
   fi
@@ -1196,10 +1197,12 @@ if [ -n "$CLAUDE_BIN" ]; then
   say "  ✓ $("$CLAUDE_BIN" --version 2>/dev/null || echo present)"
 else
   say "  the official installer, claude.ai/install.sh:"
-  changing
+  # Armed once it has run or left its binary (#160): a download that failed and left nothing changed nothing.
   if run "${BASH:-bash}" -c 'set -o pipefail; curl -fsSL https://claude.ai/install.sh | bash'; then
+    changing
     in_local_bin claude && manifest_add claude
   else
+    if in_local_bin claude; then changing; fi
     warn "Claude Code did not install. Nothing can run a session without it; when the network is"
     warn "back:  curl -fsSL https://claude.ai/install.sh | bash"
   fi

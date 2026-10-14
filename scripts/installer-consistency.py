@@ -2043,6 +2043,7 @@ def keep_local_problems(sh, ps1):
         out.append("install.ps1 Save-LocalChanges archives files the new tag may not have -- `git archive` then gives "
                    "nothing at all; want `ls-tree --name-only FETCH_HEAD -- @keep` and `FETCH_HEAD @have` (#167)")
     out.extend(keep_local_run_problems(sh, ps1))
+    out.extend(claude_step_problems(sh))
     return out
 
 
@@ -2065,6 +2066,44 @@ KEEP_LOCAL_UPKEEP = (b"import os, sys\n"
                      b"print('BESIDE', [n for n in names if os.path.exists(os.path.join(root, n))])\n"
                      b"print('UPKEEP RAN: reset, then a locked file')\n"
                      b"sys.exit(1)\n")
+
+
+def claude_step_problems(sh):
+    """#160 (the final review's M3), RUN: install.sh's Claude Code step, cut out as it stands, arms the receipt only when
+    the installer ran or left its binary -- a download that failed and left nothing changed nothing, and a later stop
+    then keeps the last receipt. `run` stands in for the installer; `changing` says it was called."""
+    import tempfile
+    block = re.search(r'^step "Claude Code"\n.*?^fi\n', sh, re.M | re.S)
+    functions, missing = cut_functions(sh, ("in_local_bin",))
+    if not block or missing:
+        return ["install.sh: no Claude Code step (`step \"Claude Code\"` ... `fi`) or in_local_bin to run (#160)"]
+    bash, why = find_bash()
+    if not bash:
+        return [f"{why} -- install.sh's Claude Code step cannot be run, and unrun is not agreed (#160)"]
+    out = []
+    tmp = tempfile.mkdtemp(prefix="autosound_claude_step_")
+    try:
+        for case, run_body, want in (("the download fails, nothing left", "return 1", False),
+                                     ("it fails, its binary left", ': > "$LOCAL_BIN/claude"; chmod +x "$LOCAL_BIN/claude"; return 1',
+                                      True),
+                                     ("it installs", ': > "$LOCAL_BIN/claude"; chmod +x "$LOCAL_BIN/claude"; return 0', True)):
+            home = Path(tmp, str(len(os.listdir(tmp))))
+            (home / "bin").mkdir(parents=True)
+            script = ('set -euo pipefail\n' + functions + f'LOCAL_BIN="{(home / "bin").as_posix()}"\n'
+                      'step() { :; }\nsay() { :; }\nwarn() { :; }\nmanifest_add() { :; }\n'
+                      'find_bin() { in_local_bin "$1" && printf %s "$LOCAL_BIN/$1"; }\n'
+                      "changing() { echo ARMED; }\n" + f"run() {{ {run_body}; }}\n" + block.group(0) + "echo END\n")
+            r = subprocess.run([bash, "-s"], input=script.encode("utf-8"), capture_output=True)
+            said = (r.stdout + r.stderr).decode("utf-8", "replace")
+            if r.returncode or "END" not in said or ("ARMED" in said) != want:
+                out.append(f"install.sh's Claude Code step, {case}: exit {r.returncode}, the receipt "
+                           f"{'armed' if 'ARMED' in said else 'not armed'} -- want {'armed' if want else 'not armed'} "
+                           f"-- said {said.strip()[-200:]!r} (#160)")
+    except OSError as exc:
+        out.append(f"the Claude Code step's fixtures could not be made ({exc}) -- unrun is not agreed (#160)")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    return out
 
 
 def keep_local_run_problems(sh, ps1):
@@ -2533,17 +2572,20 @@ def exit_contract_problems(sh, ps1):
     if "consent" not in top or top.index("consent") + 1 >= len(top) or top[top.index("consent") + 1] != "going_ahead":
         out.append("install.sh: the top level does not run `consent` and then `going_ahead`, one after the other -- an "
                    "earlier run's receipt stands over a run that ends neither in `stop` nor in `finish` (#142)")
-    # #160: install.sh arms the receipt (`changing`) right before each step that may be the first change on disk --
-    # Apple's tools, Claude Code's installer, the method's checkout (run in checkout_problems) -- and after the method's
-    # step; the git stops stand before the consent, where a stop writes no receipt at all.
+    # #160: install.sh arms the receipt (`changing`) where a step has changed something -- Apple's tools once they are
+    # there, Claude Code's installer once it has run or left its binary (RUN: claude_step_problems), the method's
+    # checkout (RUN: checkout_problems) -- and after the method's step; never before a step that may change nothing (the
+    # final review's M3: a later stop wrote `stopped` over a good receipt). The git stops stand before the consent.
     sh_arms = [n for n, line in code if line.strip().startswith("changing")]
-    arm_before = ("xcode-select --install >/dev/null", "curl -fsSL https://claude.ai/install.sh | bash'; then")
-    unarmed_sh = [w for w in arm_before
-                  if not any(0 < n2 - n <= 2 for n2, line in code if w in line for n in sh_arms)]
+    clt = re.search(r'^  step "Apple\'s Command Line Tools \(git\)"\n.*?^fi\n', sh, re.M | re.S)
+    clt_code = [ln.strip() for ln in (clt.group(0) if clt else "").splitlines() if not ln.lstrip().startswith("#")]
+    clt_ok = ("changing" in clt_code and "done" in clt_code and "xcode-select --install >/dev/null 2>&1 || true" in clt_code
+              and clt_code.index("xcode-select --install >/dev/null 2>&1 || true") < clt_code.index("done")
+              < clt_code.index("changing"))
     after_method = [n for n, line in code if line.strip() == "fi   # not --plugin"]
-    if unarmed_sh or not after_method or after_method[0] + 2 not in sh_arms:
-        out.append(f"install.sh does not call `changing` right before {unarmed_sh or 'each first change'} and after "
-                   f"the method's step (#160)")
+    if not clt_ok or not after_method or after_method[0] + 2 not in sh_arms:
+        out.append("install.sh does not call `changing` after Apple's tools are there (never before xcode-select, which "
+                   "may change nothing) and after the method's step (#160)")
     consent_at = next((n for n, line in code if line.strip() == "consent"), None)
     git_stops = [n for n, line in code if "Install git with your package manager" in line or 'stop 1 "it said: ' in line]
     if not git_stops or consent_at is None or any(n > consent_at for n in git_stops):
@@ -2600,8 +2642,12 @@ def exit_contract_problems(sh, ps1):
     enter = re.search(r"^function Enter-Change \{\n.*?^\}$", ps1, re.M | re.S)
     unarmed = re.search(r"^\$script:ReceiptArmed = \$false\s*$", ps1, re.M)
     calls = [m.start() for m in re.finditer(r"^\s*Enter-Change\b", ps1, re.M)]
+    # ...at the top level, none before the consent (a function's own call, as Set-LocalBinFirst's, runs when called).
+    top_calls = [m.start() for m in re.finditer(r"^Enter-Change\b", ps1, re.M)]
+    # Set-LocalBinFirst arms inside, right before its write: it changes nothing when ~\.local\bin leads already (M3).
     befores = ('Say "through winget...', 'Invoke-Upstream "https://claude.ai/install.ps1"',
-               'Invoke-Upstream "https://astral.sh/uv/', "& $Uv python install 3.12", "if (Set-LocalBinFirst)",
+               'Invoke-Upstream "https://astral.sh/uv/', "& $Uv python install 3.12",
+               '$key.SetValue("Path", ((@($LocalBin) + $rest) -join ";")',
                "-C $Dir checkout --quiet $want } \"git checkout", "@(& git -c advice.detachedHead=false -C $Dir checkout",
                "Step \"What the method's tools need")
     # Each change has an Enter-Change close above it (within a few lines).
@@ -2609,7 +2655,8 @@ def exit_contract_problems(sh, ps1):
     if not write_fn or 'if ($DryRun -or ($Status -eq "stopped" -and -not $script:ReceiptArmed)) { return }' \
             not in write_fn.group(0) or not enter or "if ($script:ReceiptArmed) { return }" not in enter.group(0) \
             or 'Write-Receipt "stopped"' not in enter.group(0) or not unarmed or unarmed.start() > write_fn.start() \
-            or not calls or calls[0] < asked or unguarded:
+            or not calls or any(c < asked for c in top_calls) or unguarded \
+            or re.search(r"Enter-Change\s*\n\s*if \(Set-LocalBinFirst\)", ps1):
         ps_wrong.append("`stopped` is not written from the run's first change on disk -- want Write-Receipt's guard on "
                         "`stopped` alone, Enter-Change arming once, `$script:ReceiptArmed = $false` before Write-Receipt, "
                         "and Enter-Change after the consent, before each first change"
