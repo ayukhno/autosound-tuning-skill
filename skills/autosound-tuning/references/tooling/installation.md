@@ -131,8 +131,10 @@ Codex reads `AGENTS.md`, not `CLAUDE.md`. A new project gets both; one made befo
 `python3 rew_tool/project.py <project> agents-setup` (an existing file is left as it is).
 
 The installer links the method into `~/.agents/skills/autosound-tuning`, where Codex finds skills, when `codex` is on
-PATH, or always with `--codex` (`-Codex` on Windows, a junction); it never replaces a folder or someone else's link
-there, and the receipt's `codex_link` says what it did.
+PATH, or always with `--codex` (`-Codex` on Windows, a junction). Its own link, recorded in the installer's manifest, is
+kept or repointed on every run; a folder or someone else's link there is left alone. With `--codex`, a link it could not
+make leaves the install NOT ready. The receipt's `codex_link` says what it did, and `autosound_ai.py doctor` shows that
+with where the link points now.
 
 **TCC's MCP server (one step).** Codex takes MCP servers from `~/.codex/config.toml`, never from the project's
 `.mcp.json` that TCC writes when it starts. Copy TCC's entry across: in `.mcp.json`, `mcpServers.tcc` holds a `url`

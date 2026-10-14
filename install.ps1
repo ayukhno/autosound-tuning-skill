@@ -272,8 +272,6 @@ $SkillBetaSrc = Join-Path $HOME ".claude\skills\.autosound-tuning-beta"
 # learn.chatgpt.com/docs/build-skills, read 2026-10-14). One junction there to the method this script installs: one copy
 # of the method, which Claude Code and Codex both read. Same path as install.sh's CODEX_LINK_PATH.
 $CodexLink = Join-Path $HOME ".agents\skills\autosound-tuning"
-# Where /plugin install puts a plugin's copies, one folder per version: a Codex junction into one is this script's own.
-$ClaudePlugins = Join-Path $HOME ".claude\plugins"
 # Where uv, Claude Code, gh and the app's own commands land -- the same folder on every platform.
 $LocalBin     = Join-Path $HOME ".local\bin"
 # What THIS script put on the machine, one name per line. -Uninstall removes what is listed here
@@ -446,7 +444,10 @@ function Invoke-Upstream {
     if ($Capture) {
         $script:UpstreamOutput = @(& powershell -NoProfile -ExecutionPolicy Bypass -Command $cmd 2>&1 | Out-String -Stream)
     } else {
-        & powershell -NoProfile -ExecutionPolicy Bypass -Command $cmd
+        # To the screen, not to this function's output (CI 38542204702): what the child printed became part of the
+        # return value -- an array, true whatever the child's exit code, so a failed upstream installer read as one
+        # that ran.
+        & powershell -NoProfile -ExecutionPolicy Bypass -Command $cmd | Out-Host
     }
     return ($LASTEXITCODE -eq 0)
 }
@@ -679,60 +680,85 @@ function Get-LatestAsset {
 }
 $Arch = if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64") { "arm64" } else { "amd64" }
 
-# -- uninstall --------------------------------------------------------------------------------
 # -- the Codex link (#149) ----------------------------------------------------------------------
-# Is <target> -- what a junction at $CodexLink points at -- this script's own: the method's clone, or a plugin copy of
-# it? Anything else is somebody's, and stays. install.sh's codex_ours.
+# The junction is this script's own when the installer-manifest records its target -- one "codex-link <target>" line,
+# written when the junction is made or repointed -- and the target holds no `..`. Not a path's shape: a junction into
+# ~\.claude\plugins, or one that climbs out of the clone with `..`, may be anybody's. install.sh's codex_ours.
 function Test-CodexOurs {
     param([string]$Target)
     $t = ($Target -replace '/', '\').TrimEnd("\")
-    return (($t -like "$SkillSrc\*") -or ($t -like "$ClaudePlugins\*\skills\autosound-tuning"))
+    if (-not $t -or $t -match '(^|\\)\.\.(\\|$)') { return $false }
+    if (-not (Test-Path -LiteralPath $Manifest)) { return $false }
+    foreach ($line in @(Get-Content -LiteralPath $Manifest -ErrorAction SilentlyContinue)) {
+        if ($line.StartsWith("codex-link ") -and (($line.Substring(11) -replace '/', '\').TrimEnd("\") -ieq $t)) { return $true }
+    }
+    return $false
 }
-# The user-level junction Codex finds the method by: $CodexLink -> <target>, when codex is on PATH or -Codex asked for
-# it. A JUNCTION, as ~\.claude\skills\autosound-tuning is: no Developer Mode or elevated prompt, which a symlink needs.
-# Nothing there: made. This script's own to <target>: kept; to another of its targets (an older plugin version, the
-# clone before -Plugin): repointed. Somebody's link, a real folder or a file: left as it is, and said. An empty
-# <target> is a method this script did not install (<why>): no link to it. Sets $script:CodexDid -- the receipt's
-# codex_link -- and $script:CodexSaid, the end's one line; a junction that cannot be made stops nothing and is said.
-# install.sh's codex_link.
+# The manifest's codex-link line set to <target>, or taken off with none -- its other lines as they were; $false when
+# it could not be written. install.sh's codex_record.
+function Set-CodexRecord {
+    param([string]$Target = "")
+    if ($DryRun) { return $true }
+    try {
+        $rest = @()
+        if (Test-Path -LiteralPath $Manifest) {
+            $rest = @(Get-Content -LiteralPath $Manifest -ErrorAction Stop | Where-Object { -not $_.StartsWith("codex-link ") })
+        }
+        if ($Target) { $rest += "codex-link $Target" }
+        New-Item -ItemType Directory -Force -Path (Split-Path $Manifest) -ErrorAction Stop | Out-Null
+        # An empty list is one empty line: -Value takes no empty array.
+        if ($rest.Count -eq 0) { $rest = @("") }
+        Set-Content -LiteralPath $Manifest -Value $rest -Encoding UTF8 -ErrorAction Stop
+        return $true
+    } catch { return $false }
+}
+# The user-level junction Codex finds the method by: $CodexLink -> <target>. A JUNCTION, as ~\.claude\skills\
+# autosound-tuning is: no Developer Mode or elevated prompt, which a symlink needs. This script's own junction
+# (Test-CodexOurs) is looked after on every run, codex on PATH or not -- made once with -Codex for Codex's app, it is
+# kept, and repointed when the method moves. Otherwise it is made only when codex is on PATH or -Codex asks. Nothing
+# there: made. This script's own, to <target>: kept; to another target: repointed -- the new junction made under a
+# temporary name first, then swapped in, so a failure leaves the old one. Somebody's link, a real folder or a file:
+# left as it is, and said. An empty <target> is a method this script did not install (<why>): no link to it. Sets
+# $script:CodexDid -- the receipt's codex_link -- and $script:CodexSaid, the end's one line; a link not made stops
+# nothing, and is a missing part only under -Codex. Called right after Enter-Change. install.sh's codex_link.
 function Set-CodexLink {
     param([string]$Target, [string]$WhyNone = "no method to link to")
     $at = Pretty $CodexLink
-    if (-not $Codex -and -not (Have codex)) {
+    # Get-Item -Force, not Test-Path: Test-Path says False for a dangling junction (T-38).
+    $entry = Get-Item -LiteralPath $CodexLink -Force -ErrorAction SilentlyContinue
+    $isLink = $entry -and ($entry.LinkType -in @("SymbolicLink", "Junction"))
+    $was = if ($isLink) { "$($entry.Target -join '')" } else { "" }
+    $norm = { param($p) ($p -replace '/', '\').TrimEnd("\") }
+    $same = $Target -and $was -and ((& $norm $was) -ieq (& $norm $Target)) -and -not ($Target -match '(^|[\\/])\.\.([\\/]|$)')
+    $ours = $isLink -and ((Test-CodexOurs $was) -or $same)
+    if (-not $ours -and -not $Codex -and -not (Have codex)) {
         $script:CodexDid = "absent"
         $script:CodexSaid = "--   Codex: no Codex on PATH, so no link in ~\.agents\skills (-Codex makes it anyway)"
         return
     }
-    if (-not $Target) {
-        $script:CodexDid = "skipped: $WhyNone"
-        Warn "Codex: no link made at $at -- $WhyNone"
-        $script:CodexSaid = "--   Codex: no link at $at -- $WhyNone"
+    $why = ""
+    if (-not $Target) { $why = $WhyNone }
+    elseif ($Target -match '(^|[\\/])\.\.([\\/]|$)') { $why = "the method's path $Target holds a ``..`` -- no link to it" }
+    elseif ($entry -and -not $isLink) {
+        $kind = if ($entry.PSIsContainer) { "folder" } else { "file" }
+        $why = "$at is a $kind this installer did not make -- left as it is"
+    }
+    elseif ($isLink -and -not $ours) { $why = "$at is a link to $was, not this installer's -- left as it is" }
+    elseif ($same) {
+        $script:CodexDid = "kept"
+        Say "Codex: $at already points at the method -- kept"
+        $script:CodexSaid = "OK   Codex finds the method: $at (kept)"
+        if (-not (Test-CodexOurs $was) -and -not (Set-CodexRecord $was)) {
+            Warn "Codex: the installer's manifest could not record $at -- the next run keeps it while it points here"
+        }
         return
     }
-    # Get-Item -Force, not Test-Path: Test-Path says False for a dangling junction (T-38).
-    $entry = Get-Item -LiteralPath $CodexLink -Force -ErrorAction SilentlyContinue
-    $was = ""
-    if ($entry) {
-        if ($entry.LinkType -notin @("SymbolicLink", "Junction")) {
-            $kind = if ($entry.PSIsContainer) { "folder" } else { "file" }
-            $script:CodexDid = "skipped: $at is a $kind this installer did not make -- left as it is"
-            Warn "Codex: $at is a $kind this installer did not make -- left as it is"
-            $script:CodexSaid = "--   Codex: $at is a $kind this installer did not make, left as it is"
-            return
-        }
-        $was = "$($entry.Target -join '')"
-        if (($was -replace '/', '\').TrimEnd("\") -ieq ($Target -replace '/', '\').TrimEnd("\")) {
-            $script:CodexDid = "kept"
-            Say "Codex: $at already points at the method -- kept"
-            $script:CodexSaid = "OK   Codex finds the method: $at (kept)"
-            return
-        }
-        if (-not (Test-CodexOurs $was)) {
-            $script:CodexDid = "skipped: $at is a link to $was, not this installer's -- left as it is"
-            Warn "Codex: $at is a link to $was, not this installer's -- left as it is"
-            $script:CodexSaid = "--   Codex: $at is somebody's link, left as it is"
-            return
-        }
+    if ($why) {
+        $script:CodexDid = "skipped: $why"
+        Warn "Codex: $why"
+        $script:CodexSaid = "--   Codex: no link -- $why"
+        if ($Codex) { Add-Missing "Codex link" }
+        return
     }
     # What it does -- the receipt's word -- whether this is a dry run or not.
     if ($was) { $script:CodexDid = "repointed" } else { $script:CodexDid = "made" }
@@ -742,22 +768,59 @@ function Set-CodexLink {
         $script:CodexSaid = "OK   Codex: would find the method at $at ($($script:CodexDid))"
         return
     }
+    # The temporary names sit in ~\.agents, beside the skills folder Codex scans, never in it. .NET's Directory.Move
+    # and Directory.Delete act on the junction itself and leave its target alone; Remove-Item on 5.1 asks "Are you
+    # sure?" about a junction's children.
+    $agents = Split-Path (Split-Path $CodexLink)
+    $tmp = Join-Path $agents ".autosound-codex-new-$PID"
+    $old = Join-Path $agents ".autosound-codex-old-$PID"
+    $moved = $false
     try {
         New-Item -ItemType Directory -Force -Path (Split-Path $CodexLink) -ErrorAction Stop | Out-Null
-        # Only ever this script's own junction here: anything else returned above. .NET's Directory.Delete removes the
-        # link and leaves its target alone; Remove-Item on 5.1 asks "Are you sure?" about a junction's children.
-        if ($was) { [System.IO.Directory]::Delete($CodexLink) }
-        New-Item -ItemType Junction -Path $CodexLink -Target $Target -ErrorAction Stop | Out-Null
+        New-Item -ItemType Junction -Path $tmp -Target $Target -ErrorAction Stop | Out-Null
+        if ($was) { [System.IO.Directory]::Move($CodexLink, $old); $moved = $true }
+        [System.IO.Directory]::Move($tmp, $CodexLink)
+        if ($moved) { [System.IO.Directory]::Delete($old) }
         if ($was) { Say "Codex: repointed the link $at to $(Pretty $Target) (it pointed at $(Pretty $was))" }
         else { Say "Codex: made the link $at -> $(Pretty $Target)" }
         $script:CodexSaid = "OK   Codex finds the method: $at ($($script:CodexDid))"
+        # Recorded as the junction reads back -- Windows may spell it otherwise than given (an 8.3 short name, long).
+        $made = Get-Item -LiteralPath $CodexLink -Force -ErrorAction SilentlyContinue
+        $as = if ($made -and $made.Target) { "$($made.Target -join '')" } else { $Target }
+        if (-not (Set-CodexRecord $as)) {
+            Warn "Codex: the installer's manifest could not record $at -- the next run keeps it while it points here"
+        }
     } catch {
-        $script:CodexDid = "skipped: could not make $at -- $($_.Exception.Message)"
-        Warn "Codex: could not make the link $at -- $($_.Exception.Message)"
-        $script:CodexSaid = "--   Codex: no link at $at -- it could not be made (see above)"
+        $err = $_.Exception.Message
+        # Put back what was there: the old junction to its place, the new one gone.
+        if ($moved -and -not (Test-Path -LiteralPath $CodexLink)) { try { [System.IO.Directory]::Move($old, $CodexLink) } catch { $null = $_ } }
+        if (Get-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue) { try { [System.IO.Directory]::Delete($tmp) } catch { $null = $_ } }
+        $why = "could not make $at -- $err"
+        $script:CodexDid = "skipped: $why"
+        Warn "Codex: $why"
+        $script:CodexSaid = "--   Codex: no link -- $why"
+        if ($Codex) { Add-Missing "Codex link" }
+    }
+}
+# The uninstall's part: this script's own junction (Test-CodexOurs) removed, and its manifest line with it; anything
+# else at the link's place left, and said. install.sh's codex_unlink.
+function Remove-CodexLink {
+    $entry = Get-Item -LiteralPath $CodexLink -Force -ErrorAction SilentlyContinue
+    if (-not $entry) { return }
+    $to = "$($entry.Target -join '')"
+    if ($entry.LinkType -in @("SymbolicLink", "Junction") -and (Test-CodexOurs $to)) {
+        Say "removing the Codex link $(Pretty $CodexLink)"
+        if ($DryRun) { Say "would remove the junction $(Pretty $CodexLink)"; return }
+        try { [System.IO.Directory]::Delete($CodexLink) } catch { Warn "the Codex link was not removed: $($_.Exception.Message)"; return }
+        if (-not (Set-CodexRecord)) { Warn "the installer's manifest still records the Codex link -- nothing points Codex there now" }
+    } elseif ($entry.LinkType) {
+        Warn "$CodexLink points at $to -- not ours, left alone"
+    } else {
+        Warn "$CodexLink is not a link this script made -- left alone"
     }
 }
 
+# -- uninstall --------------------------------------------------------------------------------
 if ($Uninstall) {
     Sync-ProcessPath
     Step "Removing what this script installed"
@@ -782,19 +845,8 @@ if ($Uninstall) {
             Warn "$SkillHome is a real directory this script did not create -- left alone"
         }
     } else { Say "no tuning method installed by this script" }
-    # The Codex junction (#149): only this script's own -- into the clone or a plugin copy. Anything else there is left.
-    $codexEntry = Get-Item -LiteralPath $CodexLink -Force -ErrorAction SilentlyContinue
-    if ($codexEntry) {
-        $codexTo = "$($codexEntry.Target -join '')"
-        if ($codexEntry.LinkType -in @("SymbolicLink", "Junction") -and (Test-CodexOurs $codexTo)) {
-            Say "removing the Codex link $(Pretty $CodexLink)"
-            Run { [System.IO.Directory]::Delete($CodexLink) } "remove the Codex junction" | Out-Null
-        } elseif ($codexEntry.LinkType) {
-            Warn "$CodexLink points at $codexTo -- not ours, left alone"
-        } else {
-            Warn "$CodexLink is not a link this script made -- left alone"
-        }
-    }
+    # The Codex junction (#149): only this script's own, by the manifest's record. Anything else there is left.
+    Remove-CodexLink
     # The beta channel's copy has no junction to judge ownership by. Its name is the claim: this
     # script makes that folder, and nothing but this script and an app moving it writes there.
     if (Test-Path $SkillBetaSrc) {
@@ -2320,6 +2372,9 @@ else {
             }
             "Claude Code" {
                 Warn "Claude Code is not installed; nothing can run a session without it -- when the network is back:  irm https://claude.ai/install.ps1 | iex"
+            }
+            "Codex link" {
+                Warn "the Codex link was asked for (-Codex) and not made: $($script:CodexDid -replace '^skipped: ', '') -- the Codex step above says why; the method works in Claude Code without it"
             }
             default { Warn $part }
         }

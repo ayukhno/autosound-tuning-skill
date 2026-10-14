@@ -113,9 +113,6 @@ MANIFEST="${HOME}/.local/share/autosound/installer-manifest"
 # learn.chatgpt.com/docs/build-skills, read 2026-10-14). One link there to the method this script installs: one copy of
 # the method, which Claude Code and Codex both read -- never a second copy that drifts. Same path as install.ps1's.
 CODEX_LINK_PATH="${HOME}/.agents/skills/autosound-tuning"
-#: Where `/plugin install` puts a plugin's copies, one folder per version: a Codex link into one of them is this
-#: script's own, made by an earlier --plugin run, and is repointed when the version moves.
-CLAUDE_PLUGINS="${HOME}/.claude/plugins"
 APP="${HOME}/Applications/Autosound TCC.app"
 DESKTOP_LINK="${HOME}/Desktop/Autosound TCC.app"
 
@@ -566,6 +563,9 @@ finish() {
       "Claude Code")
         warn "Claude Code is not installed; nothing can run a session without it -- when the network is back:" \
              " curl -fsSL https://claude.ai/install.sh | bash" ;;
+      "Codex link")
+        warn "the Codex link was asked for (--codex) and not made: ${CODEX_DID#skipped: } -- the Codex step above says" \
+             "why; the method works in Claude Code without it" ;;
       *) warn "$_fi_one" ;;
     esac
   done
@@ -758,54 +758,76 @@ claude_status() {  # prints "email (plan)" when signed in; fails otherwise
 }
 
 # ── the Codex link (#149) ─────────────────────────────────────────────────────
-# Is <target> -- what a link at CODEX_LINK_PATH points at -- this script's own: the method's clone, or a plugin copy of
-# it? Anything else is somebody's, and stays.
-codex_ours() {  # codex_ours <target>
-  case "$1" in
-    "$SKILL_SRC"/*) return 0 ;;
-    "$CLAUDE_PLUGINS"/*/skills/autosound-tuning) return 0 ;;
-    *) return 1 ;;
-  esac
+# The link is this script's own when the installer-manifest records its target -- one `codex-link <target>` line,
+# written when the link is made or repointed -- and the target holds no `..`. Not a path's shape: a link into
+# ~/.claude/plugins, or one that climbs out of the clone with `..`, may be anybody's.
+codex_safe() {  # codex_safe <path>: 0 when no part of it is `..`
+  case "/$1/" in */../*) return 1 ;; *) return 0 ;; esac
+}
+codex_ours() {  # codex_ours <target>: 0 when <target> is the one the manifest records for the link
+  codex_safe "$1" && grep -qxF "codex-link $1" "$MANIFEST" 2>/dev/null
+}
+# The manifest's codex-link line set to <target>, or taken off with none -- its other lines as they were. Through a
+# temporary file beside it, so a failed write leaves the manifest whole. 1 when it could not be written.
+codex_record() {  # codex_record [<target>]
+  [ "${DRY_RUN:-0}" = 1 ] && return 0
+  _cr_tmp="$MANIFEST.codex.$$"
+  if { mkdir -p "$(dirname "$MANIFEST")" \
+       && { grep -v '^codex-link ' "$MANIFEST" 2>/dev/null || true; [ -z "${1:-}" ] || printf 'codex-link %s\n' "$1"; } \
+            > "$_cr_tmp" && mv -f "$_cr_tmp" "$MANIFEST"; } 2>/dev/null; then
+    return 0
+  fi
+  rm -f "$_cr_tmp" 2>/dev/null || true
+  return 1
+}
+# No link, and why: the receipt's `skipped: <why>`, a warning, the end's line -- and, when --codex asked for the link,
+# a part missing: the person asked for something this run did not do.
+codex_skip() {  # codex_skip <why>
+  CODEX_DID="skipped: $1"
+  warn "Codex: $1"
+  CODEX_SAID="– Codex: no link -- $1"
+  [ "$WANT_CODEX" != 1 ] || missing "Codex link"
 }
 
-# The user-level link Codex finds the method by: CODEX_LINK_PATH -> <target>, when `codex` is on PATH or --codex asked
-# for it. Nothing there: made. This script's own link to <target>: kept; to another of its targets (an older plugin
-# version, the clone before --plugin): repointed. Somebody's link, a real folder or a file: left as it is, and said.
-# An empty <target> is a method this script did not install (<why>): no link to it. Sets CODEX_DID -- the receipt's
-# codex_link -- and CODEX_SAID, the end's one line; a link that cannot be made stops nothing and is said.
+# The user-level link Codex finds the method by: CODEX_LINK_PATH -> <target>. This script's own link (codex_ours) is
+# looked after on every run, codex on PATH or not -- made once with --codex for Codex's app, it is kept, and repointed
+# when the method moves (a plugin update). Otherwise the link is made only when `codex` is on PATH or --codex asks.
+# Nothing there: made. This script's own, to <target>: kept; to another target: repointed, in one step (`ln -sfn`), so
+# there is never no link. Somebody's link, a real folder or a file: left as it is, and said. An empty <target> is a
+# method this script did not install (<why>): no link to it. Sets CODEX_DID -- the receipt's codex_link -- and
+# CODEX_SAID, the end's one line; a link not made stops nothing, and is a missing part only under --codex.
 codex_link() {  # codex_link <target> [<why there is none>]
-  _cx_to="$1"; _cx_at="$(pretty "$CODEX_LINK_PATH")"
-  if [ "$WANT_CODEX" != 1 ] && ! have codex; then
+  _cx_to="$1"; _cx_at="$(pretty "$CODEX_LINK_PATH")"; _cx_was=""; _cx_ours=0
+  if [ -L "$CODEX_LINK_PATH" ]; then
+    _cx_was="$(readlink "$CODEX_LINK_PATH")"
+    # Already the very link this run would make: this script's, whoever wrote it -- recorded below.
+    if codex_ours "$_cx_was" || { [ -n "$_cx_to" ] && [ "$_cx_was" = "$_cx_to" ] && codex_safe "$_cx_to"; }; then
+      _cx_ours=1
+    fi
+  fi
+  if [ "$_cx_ours" = 0 ] && [ "$WANT_CODEX" != 1 ] && ! have codex; then
     CODEX_DID="absent"
     CODEX_SAID="– Codex: no Codex on PATH, so no link in ~/.agents/skills (--codex makes it anyway)"
     return 0
   fi
-  if [ -z "$_cx_to" ]; then
-    CODEX_DID="skipped: ${2:-no method to link to}"
-    warn "Codex: no link made at $_cx_at -- ${2:-no method to link to}"
-    CODEX_SAID="– Codex: no link at $_cx_at -- ${2:-no method to link to}"
-    return 0
-  fi
-  _cx_was=""
+  if [ -z "$_cx_to" ]; then codex_skip "${2:-no method to link to}"; return 0; fi
+  if ! codex_safe "$_cx_to"; then codex_skip "the method's path $_cx_to holds a \`..\` -- no link to it"; return 0; fi
   if [ -L "$CODEX_LINK_PATH" ]; then
-    _cx_was="$(readlink "$CODEX_LINK_PATH")"
     if [ "$_cx_was" = "$_cx_to" ]; then
       CODEX_DID="kept"
       say "  Codex: $_cx_at already points at the method -- kept"
       CODEX_SAID="✓ Codex finds the method: $_cx_at (kept)"
+      codex_ours "$_cx_to" || codex_record "$_cx_to" \
+        || warn "Codex: the installer's manifest could not record $_cx_at -- the next run keeps it while it points here"
       return 0
     fi
-    if ! codex_ours "$_cx_was"; then
-      CODEX_DID="skipped: $_cx_at is a link to $_cx_was, not this installer's -- left as it is"
-      warn "Codex: $_cx_at is a link to $_cx_was, not this installer's -- left as it is"
-      CODEX_SAID="– Codex: $_cx_at is somebody's link, left as it is"
+    if [ "$_cx_ours" = 0 ]; then
+      codex_skip "$_cx_at is a link to $_cx_was, not this installer's -- left as it is"
       return 0
     fi
   elif [ -e "$CODEX_LINK_PATH" ]; then
     _cx_kind="file"; [ -d "$CODEX_LINK_PATH" ] && _cx_kind="folder"
-    CODEX_DID="skipped: $_cx_at is a $_cx_kind this installer did not make -- left as it is"
-    warn "Codex: $_cx_at is a $_cx_kind this installer did not make -- left as it is"
-    CODEX_SAID="– Codex: $_cx_at is a $_cx_kind this installer did not make, left as it is"
+    codex_skip "$_cx_at is a $_cx_kind this installer did not make -- left as it is"
     return 0
   fi
   # What it does -- the receipt's word -- whether this is a dry run or not.
@@ -819,19 +841,35 @@ codex_link() {  # codex_link <target> [<why there is none>]
     CODEX_SAID="✓ Codex: would find the method at $_cx_at ($CODEX_DID)"
     return 0
   fi
-  # rm -f only ever meets this script's own link here: anything else returned above.
-  if _cx_err="$( { mkdir -p "$(dirname "$CODEX_LINK_PATH")" && { [ -z "$_cx_was" ] || rm -f "$CODEX_LINK_PATH"; } \
-                  && ln -s "$_cx_to" "$CODEX_LINK_PATH"; } 2>&1 )"; then
+  # -n: a link to a folder is replaced as the link it is, never followed into. Only ever this script's own link here:
+  # anything else returned above.
+  if _cx_err="$( { mkdir -p "$(dirname "$CODEX_LINK_PATH")" && ln -sfn "$_cx_to" "$CODEX_LINK_PATH"; } 2>&1 )"; then
     if [ -n "$_cx_was" ]; then
       say "  Codex: repointed the link $_cx_at to $(pretty "$_cx_to") (it pointed at $(pretty "$_cx_was"))"
     else
       say "  Codex: made the link $_cx_at -> $(pretty "$_cx_to")"
     fi
     CODEX_SAID="✓ Codex finds the method: $_cx_at ($CODEX_DID)"
+    codex_record "$_cx_to" \
+      || warn "Codex: the installer's manifest could not record $_cx_at -- the next run keeps it while it points here"
   else
-    CODEX_DID="skipped: could not make $_cx_at: ${_cx_err##*: }"
-    warn "Codex: could not make the link $_cx_at: ${_cx_err##*: }"
-    CODEX_SAID="– Codex: no link at $_cx_at -- it could not be made (see above)"
+    codex_skip "could not make $_cx_at: ${_cx_err##*: }"
+  fi
+  return 0
+}
+
+# The uninstall's part: this script's own link (codex_ours) removed, and its manifest line with it; anything else at
+# the link's place left, and said.
+codex_unlink() {
+  if [ -L "$CODEX_LINK_PATH" ] && codex_ours "$(readlink "$CODEX_LINK_PATH")"; then
+    say "  removing the Codex link $(pretty "$CODEX_LINK_PATH")"
+    if run rm -f "$CODEX_LINK_PATH"; then
+      codex_record || warn "the installer's manifest still records the Codex link -- nothing points Codex there now"
+    fi
+  elif [ -L "$CODEX_LINK_PATH" ]; then
+    warn "$CODEX_LINK_PATH points at $(readlink "$CODEX_LINK_PATH") — not ours, left alone"
+  elif [ -e "$CODEX_LINK_PATH" ]; then
+    warn "$CODEX_LINK_PATH is not a link this script made — left alone"
   fi
   return 0
 }
@@ -860,15 +898,8 @@ if [ "$UNINSTALL" = 1 ]; then
   else
     say "  no tuning method installed by this script"
   fi
-  # The Codex link (#149): only this script's own -- into the clone or a plugin copy. Anything else there is left.
-  if [ -L "$CODEX_LINK_PATH" ] && codex_ours "$(readlink "$CODEX_LINK_PATH")"; then
-    say "  removing the Codex link $(pretty "$CODEX_LINK_PATH")"
-    run rm -f "$CODEX_LINK_PATH"
-  elif [ -L "$CODEX_LINK_PATH" ]; then
-    warn "$CODEX_LINK_PATH points at $(readlink "$CODEX_LINK_PATH") — not ours, left alone"
-  elif [ -e "$CODEX_LINK_PATH" ]; then
-    warn "$CODEX_LINK_PATH is not a link this script made — left alone"
-  fi
+  # The Codex link (#149): only this script's own, by the manifest's record. Anything else there is left.
+  codex_unlink
   # The beta channel's copy has no link to judge ownership by. Its name is the claim: this script
   # makes that folder, and nothing but this script and an app moving it writes there.
   if [ -d "$SKILL_BETA_SRC" ]; then

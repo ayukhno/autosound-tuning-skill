@@ -2022,6 +2022,51 @@ def _check_private_writer_goes_through_the_move():
     assert not failures, "\n  ".join(["a writer item 8 lists does not go through the move:"] + failures)
 
 
+def _check_receipt_says_the_codex_link():
+    """#149: the receipt's line says what the installer did about the Codex link (`codex_link`) and where the link
+    stands now -- its target, and that the target is gone when a plugin update removed it; a receipt from before the
+    field says nothing of it."""
+    d = tempfile.mkdtemp(prefix="autosound_receipt_codex_")
+    try:
+        path = os.path.join(d, "install-receipt.json")
+        link = os.path.join(d, "agents", "skills", "autosound-tuning")
+        method = os.path.join(d, "method")
+        os.makedirs(method)
+        os.makedirs(os.path.dirname(link))
+        base = {"installer": "install.sh", "method_ref": "v3.1.4", "at": "2026-10-14T00:00:00Z",
+                "platform": "Darwin-arm64", "engine": "not fetched", "installer_version": "3.1.4", "status": "ready",
+                "missing": [], "python": "/usr/bin/python3 3.12.3"}
+        failures = []
+
+        def line(receipt):
+            with open(path, "w", encoding="utf-8") as fh:
+                json.dump(receipt, fh)
+            return receipt_line(path, codex_link_path=link)
+        said = line(base)
+        if "Codex" in said:
+            failures.append(f"a receipt without codex_link: {said!r}")
+        said = line(dict(base, codex_link="absent"))
+        if "Codex: absent" not in said or "посилання" in said:
+            failures.append(f"codex_link absent, no link: {said!r}")
+        said = line(dict(base, codex_link="made"))
+        if "Codex: made" not in said or "посилання нема" not in said:
+            failures.append(f"codex_link made, the link since removed: {said!r}")
+        try:
+            os.symlink(method, link)
+        except (OSError, NotImplementedError):
+            return                                      # no symlink here (Windows without the right): the rest is read
+        said = line(dict(base, codex_link="kept"))
+        if "Codex: kept" not in said or method not in said or "нема" in said:
+            failures.append(f"codex_link kept, the link to a folder that is there: {said!r}")
+        os.rmdir(method)
+        said = line(dict(base, codex_link="repointed"))
+        if method not in said or "якої вже нема" not in said:
+            failures.append(f"codex_link repointed, its target since removed: {said!r}")
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+    assert not failures, "\n  ".join(["the receipt's line, over the Codex link:"] + failures)
+
+
 def _check_receipt_says_how_the_install_ended():
     """#142: the receipt's line says how the installer's last run ended -- `status` (ready, not ready, stopped) and
     the parts `missing` -- with the installer's version and the python3 it judged the libraries with. A receipt written
@@ -3661,6 +3706,7 @@ def _selftest():
     for check in (_check_review_names_unique, _check_step_aside_refused_remove,
                   _check_step_aside_names_the_answers_name, _check_engine_line_optional,
                   _check_private_writer_goes_through_the_move, _check_receipt_says_how_the_install_ended,
+                  _check_receipt_says_the_codex_link,
                   _check_the_machine_files_win_once, _check_the_ledger_head_rides_in_the_prompt,
                   _check_the_template_teaches_titles_that_resolve, _check_the_door_records_the_review,
                   _check_the_unasked_line_leaves_tcc_its_record, _check_the_clipboard_line_runs,
@@ -5132,10 +5178,27 @@ def receipt_path():
     return os.path.join(base, "autosound", "install-receipt.json")
 
 
-def receipt_line(path=None):
+def codex_link_state(link=None):
+    """Where the Codex link stands now (#149), as words for the receipt's line: its target, and that the target is gone
+    (a plugin update removed the version it pointed at); that there is no link; or that something else is there. The
+    link is ~/.agents/skills/autosound-tuning, a symlink or, on Windows, a junction -- os.readlink reads both."""
+    link = link or os.path.join(os.path.expanduser("~"), ".agents", "skills", "autosound-tuning")
+    if not os.path.lexists(link):
+        return "посилання нема"
+    try:
+        to = os.readlink(link)
+    except (OSError, ValueError):
+        return "на місці посилання тека або файл, не посилання"
+    for prefix in ("\\\\?\\", "\\??\\"):
+        to = to[len(prefix):] if to.startswith(prefix) else to
+    return f"посилання → {to}" + ("" if os.path.exists(link) else ", якої вже нема")
+
+
+def receipt_line(path=None, codex_link_path=None):
     """What the last installer run said it did, in one line, or that none left a receipt (S-049). From v3.1.3 the
     receipt also carries the installer's version, the python3 it judged the libraries with, and how the run ended
-    (#142): `status` -- ready, not ready, stopped -- and the parts `missing`. A receipt without them reads as before."""
+    (#142): `status` -- ready, not ready, stopped -- and the parts `missing`; from v3.1.4 what it did about the Codex
+    link (#149), said with where the link stands now. A receipt without them reads as before."""
     path = path or receipt_path()
     try:
         with open(path, encoding="utf-8-sig") as fh:
@@ -5159,6 +5222,13 @@ def receipt_line(path=None):
         missing = r.get("missing") or []
         missing = [str(m) for m in missing] if isinstance(missing, list) else [str(missing)]
         line += f"; стан: {r['status']}" + (f" — бракує: {', '.join(missing)}" if missing else "")
+    codex = r.get("codex_link")
+    if codex:
+        # absent / not reached: the run made no link -- one there now is not its doing, and is not said.
+        line += f"; Codex: {codex}"
+        if codex not in ("absent", "not reached") or os.path.lexists(
+                codex_link_path or os.path.join(os.path.expanduser("~"), ".agents", "skills", "autosound-tuning")):
+            line += f" ({codex_link_state(codex_link_path)})"
     return line
 
 
