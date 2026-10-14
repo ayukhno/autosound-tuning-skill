@@ -608,7 +608,7 @@ today, every one the code reads:
   the current folder (#159), chosen from the environment the script starts with -- a critic-env file that sets it or
   the project does not move it: the folder of the project's `.critic-env`; with `AUTOSOUND_PROJECT_DIR` naming
   another folder, the current folder's `.critic-env`, `scripts/.critic-env` and `rew_analitic/` are not read (the
-  project's `.critic-env` is), and an unused `rew_analitic/` there is said in one line; with `AUTOSOUND_PROJECT_DIR`
+  project's `.critic-env` is), and each one there is said in a line of its own; with `AUTOSOUND_PROJECT_DIR`
   unset it also chooses the project, the folder above it when it is `<dir>/rew_analitic`; the context is read from
   the project root, then from it, then from the root's own `rew_analitic/`, the current folder only as the root)
   and `ADVISOR_MEMORY` (the reviewer's memory file; `depth-advisor-memory.md` in that folder by default). It also reads the vendors' own: `GEMINI_*`, the

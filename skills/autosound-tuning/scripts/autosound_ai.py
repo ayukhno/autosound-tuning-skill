@@ -250,6 +250,9 @@ def load_env_file():
     here = CWD
     if stated and os.path.normcase(os.path.realpath(stated)) != os.path.normcase(os.path.realpath(CWD)):
         here = stated
+        ENV_FILES_NOT_READ[:] = [(p, stated) for p in (os.path.join(CWD, ".critic-env"),
+                                                       os.path.join(CWD, "scripts", ".critic-env"))
+                                 if os.path.isfile(p)]
     env_paths = [
         machine_config_path(),
         os.path.join(PROJECT_MIRROR, ".critic-env"),
@@ -320,6 +323,9 @@ def env_origin(var):
     return "зі змінної середовища: її бачить кожна програма, запущена з цього сеансу"
 
 
+#: `(file, project)` for each working-folder critic-env there and not read, the project stated elsewhere (#159):
+#: said by `cwd_lines`, never skipped without a word.
+ENV_FILES_NOT_READ = []
 ENV_FILES_USED = load_env_file()
 ENV_FILE_USED = ENV_FILES_USED[-1] if ENV_FILES_USED else None
 
@@ -419,6 +425,15 @@ def cwd_mirror_line():
             os.path.abspath(PROJECT_MIRROR)):
         return None
     return f"! {here} is not read: AUTOSOUND_PROJECT_DIR is set, and the mirror is the project's, {PROJECT_MIRROR}"
+
+
+def cwd_lines():
+    """Every line a review's run and `doctor` say of the working folder's files the door does not read (#159): the
+    unused mirror (`cwd_mirror_line`), and each critic-env there, set aside because the project is another folder --
+    `! <file> is not read: the project is <project>`."""
+    mirror = cwd_mirror_line()
+    return ([mirror] if mirror else []) + [f"! {path} is not read: the project is {project}"
+                                           for path, project in ENV_FILES_NOT_READ]
 
 
 def _same_text(path, reference):
@@ -2917,7 +2932,7 @@ def _check_the_mirror_follows_the_project():
                  "                  'model': m.os.environ.get('AUTOSOUND_CRITIC_MODEL'),\n"
                  "                  'bin': m.os.environ.get('GEMINI_BIN'),\n"
                  "                  'effort': m.os.environ.get('AUTOSOUND_CRITIC_EFFORT'),\n"
-                 "                  'line': m.cwd_mirror_line()}))\n")
+                 "                  'line': m.cwd_mirror_line(), 'lines': m.cwd_lines()}))\n")
         env = {k: v for k, v in os.environ.items()
                if k not in ("PROJECT_MIRROR", "ADVISOR_MEMORY", "AUTOSOUND_DIR", "AUTOSOUND_CRITIC_MODEL", "GEMINI_BIN",
                             "AUTOSOUND_CRITIC_EFFORT")}
@@ -2950,6 +2965,27 @@ def _check_the_mirror_follows_the_project():
             if not named or os.path.realpath(named) != os.path.realpath(theirs) \
                     or "is not read: AUTOSOUND_PROJECT_DIR is set, and the mirror is the project's" not in line:
                 failures.append(f"the unused mirror said as {line!r}")
+            # The working folder's critic-env files, there and not read, are said too, one line each.
+            tail = f" is not read: the project is {project}"
+            skipped = [ln[2:-len(tail)] for ln in seen["lines"][1:] if ln.startswith("! ") and ln.endswith(tail)]
+            if seen["lines"][:1] != [line] or len(seen["lines"]) != 3 or [os.path.realpath(p) for p in skipped] != [
+                    os.path.realpath(os.path.join(other, ".critic-env")),
+                    os.path.realpath(os.path.join(other, "scripts", ".critic-env"))]:
+                failures.append(f"what is not read, said as {seen['lines']!r}")
+        # TCC's environment: both variables set, the working folder another car's. Nothing of it is read, the
+        # critic-env files there are said, and the mirror line is not (the mirror is stated).
+        env["PROJECT_MIRROR"] = os.path.join(project, "rew_analitic")
+        done = subprocess.run([sys.executable, "-c", probe, os.path.abspath(__file__)], cwd=other, env=env,
+                              capture_output=True, text=True, encoding="utf-8", timeout=60)
+        try:
+            tcc = json.loads(done.stdout.strip().splitlines()[-1])
+        except (ValueError, IndexError):
+            tcc = None
+        if not tcc or tcc["model"] == "another-cars-model" or tcc["bin"] == "their-gemini" \
+                or tcc["line"] is not None or len(tcc["lines"]) != 2 \
+                or any(os.path.realpath(p).startswith(os.path.realpath(other) + os.sep) for p in tcc["env"]):
+            failures.append(f"TCC's environment: {tcc!r} {done.stderr.strip()[-300:]!r}")
+        del env["PROJECT_MIRROR"]
         # The line rides a review's run once, on stderr; with `PROJECT_MIRROR` set (TCC always sets it) it is not said.
         pkg = os.path.join(top, "proposal.md")
         write(pkg, "Check the proposal.")
@@ -2962,6 +2998,12 @@ def _check_the_mirror_follows_the_project():
                 said = [ln for ln in err.splitlines() if "is not read: AUTOSOUND_PROJECT_DIR is set" in ln]
                 if len(said) != 1:
                     failures.append(f"a review's run said the unused mirror {len(said)} times: {err.strip()[-300:]!r}")
+                # And on `doctor`, once.
+                scene.doctor()
+                _code, _out, err = scene.run("doctor", "--no-smoke")
+                said = [ln for ln in err.splitlines() if "is not read: AUTOSOUND_PROJECT_DIR is set" in ln]
+                if len(said) != 1:
+                    failures.append(f"doctor said the unused mirror {len(said)} times: {err.strip()[-300:]!r}")
                 # A mirror stated at start (TCC always states it): no line -- whatever the environment says since.
                 globals()["_MIRROR_FROM_PROJECT"] = False
                 if cwd_mirror_line() is not None:
@@ -5648,8 +5690,7 @@ def main():
     lost = lost_pins() if role == "doctor" or role in REVIEW_TASKS else None
     if lost:
         print(lost, file=sys.stderr)
-    unused = cwd_mirror_line() if role == "doctor" or role in REVIEW_TASKS else None
-    if unused:
+    for unused in (cwd_lines() if role == "doctor" or role in REVIEW_TASKS else ()):
         print(unused, file=sys.stderr)
     if role == "doctor":
         success = run_doctor(smoke="--no-smoke" not in sys.argv, via=via)
