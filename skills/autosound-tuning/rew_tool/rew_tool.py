@@ -2111,7 +2111,8 @@ def _check_only_rews_failure_is_said_as_rews():
     запущений") for REW's own failure only -- an exception whose class carries `rew_state`, or REW's error answer
     (group fix 1, item 1). A target file it cannot open (mode 0; Windows' held file) is its own line, `error: <file>
     cannot be read (<why>) -- <repair>`, exit 1, and one in another code page `error: <file> is not UTF-8 ...`: both
-    were "start REW", which mends neither. A bug is raised as itself, never said as REW down. REW is a stand-in."""
+    were "start REW", which mends neither. A bug is never said as REW down: its traceback, `error: unexpected
+    <class>: <words>`, exit 70 (#165). REW down stays exit 1, REW's sentence. REW is a stand-in."""
     import builtins
     import shutil
     import tempfile
@@ -2175,8 +2176,9 @@ def _check_only_rews_failure_is_said_as_rews():
             raise AttributeError("'NoneType' object has no attribute 'items'")
         api.get_measurements = bug
         code, out, err = _run_main("analyze-batch", "_2 (rta)", "--no-targets")
-        if not str(code).startswith("raised AttributeError") or said_as_rews(out + err):
-            failures.append(f"a bug in analyze-batch said as REW's: exit {code!r}, said {out.strip()[-300:]!r}")
+        if code != 70 or "Traceback" not in err or "error: unexpected AttributeError" not in err \
+                or said_as_rews(out + err):
+            failures.append(f"a bug in analyze-batch: exit {code!r}, said {out.strip()[-300:]!r} {err[-300:]!r}")
 
         def journal_gone(*args, **kwargs):
             raise PermissionError(13, "Permission denied", os.path.join(top, "state", "v_001.json"))
@@ -2192,8 +2194,9 @@ def _check_only_rews_failure_is_said_as_rews():
             raise AttributeError("'NoneType' object has no attribute 'get'")
         globals()["analyze_joints"] = joints_bug
         code, out, err = _run_main("analyze-joints", "--joint", "w-L,m-L,400", "--ver", "2")
-        if not str(code).startswith("raised AttributeError") or said_as_rews(out + err):
-            failures.append(f"a bug in analyze-joints said as REW's: exit {code!r}, said {out.strip()[-300:]!r}")
+        if code != 70 or "Traceback" not in err or "error: unexpected AttributeError" not in err \
+                or said_as_rews(out + err):
+            failures.append(f"a bug in analyze-joints: exit {code!r}, said {out.strip()[-300:]!r} {err[-300:]!r}")
     finally:
         builtins.open = real_open
         globals()["analyze_joints"] = real_joints
@@ -2353,7 +2356,25 @@ def _say_batch_or_joints_failure(exc, rew_words):
     raise exc
 
 
+#: A bug's exit (#165), as `process.py` and `predict.py` answer it. REW down stays 1 here: its Ukrainian sentence and
+#: the callers that read it hold that exit.
+EXIT_UNEXPECTED = 70
+
+
 def main():
+    """The command line (`_main`), with a bug said as one (#165): its traceback, `error: unexpected <class>: <words>`,
+    exit 70 -- a refusal is `_main`'s own exit 1, REW down among them. A bug ended in Python's bare traceback, exit 1:
+    the exit of every refusal."""
+    try:
+        _main()
+    except Exception as exc:  # noqa: BLE001 -- the refusals exit on their own; what reaches here is a bug
+        import traceback
+        traceback.print_exc()
+        print(f"error: unexpected {type(exc).__name__}: {exc}", file=sys.stderr)
+        sys.exit(EXIT_UNEXPECTED)
+
+
+def _main():
     parser = argparse.ArgumentParser(description="REW Analysis Tool")
     parser.add_argument("--curves-dir", default=None,
                         help="Шлях до папки з цільовими кривими (default: $AUTOSOUND_PROJECT_DIR's "

@@ -2056,6 +2056,11 @@ def plot(result, path):
 
 
 # ---------------------------------------------------------------- CLI
+#: The exits `main` answers beside 0 and 1 (#165), as `process.py` answers them: REW not answering, and a bug.
+EXIT_REW_UNAVAILABLE = 69
+EXIT_UNEXPECTED = 70
+
+
 def main(argv=None):
     """The command line (`_main`), and its refusal of a project file it reads and cannot (#134, R53): the journal held,
     a line in it in another code page, a `dsp_profile.json` cut off or a newer method's (H I-4) -- one line,
@@ -2063,15 +2068,34 @@ def main(argv=None):
     (batch 4's re-review, Out of Scope 1): a slot nobody made active, a `--route` to a row the ledger does not have or
     to one whose crossover the method cannot model, an anchors-style state's or a `--ladder-edge`'s family it cannot
     model (N6) -- they ended in a traceback. And a filter the method has no model for met in the model itself
-    (`is_unmodelled`, R49)."""
+    (`is_unmodelled`, R49).
+
+    REW is sorted as `process.py`'s `_main` sorts it (#165), off the exception's CLASS (`rew_state`): REW not answering
+    is one line, exit 69 -- the solo's read raised `RewUnavailable` past here as a traceback; any other state of REW's,
+    and REW's error answer (an `HTTPError`), is one line, exit 1. Both end "-- nothing was written", which is so: every
+    file is written after the last read of REW. Anything else is a bug: its traceback, `error: unexpected <class>:
+    <words>`, exit 70 -- with nothing said of what was written, since a bug can come in the middle of the writes."""
+    import urllib.error
     try:
         return _main(argv)
-    except Exception as exc:  # noqa: BLE001 -- matched below; anything else still raises
-        if not (isinstance(exc, PredictError) or getattr(type(exc), "is_unreadable", False)
-                or getattr(type(exc), "is_unmodelled", False)):
-            raise
-        print(f"error: {exc}", file=sys.stderr)
-        return 1
+    except Exception as exc:  # noqa: BLE001 -- sorted below; a bug is its traceback and 70
+        if isinstance(exc, PredictError) or getattr(type(exc), "is_unreadable", False) \
+                or getattr(type(exc), "is_unmodelled", False):
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        rew_said = getattr(type(exc), "rew_state", None)
+        if rew_said == "unavailable":
+            print(f"error: {exc} -- nothing was written", file=sys.stderr)
+            return EXIT_REW_UNAVAILABLE
+        if rew_said is not None or isinstance(exc, urllib.error.HTTPError):
+            said = exc.args[0] if isinstance(exc, KeyError) and len(exc.args) == 1 else exc
+            what = "REW answered with an error: " if isinstance(exc, urllib.error.HTTPError) else ""
+            print(f"error: {what}{said} -- nothing was written", file=sys.stderr)
+            return 1
+        import traceback
+        traceback.print_exc()
+        print(f"error: unexpected {type(exc).__name__}: {exc}", file=sys.stderr)
+        return EXIT_UNEXPECTED
 
 
 def _own_rew_project(project_dir):
@@ -2970,7 +2994,7 @@ def _check_foreign_solos_refused_over_any_project_json():
     it, and another build's solos were read as this car's. Through `main --rew`, against a stand-in `rew_api`: a BOM'd
     `project.json` still refuses another build's solo; a cut one refuses, naming the file and its repair, exit 1;
     `--allow-foreign` reads past both; REW not answering is no refusal (the solos' own read meets it); a bug in the
-    check is raised as itself."""
+    check is a bug's traceback and exit 70 (#165)."""
     import shutil
     import tempfile
     import rew_api as _rew
@@ -3027,7 +3051,7 @@ def _check_foreign_solos_refused_over_any_project_json():
             raise AttributeError("'NoneType' object has no attribute 'lower'")
         _rew.foreign_measurements = bug
         rc, out, err = _run_main(argv)
-        if not str(rc).startswith("raised AttributeError"):
+        if rc != 70 or "Traceback" not in err or "error: unexpected AttributeError" not in err:
             failures.append(f"a bug in the check: rc {rc!r}, said {err.strip()[-300:]!r}")
     finally:
         _rew.get_measurements, _rew.foreign_measurements = saved
@@ -3035,6 +3059,55 @@ def _check_foreign_solos_refused_over_any_project_json():
             os.environ["AUTOSOUND_PROJECT_DIR"] = saved_env
         shutil.rmtree(top, ignore_errors=True)
     assert not failures, "\n  ".join(["the check against another build's solos:"] + failures)
+
+
+def _check_rew_down_is_rew_down():
+    """#165: `predict --rew --project` with REW down says so in one line, exit 69, never a traceback -- the solo's read
+    (`load_solo_rew`) raised `RewUnavailable` past `main`. Another state of REW's (`protocol`) is one line, exit 1;
+    both say nothing was written, which is so: every file is written after the last read of REW. Anything else is a bug:
+    its traceback, `error: unexpected <class>: <words>`, exit 70. REW is a stand-in."""
+    import shutil
+    import tempfile
+    import rew_api as _rew
+    saved_env = os.environ.pop("AUTOSOUND_PROJECT_DIR", None)
+    saved = _rew.get_measurements, _rew.foreign_measurements, globals()["load_solo_rew"]
+    top = tempfile.mkdtemp(prefix="autosound_predict_rew_down_")
+    failures = []
+    try:
+        proj, _solos = _two_way_fixture(top)
+        _rew.get_measurements = lambda: {}
+        _rew.foreign_measurements = lambda records, own: {}
+        out_dir = os.path.join(top, "out")
+        argv = ["--rew", "--project", proj, "--ver", "7", "--out", out_dir]
+
+        def raising(exc):
+            def load(*args, **kwargs):
+                raise exc
+            return load
+        for label, exc, want_rc, said_in in (
+                ("REW down", _rew.RewUnavailable(ConnectionRefusedError(61, "Connection refused"),
+                                                 "http://127.0.0.1:4735"), 69, "REW is not answering at"),
+                ("REW's answer unreadable", _rew.RewProtocolError("not JSON"), 1, "not JSON")):
+            globals()["load_solo_rew"] = raising(exc)
+            rc, out, err = _run_main(argv)
+            said = err.strip().splitlines()
+            if rc != want_rc or "Traceback" in err or not said or not said[-1].startswith("error: ") \
+                    or said_in not in said[-1] or not said[-1].endswith(" -- nothing was written") \
+                    or os.path.exists(out_dir):
+                failures.append(f"{label}: rc {rc!r}, said {err.strip()[-300:]!r}")
+        globals()["load_solo_rew"] = raising(TypeError("'NoneType' object is not subscriptable"))
+        rc, out, err = _run_main(argv)
+        if rc != 70 or "Traceback" not in err \
+                or "error: unexpected TypeError: 'NoneType' object is not subscriptable" not in err \
+                or "nothing was written" in err:
+            failures.append(f"a bug: rc {rc!r}, said {err.strip()[-300:]!r}")
+    finally:
+        _rew.get_measurements, _rew.foreign_measurements = saved[:2]
+        globals()["load_solo_rew"] = saved[2]
+        if saved_env is not None:
+            os.environ["AUTOSOUND_PROJECT_DIR"] = saved_env
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["REW down is REW down:"] + failures)
 
 
 def _check_predict_error_says_it_is_a_refusal():
@@ -3757,6 +3830,7 @@ def _selftest():
     _check_refused_notes_never_cut()
     failures = []
     for check in (_check_says_what_it_did_not_check, _check_predict_error_says_it_is_a_refusal,
+                  _check_rew_down_is_rew_down,
                   _check_own_rew_project_reads_a_bom, _check_foreign_solos_refused_over_any_project_json):
         try:
             check()

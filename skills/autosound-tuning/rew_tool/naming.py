@@ -287,12 +287,16 @@ class Glossary:
     """
 
     def __init__(self, data=None):
-        data = data or {}
-        self.channels = list(data.get("channels") or [])
-        self.pairs = dict(data.get("pairs") or {})
-        self.combos = dict(data.get("combos") or {})
-        self.joints = dict(data.get("joints") or {})
-        self.sides = dict(data.get("sides") or {})
+        # Only the shapes a glossary has (#165): `channels` a list whose rows are objects, the other sections objects.
+        # Any other shape is that part missing -- `list(42)` raised `TypeError`, a row that is a number
+        # `AttributeError`, out of the lenient `for_project`, TCC's read of a screen (contract 1).
+        data = data if isinstance(data, dict) else {}
+        rows = data.get("channels")
+        self.channels = [c for c in rows if isinstance(c, dict)] if isinstance(rows, (list, tuple)) else []
+        self.pairs = dict(data["pairs"]) if isinstance(data.get("pairs"), dict) else {}
+        self.combos = dict(data["combos"]) if isinstance(data.get("combos"), dict) else {}
+        self.joints = dict(data["joints"]) if isinstance(data.get("joints"), dict) else {}
+        self.sides = dict(data["sides"]) if isinstance(data.get("sides"), dict) else {}
 
     # -- loading --
     @classmethod
@@ -354,9 +358,10 @@ class Glossary:
         return glossary
 
     def follow_project_channels(self, rows):
-        """Set each channel's `active` from the project's row of the same code, where there is one (skill #83)."""
+        """Set each channel's `active` from the project's row of the same code, where there is one (skill #83). Rows
+        that are no list, and rows that are no object, are no rows (#165)."""
         on = {}
-        for row in rows or []:
+        for row in rows if isinstance(rows, (list, tuple)) else ():
             if isinstance(row, dict) and row.get("code"):
                 on[canonical_code(row["code"])] = not row.get("hidden") and row.get("role") != "unused"
         for c in self.channels:
@@ -1121,6 +1126,55 @@ def _check_lenient_read_of_a_glossary_not_an_object():
     assert not failures, "\n  ".join(["the lenient read over a glossary that is no object:"] + failures)
 
 
+def _check_lenient_read_of_inner_shapes():
+    """#165: the lenient `Glossary.for_project` over a glossary whose sections have the wrong shape -- `channels` a
+    number, a list of numbers, `pairs` a list -- and over a `project.json` whose channel rows are no list of objects, is
+    no glossary (no exception, `channel_codes() == []`), as a file it cannot read is: `list(42)` raised `TypeError`,
+    a row that is a number `AttributeError`, out of TCC's read of a screen (contract 1). Rows that are objects are kept
+    beside the ones that are not."""
+    import shutil
+    import tempfile
+    d = tempfile.mkdtemp(prefix="autosound_naming_inner_shapes_")
+    failures = []
+
+    def read(where):
+        try:
+            return Glossary.for_project(d).channel_codes()
+        except Exception as exc:  # noqa: BLE001 -- the failure under test
+            return f"raised {type(exc).__name__}: {exc}"
+    try:
+        gpath, ppath = os.path.join(d, "glossary.json"), os.path.join(d, "project.json")
+        for raw in ('{"channels": 42}', '{"channels": [1]}', '{"pairs": [1]}', '{"combos": 3, "joints": "x"}',
+                    '{"sides": [["L", 1]], "channels": "w-L"}'):
+            for where in ("glossary.json", "project.json's glossary"):
+                for path in (gpath, ppath):
+                    if os.path.exists(path):
+                        os.remove(path)
+                if where == "glossary.json":
+                    with open(gpath, "w", encoding="utf-8") as fh:
+                        fh.write(raw)
+                else:
+                    with open(ppath, "w", encoding="utf-8") as fh:
+                        fh.write('{"glossary": %s}' % raw)
+                got = read(where)
+                if got != []:
+                    failures.append(f"{where} {raw}: {got}")
+        os.remove(ppath)
+        with open(gpath, "w", encoding="utf-8") as fh:
+            fh.write('{"channels": [{"code": "w-L"}, 1, "m-L"]}')
+        for rows in ("42", "[1]", '"w-L"', '[{"code": "w-L", "hidden": true}, 7]'):
+            with open(ppath, "w", encoding="utf-8") as fh:
+                fh.write('{"channels": %s}' % rows)
+            got = read("rows")
+            if got != ["w-L"]:
+                failures.append(f"project.json's channels {rows}: {got}")
+        if Glossary.for_project(d).channel_codes(active_only=True) != []:
+            failures.append("a hidden row beside a number did not switch its channel off")
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+    assert not failures, "\n  ".join(["the lenient read over a glossary's inner shapes:"] + failures)
+
+
 def _check_for_project_strict():
     """`Glossary.for_project(project_dir, strict=True)` -- the method's own readers' -- refuses a file it cannot read
     (#134, batch 4's re-review, Out of Scope 6): a `glossary.json` or a `project.json` that is there and cannot be read
@@ -1333,7 +1387,7 @@ def _selftest():
                   _check_bom_glossary_read, _check_for_project_strict,
                   _check_cli_reads_the_glossary_strictly, _check_dangling_glossary_link,
                   _check_dangling_link_repair_fits, _check_lenient_read_of_a_project_json_not_an_object,
-                  _check_lenient_read_of_a_glossary_not_an_object):
+                  _check_lenient_read_of_a_glossary_not_an_object, _check_lenient_read_of_inner_shapes):
         try:
             check()
         except AssertionError as exc:
