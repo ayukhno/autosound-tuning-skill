@@ -167,14 +167,16 @@ under `<project>/process/reviews/`.
 
 `--record` (W-9, #143) asks `critic` and `advisor` to record the review they file as the process's reviewer step --
 `critic_called` through `Process.record_reviewer`, under the project's writer lock -- and to say so on stderr. One
-review round is one record, whichever way it arrives (#166): `record_reviewer` adds none when the journal holds a
-`critic_called` of the same round -- the review file's base, `<ts>-<role>`, with `-package` and `.md` stripped and `\`
-read as `/`, so a package and the answer saved for it are one round -- and the same vendor, a vendor `unknown`, `?` or
-none matching any; it returns that record, and `process.py reviewer` then says `reviewer already recorded (<review>):
-nothing added`, exit 0. A record without `--review` is no round and is always added. TCC's `call_critic` records a
-clipboard call today with no `--review` (the door prints no `REVIEW_FILE` on that route) and vendor `unknown`: its
-record and the answer's printed line are two until it passes the `PACKAGE_FILE` path as `--review`. Without it nothing is recorded, and the last line on stderr is the
-one that records it by hand: `>> Not recorded (no --record). A front-end that ran this call records it itself (TCC's
+review round is one record, whichever way it arrives (#166). The round is the review file's base, `<ts>-<role>`, with
+`-package`, `-answer[-N]` and `.md` stripped and `\` read as `/` -- a package and its answer are one round -- and its
+vendor, `unknown`, `?` or none matching any. A record of a round the journal holds adds nothing and returns it:
+`process.py reviewer` says `reviewer already recorded (<review>): nothing added`, exit 0. One that adds what the round's
+record lacked -- the answer to a package, a vendor to `unknown` -- completes it: the state's `reviewer` becomes the
+answer's, and one `critic_called` with `completes: <package>` is appended (`... (completes <package>)`). A record
+without `--review` is no round and is always added. TCC's `call_critic` records a clipboard call today with no
+`--review` (the door prints no `REVIEW_FILE` on that route): its record and the answer's line stay two until it
+passes the `PACKAGE_FILE` path as `--review`. Without `--record` nothing is recorded, and the last line on stderr is
+the one that records it by hand: `>> Not recorded (no --record). A front-end that ran this call records it itself (TCC's
 call_critic does): run nothing then. From a terminal, run once -- Запиши посилання: <command>`, the command runnable
 as it stands (`python3 <process.py> <project>/process reviewer <vendor> <model> --review <rel> --mode <mode>`). TCC's
 `call_critic` passes no `--record`: it records the call it ran, with its step, as before, and that line, in its

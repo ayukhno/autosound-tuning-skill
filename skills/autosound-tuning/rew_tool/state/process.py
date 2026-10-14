@@ -204,7 +204,8 @@ _NO_VENDOR = ("", "?", "unknown")
 def review_round(review):
     """The review round a review file belongs to (#166): its base, `<ts>-<role>` (with a `-N` when that second held
     one), `-package` and `.md` stripped and `\\` read as `/` -- so a package, `<ts>-critic-package.md`, and the answer
-    saved for it, `<ts>-critic.md`, are one round. None for no review: a record without one is no round to match."""
+    saved for it, `<ts>-critic.md` (or `<ts>-critic-answer[-N].md`), are one round. None for no review: a record without
+    one is no round to match."""
     if not review:
         return None
     name = str(review).replace("\\", "/").rsplit("/", 1)[-1]
@@ -212,13 +213,50 @@ def review_round(review):
         name = name[:-len(".md")]
     if name.endswith("-package"):
         name = name[:-len("-package")]
+    # The answer to `<base>-package.md` saved as `<base>-answer[-N].md` when a review held `<base>.md` (the door's
+    # `_answer_name`): that package's round too.
+    name = re.sub(r"-answer(-[0-9]+)?$", "", name)
     return name or None
+
+
+def _no_vendor(vendor):
+    return str(vendor or "").strip().lower() in _NO_VENDOR
 
 
 def _same_vendor(a, b):
     """True when two records' vendors can be one reviewer's: equal but for case, or either says none (`_NO_VENDOR`)."""
-    a, b = (str(v or "").strip().lower() for v in (a, b))
-    return a in _NO_VENDOR or b in _NO_VENDOR or a == b
+    return _no_vendor(a) or _no_vendor(b) or str(a).strip().lower() == str(b).strip().lower()
+
+
+def _is_package(review):
+    """True when `review` names a package -- `<ts>-<role>-package.md`, the request -- not an answer."""
+    return str(review or "").replace("\\", "/").rsplit("/", 1)[-1].endswith("-package.md")
+
+
+def _adds_to(old, new):
+    """True when the record `new` adds what the round's record `old` lacked (#166): the answer to a package, or a
+    vendor to an unknown one -- TCC records a clipboard call as `unknown` / `?` / the package, and the answer's line
+    names both. Anything else adds nothing."""
+    return bool((_is_package(old.get("review")) and new.get("review") and not _is_package(new.get("review")))
+                or (_no_vendor(old.get("vendor")) and not _no_vendor(new.get("vendor"))))
+
+
+def _completed(old, new, explicit_phase=False):
+    """`new` completing `old` (#166): each field the newer one knows -- a vendor, a model other than `?`, an answer over
+    a package -- and the older one's where the newer is silent (TCC's record carries the step)."""
+    out = dict(new)
+    if _no_vendor(new.get("vendor")):
+        out["vendor"] = old.get("vendor")
+    if str(new.get("model") or "").strip() in ("", "?") and old.get("model"):
+        out["model"] = old.get("model")
+    if _is_package(new.get("review")):
+        out["review"] = old.get("review")
+    for k in ("step", "outcome", "mode"):
+        if not new.get(k) and old.get(k):
+            out[k] = old.get(k)
+    if not explicit_phase and old.get("phase"):
+        out["phase"] = old.get("phase")
+    return out
 
 class ProcessError(ValueError):
     """A transition the process model refuses — e.g. a done step with no evidence."""
@@ -1736,22 +1774,18 @@ class Process:
         package was compiled and answered by a human paste, which must not look like no review at
         all.
 
-        One review round, one record (#166): a `critic_called` already in the journal for this review's round
-        (`review_round`) with this vendor (`_same_vendor`) is the record -- nothing is written or appended, and it is
-        returned with `already_recorded: True`. A round arrived twice under TCC's clipboard route: the package
-        recorded by `call_critic`, the answer by the printed line. Looked up here, under the writer lock, so two
-        writers of one round add one. A record without a review is no round, and is added as before.
+        One review round, one record (#166). A round arrived twice under TCC's clipboard route: the package recorded
+        by `call_critic`, the answer by the printed line. The round's last `critic_called` in the journal
+        (`review_round`, `_same_vendor`) is looked up here, under the writer lock, so two writers of one round add one:
+          * a record that adds nothing to it writes nothing, and the round's record is returned -- the state's
+            `reviewer` when that is this round's, in its shape -- with `already_recorded: True`;
+          * one that adds what it lacked (`_adds_to`: the answer to a package, a vendor to an unknown one) COMPLETES
+            it: the state's `reviewer` becomes the two merged (`_completed`), the answer's text over the request, and
+            one `critic_called` is appended with `completes: <the review it completes>`. Returned with `completes`.
+        A record without a review is no round, and is added as before. Each `critic_called` carries its `phase`.
         """
         state = self.load(strict=True)
-        key = review_round(review)
-        if key is not None:
-            for event in self._events(kinds=(EV_CRITIC_CALLED,)):
-                if review_round(event.get("review")) == key and _same_vendor(event.get("vendor"), vendor):
-                    found = {k: event.get(k) for k in ("vendor", "model", "at", "phase", "step", "outcome", "review",
-                                                       "mode")}
-                    found["already_recorded"] = True
-                    return found
-        state["reviewer"] = {
+        record = {
             "vendor": vendor,
             "model": model,
             "at": _now(),
@@ -1761,10 +1795,30 @@ class Process:
             "review": review,
             "mode": mode,
         }
+        key = review_round(review)
+        completes = None
+        if key is not None:
+            same = [e for e in self._events(kinds=(EV_CRITIC_CALLED,))
+                    if review_round(e.get("review")) == key and _same_vendor(e.get("vendor"), vendor)]
+            if same:
+                old = same[-1]
+                if not _adds_to(old, record):
+                    current = state.get("reviewer") or {}
+                    if review_round(current.get("review")) == key and _same_vendor(current.get("vendor"),
+                                                                                   old.get("vendor")):
+                        found = dict(current)
+                    else:
+                        found = {k: old.get(k) for k in record}
+                    found["already_recorded"] = True
+                    return found
+                completes = old.get("review")
+                record = _completed(old, record, explicit_phase=phase is not None)
+        state["reviewer"] = record
         self._write(state)
-        self._append(EV_CRITIC_CALLED, vendor=vendor, model=model, step=step, outcome=outcome,
-                     review=review, mode=mode)
-        return state["reviewer"]
+        self._append(EV_CRITIC_CALLED, vendor=record["vendor"], model=record["model"], step=record["step"],
+                     outcome=record["outcome"], review=record["review"], mode=record["mode"], phase=record["phase"],
+                     completes=completes)
+        return dict(record, completes=completes) if completes else state["reviewer"]
 
     # -- capture rounds (SCR-034) --
     @_locked
@@ -6387,17 +6441,22 @@ _TCC_FLAGS = (
 
 
 def _check_one_review_round_one_record():
-    """#166: one review round is one `critic_called`, whichever way it arrives. The round is the review file's base --
-    `<ts>-<role>`, `-package` and `.md` stripped, `\\` read as `/` -- with its vendor; a vendor not known (`unknown`,
-    `?`, none: what TCC records for a clipboard call, its model unreported) is any vendor's. A second record of a round
-    adds nothing and returns the first; the command line says so, exit 0. The package recorded, then its answer: one;
-    the same review twice: one; two rounds: two; two vendors' answers to one package: two."""
+    """#166: one review round is one record, whichever way it arrives. The round is the review file's base --
+    `<ts>-<role>`, `-package`, `-answer[-N]` and `.md` stripped, `\\` read as `/` -- with its vendor; a vendor not known
+    (`unknown`, `?`, none: what TCC records for a clipboard call, its model unreported) is any vendor's. A second record
+    that adds nothing returns the round's record, the state's shape (its phase too), and the command line says so,
+    exit 0. One that adds what the first lacked -- the answer to a package, a vendor to an unknown one -- COMPLETES it:
+    the state's `reviewer` is the answer's (the critique, not the request: SCR-027), and one `critic_called` carrying
+    `completes: <the first's review>` is appended. The same review twice: one; two rounds: two; two vendors' answers to
+    one review: two."""
     import shutil
     import tempfile
     assert (review_round("process/reviews/2026-10-14T01-02-03-critic-package.md"),
             review_round("process\\reviews\\2026-10-14T01-02-03-critic.md"),
-            review_round("2026-10-14T01-02-03-critic-2-package.md"), review_round(None), review_round("")) == \
-        ("2026-10-14T01-02-03-critic", "2026-10-14T01-02-03-critic", "2026-10-14T01-02-03-critic-2", None, None)
+            review_round("2026-10-14T01-02-03-critic-2-package.md"), review_round("x/2026-10-14T01-02-03-critic-answer.md"),
+            review_round("2026-10-14T01-02-03-critic-answer-3.md"), review_round(None), review_round("")) == \
+        ("2026-10-14T01-02-03-critic", "2026-10-14T01-02-03-critic", "2026-10-14T01-02-03-critic-2",
+         "2026-10-14T01-02-03-critic", "2026-10-14T01-02-03-critic", None, None)
     top = tempfile.mkdtemp(prefix="autosound_process_one_round_")
     try:
         d = os.path.join(top, "process")
@@ -6408,26 +6467,39 @@ def _check_one_review_round_one_record():
             return p.events(kinds=(EV_CRITIC_CALLED,))
         a = "process/reviews/2026-10-14T01-02-03-critic"
         first = p.record_reviewer("unknown", "?", step="-1.1", review=a + "-package.md", mode="clipboard")
-        again = p.record_reviewer("google", "g-3", review="process\\reviews\\2026-10-14T01-02-03-critic.md",
-                                  mode="clipboard")
-        assert len(called()) == 1 and again.get("already_recorded") and again["review"] == first["review"] \
-            and not first.get("already_recorded"), (called(), first, again)
-        assert p.load()["reviewer"]["review"] == a + "-package.md", p.load()["reviewer"]
+        answer = "process\\reviews\\2026-10-14T01-02-03-critic.md"
+        done = p.record_reviewer("google", "g-3", review=answer, mode="clipboard")
+        state = p.load()["reviewer"]
+        last = called()[-1]
+        assert not first.get("already_recorded") and not done.get("already_recorded"), (first, done)
+        assert (state["vendor"], state["model"], state["review"], state["step"], state["phase"], state["mode"]) == \
+            ("google", "g-3", answer, "-1.1", "-1", "clipboard"), state
+        assert len(called()) == 2 and last.get("completes") == a + "-package.md" and last["review"] == answer, called()
+        again = p.record_reviewer("google", "g-3", review=answer, mode="clipboard")
+        late = p.record_reviewer("unknown", "?", review=a + "-package.md", mode="clipboard")
+        assert again.get("already_recorded") and late.get("already_recorded") and len(called()) == 2, called()
+        assert {k: again[k] for k in state} == state and again["phase"] == "-1", (again, state)
         b = "process/reviews/2026-10-14T02-00-00-critic.md"
         p.record_reviewer("google", "g-3", review=b, mode="api")
         assert p.record_reviewer("google", "g-3", review=b, mode="api").get("already_recorded")
-        assert len(called()) == 2, called()
-        p.record_reviewer("openai", "gpt", review=b, mode="clipboard")
         assert len(called()) == 3, called()
+        p.record_reviewer("openai", "gpt", review=b, mode="clipboard")
+        assert len(called()) == 4, called()
         p.record_reviewer("google", "g-3")                      # no review: no round to match, always recorded
         p.record_reviewer("google", "g-3")
-        assert len(called()) == 5, called()
+        assert len(called()) == 6, called()
         c = "process/reviews/2026-10-14T03-00-00-critic.md"
         rc, out, err = _run_main(["process.py", d, "reviewer", "google", "g-3", "--review", c, "--mode", "api"])
         assert rc == 0 and out.startswith("reviewer recorded: google / g-3"), (rc, out, err)
         rc, out, err = _run_main(["process.py", d, "reviewer", "google", "g-3", f"--review={c}", "--mode=api"])
         assert rc == 0 and out.strip() == f"reviewer already recorded ({c}): nothing added", (rc, out, err)
-        assert len(called()) == 6, called()
+        e = "process/reviews/2026-10-14T04-00-00-critic"
+        _run_main(["process.py", d, "reviewer", "unknown", "?", "--review", e + "-package.md", "--mode", "clipboard"])
+        rc, out, err = _run_main(["process.py", d, "reviewer", "google", "g-3", "--review", e + ".md", "--mode",
+                                  "clipboard"])
+        assert rc == 0 and out.strip() == (f"reviewer recorded: google / g-3 -> {e}.md (completes "
+                                           f"{e}-package.md)"), (rc, out, err)
+        assert len(called()) == 9, called()
     finally:
         shutil.rmtree(top, ignore_errors=True)
 
@@ -9843,6 +9915,8 @@ def _main(argv):
                                     review=flags.get("review"), mode=flags.get("mode"))
             if got.get("already_recorded"):              # #166: one round, one record -- not a refusal
                 print(f"reviewer already recorded ({got.get('review')}): nothing added")
+            elif got.get("completes"):
+                print(f"reviewer recorded: {rest[0]} / {rest[1]} -> {got.get('review')} (completes {got['completes']})")
             else:
                 print(f"reviewer recorded: {rest[0]} / {rest[1]}"
                       + (f" -> {flags['review']}" if flags.get("review") else " (no text recorded)"))

@@ -114,10 +114,12 @@ spelling of a listed one (#153): `title` is then the list's, the round's own, an
 `capture_verified` carries `bands` -- `{title: {"band_hz": [lo, hi], "band_source": "rew"|"asked"}}` -- the band each
 sweep was judged over (#154).
 
-`critic_called` is one per review round (#166): `record_reviewer` adds none when one of the same round
-(`review_round`: the `review` file's base, `-package` and `.md` stripped) and vendor (equal but for case, or one of
-`unknown`, `?`, none) is in the journal -- it returns that one with `already_recorded: True`, and the state's
-`reviewer` stays as it was. A record without `review` is no round, and is always added.
+`critic_called` carries its `phase`, and is one per review round (#166): the round is `review_round` of `review`
+(the file's base, `-package`, `-answer[-N]` and `.md` stripped) with the vendor (equal but for case, or one of
+`unknown`, `?`, none). A record that adds nothing to the round's last one is not written -- `record_reviewer` returns
+the round's record with `already_recorded: True`; one that adds the answer to a package or a vendor to an unknown one
+completes it: the state's `reviewer` is the merged record, and the event appended carries `completes: <review>`. A
+record without `review` is no round, and is always added.
 
 `user_decision` is the Arbiter's half of the conversation, recorded as the answer rather than as
 prose about it. `invalidates` carries the same shape as `config_change.impact`, so a ruling that
