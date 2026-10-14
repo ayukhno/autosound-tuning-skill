@@ -155,7 +155,7 @@ MISSING=""
 #: Set by `stop` and `finish` as they end the run (#142): `going_ahead`'s EXIT trap leaves an exit that came through
 #: them as it is, and makes any other one a stop.
 ENDED=""
-#: Set by `going_ahead` (#160): write_receipt writes nothing before it.
+#: Set by `changing`, before the run's first change on disk (#160): before it a stop writes no receipt.
 RECEIPT_ARMED=0
 #: What the method's step left as it was, when it did (#142): a link that is not this script's, or anything else at
 #: ~/.claude/skills/autosound-tuning. The receipt's method_ref says that, not a tag this run never installed.
@@ -393,10 +393,12 @@ clt_present() { if on_mac; then xcode-select -p >/dev/null 2>&1; else return 0; 
 # ── how the run ends (#142) ───────────────────────────────────────────────────
 # The exit code a script reads: 0 ready · 1 stopped before the end -- a refusal, an error or an interruption: what was
 # done before it stays, and the last lines say what; a stop before the method's step leaves the method as it was · 2 a
-# usage error, before anything ran · 3 installed, NOT ready, the missing parts named. A stop and the end each write the
-# receipt once the run has gone ahead (`going_ahead`), and from there it says `stopped` until one of them does; a usage
-# error, and a stop before going ahead -- a declined consent, no git -- write none (#160): such a run changed nothing,
-# and the last real install's receipt stays, so `doctor` still says what that install did about the engine.
+# usage error, before anything ran · 3 installed, NOT ready, the missing parts named. The end always writes the
+# receipt; a stop writes it only once the run has changed something on disk (`changing`, before each first change),
+# and from that change on it says `stopped` until the end does. A usage error, and a stop before any change -- a
+# declined consent, no git, a tag list GitHub did not give, a tag whose signature is refused -- write none (#160):
+# such a run changed nothing, and the last real install's receipt stays, so `doctor` still says what that install did
+# about the engine.
 
 # <text> as a JSON string: `\` and `"` escaped, control characters dropped, and the text UTF-8 (#172): iconv drops a
 # byte that is not, and with no iconv every byte outside printable ASCII is a `?` -- a `--skill-ref $'v\xff'` made a
@@ -425,7 +427,8 @@ json_str() {  # json_str <text>
 # once, naming the file and why (#142): kept quiet, `doctor` read an earlier run's receipt as this one's.
 write_receipt() {  # write_receipt ready|"not ready"|stopped
   [ "${DRY_RUN:-0}" = 1 ] && return 0
-  [ "${RECEIPT_ARMED:-0}" = 1 ] || return 0   # not gone ahead yet: nothing changed, the last receipt stays (#160)
+  # A stop before any change changed nothing: the last real receipt stays (#160). The end's verdict is always written.
+  [ "$1" != stopped ] || [ "${RECEIPT_ARMED:-0}" = 1 ] || return 0
   _wr_status="$1"; _wr_ver=""; _wr_json=""
   _wr_dir="${XDG_DATA_HOME:-$HOME/.local/share}/autosound"
   _wr_file="$_wr_dir/install-receipt.json"
@@ -560,15 +563,21 @@ consent() {
   stop 1 "Nothing installed. Re-run when you want to."
 }
 
-# From here the run is going ahead (#142). The receipt says `stopped` until `stop` or `finish` writes how the run
-# ended: an end neither reaches -- a failure under `set -e`, Ctrl-C, a kill -- leaves no earlier run's `ready` standing.
-# Ctrl-C at the terminal goes to the whole group, and bash 3.2 runs the EXIT trap for it too (a child stopped by it
-# hands the trap 130); a plain `kill` (SIGTERM) runs it as well, with $? = 0, and the run ends 143; only SIGKILL runs
-# no trap at all -- the receipt written here says `stopped` all the same.
+# From here the run is going ahead (#142): an end that comes through neither `stop` nor `finish` -- a failure under
+# `set -e`, Ctrl-C, a kill -- is a stop. Ctrl-C at the terminal goes to the whole group, and bash 3.2 runs the EXIT trap
+# for it too (a child stopped by it hands the trap 130); a plain `kill` (SIGTERM) runs it as well, with $? = 0, and the
+# run ends 143; only SIGKILL runs no trap at all.
 going_ahead() {
+  trap unplanned_end EXIT
+}
+# The run's first real change on disk is next (#160): from here the receipt says `stopped` until `stop` or `finish`
+# writes how the run ended, so an end neither reaches -- SIGKILL included -- leaves no earlier run's `ready` standing.
+# Before it nothing changed, and a stop leaves the last real receipt as it is. Called before each step that may be
+# the first to change something; once is enough.
+changing() {
+  [ "${RECEIPT_ARMED:-0}" = 1 ] && return 0
   RECEIPT_ARMED=1
   write_receipt stopped
-  trap unplanned_end EXIT
 }
 # going_ahead's EXIT trap: an end that came through neither `stop` nor `finish` is a stop, 1 -- a failing command's own
 # code is not the table's 2 or 3. Whatever $? says: under bash 3.2 an unbound variable (`set -u`) reaches this trap as
@@ -1021,6 +1030,7 @@ if on_mac && [ "$HAVE_CLT" = 0 ]; then
     if ! clt_present; then
       say "  Apple's own installer window opens now. Click Install, then Agree, and let it finish —"
       say "  this waits for it. (Do not pick \"Get Xcode\": that is 12 GB and not needed.)"
+      changing
       xcode-select --install >/dev/null 2>&1 || true
       _waited=0
       until clt_present; do
@@ -1043,6 +1053,7 @@ if [ -n "$CLAUDE_BIN" ]; then
   say "  ✓ $("$CLAUDE_BIN" --version 2>/dev/null || echo present)"
 else
   say "  the official installer, claude.ai/install.sh:"
+  changing
   if run "${BASH:-bash}" -c 'set -o pipefail; curl -fsSL https://claude.ai/install.sh | bash'; then
     in_local_bin claude && manifest_add claude
   else
@@ -1244,6 +1255,7 @@ checkout_method() {
       fi
     fi
     _co_was="$(git -C "$_co_dir" rev-parse --verify --quiet HEAD 2>/dev/null)" || _co_was=""
+    changing   # the copy moves from here (#160); a refusal above left it as it was
     run git -c advice.detachedHead=false -C "$_co_dir" checkout --quiet "$_co_want" || true
     if [ "$DRY_RUN" = 1 ] || head_is "$_co_dir" "$_co_want"; then return 0; fi
     # Put back: over a tree seen clean before this checkout, --force drops only what a checkout that broke off left
@@ -1273,6 +1285,7 @@ checkout_method() {
   fi
   # Checked before anything of it is checked out (skill #99), and removed when it fails: nothing unverified stays.
   verify_tag "$_co_dir" "$_co_ref" || { rm -rf "$_co_dir"; return 2; }
+  changing   # the new copy stays from here (#160)
   git -c advice.detachedHead=false -C "$_co_dir" checkout --quiet "$_co_want" || true
   head_is "$_co_dir" "$_co_want" && return 0
   warn "the new copy is not $_co_ref after its checkout -- it is removed; nothing was installed."
@@ -1435,6 +1448,8 @@ if [ "$CHANNEL" = "beta" ]; then
   fi
 fi
 fi   # not --plugin
+# Every step below installs something (#160): the run has changed the machine from here, if nothing above did.
+changing
 
 # ── what the method's own tools need ──────────────────────────────────────────
 # The reason this script exists, ahead of anything about models (INSTALLER-TZ §0): put the wall

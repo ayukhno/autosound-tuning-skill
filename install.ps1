@@ -104,8 +104,9 @@ if (-not $AutosoundRunAsFile) { $global:AutosoundInstallExit = 0 }
 # The codes (#142), install.sh's: 0 ready -- 1 stopped before the end, a refusal, an error or an interruption: what was
 # done before it stays (Git, Claude Code, uv, Python, perhaps the method), and a stop before the method's step leaves
 # the method as it was -- 2 a usage error -- 3 installed, NOT ready, the missing parts named.
-# A stop (1) writes the receipt as `stopped` -- once the run has gone ahead: a stop before it changed nothing, and the
-# last real install's receipt stays (#160); the end writes its own before its 3; 0 and 2 here write none.
+# A stop (1) writes the receipt as `stopped` -- once the run has changed something on disk (Enter-Change): a stop
+# before that changed nothing, and the last real install's receipt stays (#160); the end writes its own before its 3;
+# 0 and 2 here write none.
 function Stop-Installer {
     param([int]$Code)
     if ($Code -eq 1) { Write-Receipt "stopped" }
@@ -117,13 +118,15 @@ function Stop-Installer {
 # The installer's RECEIPT (S-049, #142) -- install.sh's write_receipt, the same fields in the same order: which
 # install.ps1 ran (its version; its sha256 when it ran as a file), for which method tag, what it did about the engine,
 # the python3 the method runs on, and how the run ended -- ready, not ready (`missing` names the parts) or stopped.
-# `doctor` reads it back. Never in a dry run, and never before the run goes ahead ($script:ReceiptArmed, #160): a stop
-# before the consent's yes changed nothing, and replaced the last real install's receipt -- `doctor` then no longer said
-# what that install did about the engine. A receipt that cannot be written stops nothing.
+# `doctor` reads it back. Never in a dry run; and `stopped` never before the run's first change on disk
+# ($script:ReceiptArmed, set by Enter-Change, #160): a stop before it -- a declined consent, a tag list GitHub did not
+# give, a signature refused -- changed nothing, and replaced the last real install's receipt; `doctor` then no longer
+# said what that install did about the engine. The end's verdict is always written. A receipt that cannot be written
+# stops nothing. $false here, so a second run in the same window starts unarmed.
 $script:ReceiptArmed = $false
 function Write-Receipt {
     param([string]$Status)
-    if ($DryRun -or -not $script:ReceiptArmed) { return }
+    if ($DryRun -or ($Status -eq "stopped" -and -not $script:ReceiptArmed)) { return }
     $file = "install-receipt.json"
     try {
         $rd = Join-Path $env:LOCALAPPDATA "autosound"
@@ -162,6 +165,14 @@ function Write-Receipt {
         # Stop above: Set-Content's error is not a terminating one, and passed this catch by. It stops nothing.
         Warn "the receipt was not written ($(Pretty $file)): $($_.Exception.Message)"
     }
+}
+# The run's first real change on disk is next (#160): from here the receipt says `stopped` until the end writes how
+# the run ended, so a terminating error, Ctrl-C or a closed window leaves no earlier run's `ready` standing -- install.sh's
+# `changing`. Called before each step that may be the first to change something; once is enough.
+function Enter-Change {
+    if ($script:ReceiptArmed) { return }
+    $script:ReceiptArmed = $true
+    Write-Receipt "stopped"
 }
 # What the run leaves not ready, by short names (#142) -- install.sh's MISSING. Each check that finds a part not ready
 # says why and adds it with Add-Missing, which names a part once; the end reads this list and nothing else. $script:
@@ -868,11 +879,8 @@ if (-not $DryRun) {
         Stop-Installer 1; return
     }
 }
-# From here the run is going ahead (#142): the receipt says `stopped` until the end writes how the run ended, so a
-# terminating error, Ctrl-C or a closed window leaves no earlier run's `ready` standing -- install.sh's going_ahead.
-# Before this line no receipt is written (#160).
-$script:ReceiptArmed = $true
-Write-Receipt "stopped"
+# From here the run is going ahead (#142). The receipt says `stopped` from its first change on disk (Enter-Change,
+# #160): a stop before that changed nothing, and leaves the last real receipt as it is.
 if (-not $DryRun) { New-Item -ItemType Directory -Force -Path $LocalBin | Out-Null }
 $env:Path = "$LocalBin;$env:Path"
 
@@ -884,6 +892,7 @@ $env:Path = "$LocalBin;$env:Path"
 if (-not $HaveGit) {
     Step "Git for Windows"
     Say "Windows will ask for permission (a dialog: click Yes). Nothing else here asks for anything."
+    Enter-Change
     if (Have winget) {
         Say "through winget..."
         Run { winget install --id Git.Git -e --source winget --accept-package-agreements --accept-source-agreements --silent } "winget install --id Git.Git" | Out-Null
@@ -939,6 +948,7 @@ if ($ClaudeBin) {
     Say "OK   $(& $ClaudeBin --version 2>$null)"
 } else {
     # Invoke-Upstream says whose script runs, so the step does not say it first (skill #96: it read twice).
+    Enter-Change
     if (Invoke-Upstream "https://claude.ai/install.ps1" "Claude Code") {
         Sync-ProcessPath
         if (Test-Path (Join-Path $LocalBin "claude.exe")) { Add-ManifestEntry "claude" }
@@ -963,6 +973,7 @@ if ($Uv) {
 } else {
     # PINNED -- see the same note in install.sh; the two versions must match, and
     # installer-consistency.py fails when they drift. The URL Invoke-Upstream prints carries the pin.
+    Enter-Change
     if (Invoke-Upstream "https://astral.sh/uv/$UvVersion/install.ps1" "uv") {
         Sync-ProcessPath
         if (Test-Path (Join-Path $LocalBin "uv.exe")) { Add-ManifestEntry "uv" }
@@ -978,6 +989,7 @@ if ($Uv) {
         Say "OK   $(& $Py3 -V 2>&1) at $(Pretty $Py3)"
     } else {
         Say "Python 3.12, as this profile's python, python3 and python3.12..."
+        Enter-Change
         Run { & $Uv python install 3.12 --default --quiet } "uv python install 3.12 --default" | Out-Null
         if (Test-Path $Py3) { Say "OK   $(& $Py3 -V 2>&1) at $(Pretty $Py3)" }
         elseif (-not $DryRun) { Warn "python3.exe did not appear in $(Pretty $LocalBin); the method's tools will not run until it does." }
@@ -991,7 +1003,10 @@ if (Test-Path $Py3) {
     if (-not $NewPy -or ($NewPy -ine $Py3)) {
         $was = if ($NewPy) { $NewPy } else { "nothing" }
         if ($DryRun) { Say "would move $(Pretty $LocalBin) to the front of your user PATH: a new window's python3 is $was" }
-        elseif (Set-LocalBinFirst) { Say "OK   $(Pretty $LocalBin) now leads your user PATH -- a new window's python3 was $was" }
+        else {
+            Enter-Change
+            if (Set-LocalBinFirst) { Say "OK   $(Pretty $LocalBin) now leads your user PATH -- a new window's python3 was $was" }
+        }
     }
 }
 
@@ -1229,6 +1244,7 @@ function Sync-MethodCheckout {
             if ($LASTEXITCODE -eq 0 -and $again.Count -eq 0) { $force = @("--force") }
         }
         $was = "$(& git -C $Dir rev-parse --verify --quiet HEAD 2>$null)".Trim()
+        Enter-Change   # the copy moves from here (#160); a refusal above left it as it was
         Run { & git -c advice.detachedHead=false -C $Dir checkout --quiet $want } "git checkout $want" | Out-Null
         if ($DryRun -or (Test-HeadIs $Dir $want)) { return $true }
         # Put back: over a tree seen clean before this checkout, --force drops only what a checkout that broke off left
@@ -1271,6 +1287,7 @@ function Sync-MethodCheckout {
         Remove-Item $Dir -Recurse -Force -ErrorAction SilentlyContinue
         return $false
     }
+    Enter-Change   # the new copy stays from here (#160)
     $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
     @(& git -c advice.detachedHead=false -C $Dir checkout --quiet $want 2>&1) | ForEach-Object { Write-Host "  $_" }
     $ErrorActionPreference = $prev
@@ -1461,6 +1478,8 @@ if ($Channel -eq "beta") {
 }
 
 }   # not -Plugin
+# Every step below installs something (#160): the run has changed the machine from here, if nothing above did.
+Enter-Change
 
 # -- what the method's tools need --------------------------------------------------------------
 Step "What the method's tools need (numpy, scipy, matplotlib)"

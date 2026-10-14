@@ -644,6 +644,10 @@ def shell_text_problems(sh):
     return out
 
 
+#: An earlier run's receipt, there before a run that stops before changing anything (#160): it stays byte for byte.
+SEEDED_RECEIPT = b'{"installer": "install.sh", "status": "ready", "missing": [], "engine": "fetched v0.1.0"}\n'
+
+
 def selection_problems(sh, ps1):
     """T-37 (#142): install.sh's `pick_method_ref` RUN with a `git` that has no network; [] when it answers right.
 
@@ -695,10 +699,14 @@ def selection_problems(sh, ps1):
         for i, (given, offered, stub_rc, says, dry, nogit, want_rc, want_ref, words, not_words) in enumerate(cases):
             script = (f'set -euo pipefail\nexport PATH="$(cd "{stub_dir.as_posix()}" && pwd)":"/usr/bin:$PATH"\n'
                       'SKILL_REPO="https://github.com/ayukhno/autosound-tuning-skill.git"\nSKILL_TAG_GLOB="v3.*"\n'
-                      # The pick runs after `going_ahead` (#160): its stop writes `stopped`.
-                      f'DRY_RUN={dry}\nRECEIPT_ARMED=1\n' + functions + ("usable() { return 1; }\n" if nogit else "")
+                      # #160: nothing has changed yet when the pick stops (Claude Code was there) -- an earlier
+                      # run's receipt, seeded below, stays byte for byte; a stop after a change writes `stopped`
+                      # (exit_contract_problems, a-stop).
+                      f'DRY_RUN={dry}\n' + functions + ("usable() { return 1; }\n" if nogit else "")
                       + f'ref="$(pick_method_ref "{given}")" || exit $?\nprintf "REF=[%s]\\n" "$ref"\n')
             data, calls = Path(tmp, f"data-{i}"), Path(tmp, f"git-calls-{i}")
+            (data / "autosound").mkdir(parents=True)
+            (data / "autosound" / "install-receipt.json").write_bytes(SEEDED_RECEIPT)
             env = dict(os.environ, STUB_RC=str(stub_rc), STUB_TAGS=offered.as_posix() if offered else "",
                        HOME=tmp, XDG_DATA_HOME=str(data), STUB_LOG=calls.as_posix())
             env.pop("STUB_SAYS", None)
@@ -709,11 +717,9 @@ def selection_problems(sh, ps1):
             got_err = r.stderr.decode("utf-8", "replace")
             want_out = f"REF=[{want_ref}]\n" if want_ref is not None else ""
             receipt = data / "autosound" / "install-receipt.json"
-            try:
-                status = json.loads(receipt.read_text(encoding="utf-8-sig")).get("status") if receipt.exists() else None
-            except ValueError as exc:
-                status = f"unreadable ({exc})"
-            want_status = "stopped" if want_rc == 1 else None
+            status = "kept" if receipt.is_file() and receipt.read_bytes() == SEEDED_RECEIPT else \
+                f"not kept: {receipt.read_bytes()[:80] if receipt.is_file() else 'gone'!r}"
+            want_status = "kept"
             ran_git = calls.read_text(encoding="utf-8").strip() if calls.exists() else ""
             if (r.returncode != want_rc or got_out != want_out or any(w not in got_err for w in words)
                     or any(w in got_err for w in not_words) or status != want_status or (nogit and ran_git)):
@@ -724,7 +730,7 @@ def selection_problems(sh, ps1):
                            f"{want_out.strip()!r}"
                            + (f" saying {' + '.join(map(repr, words))}" if words else "")
                            + (f" and never {' + '.join(map(repr, not_words))}" if not_words else "")
-                           + (f", a receipt saying {want_status!r} (#142)" if want_status else ", no receipt")
+                           + ", the earlier receipt kept byte for byte (#160)"
                            + (f", and no git run -- it ran {ran_git!r}" if nogit else "")
                            + f" -- stderr {got_err.strip()[-220:]!r} (T-37)")
         # #164: the full path -- the pick, then the signature step every ref passes -- says a branch is not a release
@@ -929,6 +935,8 @@ def checkout_problems(sh, ps1):
                   f'export PATH={first_on_path}"/usr/bin:$PATH"\n' + functions
                   + f'DRY_RUN=0\nAUTOSOUND_SKIP_TAG_VERIFY=""\nSKILL_SIGNING_PRINCIPAL=author\n'
                   f'SKILL_SIGNING_KEY="{author}"\nSKILL_SIGNED_FROM=v3.0.64\nSKILL_REPO="{url}"\n'
+                  # #160: where the copy is first changed -- the receipt is armed there, and never before a refusal.
+                  "changing() { printf 'CHANGING THE COPY\\n'; }\n"
                   f'checkout_method "{Path(where).as_posix()}" "{ref}" "the method"\n')
         r = subprocess.run([bash, "-s"], input=script.encode("utf-8"), capture_output=True, env=env)
         return r.returncode, (r.stdout + r.stderr).decode("utf-8", "replace")
@@ -1013,10 +1021,14 @@ def checkout_problems(sh, ps1):
         for made in prepare:
             made()
         rc, said = run(where, ref, stub)
-        if rc != want_rc or any(w not in said for w in words) or not state_ok():
+        # #160: a copy refused (2) or not reachable (1) was never changed, so the receipt is not armed: the last real
+        # one stays. One that lands (0) or is put back after its checkout (3) was.
+        armed = "CHANGING THE COPY" in said
+        if rc != want_rc or any(w not in said for w in words) or not state_ok() or armed != (want_rc in (0, 3)):
             out.append(f"install.sh checkout_method, {what}: exit {rc}, {where_is(where)} -- want exit {want_rc}"
                        + (f", saying {' + '.join(map(repr, words))}" if words else "")
-                       + f" -- said {said.strip()[-220:]!r} (T-45)")
+                       + f", the receipt {'armed' if want_rc in (0, 3) else 'not armed'} (it was "
+                       f"{'armed' if armed else 'not'}, #160) -- said {said.strip()[-220:]!r} (T-45)")
     shutil.rmtree(tmp, ignore_errors=True)
     # install.ps1's mirror, READ: a new copy made the same way, HEAD held to the tag, and every failed copy a stop.
     sync = re.search(r"^function Sync-MethodCheckout \{.*?^\}", ps1, re.M | re.S)
@@ -1564,7 +1576,7 @@ def powershell_env(environ=None):
 
 
 #: The functions of install.ps1 that its end and its probes need, cut out as they stand.
-PS1_RUN_FUNCTIONS = ("Stop-Installer", "Write-Receipt", "Add-Missing", "Say", "Warn", "Pretty", "Run", "Test-Quiet",
+PS1_RUN_FUNCTIONS = ("Stop-Installer", "Write-Receipt", "Enter-Change", "Add-Missing", "Say", "Warn", "Pretty", "Run", "Test-Quiet",
                      "Test-ReleaseTag", "Test-SettledByName", "Select-MethodRef", "Select-NewestOnChannel")
 #: #164, #171: install.ps1's tag pick over a stand-in tag list -- Read-ReleaseTags answers $script:StubTags, or nothing
 #: with $script:StubWhy -- then the signature step every ref passes. (case, body, the words, how many times "is not a
@@ -1665,22 +1677,26 @@ def ps1_run_problems(ps1):
                 out.append(f"install.ps1's tag pick under {Path(shell).name}, {case}: exit {rc}, want 0, "
                            f"{' + '.join(map(repr, words))} and 'is not a release' {unsigned} time(s) (said "
                            f"{said.count('is not a release')}) -- said {said.strip()[-300:]!r} (#164, #171)")
-        # #160: a stop before the run goes ahead keeps the last real receipt byte for byte -- the consent declined (its
-        # block cut out of install.ps1 and run with an Ask that says no), or any stop before it; the consent given, the
-        # receipt says `stopped` from there.
-        consent = re.search(r'^if \(-not \$DryRun\) \{\n    if \(-not \(Ask "Go ahead\?" "n"\)\) \{\n.*?'
-                            r'^\$script:ReceiptArmed = \$true\nWrite-Receipt "stopped"\n', ps1, re.M | re.S)
+        # #160: a stop before the run's first change keeps the last real receipt byte for byte -- the consent declined
+        # (its block cut out of install.ps1 and run with an Ask that says no), the consent given and a stop before any
+        # change (the tag list, a signature), or a stop anywhere before; from Enter-Change on, it says `stopped`.
+        consent = re.search(r'^if \(-not \$DryRun\) \{\n    if \(-not \(Ask "Go ahead\?" "n"\)\) \{\n.*?^\}\n', ps1,
+                            re.M | re.S)
         earlier = b'{"installer":"install.ps1","status":"ready","missing":[],"at":"2026-10-01T00:00:00Z"}\r\n'
         if not consent:
-            out.append('install.ps1: no consent block ending in `$script:ReceiptArmed = $true` and `Write-Receipt '
-                       '"stopped"` to run (#160)')
+            out.append('install.ps1: no consent block (`if (-not $DryRun) { if (-not (Ask "Go ahead?" "n")) {`) to run '
+                       '(#160)')
         else:
             for case, body, want_rc, word, want in (
                     ("declined", "function Ask { param($q, $d) return $false }\n" + consent.group(0), 1,
                      "Nothing installed. Re-run when you want to.", "kept"),
                     ("a-stop-before-going-ahead", 'Warn "stopped: no git"\nStop-Installer 1; return\n', 1,
                      "stopped: no git", "kept"),
-                    ("consented", "function Ask { param($q, $d) return $true }\n" + consent.group(0), 0, "", "stopped")):
+                    ("consented-then-a-stop", "function Ask { param($q, $d) return $true }\n" + consent.group(0)
+                     + 'Warn "stopped: could not read the tags"\nStop-Installer 1; return\n', 1,
+                     "stopped: could not read the tags", "kept"),
+                    ("consented-then-a-change", "function Ask { param($q, $d) return $true }\n" + consent.group(0)
+                     + "Enter-Change\nEnter-Change\n", 0, "", "stopped")):
                 rc, said, receipt = run_case(f"receipt-{case}", "$script:ReceiptArmed = $false\n" + body, seed=earlier)
                 there = Path(tmp, f"receipt-{case}", "appdata", "autosound", "install-receipt.json")
                 got = there.read_bytes() if there.is_file() else b""
@@ -1763,6 +1779,22 @@ def exit_contract_problems(sh, ps1):
     if "consent" not in top or top.index("consent") + 1 >= len(top) or top[top.index("consent") + 1] != "going_ahead":
         out.append("install.sh: the top level does not run `consent` and then `going_ahead`, one after the other -- an "
                    "earlier run's receipt stands over a run that ends neither in `stop` nor in `finish` (#142)")
+    # #160: install.sh arms the receipt (`changing`) right before each step that may be the first change on disk --
+    # Apple's tools, Claude Code's installer, the method's checkout (run in checkout_problems) -- and after the method's
+    # step; the git stops stand before the consent, where a stop writes no receipt at all.
+    sh_arms = [n for n, line in code if line.strip().startswith("changing")]
+    arm_before = ("xcode-select --install >/dev/null", "curl -fsSL https://claude.ai/install.sh | bash'; then")
+    unarmed_sh = [w for w in arm_before
+                  if not any(0 < n2 - n <= 2 for n2, line in code if w in line for n in sh_arms)]
+    after_method = [n for n, line in code if line.strip() == "fi   # not --plugin"]
+    if unarmed_sh or not after_method or after_method[0] + 2 not in sh_arms:
+        out.append(f"install.sh does not call `changing` right before {unarmed_sh or 'each first change'} and after "
+                   f"the method's step (#160)")
+    consent_at = next((n for n, line in code if line.strip() == "consent"), None)
+    git_stops = [n for n, line in code if "Install git with your package manager" in line or 'stop 1 "it said: ' in line]
+    if not git_stops or consent_at is None or any(n > consent_at for n in git_stops):
+        out.append("install.sh's no-git stops do not stand before `consent` -- a stop there writes no receipt only "
+                   "while nothing ran (#160)")
     # R38: the beta channel's copy, when it is not on this run's candidate -- the candidates unread, or the update refused
     # -- counts missing in its own block, in both installers; the checks count a copy that is not there at all.
     beta_sh = re.search(r'^if \[ "\$CHANNEL" = "beta" \]; then\n.*?^fi\n', sh, re.M | re.S)
@@ -1806,18 +1838,28 @@ def exit_contract_problems(sh, ps1):
     # script read as ready), and once given the receipt says `stopped` until the end writes how the run ended.
     if not re.search(r'Ask "Go ahead\?" "n"\)\) \{[^{}]*Stop-Installer 1; return', ps1):
         ps_wrong.append('a declined "Go ahead?" does not stop with `Stop-Installer 1; return`')
-    asked, first_dir = ps1.find('Ask "Go ahead?"'), ps1.find("New-Item -ItemType Directory -Force -Path $LocalBin")
-    if not any(asked < m.start() < first_dir for m in re.finditer(r'^Write-Receipt "stopped"\s*$', ps1, re.M)):
-        ps_wrong.append('the receipt does not say `stopped` (`Write-Receipt "stopped"`, at the top level) between the '
-                        'consent and the first install step -- an earlier run\'s receipt stands over one that dies')
-    # #160: no receipt before the run goes ahead -- a stop before it changed nothing, and replaced the last real one.
-    # Armed once, at the top level, after the consent and before the first install step. RUN where PowerShell is.
-    arms = [m.start() for m in re.finditer(r"^\$script:ReceiptArmed = \$true\s*$", ps1, re.M)]
-    if not write_fn or "if ($DryRun -or -not $script:ReceiptArmed) { return }" not in write_fn.group(0) \
-            or len(arms) != 1 or not asked < arms[0] < first_dir:
-        ps_wrong.append("Write-Receipt writes before the run goes ahead -- want `if ($DryRun -or -not "
-                        "$script:ReceiptArmed) { return }` and one `$script:ReceiptArmed = $true` between the consent "
-                        "and the first install step (#160)")
+    # #160: `stopped` is written from the run's first change on disk, never before -- a stop before it changed
+    # nothing, and replaced the last real receipt. Enter-Change arms it, called before each step that may be the first
+    # to change something and after the method's step; the flag starts $false at the top level, before the end can
+    # write (a second run in the same window). RUN where PowerShell is (ps1_run_problems).
+    asked = ps1.find('Ask "Go ahead?"')
+    enter = re.search(r"^function Enter-Change \{\n.*?^\}$", ps1, re.M | re.S)
+    unarmed = re.search(r"^\$script:ReceiptArmed = \$false\s*$", ps1, re.M)
+    calls = [m.start() for m in re.finditer(r"^\s*Enter-Change\b", ps1, re.M)]
+    befores = ('Say "through winget...', 'Invoke-Upstream "https://claude.ai/install.ps1"',
+               'Invoke-Upstream "https://astral.sh/uv/', "& $Uv python install 3.12", "if (Set-LocalBinFirst)",
+               "-C $Dir checkout --quiet $want } \"git checkout", "@(& git -c advice.detachedHead=false -C $Dir checkout",
+               "Step \"What the method's tools need")
+    # Each change has an Enter-Change close above it (within a few lines).
+    unguarded = [b for b in befores if (at := ps1.find(b)) < 0 or not any(0 < at - c < 400 for c in calls)]
+    if not write_fn or 'if ($DryRun -or ($Status -eq "stopped" -and -not $script:ReceiptArmed)) { return }' \
+            not in write_fn.group(0) or not enter or "if ($script:ReceiptArmed) { return }" not in enter.group(0) \
+            or 'Write-Receipt "stopped"' not in enter.group(0) or not unarmed or unarmed.start() > write_fn.start() \
+            or not calls or calls[0] < asked or unguarded:
+        ps_wrong.append("`stopped` is not written from the run's first change on disk -- want Write-Receipt's guard on "
+                        "`stopped` alone, Enter-Change arming once, `$script:ReceiptArmed = $false` before Write-Receipt, "
+                        "and Enter-Change after the consent, before each first change"
+                        + (f" (none close before: {unguarded})" if unguarded else "") + " (#160)")
     add_fn = re.search(r"^function Add-Missing \{\n.*?^\}$", ps1, re.M | re.S)
     if not add_fn or "-notcontains $Name" not in add_fn.group(0):
         ps_wrong.append("Add-Missing adds a name already listed -- a part is named once, as install.sh's `missing`")
@@ -1863,7 +1905,7 @@ def exit_contract_problems(sh, ps1):
     # install.sh, RUN.
     functions, missing = cut_functions(sh, ("say", "warn", "have", "on_mac", "runs_ok", "usable", "pretty", "ask",
                                             "json_str", "write_receipt", "is_missing", "missing", "stop", "finish",
-                                            "consent", "going_ahead", "unplanned_end"))
+                                            "consent", "going_ahead", "changing", "unplanned_end"))
     if missing:
         return out + [f"install.sh: no `{name}() {{ ... }}` -- the exit contract cannot be run (#142)"
                       for name in missing]
@@ -1912,7 +1954,7 @@ def exit_contract_problems(sh, ps1):
     earlier = {"installer": "install.sh", "status": "ready", "missing": [], "at": "2026-10-01T00:00:00Z"}
     # Every run goes ahead as install.sh's does -- `going_ahead` after the consent -- so its trap is there when `stop` and
     # `finish` end it; a dry run passes `consent` without a question.
-    go = "going_ahead\n"
+    go = "going_ahead\nchanging\n"
     # (case, body, builder, dry run, --plugin, exit, words, never, status (None: no receipt), missing, plugin-ready
     # [, the receipt there before])
     cases = (("ready", go + "finish\n", "python3", "0", True, 0, ("Installed.",), ("NOT ready",), "ready", [], 1),
@@ -1945,6 +1987,14 @@ def exit_contract_problems(sh, ps1):
              ("no-git", 'stop 1 "Install git with your package manager, then run this again."\n' + go + "finish\n",
               "python3", "0", False, 1, ("Install git with your package manager",), ("Installed",), "kept", [], 0,
               earlier),
+             # ...and after going ahead, until the first change on disk (`changing`): a stop -- the tag list GitHub
+             # did not give, a signature refused -- and a failure under set -e keep it too (the T7 review).
+             ("a-stop-before-any-change", 'ASSUME_YES=1\nconsent\ngoing_ahead\nstop 1 "stopped: no tag"\n' + "finish\n",
+              "python3", "0", False, 1, ("stopped: no tag",), ("Installed",), "kept", [], 0, earlier),
+             ("a-failure-before-any-change", "going_ahead\nfalse\nchanging\nfinish\n", "python3", "0", False, 1,
+              ("stopped (exit 1) -- the lines above say where",), ("Installed",), "kept", [], 0, earlier),
+             ("the-end-with-no-change", "going_ahead\nfinish\n", "python3", "0", False, 0, ("Installed.",), (),
+              "ready", [], 0, earlier),
              ("consented", "ASSUME_YES=1\nconsent\n" + go + "finish\n", "python3", "0", False, 0, ("Installed.",),
               ("Nothing installed",), "ready", [], 0, earlier),
              # ...and a run that ends neither in `stop` nor in `finish`: a failure under `set -e` is a stop, 1 -- also
