@@ -161,9 +161,10 @@ NO_CHECKOUT_GIT = (b"#!/bin/sh\n"
 #: The installers' exit table (#142, audit T-44, J6a item 4): 0 ready · 1 stopped before the end -- a refusal, an error
 #: or an interruption; what was done before it stays, and a stop before the method's step leaves the method as it was ·
 #: 2 usage · 3 installed, NOT ready, the missing parts named.
-#: The receipt's fields in the order both installers write them: today's seven, then how the run ended.
+#: The receipt's fields in the order both installers write them: today's seven, then how the run ended, then the
+#: Codex link (#149).
 RECEIPT_FIELDS = ("installer", "installer_sha256", "method_ref", "mode", "at", "platform", "engine",
-                  "installer_version", "status", "missing", "python")
+                  "installer_version", "status", "missing", "python", "codex_link")
 #: The short names a part that is not ready goes by, in both installers. install.ps1 adds the python3 a new window
 #: runs, which only Windows gets wrong (`python3 in a new window`).
 MISSING_NAMES = ("numpy", "scipy", "the method", "the method (2.x line)", "the beta copy", "TCC", "Claude Code")
@@ -657,7 +658,6 @@ def selection_problems(sh, ps1):
     remote offers. The ref is all that reaches stdout, since the caller takes it with $(...). The call sites in both
     installers, and install.ps1's mirror, are READ: no `main` to fall back on, no app spec without a tag.
     """
-    import json
     import tempfile
     # The stop is `stop` (#142): it writes the receipt, here into a temp XDG_DATA_HOME, under the call's own `set -u`.
     functions, missing = cut_functions(sh, ("say", "warn", "pretty", "have", "on_mac", "runs_ok", "usable",
@@ -1424,6 +1424,261 @@ def option_problems(sh):
     return out
 
 
+#: #149 (T17b): the user-level link Codex finds the method by -- OpenAI's docs (learn.chatgpt.com/docs/build-skills):
+#: Codex scans `$HOME/.agents/skills` and follows a symlinked skill folder. Both installers make it when `codex` is on
+#: PATH, or always with the option; on Windows a junction. Never over what is there, unless it is the installers' own
+#: link to an older target (a clone, or a plugin copy): that one is repointed. The receipt's `codex_link` says which.
+CODEX_OPTION = {"install.sh": "--codex", "install.ps1": "-Codex"}
+CODEX_PATH = {"install.sh": 'CODEX_LINK_PATH="${HOME}/.agents/skills/autosound-tuning"',
+              "install.ps1": '$CodexLink = Join-Path $HOME ".agents\\skills\\autosound-tuning"'}
+#: The receipt's codex_link, in both installers: the first five the link step's, `not reached` a run that stopped
+#: before it. `skipped: ` carries why.
+CODEX_VALUES = ("made", "repointed", "kept", "skipped: ", "absent", "not reached")
+#: (case, codex on PATH, the option given, a dry run, what is there before, the target (None: the method is not this
+#: installer's), codex_link (a prefix for `skipped: `), words, never, what is there after). Places: `new` the method's
+#: folder, `old` an older plugin copy of it (gone), `foreign` somebody's folder elsewhere, `folder` a real folder.
+CODEX_CASES = (
+    ("no-codex", False, False, False, None, "new", "absent", ("no Codex on PATH", "<option>"), ("made the link",),
+     "nothing"),
+    ("codex-on-path", True, False, False, None, "new", "made", ("made the link",), ("would",), "new"),
+    ("the-option-no-codex", False, True, False, None, "new", "made", ("made the link",), ("no Codex on PATH",), "new"),
+    ("a-dry-run", True, False, True, None, "new", "made", ("would make the link",), ("made the link",), "nothing"),
+    ("a-dry-run-no-codex", False, False, True, None, "new", "absent", ("no Codex on PATH", "<option>"),
+     ("would make",), "nothing"),
+    ("ours-already", True, False, False, "new", "new", "kept", ("already points at the method",),
+     ("made the link", "repointed"), "new"),
+    ("ours-older", True, False, False, "old", "new", "repointed", ("repointed the link",), (), "new"),
+    ("ours-older-a-dry-run", True, False, True, "old", "new", "repointed", ("would repoint the link",),
+     ("repointed the link",), "old"),
+    ("somebody-elses-link", True, False, False, "foreign", "new", "skipped: ",
+     ("not this installer's -- left as it is",), ("made the link", "repointed"), "foreign"),
+    ("a-real-folder", True, True, False, "folder", "new", "skipped: ",
+     ("this installer did not make -- left as it is",), ("made the link",), "folder"),
+    ("the-method-not-ours", True, False, False, None, None, "skipped: ",
+     ("the method at ~/.claude/skills/autosound-tuning is not this installer's",), ("made the link",), "nothing"))
+#: What the method is not, said when the method's step left the link's place as it was.
+CODEX_NOT_OURS = "the method at ~/.claude/skills/autosound-tuning is not this installer's"
+
+
+def codex_read_problems(sh, ps1):
+    """#149: what both installers must agree on, READ -- the option (parsed, in --help), the link's path, the receipt's
+    `codex_link` and its values, the step called after the method's, the end's line, and the uninstall removing only
+    the installers' own link. `[]` when they do."""
+    out = []
+    for where, text in (("install.sh", sh), ("install.ps1", ps1)):
+        opt = CODEX_OPTION[where]
+        if where == "install.sh":
+            parsed = re.search(r"^\s*--codex\)\s+WANT_CODEX=1 ;;", sh, re.M)
+            usage = re.search(r"^usage\(\) \{.*?^\}", sh, re.M | re.S)
+            helped = usage and "install.sh --codex" in usage.group(0)
+            values = [v for v in CODEX_VALUES if not re.search(r'CODEX_DID="' + re.escape(v), sh)]
+            called = re.search(r'^changing\n(?:#[^\n]*\n)*if \[ -n "\$METHOD_LEFT" \]; then codex_link "" ', sh, re.M)
+            said = "$CODEX_SAID" in (re.search(r'^step "Checking"\n.*?(?=^step ")', sh, re.M | re.S) or [""])[0]
+            gone = re.search(r'^if \[ "\$UNINSTALL" = 1 \]; then\n.*?^fi\n', sh, re.M | re.S)
+            unlinks = gone and 'run rm -f "$CODEX_LINK_PATH"' in gone.group(0) and "codex_ours" in gone.group(0)
+        else:
+            parsed = re.search(r"^\s*\[switch\]\$Codex,", ps1, re.M)
+            usage = re.search(r'^if \(\$Help\) \{\n.*?^\}', ps1, re.M | re.S)
+            helped = usage and "install.ps1 -Codex" in usage.group(0)
+            values = [v for v in CODEX_VALUES if not re.search(r'\$script:CodexDid = "' + re.escape(v), ps1)]
+            called = re.search(r'^Enter-Change\n(?:#[^\n]*\n)*if \(\$MethodLeft\) \{ Set-CodexLink "" ', ps1, re.M)
+            said = "$script:CodexSaid" in (re.search(r'^Step "Checking"\n.*?(?=^Step ")', ps1, re.M | re.S) or [""])[0]
+            gone = re.search(r'^if \(\$Uninstall\) \{\n.*?^\}\n', ps1, re.M | re.S)
+            unlinks = gone and "[System.IO.Directory]::Delete($CodexLink)" in gone.group(0) \
+                and "Test-CodexOurs" in gone.group(0)
+        wrong = []
+        if CODEX_PATH[where] not in text:
+            wrong.append(f"the link's path is not `{CODEX_PATH[where]}`")
+        if not parsed:
+            wrong.append(f"{opt} is not an option")
+        if not helped:
+            wrong.append(f"--help does not name {opt}")
+        if values:
+            wrong.append(f"codex_link never says {values}")
+        if not called:
+            wrong.append("the link step is not called right after the run's first change, after the method's step, "
+                         "with no target when the method was left as it was")
+        if not said:
+            wrong.append("the end's Checking block does not say the link in its one line")
+        if not unlinks:
+            wrong.append("the uninstall does not remove the link, or removes one that is not the installer's")
+        if wrong:
+            out.append(f"{where}, the Codex link (#149): " + "; ".join(wrong))
+    if "codex_link" not in RECEIPT_FIELDS:
+        out.append("the receipt's fields do not hold codex_link (#149)")
+    if "New-Item -ItemType Junction -Path $CodexLink -Target" not in ps1:
+        out.append("install.ps1's Codex link is not a junction (`New-Item -ItemType Junction -Path $CodexLink`) -- a "
+                   "symlink needs Developer Mode or an elevated prompt (#149)")
+    return out
+
+
+def _codex_state(link, places):
+    """What is at the Codex link's place: `nothing`, `folder` (a real one, its `mine` inside), the name in `places` a
+    link or junction there points at -- read with os.readlink, which reads a junction too, dangling or not -- or
+    `something else`."""
+    if not os.path.lexists(link):
+        return "nothing"
+    try:
+        to = os.readlink(link)
+    except (OSError, ValueError):
+        return "folder" if (Path(link) / "mine").is_dir() else "something else"
+    for prefix in ("\\\\?\\", "\\??\\"):
+        to = to[len(prefix):] if to.startswith(prefix) else to
+    def norm(p):
+        return os.path.normcase(os.path.abspath(str(p)))
+    return next((name for name in ("new", "old", "foreign") if norm(to) == norm(places[name])),
+                f"something else ({to})")
+
+
+def codex_link_problems(sh):
+    """#149: install.sh's `codex_link`, cut out and RUN over CODEX_CASES in a scratch HOME -- a stand-in `codex` on a
+    PATH of its own (or none), under `set -euo pipefail`. `(problems, ran)`; Windows reads it (Git Bash's `ln -s`
+    copies), and the Windows job runs install.ps1's own."""
+    import tempfile
+    functions, missing = cut_functions(sh, ("say", "warn", "have", "pretty", "codex_ours", "codex_link"))
+    if missing:
+        return [f"install.sh: no `{name}() {{ ... }}` -- the Codex link cannot be run (#149)" for name in missing], False
+    bash, why = find_bash()
+    if not bash:
+        return [f"{why} -- install.sh's Codex link cannot be run, and unrun is not agreed (#149)"], False
+    if os.name == "nt":
+        return [], False
+    out = []
+    tmp = tempfile.mkdtemp(prefix="autosound_codex_")
+    try:
+        for case, on_path, option, dry, before, target, did, words, never, after in CODEX_CASES:
+            home = Path(tmp, case)
+            stub = home / "stub-bin"
+            stub.mkdir(parents=True)
+            if on_path:
+                (stub / "codex").write_bytes(b"#!/bin/sh\nexit 0\n")
+                (stub / "codex").chmod(0o755)
+            src = home / ".claude" / "skills" / ".autosound-tuning-src"
+            places = {"new": src / "skills" / "autosound-tuning",
+                      "old": home / ".claude" / "plugins" / "cache" / "m" / "autosound-tuning" / "3.1.2" / "skills"
+                      / "autosound-tuning",
+                      "foreign": home / "elsewhere"}
+            places["new"].mkdir(parents=True)
+            places["foreign"].mkdir()
+            link = home / ".agents" / "skills" / "autosound-tuning"
+            if before in ("new", "old", "foreign"):
+                link.parent.mkdir(parents=True)
+                os.symlink(places[before], link)
+            elif before == "folder":
+                (link / "mine").mkdir(parents=True)
+            call = (f'codex_link "{places["new"].as_posix()}"' if target else f'codex_link "" "{CODEX_NOT_OURS}"')
+            script = ('set -euo pipefail\n' + functions
+                      + f'DRY_RUN={int(dry)}\nWANT_CODEX={"1" if option else "auto"}\nCODEX_DID="not reached"\n'
+                      + 'CODEX_SAID=""\nCODEX_LINK_PATH="${HOME}/.agents/skills/autosound-tuning"\n'
+                      + 'SKILL_SRC="${HOME}/.claude/skills/.autosound-tuning-src"\n'
+                      + 'CLAUDE_PLUGINS="${HOME}/.claude/plugins"\n' + call + "\n"
+                      + 'printf "CODEX_DID=[%s]\\nCODEX_SAID=[%s]\\n" "$CODEX_DID" "$CODEX_SAID"\n')
+            r = subprocess.run([bash, "-s"], input=script.encode("utf-8"), capture_output=True,
+                               env=dict(os.environ, HOME=home.as_posix(), PATH=f"{stub.as_posix()}:/usr/bin:/bin"))
+            said = (r.stdout + r.stderr).decode("utf-8", "replace")
+            got = re.search(r"^CODEX_DID=\[(.*)\]$", said, re.M)
+            line = re.search(r"^CODEX_SAID=\[(.*)\]$", said, re.M)
+            state = _codex_state(link, places)
+            wrong = [f"exit {r.returncode}, want 0"] if r.returncode else []
+            if not got or not (got.group(1).startswith(did) if did.endswith(": ") else got.group(1) == did):
+                wrong.append(f"codex_link is {got.group(1) if got else None!r}, want {did!r}")
+            elif did.endswith(": ") and len(got.group(1)) <= len(did):
+                wrong.append("codex_link says `skipped:` and not why")
+            wrong += [f"never says {w!r}" for w in (w.replace("<option>", "--codex") for w in words) if w not in said]
+            wrong += [f"says {w!r}" for w in never if w in said]
+            if not line or not line.group(1):
+                wrong.append("no line for the end's Checking block")
+            if state != after:
+                wrong.append(f"the link's place holds {state}, want {after}")
+            if before == "folder" and not (link / "mine").is_dir():
+                wrong.append("the real folder's content is gone")
+            if wrong:
+                out.append(f"install.sh's Codex link, {case}: " + "; ".join(wrong) + f" -- said {said.strip()[-240:]!r}"
+                           " (#149)")
+    except OSError as exc:
+        out.append(f"the Codex link's fixtures could not be made ({exc}) -- unrun is not agreed (#149)")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    return out, True
+
+
+def ps1_codex_link_problems(ps1):
+    """#149: install.ps1's Set-CodexLink, cut out and RUN under PowerShell over CODEX_CASES -- where there is one: the
+    Windows job's runner; `(problems, ran)`. The places are made by the case's own script (junctions, as the installer
+    makes them), a stand-in `codex.cmd` on a PATH of its own, or none."""
+    import tempfile
+    shell = find_powershell()
+    if not shell:
+        return [], False
+    cut, lacking = [], []
+    for name in ("Say", "Warn", "Have", "Pretty", "Test-CodexOurs", "Set-CodexLink"):
+        m = (re.search(rf"^function {re.escape(name)}\s+\{{[^\n]*\}}[ \t]*$", ps1, re.M)
+             or re.search(rf"^function {re.escape(name)} \{{\n.*?^\}}", ps1, re.M | re.S))
+        (cut.append(m.group(0)) if m else lacking.append(name))
+    if lacking:
+        return [f"install.ps1: no {lacking} to run under PowerShell (#149)"], True
+    out = []
+    tmp = tempfile.mkdtemp(prefix="autosound_ps1_codex_")
+    sysroot = os.environ.get("SystemRoot", "C:\\Windows")
+    try:
+        for case, on_path, option, dry, before, target, did, words, never, after in CODEX_CASES:
+            home = Path(tmp, case)
+            stub = home / "stub-bin"
+            stub.mkdir(parents=True)
+            if on_path:
+                (stub / "codex.cmd").write_bytes(b"@exit /b 0\r\n")
+            src = home / ".claude" / "skills" / ".autosound-tuning-src"
+            places = {"new": src / "skills" / "autosound-tuning",
+                      "old": home / ".claude" / "plugins" / "cache" / "m" / "autosound-tuning" / "3.1.2" / "skills"
+                      / "autosound-tuning",
+                      "foreign": home / "elsewhere"}
+            for p in places.values():
+                p.mkdir(parents=True)
+            link = home / ".agents" / "skills" / "autosound-tuning"
+            make = ""
+            if before in ("new", "old", "foreign"):
+                make = (f"New-Item -ItemType Directory -Force -Path '{link.parent}' | Out-Null\n"
+                        f"New-Item -ItemType Junction -Path '{link}' -Target '{places[before]}' | Out-Null\n")
+            elif before == "folder":
+                (link / "mine").mkdir(parents=True)
+            # The older plugin copy is gone: its junction dangles, as one left by an uninstalled plugin version.
+            gone = f"Remove-Item -Recurse -Force '{places['old']}'\n"
+            call = (f"Set-CodexLink '{places['new']}'" if target else f'Set-CodexLink "" "{CODEX_NOT_OURS}"')
+            body = (f'$ErrorActionPreference = "Continue"\n$env:PATH = "{stub};{sysroot}\\System32"\n'
+                    f"$DryRun = ${str(dry).lower()}\n$Codex = ${str(option).lower()}\n"
+                    f"$CodexLink = '{link}'\n$SkillSrc = '{src}'\n$ClaudePlugins = '{home / '.claude' / 'plugins'}'\n"
+                    '$script:CodexDid = "not reached"\n$script:CodexSaid = ""\n' + "\n".join(cut) + "\n" + make + gone
+                    + call + '\nWrite-Host "CODEX_DID=[$($script:CodexDid)]"\nWrite-Host "CODEX_SAID=[$($script:CodexSaid)]"\n')
+            script = home / "case.ps1"
+            script.write_bytes(body.encode("utf-8"))
+            r = subprocess.run([shell, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File",
+                                str(script)], capture_output=True, timeout=120, env=powershell_env())
+            said = (r.stdout + r.stderr).decode("utf-8", "replace")
+            got = re.search(r"^CODEX_DID=\[(.*)\]\s*$", said, re.M)
+            line = re.search(r"^CODEX_SAID=\[(.*)\]\s*$", said, re.M)
+            state = _codex_state(link, places)
+            wrong = [f"exit {r.returncode}, want 0"] if r.returncode else []
+            if not got or not (got.group(1).startswith(did) if did.endswith(": ") else got.group(1) == did):
+                wrong.append(f"codex_link is {got.group(1) if got else None!r}, want {did!r}")
+            elif did.endswith(": ") and len(got.group(1)) <= len(did):
+                wrong.append("codex_link says `skipped:` and not why")
+            wrong += [f"never says {w!r}" for w in (w.replace("<option>", "-Codex") for w in words)
+                      if w.replace("~/", "~\\").replace("/", "\\") not in said and w not in said]
+            wrong += [f"says {w!r}" for w in never if w in said]
+            if not line or not line.group(1):
+                wrong.append("no line for the end's Checking block")
+            if state != after:
+                wrong.append(f"the link's place holds {state}, want {after}")
+            if wrong:
+                out.append(f"install.ps1's Codex link under {Path(shell).name}, {case}: " + "; ".join(wrong)
+                           + f" -- said {said.strip()[-300:]!r} (#149)")
+    except (OSError, subprocess.SubprocessError) as exc:
+        out.append(f"install.ps1's Codex link could not be run under {shell} ({exc}) -- unrun is not agreed (#149)")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    return out, True
+
+
 def engine_answer_problems(sh, ps1):
     """#142 (PTA 6): fetch-binary's answers, each in its own arm. install.sh's `case "$ENGINE_RC" in ... esac` is cut out
     and RUN for each code -- the receipt's words were searched anywhere in the file, so an arm that said another code's
@@ -2124,7 +2379,7 @@ def exit_contract_problems(sh, ps1):
                 ref = left.group(1) if left else ("v", "v?") if "SKILL_REF=$'v\\xff'" in body else "v3.1.2"
                 want = {"installer": "install.sh", "installer_sha256": sha, "method_ref": ref, "mode": "terminal",
                         "engine": HOSTILE_ENGINE if builder == "python3" else flat, "installer_version": version,
-                        "status": status, "missing": missing_want}
+                        "status": status, "missing": missing_want, "codex_link": "not reached"}
                 if tuple(receipt) != RECEIPT_FIELDS:
                     wrong.append(f"the receipt's fields are {list(receipt)}, not {list(RECEIPT_FIELDS)}")
                 wrong += [f"the receipt's {k} is {receipt.get(k)!r}, want {v!r}" for k, v in want.items()
@@ -2494,6 +2749,21 @@ def main():
         checked.append("install.ps1 under Windows PowerShell 5.1 resets PSModulePath to its own before its first cmdlet, "
                        "and hands the reset to the upstream installers' child PowerShell; install.cmd holds its window "
                        "open only for Explorer's exact command line (read; the Windows job runs both) (#161, #162)")
+    # #149: the Codex link -- READ in both, install.sh's RUN here, install.ps1's RUN under PowerShell where there is one.
+    codex = codex_read_problems(sh, ps1)
+    codex_sh, codex_sh_ran = codex_link_problems(sh)
+    codex_ps, codex_ps_ran = ps1_codex_link_problems(ps1)
+    if codex or codex_sh or codex_ps:
+        problems.extend(codex + codex_sh + codex_ps)
+    else:
+        checked.append(f"the Codex link (#149): both installers name --codex / -Codex in --help, make "
+                       f"~/.agents/skills/autosound-tuning (a junction on Windows) and write the receipt's codex_link "
+                       f"({', '.join(CODEX_VALUES)}), say it in the end's one line and take only their own link off on "
+                       f"uninstall (read); {len(CODEX_CASES)} cases -- codex on PATH or not, the option, a dry run, "
+                       f"their own link kept or repointed, somebody's link and a real folder left -- run for install.sh "
+                       + ("here" if codex_sh_ran else "NOT here (Windows: Git Bash's ln -s copies)")
+                       + " and for install.ps1 " + (f"under {Path(find_powershell()).name}" if codex_ps_ran
+                                                    else "NOT here -- no PowerShell; the Windows job runs them"))
     # install.ps1's end and its probes RUN under PowerShell, where there is one (#142): the Windows job's runner.
     ran_ps1, ps1_ran = ps1_run_problems(ps1)
     if ran_ps1:
@@ -2511,7 +2781,7 @@ def main():
         problems.extend(contract)
     else:
         checked.append("the exit contract: install.sh's finish ends 0 `Installed.` or 3 `Installed, NOT ready: "
-                       "<names>`, and stop ends 1, each writing a receipt that parses with its eleven fields in "
+                       "<names>`, and stop ends 1, each writing a receipt that parses with its twelve fields in "
                        "install.ps1's order -- with a quote, a backslash and a tab in the engine's line, built by "
                        "python3 and by the shell -- plugin-ready only when ready, and a dry run writes nothing; a "
                        "declined consent ends 1, and a run that dies after it -- set -e, an unbound variable, an exec "

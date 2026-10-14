@@ -40,6 +40,8 @@
 #   .\install.ps1 -WithOmp            with omp, which offers TCC every non-Claude model (default: without)
 #   .\install.ps1 -NoEngine           without Phase 1's desk engine (default: fetched only when this
 #   .\install.ps1 -Engine             machine has no .NET SDK to build it from; -Engine fetches anyway)
+#   .\install.ps1 -Codex              also link the method into ~\.agents\skills for OpenAI's Codex (default:
+#                                     only when `codex` is on PATH)
 #   .\install.ps1 -DryRun             say what it would do, change nothing
 #   .\install.ps1 -Plugin             run from inside a plugin copy (/plugin install): the method IS that copy,
 #                                     checked against its signed release, not cloned (W-6 #120)
@@ -68,6 +70,7 @@ param(
     [switch]$NoEngine,  # never fetch it
     [switch]$DryRun,
     [switch]$Plugin,    # W-6 #120: the method is the plugin copy this script sits in
+    [switch]$Codex,     # #149: link the method into ~\.agents\skills for Codex even when codex is not on PATH
     [switch]$Yes,
     [string]$SkillRef = "",
     [string]$TccRef = "",
@@ -162,7 +165,8 @@ function Write-Receipt {
                                mode = "$Mode"; at = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ");
                                platform = "Windows-$env:PROCESSOR_ARCHITECTURE"; engine = $engine;
                                installer_version = $InstallerVersion; status = $Status;
-                               missing = [string[]]@($script:Missing); python = $python }
+                               missing = [string[]]@($script:Missing); python = $python;
+                               codex_link = "$($script:CodexDid)" }
         $receipt | ConvertTo-Json -Compress | Set-Content -Encoding UTF8 -ErrorAction Stop $file
     } catch {
         # Said once, the file and why (#142): kept quiet, `doctor` read an earlier run's receipt as this one's. -ErrorAction
@@ -185,6 +189,11 @@ $script:Missing = @()
 # What the method's step left as it was, when it did (#142): a link that is not this script's, or anything else at the
 # link's place. The receipt's method_ref says that -- install.sh's METHOD_LEFT.
 $MethodLeft = ""
+# What the Codex link step did (#149) -- the receipt's codex_link: made, repointed, kept, "skipped: <why>", absent (no
+# codex and no -Codex), or "not reached" (the run stopped before the step) -- and its line in the end's Checking.
+# install.sh's CODEX_DID and CODEX_SAID.
+$script:CodexDid = "not reached"
+$script:CodexSaid = ""
 function Add-Missing {
     param([string]$Name)
     if ($script:Missing -notcontains $Name) { $script:Missing += $Name }
@@ -256,6 +265,12 @@ $SkillSrc     = Join-Path $HOME ".claude\skills\.autosound-tuning-src"
 # The beta channel's copy, beside it and with no junction pointing at it -- see install.sh
 # (SKILL_BETA_SRC, autosound-hub #145) for why the terminal and a beta app cannot share one checkout.
 $SkillBetaSrc = Join-Path $HOME ".claude\skills\.autosound-tuning-beta"
+# Codex (OpenAI's CLI) finds a skill in ~\.agents\skills and follows a linked skill folder (#149;
+# learn.chatgpt.com/docs/build-skills, read 2026-10-14). One junction there to the method this script installs: one copy
+# of the method, which Claude Code and Codex both read. Same path as install.sh's CODEX_LINK_PATH.
+$CodexLink = Join-Path $HOME ".agents\skills\autosound-tuning"
+# Where /plugin install puts a plugin's copies, one folder per version: a Codex junction into one is this script's own.
+$ClaudePlugins = Join-Path $HOME ".claude\plugins"
 # Where uv, Claude Code, gh and the app's own commands land -- the same folder on every platform.
 $LocalBin     = Join-Path $HOME ".local\bin"
 # What THIS script put on the machine, one name per line. -Uninstall removes what is listed here
@@ -286,6 +301,8 @@ Autosound tuning -- installer for Windows
   install.ps1 -WithOmp            with omp, which offers TCC every non-Claude model (metered; default: without)
   install.ps1 -NoEngine           without Phase 1's desk engine; -Engine fetches it even where the
                                   .NET SDK could build it (default: fetched only when there is no SDK)
+  install.ps1 -Codex              also link the method into ~\.agents\skills for OpenAI's Codex
+                                  (default: only when codex is on PATH)
   install.ps1 -DryRun             say what it would do, change nothing
   install.ps1 -Plugin             from inside a plugin copy (/plugin install): the method is that copy,
                                   checked against its signed release, not cloned
@@ -660,6 +677,84 @@ function Get-LatestAsset {
 $Arch = if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64") { "arm64" } else { "amd64" }
 
 # -- uninstall --------------------------------------------------------------------------------
+# -- the Codex link (#149) ----------------------------------------------------------------------
+# Is <target> -- what a junction at $CodexLink points at -- this script's own: the method's clone, or a plugin copy of
+# it? Anything else is somebody's, and stays. install.sh's codex_ours.
+function Test-CodexOurs {
+    param([string]$Target)
+    $t = ($Target -replace '/', '\').TrimEnd("\")
+    return (($t -like "$SkillSrc\*") -or ($t -like "$ClaudePlugins\*\skills\autosound-tuning"))
+}
+# The user-level junction Codex finds the method by: $CodexLink -> <target>, when codex is on PATH or -Codex asked for
+# it. A JUNCTION, as ~\.claude\skills\autosound-tuning is: no Developer Mode or elevated prompt, which a symlink needs.
+# Nothing there: made. This script's own to <target>: kept; to another of its targets (an older plugin version, the
+# clone before -Plugin): repointed. Somebody's link, a real folder or a file: left as it is, and said. An empty
+# <target> is a method this script did not install (<why>): no link to it. Sets $script:CodexDid -- the receipt's
+# codex_link -- and $script:CodexSaid, the end's one line; a junction that cannot be made stops nothing and is said.
+# install.sh's codex_link.
+function Set-CodexLink {
+    param([string]$Target, [string]$WhyNone = "no method to link to")
+    $at = Pretty $CodexLink
+    if (-not $Codex -and -not (Have codex)) {
+        $script:CodexDid = "absent"
+        $script:CodexSaid = "--   Codex: no Codex on PATH, so no link in ~\.agents\skills (-Codex makes it anyway)"
+        return
+    }
+    if (-not $Target) {
+        $script:CodexDid = "skipped: $WhyNone"
+        Warn "Codex: no link made at $at -- $WhyNone"
+        $script:CodexSaid = "--   Codex: no link at $at -- $WhyNone"
+        return
+    }
+    # Get-Item -Force, not Test-Path: Test-Path says False for a dangling junction (T-38).
+    $entry = Get-Item -LiteralPath $CodexLink -Force -ErrorAction SilentlyContinue
+    $was = ""
+    if ($entry) {
+        if ($entry.LinkType -notin @("SymbolicLink", "Junction")) {
+            $kind = if ($entry.PSIsContainer) { "folder" } else { "file" }
+            $script:CodexDid = "skipped: $at is a $kind this installer did not make -- left as it is"
+            Warn "Codex: $at is a $kind this installer did not make -- left as it is"
+            $script:CodexSaid = "--   Codex: $at is a $kind this installer did not make, left as it is"
+            return
+        }
+        $was = "$($entry.Target -join '')"
+        if (($was -replace '/', '\').TrimEnd("\") -ieq ($Target -replace '/', '\').TrimEnd("\")) {
+            $script:CodexDid = "kept"
+            Say "Codex: $at already points at the method -- kept"
+            $script:CodexSaid = "OK   Codex finds the method: $at (kept)"
+            return
+        }
+        if (-not (Test-CodexOurs $was)) {
+            $script:CodexDid = "skipped: $at is a link to $was, not this installer's -- left as it is"
+            Warn "Codex: $at is a link to $was, not this installer's -- left as it is"
+            $script:CodexSaid = "--   Codex: $at is somebody's link, left as it is"
+            return
+        }
+    }
+    # What it does -- the receipt's word -- whether this is a dry run or not.
+    if ($was) { $script:CodexDid = "repointed" } else { $script:CodexDid = "made" }
+    if ($DryRun) {
+        if ($was) { Say "Codex: would repoint the link $at from $(Pretty $was) to $(Pretty $Target)" }
+        else { Say "Codex: would make the link $at -> $(Pretty $Target)" }
+        $script:CodexSaid = "OK   Codex: would find the method at $at ($($script:CodexDid))"
+        return
+    }
+    try {
+        New-Item -ItemType Directory -Force -Path (Split-Path $CodexLink) -ErrorAction Stop | Out-Null
+        # Only ever this script's own junction here: anything else returned above. .NET's Directory.Delete removes the
+        # link and leaves its target alone; Remove-Item on 5.1 asks "Are you sure?" about a junction's children.
+        if ($was) { [System.IO.Directory]::Delete($CodexLink) }
+        New-Item -ItemType Junction -Path $CodexLink -Target $Target -ErrorAction Stop | Out-Null
+        if ($was) { Say "Codex: repointed the link $at to $(Pretty $Target) (it pointed at $(Pretty $was))" }
+        else { Say "Codex: made the link $at -> $(Pretty $Target)" }
+        $script:CodexSaid = "OK   Codex finds the method: $at ($($script:CodexDid))"
+    } catch {
+        $script:CodexDid = "skipped: could not make $at -- $($_.Exception.Message)"
+        Warn "Codex: could not make the link $at -- $($_.Exception.Message)"
+        $script:CodexSaid = "--   Codex: no link at $at -- it could not be made (see above)"
+    }
+}
+
 if ($Uninstall) {
     Sync-ProcessPath
     Step "Removing what this script installed"
@@ -684,6 +779,19 @@ if ($Uninstall) {
             Warn "$SkillHome is a real directory this script did not create -- left alone"
         }
     } else { Say "no tuning method installed by this script" }
+    # The Codex junction (#149): only this script's own -- into the clone or a plugin copy. Anything else there is left.
+    $codexEntry = Get-Item -LiteralPath $CodexLink -Force -ErrorAction SilentlyContinue
+    if ($codexEntry) {
+        $codexTo = "$($codexEntry.Target -join '')"
+        if ($codexEntry.LinkType -in @("SymbolicLink", "Junction") -and (Test-CodexOurs $codexTo)) {
+            Say "removing the Codex link $(Pretty $CodexLink)"
+            Run { [System.IO.Directory]::Delete($CodexLink) } "remove the Codex junction" | Out-Null
+        } elseif ($codexEntry.LinkType) {
+            Warn "$CodexLink points at $codexTo -- not ours, left alone"
+        } else {
+            Warn "$CodexLink is not a link this script made -- left alone"
+        }
+    }
     # The beta channel's copy has no junction to judge ownership by. Its name is the claim: this
     # script makes that folder, and nothing but this script and an app moving it writes there.
     if (Test-Path $SkillBetaSrc) {
@@ -1490,6 +1598,9 @@ if ($Channel -eq "beta") {
 }   # not -Plugin
 # Every step below installs something (#160): the run has changed the machine from here, if nothing above did.
 Enter-Change
+if ($MethodLeft) { Set-CodexLink "" "the method at ~\.claude\skills\autosound-tuning is not this installer's" }
+elseif ($PluginRoot) { Set-CodexLink $SkillHome }
+else { Set-CodexLink (Join-Path $SkillSrc "skills\autosound-tuning") }
 
 # -- what the method's tools need --------------------------------------------------------------
 Step "What the method's tools need (numpy, scipy, matplotlib)"
@@ -1954,6 +2065,7 @@ if ($Mode -eq "tcc" -and -not $DryRun) {
     elseif ($HaveTcc) { Warn "Autosound TCC was here before and was not upgraded this time (above) -- it is left as it was"; Add-Missing "TCC" }
     else { Warn "Autosound TCC is not installed"; Add-Missing "TCC" }
 }
+if ($script:CodexSaid) { Say $script:CodexSaid }
 $ClaudeBin = Find-Bin claude
 if ($ClaudeBin) { Say "OK   Claude Code" }
 elseif (-not $DryRun) { Warn "Claude Code is not installed; nothing can run a session without it"; Add-Missing "Claude Code" }

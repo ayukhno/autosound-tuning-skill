@@ -33,6 +33,8 @@
 #   ./install.sh --with-omp          with omp, which offers TCC every non-Claude model (default: without)
 #   ./install.sh --no-engine         without Phase 1's desk engine (default: fetched only when this
 #   ./install.sh --engine            machine has no .NET SDK to build it from; --engine fetches anyway)
+#   ./install.sh --codex             also link the method into ~/.agents/skills for OpenAI's Codex (default:
+#                                    only when `codex` is on PATH)
 #   ./install.sh --dry-run           say what it would do, change nothing
 #   ./install.sh --plugin            run from inside a plugin copy (/plugin install): the method IS that copy, so
 #                                    it is checked against its signed release and not cloned; everything else as
@@ -107,6 +109,13 @@ LOCAL_BIN="${HOME}/.local/bin"
 # and nothing else: a tool the person already had — their own uv, their own agy — is never ours to
 # delete, however sure we are of what it is (an installer deleted a Homebrew uv on 2026-08-13).
 MANIFEST="${HOME}/.local/share/autosound/installer-manifest"
+# Codex (OpenAI's CLI) finds a skill in ~/.agents/skills and follows a symlinked skill folder (#149;
+# learn.chatgpt.com/docs/build-skills, read 2026-10-14). One link there to the method this script installs: one copy of
+# the method, which Claude Code and Codex both read -- never a second copy that drifts. Same path as install.ps1's.
+CODEX_LINK_PATH="${HOME}/.agents/skills/autosound-tuning"
+#: Where `/plugin install` puts a plugin's copies, one folder per version: a Codex link into one of them is this
+#: script's own, made by an earlier --plugin run, and is repointed when the version moves.
+CLAUDE_PLUGINS="${HOME}/.claude/plugins"
 APP="${HOME}/Applications/Autosound TCC.app"
 DESKTOP_LINK="${HOME}/Desktop/Autosound TCC.app"
 
@@ -130,6 +139,13 @@ WANT_GITHUB="auto"
 #: never. The name is computed by the method from its own engine pin and this platform, so nothing
 #: here lists a release; a tag that carries none for that pair is an answer, said out loud.
 WANT_ENGINE="auto"
+#: The Codex link (#149): `auto` makes it only when `codex` is on PATH; `--codex` makes it anyway, for a Codex
+#: installed after this run or somewhere PATH does not reach.
+WANT_CODEX="auto"
+#: What the Codex link step did -- the receipt's `codex_link`: made, repointed, kept, `skipped: <why>`, absent (no
+#: codex and no --codex), or `not reached` (the run stopped before the step) -- and its line in the end's Checking.
+CODEX_DID="not reached"
+CODEX_SAID=""
 #: Where a fetched engine lands -- `resonalyze_engine.installed_dir()` owns this path; the line here
 #: is the uninstaller's, so what this script put on the machine can come off it.
 ENGINE_HOME="${HOME}/.local/share/autosound/engines"
@@ -182,6 +198,8 @@ Autosound tuning — installer for macOS (and Linux)
   install.sh --with-omp          with omp, which offers TCC every non-Claude model (metered; default: without)
   install.sh --no-engine         without Phase 1's desk engine; --engine fetches it even where the
                                  .NET SDK could build it (default: fetched only when there is no SDK)
+  install.sh --codex             also link the method into ~/.agents/skills for OpenAI's Codex
+                                 (default: only when codex is on PATH)
   install.sh --dry-run           say what it would do, change nothing
   install.sh --yes               yes to every question; sign-ins are printed, not run
   install.sh --skill-ref v3.1.0  a specific skill version (default: the newest 3.x tag)
@@ -243,6 +261,7 @@ while [ $# -gt 0 ]; do
     --all)         REMOVE_ALL=1 ;;
     --dry-run)     DRY_RUN=1 ;;
     --plugin)      WANT_PLUGIN=1 ;;
+    --codex)       WANT_CODEX=1 ;;
     --yes|-y)      ASSUME_YES=1 ;;
     # An option that takes a value, given none, is a usage error (#142): `shift` past the end under `set -e` ended the
     # run 1 with no line at all.
@@ -419,7 +438,7 @@ json_str() {  # json_str <text>
 
 # The installer's RECEIPT (S-049, #142): which install.sh ran -- its version, and its sha256 when it ran as a file --
 # for which method tag, what it did about the engine, the python3 the method runs on, and how the run ended: `ready`,
-# `not ready` (`missing` names the parts) or `stopped`. Answering "why is there no engine on this MacBook" took four
+# `not ready` (`missing` names the parts) or `stopped` -- then what it did about the Codex link (#149). Answering "why is there no engine on this MacBook" took four
 # exchanges, because nothing on the machine said which installer had run -- an old bookmarked URL installs old logic
 # while the method itself updates to the newest tag. `doctor` reads it back. Its fields, in their order, are
 # install.ps1's; JSON from python3 when one runs, and built here when none does -- the engine's line is a tool's own
@@ -447,11 +466,11 @@ write_receipt() {  # write_receipt ready|"not ready"|stopped
   fi
   set -- install.sh "$_wr_sha" "${METHOD_LEFT:-${SKILL_REF:-}}" "${MODE:-}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
          "$(uname -s)-$(uname -m)" "${ENGINE_DID:-not reached}" "${INSTALLER_VERSION:-}" "$_wr_status" \
-         "${MISSING:-}" "$_wr_python"
+         "${MISSING:-}" "$_wr_python" "${CODEX_DID:-not reached}"
   if [ -n "$_wr_ver" ]; then
     _wr_json="$(python3 -c 'import json, sys
 keys = ("installer", "installer_sha256", "method_ref", "mode", "at", "platform", "engine", "installer_version",
-        "status", "missing", "python")
+        "status", "missing", "python", "codex_link")
 receipt = dict(zip(keys, sys.argv[1:]))
 receipt["missing"] = [part for part in receipt["missing"].split(", ") if part]
 print(json.dumps(receipt))' "$@" 2>/dev/null)" || _wr_json=""
@@ -464,11 +483,12 @@ print(json.dumps(receipt))' "$@" 2>/dev/null)" || _wr_json=""
       _wr_list="${_wr_list:+$_wr_list, }$(json_str "$_wr_one")"
     done
     _wr_fmt='{"installer": %s, "installer_sha256": %s, "method_ref": %s, "mode": %s, "at": %s, "platform": %s, '
-    _wr_fmt="$_wr_fmt"'"engine": %s, "installer_version": %s, "status": %s, "missing": [%s], "python": %s}'
+    _wr_fmt="$_wr_fmt"'"engine": %s, "installer_version": %s, "status": %s, "missing": [%s], "python": %s, '
+    _wr_fmt="$_wr_fmt"'"codex_link": %s}'
     # shellcheck disable=SC2059  # the format is the two lines above, never a value
     _wr_json="$(printf "$_wr_fmt" "$(json_str "$1")" "$(json_str "$2")" "$(json_str "$3")" "$(json_str "$4")" \
       "$(json_str "$5")" "$(json_str "$6")" "$(json_str "$7")" "$(json_str "$8")" "$(json_str "$9")" "$_wr_list" \
-      "$(json_str "${11}")")"
+      "$(json_str "${11}")" "$(json_str "${12}")")"
   fi
   if ! _wr_err="$( { printf '%s\n' "$_wr_json" > "$_wr_file"; } 2>&1 )"; then
     warn "the receipt was not written ($(pretty "$_wr_file")): ${_wr_err##*: }"
@@ -733,6 +753,85 @@ claude_status() {  # prints "email (plan)" when signed in; fails otherwise
   printf '%s%s' "${_e:-signed in}" "${_p:+ ($_p)}"
 }
 
+# ── the Codex link (#149) ─────────────────────────────────────────────────────
+# Is <target> -- what a link at CODEX_LINK_PATH points at -- this script's own: the method's clone, or a plugin copy of
+# it? Anything else is somebody's, and stays.
+codex_ours() {  # codex_ours <target>
+  case "$1" in
+    "$SKILL_SRC"/*) return 0 ;;
+    "$CLAUDE_PLUGINS"/*/skills/autosound-tuning) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# The user-level link Codex finds the method by: CODEX_LINK_PATH -> <target>, when `codex` is on PATH or --codex asked
+# for it. Nothing there: made. This script's own link to <target>: kept; to another of its targets (an older plugin
+# version, the clone before --plugin): repointed. Somebody's link, a real folder or a file: left as it is, and said.
+# An empty <target> is a method this script did not install (<why>): no link to it. Sets CODEX_DID -- the receipt's
+# codex_link -- and CODEX_SAID, the end's one line; a link that cannot be made stops nothing and is said.
+codex_link() {  # codex_link <target> [<why there is none>]
+  _cx_to="$1"; _cx_at="$(pretty "$CODEX_LINK_PATH")"
+  if [ "$WANT_CODEX" != 1 ] && ! have codex; then
+    CODEX_DID="absent"
+    CODEX_SAID="– Codex: no Codex on PATH, so no link in ~/.agents/skills (--codex makes it anyway)"
+    return 0
+  fi
+  if [ -z "$_cx_to" ]; then
+    CODEX_DID="skipped: ${2:-no method to link to}"
+    warn "Codex: no link made at $_cx_at -- ${2:-no method to link to}"
+    CODEX_SAID="– Codex: no link at $_cx_at -- ${2:-no method to link to}"
+    return 0
+  fi
+  _cx_was=""
+  if [ -L "$CODEX_LINK_PATH" ]; then
+    _cx_was="$(readlink "$CODEX_LINK_PATH")"
+    if [ "$_cx_was" = "$_cx_to" ]; then
+      CODEX_DID="kept"
+      say "  Codex: $_cx_at already points at the method -- kept"
+      CODEX_SAID="✓ Codex finds the method: $_cx_at (kept)"
+      return 0
+    fi
+    if ! codex_ours "$_cx_was"; then
+      CODEX_DID="skipped: $_cx_at is a link to $_cx_was, not this installer's -- left as it is"
+      warn "Codex: $_cx_at is a link to $_cx_was, not this installer's -- left as it is"
+      CODEX_SAID="– Codex: $_cx_at is somebody's link, left as it is"
+      return 0
+    fi
+  elif [ -e "$CODEX_LINK_PATH" ]; then
+    _cx_kind="file"; [ -d "$CODEX_LINK_PATH" ] && _cx_kind="folder"
+    CODEX_DID="skipped: $_cx_at is a $_cx_kind this installer did not make -- left as it is"
+    warn "Codex: $_cx_at is a $_cx_kind this installer did not make -- left as it is"
+    CODEX_SAID="– Codex: $_cx_at is a $_cx_kind this installer did not make, left as it is"
+    return 0
+  fi
+  # What it does -- the receipt's word -- whether this is a dry run or not.
+  if [ -n "$_cx_was" ]; then CODEX_DID="repointed"; else CODEX_DID="made"; fi
+  if [ "${DRY_RUN:-0}" = 1 ]; then
+    if [ -n "$_cx_was" ]; then
+      say "  Codex: would repoint the link $_cx_at from $(pretty "$_cx_was") to $(pretty "$_cx_to")"
+    else
+      say "  Codex: would make the link $_cx_at -> $(pretty "$_cx_to")"
+    fi
+    CODEX_SAID="✓ Codex: would find the method at $_cx_at ($CODEX_DID)"
+    return 0
+  fi
+  # rm -f only ever meets this script's own link here: anything else returned above.
+  if _cx_err="$( { mkdir -p "$(dirname "$CODEX_LINK_PATH")" && { [ -z "$_cx_was" ] || rm -f "$CODEX_LINK_PATH"; } \
+                  && ln -s "$_cx_to" "$CODEX_LINK_PATH"; } 2>&1 )"; then
+    if [ -n "$_cx_was" ]; then
+      say "  Codex: repointed the link $_cx_at to $(pretty "$_cx_to") (it pointed at $(pretty "$_cx_was"))"
+    else
+      say "  Codex: made the link $_cx_at -> $(pretty "$_cx_to")"
+    fi
+    CODEX_SAID="✓ Codex finds the method: $_cx_at ($CODEX_DID)"
+  else
+    CODEX_DID="skipped: could not make $_cx_at: ${_cx_err##*: }"
+    warn "Codex: could not make the link $_cx_at: ${_cx_err##*: }"
+    CODEX_SAID="– Codex: no link at $_cx_at -- it could not be made (see above)"
+  fi
+  return 0
+}
+
 # ── uninstall ─────────────────────────────────────────────────────────────────
 if [ "$UNINSTALL" = 1 ]; then
   step "Removing what this script installed"
@@ -756,6 +855,15 @@ if [ "$UNINSTALL" = 1 ]; then
     warn "$SKILL_HOME is a real directory this script did not create — left alone"
   else
     say "  no tuning method installed by this script"
+  fi
+  # The Codex link (#149): only this script's own -- into the clone or a plugin copy. Anything else there is left.
+  if [ -L "$CODEX_LINK_PATH" ] && codex_ours "$(readlink "$CODEX_LINK_PATH")"; then
+    say "  removing the Codex link $(pretty "$CODEX_LINK_PATH")"
+    run rm -f "$CODEX_LINK_PATH"
+  elif [ -L "$CODEX_LINK_PATH" ]; then
+    warn "$CODEX_LINK_PATH points at $(readlink "$CODEX_LINK_PATH") — not ours, left alone"
+  elif [ -e "$CODEX_LINK_PATH" ]; then
+    warn "$CODEX_LINK_PATH is not a link this script made — left alone"
   fi
   # The beta channel's copy has no link to judge ownership by. Its name is the claim: this script
   # makes that folder, and nothing but this script and an app moving it writes there.
@@ -1453,6 +1561,11 @@ fi
 fi   # not --plugin
 # Every step below installs something (#160): the run has changed the machine from here, if nothing above did.
 changing
+# The Codex link (#149) to the method this run installed -- the clone, or the plugin copy; none to a method left as it
+# was, which is not this script's to point Codex at.
+if [ -n "$METHOD_LEFT" ]; then codex_link "" "the method at ~/.claude/skills/autosound-tuning is not this installer's"
+elif [ -n "$PLUGIN_ROOT" ]; then codex_link "$SKILL_HOME"
+else codex_link "$SKILL_SRC/skills/autosound-tuning"; fi
 
 # ── what the method's own tools need ──────────────────────────────────────────
 # The reason this script exists, ahead of anything about models (INSTALLER-TZ §0): put the wall
@@ -1986,6 +2099,7 @@ if [ "$MODE" = "tcc" ] && [ "$DRY_RUN" = 0 ]; then
     missing TCC
   fi
 fi
+[ -z "$CODEX_SAID" ] || say "  $CODEX_SAID"
 CLAUDE_BIN="$(find_bin claude || true)"
 if [ -n "$CLAUDE_BIN" ]; then
   say "  ✓ Claude Code"
