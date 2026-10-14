@@ -127,6 +127,31 @@ state is on disk: `python3 rew_tool/state/process.py <project>/process handoff` 
 A session can neither restart itself nor `/clear`, so the offer is the Arbiter's to take; what the check removes is the
 improvising (S-044).
 
+## Working from another device, and when the link drops
+
+A day in the car often runs the session from a phone or another browser while the laptop sits in the car. Claude
+Code's own Remote Control does this; nothing in the skill adds to it. What its page
+([code.claude.com/docs/en/remote-control](https://code.claude.com/docs/en/remote-control)) says, and what the method
+adds:
+
+* **Start it interactive** — `claude --remote-control`, or `/remote-control` inside the running session. In an
+  interactive session, per the page, Claude Code "retries for as long as the outage lasts and reconnects on its own
+  when the network returns"; server mode (`claude remote-control`) "gives up after roughly 10 minutes" and exits.
+* **The laptop is the session.** The page: "your computer has to stay on and the `claude` process has to keep
+  running". The method adds: on power, sleep off — REW and the sound card stay on the laptop, and the captures with
+  them. REW stays open and the `.mdat` saved.
+* **Rounds short, checked before leaving the car.** An open round's status lives in REW's measurement list, so run
+  `capture-check` before stepping away, and keep `process.py <project>/process session-close --check` as the habit at
+  each block boundary — it writes nothing and names what is still open (§ Stopping).
+* **When the link drops**: the page brings an interactive session back with `claude --continue` or `claude --resume`
+  (the "about four hours" it names is for server mode's own bring-back). Past that, or on doubt, a fresh session reads
+  `process show` and the ▶️ CONTINUE block, as at any start.
+* **Listening verdicts** are typed or spoken to the session from the device in hand — the record is the same.
+
+**The plan of the day on the web — an offer, once.** At the start of a day in the car the session offers the person
+the plan of the day as a page published with Claude's own means (an Artifact page, opened in any browser); the person
+says yes or no. Nothing in the skill builds that page, and the record stays in `process/` and the ledger.
+
 ## The reply after a desk computation
 
 **A reply after a desk computation ends with one of two things**: «введи це» (the sheet), or «виміряй ці N кривих» (N from `state.py … verification-set`, never "re-measure the series"). A defect of the method found mid-session gets one line in the pool, and the tuning goes on.
