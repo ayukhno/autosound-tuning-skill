@@ -1272,12 +1272,15 @@ function Save-LocalChanges {
     Say "Sent to the skill as an issue, the patch tells its author what had to be fixed by hand."
     $send = @()
     if (Offer "Enter = send it / s = keep it only here") { $send = @("--send") }
+    # upkeep writes the patch, then resets and cleans the copy: the run's first change on disk may be right here (#160).
+    Enter-Change
     $global:LASTEXITCODE = 0
     # To the screen, not into this function's answer: its lines would make any answer read as "kept" (R32, #142).
     & $Py3 $tool --clone $Dir keep-local @send | Out-Host
     $kept = ($LASTEXITCODE -eq 0)
     Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
-    if (-not $kept) { Warn "the changes were not kept, so nothing was reset or updated -- see above." }
+    # It may have reset the copy and then stopped -- a locked file in its clean: what is left is what it says (#160).
+    if (-not $kept) { Warn "the update stops here -- see above: upkeep says what it kept and reset." }
     return $kept
 }
 

@@ -1275,11 +1275,14 @@ keep_local() {  # keep_local <dir> <what>; 0 = kept and reset, 1 = left as it wa
   say "  Sent to the skill as an issue, the patch tells its author what had to be fixed by hand."
   _kl_send=""
   if offer "Enter = send it · s = keep it only here:"; then _kl_send="--send"; fi
+  # upkeep writes the patch, then resets and cleans the copy: the run's first change on disk may be right here (#160).
+  changing
   if "$_kl_py" "$_kl_tmp/skills/autosound-tuning/scripts/upkeep.py" --clone "$_kl_dir" keep-local ${_kl_send:+"$_kl_send"}; then
     rm -rf "$_kl_tmp"; return 0
   fi
   rm -rf "$_kl_tmp"
-  warn "the changes were not kept, so nothing was reset or updated -- see above."
+  # It may have reset the copy and then stopped -- a locked file in its clean: what is left is what it says (#160).
+  warn "the update stops here -- see above: upkeep says what it kept and reset."
   return 1
 }
 

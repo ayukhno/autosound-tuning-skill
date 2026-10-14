@@ -1820,6 +1820,64 @@ def keep_local_problems(sh, ps1):
     if "ls-tree --name-only FETCH_HEAD -- @keep" not in body or "FETCH_HEAD @have" not in body:
         out.append("install.ps1 Save-LocalChanges archives files the new tag may not have -- `git archive` then gives "
                    "nothing at all; want `ls-tree --name-only FETCH_HEAD -- @keep` and `FETCH_HEAD @have` (#167)")
+    out.extend(keep_local_run_problems(sh, ps1))
+    return out
+
+
+#: A `git` for keep_local alone: `status` names one changed file, the new tag's upkeep.py is a script that says it ran
+#: and fails (it reset the copy, then a locked file stopped its clean), and any other file of the tag is not there.
+KEEP_LOCAL_GIT = (b"#!/bin/sh\n"
+                  b'case "$*" in\n'
+                  b'  *" status "*) echo " M a"; exit 0 ;;\n'
+                  b'  *" show FETCH_HEAD:skills/autosound-tuning/scripts/upkeep.py") '
+                  b"printf 'import sys\\nprint(\"UPKEEP RAN: reset, then a locked file\")\\nsys.exit(1)\\n'; exit 0 ;;\n"
+                  b'  *" show "*) echo "fatal: path not in FETCH_HEAD" >&2; exit 128 ;;\n'
+                  b"esac\nexit 0\n")
+
+
+def keep_local_run_problems(sh, ps1):
+    """#160 (the group round), RUN: keep_local arms the receipt (`changing`) before the new upkeep.py runs -- it writes
+    the patch and resets the copy, and a locked file can stop it after the reset -- and a failure then is said as upkeep
+    says it, never "nothing was reset". install.ps1's Save-LocalChanges is READ: Enter-Change before the upkeep call,
+    the same words."""
+    import tempfile
+    out = []
+    functions, missing = cut_functions(sh, ("say", "warn", "pretty", "keep_local"))
+    if missing:
+        return [f"install.sh: no `{name}() {{ ... }}` -- keep_local cannot be run (#160)" for name in missing]
+    bash, why = find_bash()
+    if not bash:
+        return [f"{why} -- install.sh's keep_local cannot be run, and unrun is not agreed (#160)"]
+    tmp = tempfile.mkdtemp(prefix="autosound_keep_")
+    try:
+        stub = Path(tmp, "stub")
+        stub.mkdir()
+        (stub / "git").write_bytes(KEEP_LOCAL_GIT)
+        (stub / "git").chmod(0o755)
+        py_dir = Path(sys.executable).parent.as_posix()
+        script = (f'export PATH="$(cd "{stub.as_posix()}" && pwd)":"{py_dir}":"/usr/bin:$PATH"\n' + functions
+                  + f'DRY_RUN=0\nLOCAL_CHANGES="{Path(tmp, "patches").as_posix()}"\n'
+                  + "offer() { return 1; }\nchanging() { echo 'ARMED BEFORE UPKEEP'; }\npython3() { "
+                  + f'"{Path(sys.executable).as_posix()}" "$@"; }}\n'
+                  + f'keep_local "{Path(tmp, "copy").as_posix()}" "the method"\n')
+        r = subprocess.run([bash, "-s"], input=script.encode("utf-8"), capture_output=True)
+        said = (r.stdout + r.stderr).decode("utf-8", "replace")
+        armed, ran = said.find("ARMED BEFORE UPKEEP"), said.find("UPKEEP RAN")
+        if r.returncode != 1 or not 0 <= armed < ran or "nothing was reset" in said \
+                or "see above: upkeep says what it kept and reset" not in said:
+            out.append(f"install.sh keep_local, the new upkeep.py failing after its reset: exit {r.returncode}, want 1, "
+                       f"`changing` before upkeep runs and 'see above: upkeep says what it kept and reset', never "
+                       f"'nothing was reset' -- said {said.strip()[-300:]!r} (#160)")
+    except OSError as exc:
+        out.append(f"keep_local's fixtures could not be made ({exc}) -- unrun is not agreed (#160)")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    fn = re.search(r"^function Save-LocalChanges \{.*?^\}", ps1, re.M | re.S)
+    body = fn.group(0) if fn else ""
+    at_arm, at_call = body.find("Enter-Change"), body.find("& $Py3 $tool --clone $Dir keep-local")
+    if not 0 <= at_arm < at_call or "nothing was reset" in body or "see above: upkeep says what it kept and reset" not in body:
+        out.append("install.ps1 Save-LocalChanges does not arm the receipt (Enter-Change) before the new upkeep.py runs, "
+                   "or says 'nothing was reset' over a failure after its reset (#160)")
     return out
 
 
@@ -2012,11 +2070,14 @@ def ps1_run_problems(ps1):
 
     end = ps1[end_at:]
     try:
+        # (#160) a run that changed nothing still writes its end's verdict: the end with the receipt unarmed.
         for case, missing, want_rc, word, status in (("ready", "", 0, "Installed.", "ready"),
                                                      ("not-ready", 'Add-Missing "numpy"\n', 3,
-                                                      "Installed, NOT ready: numpy", "not ready")):
+                                                      "Installed, NOT ready: numpy", "not ready"),
+                                                     ("ready-nothing-changed", "$script:ReceiptArmed = $false\n", 0,
+                                                      "Installed.", "ready")):
             rc, said, receipt = run_case(case, missing + end)
-            want_missing = ["numpy"] if missing else []
+            want_missing = ["numpy"] if "numpy" in missing else []
             if rc != want_rc or word not in said or not isinstance(receipt, dict) or receipt.get("status") != status \
                     or receipt.get("missing") != want_missing:
                 out.append(f"install.ps1's end under {Path(shell).name}, {case}: exit {rc}, receipt "
@@ -2893,9 +2954,11 @@ def main():
     if ran_ps1:
         problems.extend(ran_ps1)
     elif ps1_ran:
-        checked.append(f"install.ps1's end, run under {Path(find_powershell()).name}: nothing missing ends 0 with the "
-                       f"receipt ready, numpy missing ends 3 with it not ready; Run and Test-Quiet say $false for a "
-                       f"command that is not there or ends 3, $true for one that ends 0 (#142)")
+        checked.append(f"install.ps1 run under {Path(find_powershell()).name}: its end (ready, not ready, ready with "
+                       f"nothing changed); Run and Test-Quiet (#142); the receipt kept before the first change and "
+                       f"`stopped` after it (#160); the tag pick, Sync-MethodCheckout's dry runs and the UNSIGNED line "
+                       f"(#164, #171); the module path over SQL Server's entry and over pwsh's, and Invoke-Upstream's "
+                       f"child (#161)")
     else:
         checked.append("install.ps1's end, Run and Test-Quiet are NOT run here -- no PowerShell on this machine; the "
                        "Windows job runs them (#142)")
