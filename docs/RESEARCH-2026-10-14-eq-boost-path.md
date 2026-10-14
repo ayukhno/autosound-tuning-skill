@@ -27,8 +27,9 @@ goes to the Arbiter as a proposal. Any code is a later task, after his ruling.
   *"headroom + EQ-ability caution"* (`:925-926`). `eq_propose` closes it with `gain_hi=0`.
 - **Method text.** `FAQ.md:133`: *"a dip that would need a boost is almost certainly a
   cancellation"*; `phase_2_eq.md:28,49`, `virtual-first.md:355`, `happy-paths.md:39`: cuts only,
-  ≤ 6 dB. But `phase_2_eq.md:55` and `diagnostic-techniques.md:127` say a dip below Schroeder
-  *"can be a legitimate target"*: the doctrine admits a boost there, the code does not.
+  ≤ 6 dB. But below Schroeder `phase_2_eq.md:55` calls a dip *"a legitimate target"* and
+  `diagnostic-techniques.md:127` says it *"may be worth a filter"*: the doctrine admits a boost
+  there, the code does not.
 - **The 09-23 verdict table** (`docs/RESEARCH-2026-09-23-min-phase-verdict.md:224-225`): *dip, MIN*
   below Schroeder is *"a legitimate boost candidate within the +6 dB ceiling"*, above it *"never
   boosted on single-point evidence"*; *dip, NON* is `cabin_null`, no boost. This note extends
@@ -191,19 +192,25 @@ which is where excursion lives.
 **Advice: option B, a narrow, opt-in `fill` path for one dip class, with the default left at
 cuts only until the Passat check (below) has run.** Reasons:
 - the doctrine (`phase_2_eq.md:55`) and the 09-23 table already admit the class;
-- tier-1 sources allow EQ wherever the response is minimum-phase and stable (1, 2), and keep the
-  amount small (3, 6);
+- REW's help allows EQ in minimum-phase regions (2); Toole only a spatially averaged bass lift
+  (1), which the ellipsoid condition approximates; REW and FIR practice bound the amount (3, 6);
 - dips are cheap to leave partly unfilled (8), so a low cap loses little.
 
 **B. The class: all of these must hold at once.**
-1. **Below `SCHROEDER_HZ`** (200 Hz). Above it: none, ever. This is the 09-23 row, unchanged.
+1. **Below `SCHROEDER_HZ`** (200 Hz). Above it: none in this path — a narrowing of the 09-23 row, which
+   bars only single-point evidence.
 2. **`min_phase_across` = MIN_PHASE**, agreed on ≥ 2 of 3 centre returns, with a measured floor.
-   UNSTABLE, PROVISIONAL or NON means no boost.
+   NON or UNSTABLE means no boost, and so does a take flagged PROVISIONAL (no floor measured).
 3. **Ellipsoid `stays`** for the dip, matched as `package_res` already matches peaks (±1/6 oct).
    A dip that moves is the position.
-4. **Gate**: where it is in scope (≥ 150 Hz), the verdict must be ALLOW. WARN and BLOCK both mean
-   no boost, with no mic-shift override inside this path. Below 150 Hz the gate has no vote, and
-   items 2 and 3 carry the decision.
+4. **Gate, read over the same 3 centre returns.** Where it is in scope (≥ 150 Hz): BLOCK on
+   ≥ 2 of 3 returns means no boost; BLOCK on 1 of 3 makes the dip UNSTABLE (no boost); WARN does
+   **not** bar the fill once item 2 reads MIN on ≥ 2 of 3, and the package says so. Why: below
+   Schroeder the 09-23 note makes the minimum-phase verdict *decisive*; the gate is strong as a
+   BLOCK detector (90/90 on matched combs, at z_warn 5.0) but *"NOT a certifier"*, and at the default z_warn
+   *"deep min-phase dips tip to WARN ... an abstention, not a false block"* (`eq_gate.py:30-38`).
+   Requiring ALLOW would bar exactly the deep minimum-phase dip this path exists for. Below
+   150 Hz the gate has no vote, and items 2 and 3 decide.
 5. **Width 1/6 to 2/3 oct**, the same window as `RES_WIDTH`. Narrower is a null (2, 4, 5; the
    Resonalyze mask). Broader is tone, and goes to option C.
 6. **Inside where the channel plays, and ≥ ½ oct above its HPF corner.** This follows REW's
@@ -215,7 +222,8 @@ cuts only until the Passat check (below) has run.** Reasons:
 - **At most one fill per channel**, and the existing **4.5 dB summed budget** never applies in
   full.
 - Q is capped at the ellipsoid's ceiling, and at REW's decay-time rule for boosts (3).
-- Why +3, not 09-23's +6: +6 is the cut budget borrowed, derived by no source; a half fill takes
+- Why +3, not 09-23's +6: +6 looks like the cut budget borrowed **[I]** (or `diagnostic-techniques.md:58`, *"Depth > +6 dB to 'fix' ⇒
+  almost certainly cancellation"*), derived by no source; a half fill takes
   most of the audible gain (8); REW, the guide and car FIR practice all bound it (3, 6, 9). This
   **narrows** the 09-23 row; it does not contradict it.
 
@@ -265,7 +273,10 @@ cuts only until the Passat check (below) has run.** Reasons:
 ## What would refute the proposal
 
 1. **The 09-23 Passat check.** Its §5 asks for the w-L ~150 Hz dip over one ellipsoid round,
-   9 sweeps. If the dip reads NON or UNSTABLE, B has no member on this car so far.
+   9 sweeps, read by `min_phase_across` **and** the gate per return (B2, B4). The car record has
+   it gate BLOCK on 5/5 takes with S = 3.3 … 589 (09-23); if BLOCK holds on ≥ 2 of 3 returns, or
+   the verdict is NON or UNSTABLE, B has no member on this car so far. Only MIN with no majority
+   BLOCK adds it to B.
    - If the next ellipsoid round on a second car also yields **no** dip passing B1–B6, the path
      is dead code: choose A.
 2. **A fill that does not arrive at the head.**
