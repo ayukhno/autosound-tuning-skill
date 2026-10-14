@@ -93,7 +93,7 @@ end.
 | 60 | Agent start group fix (a2): the trigger eval (T20's implementer) | opus · medium | Agent start | 09:12 | 09:15 | `78da32e`; 68 queries (62 neutral, 17 project) |
 | 61 | Agent start group fix (a3): project seed (T17a's implementer) | opus · high | Agent start | 09:12 | 09:14 | `5170fb7`; the gate's sentence made true; existing projects keep the old one |
 | 62 | the trigger eval, three live runs (claude -p, sonnet-4-6, 3 workers) | — | Agent start | 09:15 | 09:36 | run 1: 52/68 (439 s) — all 16 misses are neutral should-fire (recall 10/26), no false fire, project 11/11; runs 2 and 3 void (one query each gave no result in 120 s — load); two runs to repeat |
-| 63 | T17b fix round (b) (resumed) | opus · high | Agent start | 09:25 | | |
+| 63 | T17b fix round (b) (resumed) | opus · high | Agent start | 09:25 | 09:38 | 796 s; `f2af045` — (b) all eight, and CI run 2's: 8.3 short paths, Invoke-Upstream returned output+True as success (a real bug), the consistency script's FAIL recap |
 
 ## Quality notes
 
@@ -105,6 +105,9 @@ end.
   critique was dropped. The group seat caught it by probe.
 - **A regression made by a fix (T2, #155).** The fix round of d23d73e recased the level's unit and gave one capture two
   keys; the re-review caught it; fixed in 306bd4c, verified live.
+- **CI found a real defect no review had (#161).** `Invoke-Upstream` returned the child's printed output together with
+  True — an array that counts as success whatever the child's exit code; found by the file:// child probe the test seat
+  asked for, fixed in `f2af045`.
 - **Repo-wide checks not run locally.** The implementers ran their modules' selftests, not `encoding-check` or ruff,
   which only the full runner runs; CI found three such defects. From then on every fixer runs both on its files.
 - **Fixes that did not reach the end (T1, #153).** The first build stored the typed title correctly but the check
@@ -117,6 +120,7 @@ end.
 |---|---|---|---|---|
 | 38537781090 | 08:49 | `f991c10` | `workflow_dispatch` — the wave touches Windows (checks.yml's own rule) | red: installers-windows at the #161 probe (SQL Server's path; later steps skipped); selftests — encoding-check (side_effect, bounded_run: fixed `33b84cf`) and ruff (installer-consistency `import json`); installers-ubuntu, engine, gate green |
 | 38542204702 | 09:25 | `99bddb2` | after the Installers' and SF3's group fixes | red, further on: installers-windows passed the #161 probe; its consistency step fails T17b's six ps1 Codex-link cases (8.3 short paths) and the file:// upstream-child probe; Ubuntu selftests — installers and tag-check (a Linux-only case; the runner's 12-line tail cut the FAIL line); installers-ubuntu, engine, gate green |
+| 38543860362 | 09:38 | `f2af045` | after T17b's fix round | |
 
 ## Per group
 
