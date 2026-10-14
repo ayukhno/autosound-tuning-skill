@@ -121,9 +121,10 @@ _LEVEL_RE = re.compile(
 
 
 def _level_text(level):
-    """A level as it is written: the unit `dB` in any case typed (`86db`), the spacing collapsed (`86  dB` -> `86 dB`)."""
-    m = re.match(r"(?P<n>[+-]?\d+(?:[.,]\d+)?)(?P<gap>\s*)", level)
-    return f"{m.group('n')}{' ' if m.group('gap') else ''}dB"
+    """A level as typed, its spacing collapsed the way `params` collapses a tail (`86  DB` -> `86 DB`), its case kept:
+    the before-form is the after-form with the level moved, so both read to one key (contract 1: no key of a title that
+    parsed before changes)."""
+    return " ".join(level.split())
 
 
 def _match_title(text):
@@ -981,11 +982,18 @@ def _check_level_before_method():
     assert got is None and why, why
     # An impedance sweep with no `_N` reads as it did.
     assert parse_name("w-L (imp) 86dB")["params"] == "86dB"
-    # The unit read in any case, written `dB`, its spacing collapsed (review of bebab42).
-    for before, after in (("sw_3 86db (sw)", "sw_3 (sw) 86dB"), ("sw_3 86  DB (sw) x0", "sw_3 (sw) 86 dB x0")):
+    # The unit read in any case and kept AS TYPED, its spacing collapsed as `params` collapses it: the before-form is the
+    # after-form with the level moved, so the two share a key, and so does the canonical title (re-review of d23d73e).
+    for before, after, written in (("sw_3 86DB (sw)", "sw_3 (sw) 86DB", "sw_3 (sw) 86DB"),
+                                   ("sw_3 86db (sw)", "sw_3 (sw) 86db", "sw_3 (sw) 86db"),
+                                   ("sw_3 86  DB (sw)", "sw_3 (sw) 86  DB", "sw_3 (sw) 86 DB"),
+                                   ("sw_3 86  DB (sw) x0", "sw_3 (sw) 86  DB x0", "sw_3 (sw) 86 DB x0")):
         got, why = explain_name(before)
-        assert why is None and canonical_title(before) == after, (before, why, canonical_title(before))
-        assert name_key(got) == name_key(parse_name(after)) and f"`{after}`" in got["note"], (before, got)
+        assert why is None, (before, why)
+        assert name_key(got) == name_key(parse_name(after)), (before, name_key(got), name_key(parse_name(after)))
+        assert canonical_title(before) == written, (before, canonical_title(before), written)
+        assert name_key(parse_name(canonical_title(before))) == name_key(got), before
+        assert f"`{written}`" in got["note"], (before, got["note"])
 
 
 def _check_letter_before_series():
