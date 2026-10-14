@@ -161,6 +161,7 @@ SKILL_RULE_PHRASES = (
     # 🏛️ Three Roles: the capability block -- the finder and the feedback gate (#150)
     "capabilities.py find",
     "post_feedback",
+    "never raw `gh`",
     # 🔄 Pre-Session & Resume: the language paragraph, then items 0-4
     "You write in the interface language, always",
     "Which method is this",

@@ -126,6 +126,7 @@ Everything else — the inventory, the caveats, the previews, the reasoning, the
 * **Copy-paste-ready specifics:** exact save PATH, short measurement lists, direct targets.
 * **Every number in a proposal names where it came from**: a measurement title, `project.json`, `dsp_profile.json`, the Arbiter's word, or ASSUMPTION. An assumption is never written to state, and a feature the processor's profile does not list does not exist on this car.
 * **What the Arbiter types, they get as a table**: measurement TITLES, not curve ids; the quantity beside every number (an RMS says over which band and at which smoothing); no emoji in a table of values to type; no praise; one screen, then «деталі?».
+* **A desk computation's reply**: a sheet or a capture list → `process-control.md`.
 * **The `🔍 What I see` · `⚠️ Main problems` · `✅ Fixable / ❌ Not fixable` · `🔧 Next steps` · `❓ One question` headings are for an ANALYSIS that was asked for** — a phase verdict, a flaw-map read — not for a step reply.
 
 ---
