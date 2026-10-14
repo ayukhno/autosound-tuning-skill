@@ -96,7 +96,8 @@ if (-not $AutosoundRunAsFile) { $global:AutosoundInstallExit = 0 }
 # The codes (#142), install.sh's: 0 ready -- 1 stopped before the end, a refusal, an error or an interruption: what was
 # done before it stays (Git, Claude Code, uv, Python, perhaps the method), and a stop before the method's step leaves
 # the method as it was -- 2 a usage error -- 3 installed, NOT ready, the missing parts named.
-# A stop (1) writes the receipt as `stopped`; the end writes its own before its 3; 0 and 2 here write none.
+# A stop (1) writes the receipt as `stopped` -- once the run has gone ahead: a stop before it changed nothing, and the
+# last real install's receipt stays (#160); the end writes its own before its 3; 0 and 2 here write none.
 function Stop-Installer {
     param([int]$Code)
     if ($Code -eq 1) { Write-Receipt "stopped" }
@@ -108,10 +109,13 @@ function Stop-Installer {
 # The installer's RECEIPT (S-049, #142) -- install.sh's write_receipt, the same fields in the same order: which
 # install.ps1 ran (its version; its sha256 when it ran as a file), for which method tag, what it did about the engine,
 # the python3 the method runs on, and how the run ended -- ready, not ready (`missing` names the parts) or stopped.
-# `doctor` reads it back. Never in a dry run; a receipt that cannot be written stops nothing.
+# `doctor` reads it back. Never in a dry run, and never before the run goes ahead ($script:ReceiptArmed, #160): a stop
+# before the consent's yes changed nothing, and replaced the last real install's receipt -- `doctor` then no longer said
+# what that install did about the engine. A receipt that cannot be written stops nothing.
+$script:ReceiptArmed = $false
 function Write-Receipt {
     param([string]$Status)
-    if ($DryRun) { return }
+    if ($DryRun -or -not $script:ReceiptArmed) { return }
     $file = "install-receipt.json"
     try {
         $rd = Join-Path $env:LOCALAPPDATA "autosound"
@@ -857,6 +861,8 @@ if (-not $DryRun) {
 }
 # From here the run is going ahead (#142): the receipt says `stopped` until the end writes how the run ended, so a
 # terminating error, Ctrl-C or a closed window leaves no earlier run's `ready` standing -- install.sh's going_ahead.
+# Before this line no receipt is written (#160).
+$script:ReceiptArmed = $true
 Write-Receipt "stopped"
 if (-not $DryRun) { New-Item -ItemType Directory -Force -Path $LocalBin | Out-Null }
 $env:Path = "$LocalBin;$env:Path"

@@ -155,6 +155,8 @@ MISSING=""
 #: Set by `stop` and `finish` as they end the run (#142): `going_ahead`'s EXIT trap leaves an exit that came through
 #: them as it is, and makes any other one a stop.
 ENDED=""
+#: Set by `going_ahead` (#160): write_receipt writes nothing before it.
+RECEIPT_ARMED=0
 #: What the method's step left as it was, when it did (#142): a link that is not this script's, or anything else at
 #: ~/.claude/skills/autosound-tuning. The receipt's method_ref says that, not a tag this run never installed.
 METHOD_LEFT=""
@@ -390,8 +392,10 @@ clt_present() { if on_mac; then xcode-select -p >/dev/null 2>&1; else return 0; 
 # ── how the run ends (#142) ───────────────────────────────────────────────────
 # The exit code a script reads: 0 ready · 1 stopped before the end -- a refusal, an error or an interruption: what was
 # done before it stays, and the last lines say what; a stop before the method's step leaves the method as it was · 2 a
-# usage error, before anything ran · 3 installed, NOT ready, the missing parts named. A stop and the end each write the receipt; a usage error writes none; from the consent on, the
-# receipt says `stopped` until one of them does (`going_ahead`).
+# usage error, before anything ran · 3 installed, NOT ready, the missing parts named. A stop and the end each write the
+# receipt once the run has gone ahead (`going_ahead`), and from there it says `stopped` until one of them does; a usage
+# error, and a stop before going ahead -- a declined consent, no git -- write none (#160): such a run changed nothing,
+# and the last real install's receipt stays, so `doctor` still says what that install did about the engine.
 
 # <text> as a JSON string: `\` and `"` escaped, control characters dropped, and the text UTF-8 (#172): iconv drops a
 # byte that is not, and with no iconv every byte outside printable ASCII is a `?` -- a `--skill-ref $'v\xff'` made a
@@ -417,6 +421,7 @@ json_str() {  # json_str <text>
 # once, naming the file and why (#142): kept quiet, `doctor` read an earlier run's receipt as this one's.
 write_receipt() {  # write_receipt ready|"not ready"|stopped
   [ "${DRY_RUN:-0}" = 1 ] && return 0
+  [ "${RECEIPT_ARMED:-0}" = 1 ] || return 0   # not gone ahead yet: nothing changed, the last receipt stays (#160)
   _wr_status="$1"; _wr_ver=""; _wr_json=""
   _wr_dir="${XDG_DATA_HOME:-$HOME/.local/share}/autosound"
   _wr_file="$_wr_dir/install-receipt.json"
@@ -557,6 +562,7 @@ consent() {
 # hands the trap 130); a plain `kill` (SIGTERM) runs it as well, with $? = 0, and the run ends 143; only SIGKILL runs
 # no trap at all -- the receipt written here says `stopped` all the same.
 going_ahead() {
+  RECEIPT_ARMED=1
   write_receipt stopped
   trap unplanned_end EXIT
 }

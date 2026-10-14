@@ -690,7 +690,8 @@ def selection_problems(sh, ps1):
         for i, (given, offered, stub_rc, says, dry, nogit, want_rc, want_ref, words, not_words) in enumerate(cases):
             script = (f'set -euo pipefail\nexport PATH="$(cd "{stub_dir.as_posix()}" && pwd)":"/usr/bin:$PATH"\n'
                       'SKILL_REPO="https://github.com/ayukhno/autosound-tuning-skill.git"\nSKILL_TAG_GLOB="v3.*"\n'
-                      f'DRY_RUN={dry}\n' + functions + ("usable() { return 1; }\n" if nogit else "")
+                      # The pick runs after `going_ahead` (#160): its stop writes `stopped`.
+                      f'DRY_RUN={dry}\nRECEIPT_ARMED=1\n' + functions + ("usable() { return 1; }\n" if nogit else "")
                       + f'ref="$(pick_method_ref "{given}")" || exit $?\nprintf "REF=[%s]\\n" "$ref"\n')
             data, calls = Path(tmp, f"data-{i}"), Path(tmp, f"git-calls-{i}")
             env = dict(os.environ, STUB_RC=str(stub_rc), STUB_TAGS=offered.as_posix() if offered else "",
@@ -1561,18 +1562,22 @@ def ps1_run_problems(ps1):
     tmp = tempfile.mkdtemp(prefix="autosound_ps1_")
     out = []
 
-    def run_case(case, body):
+    def run_case(case, body, seed=None):
         home = Path(tmp, case)
         home.mkdir()
         appdata = home / "appdata"
         script = home / "case.ps1"
+        if seed is not None:                            # an earlier run's receipt, there before this one (#160)
+            (appdata / "autosound").mkdir(parents=True)
+            (appdata / "autosound" / "install-receipt.json").write_bytes(seed)
         head = (f'$ErrorActionPreference = "Continue"\n$env:LOCALAPPDATA = "{appdata.as_posix()}"\n'
                 f'$DryRun = $false\n$PluginRoot = ""\n$LocalBin = "{(home / "bin").as_posix()}"\n'
                 f'$Py3 = "{(home / "bin" / "python3.exe").as_posix()}"\n$SkillHome = "{(home / "skill").as_posix()}"\n'
                 f'$SkillBetaSrc = "{(home / "beta").as_posix()}"\n$SkillRef = "v3.1.2"\n$MethodLeft = ""\n'
                 '$Mode = "terminal"\n$InstallerVersion = "3.1.2"\n$EngineDid = "not fetched: -NoEngine"\n'
                 '$TccRefused = ""\n$AutosoundTranscriptOn = $false\n$AutosoundRunAsFile = [bool]$PSCommandPath\n'
-                '$script:Missing = @()\n')
+                # The end runs after the run went ahead (#160); a case before it sets $false itself.
+                '$script:Missing = @()\n$script:ReceiptArmed = $true\n')
         script.write_bytes((head + "\n".join(cut) + "\n" + body).encode("utf-8"))
         r = subprocess.run([shell, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", str(script)],
                            capture_output=True, timeout=120, env=powershell_env())
@@ -1610,6 +1615,31 @@ def ps1_run_problems(ps1):
                 out.append(f"install.ps1's tag pick under {Path(shell).name}, {case}: exit {rc}, want 0, "
                            f"{' + '.join(map(repr, words))} and 'is not a release' {unsigned} time(s) (said "
                            f"{said.count('is not a release')}) -- said {said.strip()[-300:]!r} (#164, #171)")
+        # #160: a stop before the run goes ahead keeps the last real receipt byte for byte -- the consent declined (its
+        # block cut out of install.ps1 and run with an Ask that says no), or any stop before it; the consent given, the
+        # receipt says `stopped` from there.
+        consent = re.search(r'^if \(-not \$DryRun\) \{\n    if \(-not \(Ask "Go ahead\?" "n"\)\) \{\n.*?'
+                            r'^\$script:ReceiptArmed = \$true\nWrite-Receipt "stopped"\n', ps1, re.M | re.S)
+        earlier = b'{"installer":"install.ps1","status":"ready","missing":[],"at":"2026-10-01T00:00:00Z"}\r\n'
+        if not consent:
+            out.append('install.ps1: no consent block ending in `$script:ReceiptArmed = $true` and `Write-Receipt '
+                       '"stopped"` to run (#160)')
+        else:
+            for case, body, want_rc, word, want in (
+                    ("declined", "function Ask { param($q, $d) return $false }\n" + consent.group(0), 1,
+                     "Nothing installed. Re-run when you want to.", "kept"),
+                    ("a-stop-before-going-ahead", 'Warn "stopped: no git"\nStop-Installer 1; return\n', 1,
+                     "stopped: no git", "kept"),
+                    ("consented", "function Ask { param($q, $d) return $true }\n" + consent.group(0), 0, "", "stopped")):
+                rc, said, receipt = run_case(f"receipt-{case}", "$script:ReceiptArmed = $false\n" + body, seed=earlier)
+                there = Path(tmp, f"receipt-{case}", "appdata", "autosound", "install-receipt.json")
+                got = there.read_bytes() if there.is_file() else b""
+                kept_ok = got == earlier if want == "kept" else isinstance(receipt, dict) and receipt.get("status") == want
+                if rc != want_rc or word not in said or not kept_ok:
+                    out.append(f"install.ps1's receipt under {Path(shell).name}, {case}: exit {rc}, receipt "
+                               f"{got[:120]!r} -- want {want_rc}, {word!r} and "
+                               f"{'the earlier receipt byte for byte' if want == 'kept' else 'status ' + repr(want)} -- "
+                               f"said {said.strip()[-300:]!r} (#160)")
         rc, said, _ = run_case("probes", probes)
         want = {"Q-absent": "False", "Q-zero": "True", "Q-three": "False", "R-absent": "False", "R-zero": "True",
                 "R-three": "False"}
@@ -1730,6 +1760,14 @@ def exit_contract_problems(sh, ps1):
     if not any(asked < m.start() < first_dir for m in re.finditer(r'^Write-Receipt "stopped"\s*$', ps1, re.M)):
         ps_wrong.append('the receipt does not say `stopped` (`Write-Receipt "stopped"`, at the top level) between the '
                         'consent and the first install step -- an earlier run\'s receipt stands over one that dies')
+    # #160: no receipt before the run goes ahead -- a stop before it changed nothing, and replaced the last real one.
+    # Armed once, at the top level, after the consent and before the first install step. RUN where PowerShell is.
+    arms = [m.start() for m in re.finditer(r"^\$script:ReceiptArmed = \$true\s*$", ps1, re.M)]
+    if not write_fn or "if ($DryRun -or -not $script:ReceiptArmed) { return }" not in write_fn.group(0) \
+            or len(arms) != 1 or not asked < arms[0] < first_dir:
+        ps_wrong.append("Write-Receipt writes before the run goes ahead -- want `if ($DryRun -or -not "
+                        "$script:ReceiptArmed) { return }` and one `$script:ReceiptArmed = $true` between the consent "
+                        "and the first install step (#160)")
     add_fn = re.search(r"^function Add-Missing \{\n.*?^\}$", ps1, re.M | re.S)
     if not add_fn or "-notcontains $Name" not in add_fn.group(0):
         ps_wrong.append("Add-Missing adds a name already listed -- a part is named once, as install.sh's `missing`")
@@ -1850,8 +1888,13 @@ def exit_contract_problems(sh, ps1):
               ("stopped: no tag",), (), None, None, 0),
              # Task 8's review: a declined "Go ahead?" -- here no terminal and no --yes, which takes the default "n" --
              # is a stop, 1, nothing installed; it ended 0, which a script read as ready. Given, the run goes on.
+             # #160: a stop before going ahead changed nothing, and the last real receipt stays, byte for byte:
+             # `kept`. After going ahead a stop still writes `stopped` (a-stop, a-failure).
              ("declined", "consent\n" + go + "finish\n", "python3", "0", False, 1,
-              ("Nothing installed. Re-run when you want to.",), ("Installed",), "stopped", [], 0, earlier),
+              ("Nothing installed. Re-run when you want to.",), ("Installed",), "kept", [], 0, earlier),
+             ("no-git", 'stop 1 "Install git with your package manager, then run this again."\n' + go + "finish\n",
+              "python3", "0", False, 1, ("Install git with your package manager",), ("Installed",), "kept", [], 0,
+              earlier),
              ("consented", "ASSUME_YES=1\nconsent\n" + go + "finish\n", "python3", "0", False, 0, ("Installed.",),
               ("Nothing installed",), "ready", [], 0, earlier),
              # ...and a run that ends neither in `stop` nor in `finish`: a failure under `set -e` is a stop, 1 -- also
@@ -1918,7 +1961,14 @@ def exit_contract_problems(sh, ps1):
             wrong += [f"says {w!r}" for w in never if w in said]
             if calls != want_calls:
                 wrong.append(f"plugin-ready asked for {calls} time(s), want {want_calls}")
-            if unreadable:
+            if status == "kept":
+                kept = json.dumps(before[0]).encode("utf-8") if before and isinstance(before[0], dict) else None
+                there = Path(tmp, case, "data", "autosound", "install-receipt.json")
+                got = there.read_bytes() if there.is_file() else None
+                if kept is None or got != kept:
+                    wrong.append(f"the receipt there before is not kept byte for byte -- it is "
+                                 f"{(got or b'')[:160]!r} (#160)")
+            elif unreadable:
                 wrong.append(f"the receipt is {unreadable}")
             elif status is None and receipt is not None:
                 wrong.append("a receipt was written")
