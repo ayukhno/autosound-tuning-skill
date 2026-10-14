@@ -23,6 +23,10 @@ work; this wave runs Haiku 5.5 instead — #163 at high, the release bookkeeping
 reviewed on opus. Counted per task: defects the review finds, rework rounds, time. The result goes to the hub (H-019) at the wave's
 end.
 
+| task | effort | time | defects (Important / Minor) | rework |
+|---|---|---|---|---|
+| #163 help one-liner | high | 147 s, 89k tokens | 0 / 2 (+1 pool-worthy) | one round, by Haiku, all three done (`518b55b`) |
+
 ## Agent runs
 
 | # | role | model · effort | group | started | ended | result |
@@ -57,14 +61,16 @@ end.
 | 28 | fix of the regression T2 #155 (resumed) | opus · high | Captures | 08:11 | 08:12 | `306bd4c`; verified by the controller with a live probe (5 pairs share one key with their canonical form; old titles parse as before) — no re-review agent |
 | 29 | fix round T17a #149 (resumed) | opus · high | Agent start | 08:12 | 08:14 | `f0616a2`; all five; verified by the controller live (6 folder cases: write, again, read-only, a folder, a dangling link, no project) — no re-review agent |
 | 30 | re-review T1 fix | opus · high | Captures | 08:16 | 08:20 | fix accepted; 3 Minor → the group's fix round |
-| 31 | group seat: silent failures | opus · high | Captures | 08:20 | | |
-| 32 | group seat: tests | opus · high | Captures | 08:20 | | |
-| 33 | task review T5 #157 #172 | opus · high | Installers | 08:22 | | |
-| 34 | task review T6 #164 #171 | opus · high | Installers | 08:22 | | |
-| 35 | task review T7 #160 | opus · high | Installers | 08:22 | | |
-| 36 | task review T9 #161 #162 | opus · high | Installers | 08:22 | | |
+| 31 | group seat: silent failures | opus · high | Captures | 08:20 | 08:25 | 3 Important (the own-range check compares REW to itself and the band never reaches the person; a stale as_in_rew; a refused title recorded with no reason), 4 Minor |
+| 32 | group seat: tests | opus · high | Captures | 08:20 | 08:25 | 4 Important (3 are behaviour: a check before capture-taken; a before-form list offers the wrong rename; a superseded row hides a standing one), 3 Minor |
+| 33 | task review T5 #157 #172 | opus · high | Installers | 08:22 | 08:25 | 1 Important (macOS iconv passes bytes above U+10FFFF), 2 Minor |
+| 34 | task review T6 #164 #171 | opus · high | Installers | 08:22 | 08:27 | no Critical/Important; 3 Minor |
+| 35 | task review T7 #160 | opus · high | Installers | 08:22 | 08:26 | 1 Important (a no-change stop after consent still replaces the receipt), 3 Minor |
+| 36 | task review T9 #161 #162 | opus · high | Installers | 08:22 | 08:29 | 3 Important (the reset rewrites the person's own window; the CI probe may not prove the bad path reached 5.1; CI can test the double-click forms), 5 Minor |
 | 37 | implementer T8 #163 — the Haiku trial | haiku · high | Installers | 08:22 | 08:24 | 147 s, 17 tool calls, 89k tokens; `089d3b3`; red first (5), then green; CRLF kept |
-| 38 | review of the Haiku T8 (trial count) | opus · high | Installers | 08:24 | | |
+| 38 | review of the Haiku T8 (trial count) | opus · high | Installers | 08:24 | 08:28 | no Important, no functional defect; 2 Minor in the checker (~10 min), 1 pool-worthy (the header comment's `main`); the trailer names Opus — the brief's fault, not Haiku's |
+| 39 | Haiku T8 rework (resumed) | haiku · high | Installers | 08:28 | 08:31 | `518b55b`; all three, each red on a scratch copy first |
+| 40 | fix round Installers T5 T7 T9 (resumed) | opus · high | Installers | 08:31 | | |
 
 ## Per group
 
