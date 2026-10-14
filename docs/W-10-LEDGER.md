@@ -53,7 +53,7 @@ end.
 | 20 | fix round T2+T3 (the implementer resumed) | opus · high | Captures | 08:07 | 08:09 | `d23d73e`; all four items |
 | 21 | re-review T4 fix | opus · high | Captures | 08:08 | 08:09 | fix accepted, no regression |
 | 22 | task review T17a #149 | opus · high | Agent start | 08:08 | 08:12 | 2 Important (OSError traceback; no next step when the skill is missing), 3 Minor |
-| 23 | implementer T13, T16, T15, T14, T12 text (#159 #167 #166 #165 #158) | opus · high | Silent failures 3 + Windows | 08:09 | | |
+| 23 | implementer T13, T16, T15, T14, T12 text (#159 #167 #166 #165 #158) | opus · high | Silent failures 3 + Windows | 08:09 | 08:37 | 1653 s, 160 tool calls, 310k tokens; `f8e97f7` `6cd0755` `c3144ca` `5104af8` `7f28c01`; TCC records the clipboard call with no review path — an ask for the candidate's ticket |
 | 24 | re-review T2+T3 fix | opus · high | Captures | 08:09 | 08:11 | four fixes accepted; 1 Important — a REGRESSION the fix made (the unit recased → two keys for one capture); 305 old titles unchanged |
 | 25 | fix round T1 #153 (the implementer resumed) | opus · high | Captures | 08:10 | 08:16 | `bf54719`; all six (glossary: the fallback — contract._title_key reads none) |
 | 26 | fix round T22 #168 (resumed) | opus · medium | Method text | 08:11 | 08:12 | `8895f6a`; all items; docs — no re-review |
@@ -71,6 +71,12 @@ end.
 | 38 | review of the Haiku T8 (trial count) | opus · high | Installers | 08:24 | 08:28 | no Important, no functional defect; 2 Minor in the checker (~10 min), 1 pool-worthy (the header comment's `main`); the trailer names Opus — the brief's fault, not Haiku's |
 | 39 | Haiku T8 rework (resumed) | haiku · high | Installers | 08:28 | 08:31 | `518b55b`; all three, each red on a scratch copy first |
 | 40 | fix round Installers T5 T7 T9 (resumed) | opus · high | Installers | 08:31 | | |
+| 41 | Captures group fix: process.py part (T1's implementer) | opus · high | Captures | 08:37 | | |
+| 42 | Captures group fix: naming.py part (T2/T3's implementer) | opus · high | Captures | 08:37 | | |
+| 43 | Captures group fix: verify part (T4's implementer) | opus · high | Captures | 08:37 | | |
+| 44 | task review T13 #159 | opus · high | Silent failures 3 | 08:37 | | |
+| 45 | task review T15 #166 | opus · high | Silent failures 3 | 08:37 | | |
+| 46 | task review T14 #165 | opus · high | Silent failures 3 | 08:37 | | |
 
 ## Per group
 
