@@ -959,13 +959,15 @@ def _outstanding(round_, optional=False):
     """Expected captures of one round that are neither taken nor skipped -- the REQUIRED ones; the optional ones
     ("if you have time", skill #80) with `optional=True`. An optional capture left untaken is not a gap: it is on
     the list so that it is not forgotten in the car and so that its taking is recorded, not so that its absence
-    holds a stop."""
+    holds a stop. Taken and skipped are matched by `title_key` (#153): `w-R_01 (sw)` taken is the `w-R_1 (sw)`
+    asked for."""
     wanted = set(round_.get("optional") or [])
+    skipped = round_.get("skipped") or {}
     return [
         title
         for title in round_.get("expected", [])
         if (title in wanted) == optional
-        and not _is_taken(round_, title) and title not in round_.get("skipped", {})
+        and not _is_taken(round_, title) and _row_for(skipped, title) is None
     ]
 
 
@@ -1011,10 +1013,41 @@ def _last_method_taken(round_):
     return (last[1], last[2]) if last else (None, None)
 
 
+def title_key(title):
+    """A capture title's identity for matching within a round (#153, hub #269): `naming.name_key(parse_name(t))`, so
+    `w-R_01 (sw)` and `w-R_1 (sw)` are one capture -- the comparison `naming.validate_series` already makes against
+    REW. A title the grammar does not read, or no grammar loaded, is `("raw", title)`: it matches only itself."""
+    text = str(title).strip()
+    naming = _load_naming()
+    key = naming.name_key(naming.parse_name(text)) if naming is not None else None
+    return key if key is not None else ("raw", text)
+
+
+def _row_for(rows, title):
+    """The entry of `rows` -- a round's `expected`, `taken` or `skipped` -- that names `title`: itself first, else the
+    first with its `title_key` (#153), else None. Rows written since #153 are under the list's own title; a round
+    already on disk holds them as they were typed, and this is how they are still found."""
+    if title in rows:
+        return title
+    key = title_key(title)
+    return next((row for row in rows if title_key(row) == key), None)
+
+
+def _on_list(round_, title):
+    """`(the title a round stores a typed one under, typed)` (#153): the round's own expected (or optional) title when
+    the keys match, the typed one -- stripped -- when it is off the list."""
+    typed = str(title).strip()
+    listed = _row_for(round_.get("expected") or [], typed)
+    return (typed if listed is None else listed), typed
+
+
 def _is_taken(round_, title):
     """Taken AND still standing: a superseded row is evidence of a typo, not of a measurement. Every reader of a
-    round's `taken` asks this, and none counts the row itself (N17, #134)."""
-    entry = (round_.get("taken") or {}).get(title)
+    round's `taken` asks this, and none counts the row itself (N17, #134). The row is found by `_row_for` (#153):
+    the exact title first, so a row read off `taken` itself answers for itself, superseded or not."""
+    taken = round_.get("taken") or {}
+    row = _row_for(taken, title)
+    entry = taken.get(row) if row is not None else None
     return isinstance(entry, dict) and not entry.get("superseded_by")
 
 
@@ -1758,6 +1791,22 @@ class Process:
                 raise ProcessError(f"the method's plan for phase {phase_key!r} captures nothing -- open the round "
                                    "with its titles instead")
         if naming is not None:
+            # A title typed in another spelling of one already listed -- the plan's, or typed before it -- IS that one
+            # (#153, `title_key`): listed once, under the first spelling, and optional only if typed as optional.
+            listed = [n for g in groups for n in (g.get("names") or [])]
+
+            def _listed_as(titles):
+                out = []
+                for t in titles:
+                    same = _row_for(listed, t)
+                    if same is None:
+                        listed.append(t)
+                        same = t
+                    if same not in out:
+                        out.append(same)
+                return out
+
+            expected, optional = _listed_as(expected), _listed_as(optional)
             groups = naming.place_in_groups(groups, expected + optional, glossary)
             first, from_title = (start_method, None) if start_method else _last_method_taken(previous)
             groups = naming.order_by_setup(groups, first)
@@ -1972,14 +2021,23 @@ class Process:
         `planned` is the whole point of recording rather than re-deriving: a capture that was not
         on the list is a fact about the round, and the derivation (`naming.expected_groups`) can
         only ever say what SHOULD have been taken.
+
+        A title typed in another spelling of one on the list (`w-R_01 (sw)` for `w-R_1 (sw)`, #153) is recorded
+        under the list's own, planned, with the typed one kept as `as_in_rew` -- on the row and in the journal --
+        the form `reconcile_captures` writes. A front-end reads `taken` against `expected` as strings.
         """
         state, round_ = self._require_capture()
-        title = str(title).strip()
+        title, typed = _on_list(round_, title)
         if not title:
             raise ProcessError("a capture needs its REW title")
         planned = title in round_["expected"]
-        round_["taken"][title] = {"at": at or _now(), "planned": planned}
-        round_["skipped"].pop(title, None)  # taken after all
+        entry = {"at": at or _now(), "planned": planned}
+        if typed != title:
+            entry["as_in_rew"] = typed
+        round_["taken"][title] = entry
+        skip = _row_for(round_["skipped"], title)
+        if skip is not None:
+            round_["skipped"].pop(skip)  # taken after all
         self._write(state)
         self._append(
             EV_CAPTURE_TAKEN,
@@ -1987,6 +2045,7 @@ class Process:
             title=title,
             planned=planned,
             version=round_["version"],
+            **({"as_in_rew": typed} if typed != title else {}),
         )
         return round_
 
@@ -2386,9 +2445,14 @@ class Process:
         for event in self._events(kinds=(EV_CAPTURE_TAKEN, EV_CAPTURE_CLOSED, EV_CAPTURE_RECONCILED)):
             if event.get("title"):
                 titles.add(str(event["title"]))
+            if event.get("as_in_rew"):
+                titles.add(str(event["as_in_rew"]))     # REW's spelling of a title stored under the list's (#153)
             titles.update(str(t) for t in event.get("taken") or [])
             titles.update(str(t) for t in (event.get("renames") or {}))
-        titles.update(str(t) for t in ((state.get("capture") or {}).get("taken") or {}))
+        for title, entry in ((state.get("capture") or {}).get("taken") or {}).items():
+            titles.add(str(title))
+            if isinstance(entry, dict) and entry.get("as_in_rew"):
+                titles.add(str(entry["as_in_rew"]))
         return titles
 
     def protective_record_for(self, version):
@@ -2564,12 +2628,16 @@ class Process:
         corrected_to = str(corrected_to).strip()
         if not title or not corrected_to:
             raise ProcessError("superseding a capture needs the wrong title AND the right one")
+        # Both by `title_key` (#153): the wrong row as the round holds it, the right title as the list spells it --
+        # `record_capture` below stores it there.
+        taken = round_.get("taken") or {}
+        title = _row_for(taken, title) or title
+        corrected_to, corrected_typed = _on_list(round_, corrected_to)
         if title == corrected_to:
             raise ProcessError(
                 f"{title!r} is corrected to itself — nothing to supersede. If the title is right and "
                 "the measurement is not, re-take it: a second `capture-taken` under the same title "
                 "updates the row.")
-        taken = round_.get("taken") or {}
         if title not in taken:
             raise ProcessError(
                 f"round {round_.get('id')} never took {title!r}"
@@ -2584,8 +2652,8 @@ class Process:
         self._write(state)
         self._append(EV_CAPTURE_SUPERSEDED, capture=round_["id"], title=title,
                      corrected_to=corrected_to, reason=reason, version=round_["version"])
-        # The corrected title is a capture like any other -- same event, same `planned` test.
-        return self.record_capture(corrected_to)
+        # The corrected title is a capture like any other -- same event, same `planned` test, as typed (#153).
+        return self.record_capture(corrected_typed)
 
     @_locked
     def skip_capture(self, title, reason):
@@ -2597,19 +2665,25 @@ class Process:
         decision that has to be made again.
         """
         state, round_ = self._require_capture()
-        title, reason = str(title).strip(), str(reason or "").strip()
+        reason = str(reason or "").strip()
         if not reason:
-            raise ProcessError(f"skipping {title!r} needs a reason -- it is a decision, not a gap")
+            raise ProcessError(f"skipping {str(title).strip()!r} needs a reason -- it is a decision, not a gap")
+        # Under the list's own title when typed in another spelling of it (#153), the typed one kept as `as_typed`:
+        # not `as_in_rew`, since a capture skipped is one REW does not hold.
+        title, typed = _on_list(round_, title)
         # `planned` for the same reason `record_capture` carries it (TCC-022): `expected[]` is not
         # a closed set, so a reader of a round cannot assume everything in `skipped` was ever asked
         # for. Four rear titles were skipped into rounds that never expected them, and a skip of a
         # title that was never expected used to vanish from `contract.py`'s report entirely --
         # neither taken, nor missing, nor listed as skipped.
         planned = title in round_["expected"]
-        round_["skipped"][title] = {"at": _now(), "reason": reason, "planned": planned}
+        entry = {"at": _now(), "reason": reason, "planned": planned}
+        if typed != title:
+            entry["as_typed"] = typed
+        round_["skipped"][title] = entry
         self._write(state)
         self._append(EV_CAPTURE_SKIPPED, capture=round_["id"], title=title, reason=reason,
-                     planned=planned)
+                     planned=planned, **({"as_typed": typed} if typed != title else {}))
         return round_
 
     def _load_verifier(self):
@@ -2747,8 +2821,9 @@ class Process:
             taken, checks = live.setdefault("taken", {}), live.setdefault("checks", {})
             for title, verified in checked:
                 checks[title] = dict(verified)          # every title checked, held or not (T-1)
-                if title in taken:
-                    taken[title]["verified"] = verified
+                row = _row_for(taken, title)            # a row on disk under another spelling is this one (#153)
+                if row is not None:
+                    taken[row]["verified"] = verified
                 elif verified["exists"] is True:        # taken only when REW holds it (#77) -- never invented
                     taken[title] = {"at": _now(), "planned": title in live.get("expected", []), "verified": verified}
             if session_probe is not None:
@@ -2786,12 +2861,13 @@ class Process:
         if not round_ or round_.get("closed"):
             return []
         out = []
+        taken = round_.get("taken") or {}
         for title in round_.get("expected", []):
-            if title in (round_.get("skipped") or {}):
+            if _row_for(round_.get("skipped") or {}, title) is not None:   # by `title_key` (#153)
                 continue  # a decision, and decisions are recorded, not re-litigated
             # A superseded row is a typo's trace, never the capture (N17): it counted here as taken -- and as usable
             # when it had been checked under the wrong title.
-            entry = (round_.get("taken") or {}).get(title) if _is_taken(round_, title) else None
+            entry = taken.get(_row_for(taken, title)) if _is_taken(round_, title) else None
             verified = (entry or {}).get("verified") or {}
             if verified.get("applicable") is False:
                 continue  # checked, and the check does not apply to it (an RTA): not unusable (#29)
@@ -6691,6 +6767,96 @@ def _check_check_never_invents_taken():
         shutil.rmtree(top, ignore_errors=True)
 
 
+def _check_a_round_matches_titles_by_name_key():
+    """#153 (hub #269, TCC-054): a round's titles match by `naming.name_key`, so `w-R_01 (sw)` taken is the
+    `w-R_1 (sw)` the round expected. On write the typed title is stored under the list's own (`as_in_rew` keeps the
+    typed one on a taken row, `as_typed` on a skip), and the journal says both; a title off the list stays as typed.
+    A round already on disk, its rows under the typed titles, is read by key: nothing outstanding, no OUTSTANDING at
+    the close, `capture-check` reads its rows. It was: `w-R_1 (sw)` outstanding, and `capture-taken` raising KeyError
+    at the line that reads back the row."""
+    import shutil
+    import tempfile
+
+    class Verifier:                               # REW holds every title asked for but the skipped one
+        def verify(self, titles):
+            return [{"name": t, "exists": t != "w-L_2 (sw)", "reachable": True, "valid": t != "w-L_2 (sw)",
+                     "issues": [] if t != "w-L_2 (sw)" else [f"No measurement titled {t!r} (REW holds 3)"],
+                     "stats": {}} for t in titles]
+
+    top = tempfile.mkdtemp(prefix="autosound_process_name_key_")
+    real = Process._load_verifier
+    try:
+        d = os.path.join(top, "process")
+        p = Process(d)
+        p.enter_phase("-1")
+        p.start_capture("1", expected=["w-R_1 (sw)", "w-L_1 (sw)", "tw-L_1 (sw)"], optional=["m-R_1 (sw)"])
+        rc, out, err = _run_main(["process.py", d, "capture-taken", "w-R_01 (sw)"])
+        assert rc == 0 and out.startswith("w-R_01 (sw) recorded") and "unplanned" not in out \
+            and "w-R_1 (sw)" in out, (rc, out, err)
+        taken = p.load()["capture"]["taken"]
+        assert "w-R_01 (sw)" not in taken and taken["w-R_1 (sw)"]["planned"] is True \
+            and taken["w-R_1 (sw)"]["as_in_rew"] == "w-R_01 (sw)", taken
+        ev = [e for e in p.events() if e.get("type") == EV_CAPTURE_TAKEN][-1]
+        assert (ev["title"], ev["as_in_rew"], ev["planned"]) == ("w-R_1 (sw)", "w-R_01 (sw)", True), ev
+        assert "w-R_01 (sw)" in p._titles_on_record(p.load()), "REW's spelling is a title on record (capture-import)"
+        rc, out, err = _run_main(["process.py", d, "capture-skip", "w-L_01 (sw)", "door open"])
+        assert rc == 0, (rc, out, err)
+        skipped = p.load()["capture"]["skipped"]
+        assert list(skipped) == ["w-L_1 (sw)"] and skipped["w-L_1 (sw)"]["planned"] is True \
+            and skipped["w-L_1 (sw)"]["as_typed"] == "w-L_01 (sw)", skipped
+        ev = [e for e in p.events() if e.get("type") == EV_CAPTURE_SKIPPED][-1]
+        assert (ev["title"], ev["as_typed"], ev["planned"]) == ("w-L_1 (sw)", "w-L_01 (sw)", True), ev
+        # The optional capture, taken under another spelling: not left.
+        assert _outstanding_optional(p.load()["capture"]) == ["m-R_1 (sw)"]
+        _run_main(["process.py", d, "capture-taken", "m-R_01 (sw)"])
+        assert _outstanding_optional(p.load()["capture"]) == [], p.load()["capture"]["taken"]
+        # A title off the list stays as typed, unplanned; superseded by its key, corrected onto the list's title.
+        rc, out, err = _run_main(["process.py", d, "capture-taken", "tw-R_01 (sw)"])
+        assert rc == 0 and "unplanned" in out and "tw-R_01 (sw)" in p.load()["capture"]["taken"], (rc, out, err)
+        rc, out, err = _run_main(["process.py", d, "capture-supersede", "tw-R_1 (sw)", "tw-L_01 (sw)", "typed R"])
+        assert rc == 0, (rc, out, err)
+        taken = p.load()["capture"]["taken"]
+        assert taken["tw-R_01 (sw)"]["superseded_by"] == "tw-L_1 (sw)" and "tw-R_1 (sw)" not in taken, taken
+        assert taken["tw-L_1 (sw)"]["as_in_rew"] == "tw-L_01 (sw)" and taken["tw-L_1 (sw)"]["planned"], taken
+        assert p.capture_outstanding() == [], p.capture_outstanding()
+        rc, out, err = _run_main(["process.py", d, "capture-close", "--no-rew"])
+        assert rc == 0 and "OUTSTANDING" not in out and "0 outstanding" in out and "optional left" not in out, \
+            (rc, out, err)
+        # A round already on disk, its rows under the typed titles: read by key.
+        p.start_capture("2", expected=["w-R_2 (sw)", "w-L_2 (sw)", "tw-L_2 (sw)"], optional=["m-R_2 (sw)"])
+        with open(p.state_path, encoding="utf-8") as fh:
+            state = json.load(fh)
+        ok = {"ok": True, "exists": True, "applicable": True, "uuid": None, "at": "t", "issues": []}
+        state["capture"]["taken"] = {t: {"at": "t", "planned": False, "verified": dict(ok)}
+                                     for t in ("w-R_02 (sw)", "m-R_02 (sw)", "tw-L_02 (sw)")}
+        state["capture"]["skipped"] = {"w-L_02 (sw)": {"at": "t", "reason": "door open", "planned": False}}
+        with open(p.state_path, "w", encoding="utf-8") as fh:
+            json.dump(state, fh)
+        round_ = p.load()["capture"]
+        assert p.capture_outstanding() == [] and _outstanding_optional(round_) == [], round_
+        assert p.unusable_captures() == [], p.unusable_captures()
+        assert p.open_work()["capture_round"]["outstanding"] == [], p.open_work()
+        Process._load_verifier = lambda self: Verifier()
+        rc, out, err = _run_main(["process.py", d, "capture-check"])
+        lines = out.splitlines()
+        assert rc == 0 and "OK      w-R_2 (sw)" in lines and "SKIP    w-L_2 (sw)" in lines, (rc, out, err)
+        taken = p.load()["capture"]["taken"]
+        assert "w-R_2 (sw)" not in taken and taken["w-R_02 (sw)"]["verified"]["at"] != "t", \
+            "a check of the list's title updates the row on disk under REW's spelling, never adds a second"
+        rc, out, err = _run_main(["process.py", d, "capture-close", "--no-rew"])
+        assert rc == 0 and "OUTSTANDING" not in out and "0 outstanding" in out, (rc, out, err)
+        ev = [e for e in p.events() if e.get("type") == EV_CAPTURE_CLOSED][-1]
+        assert ev["outstanding"] == [] and ev["outstanding_optional"] == [], ev
+        # Opening a round: a title typed beside the list in another spelling is the list's, listed once.
+        r3 = p.start_capture("3", expected=["w-R_3 (sw)", "w-L_03 (sw)", "w-R_03 (sw)"],
+                             optional=["w-L_3 (sw)", "m-R_3 (sw)"])
+        assert r3["expected"] == ["w-R_3 (sw)", "w-L_03 (sw)", "m-R_3 (sw)"], r3["expected"]
+        assert r3["optional"] == ["w-L_03 (sw)", "m-R_3 (sw)"], r3["optional"]
+    finally:
+        Process._load_verifier = real
+        shutil.rmtree(top, ignore_errors=True)
+
+
 def _check_listing_never_read_as_rew():
     """A listing read that never reached REW is never recorded as REW's answer (#134, H I-6, H I-5), and the verb
     exits by its state. `REW_API_URL` that is no address, through the real `verify` and `rew_api`: `capture-check`
@@ -8257,7 +8423,8 @@ def _selftest():
                   _check_handoff_says_a_cut_changelog_as_cut, _check_route_line_reads_a_bom,
                   _check_route_line_over_a_project_json_no_object, _check_plan_over_a_word_says_neither,
                   _check_handoff_names_a_changelog_copy_that_differs, _check_superseded_not_taken,
-                  _check_check_never_invents_taken, _check_close_says_what_rew_did,
+                  _check_check_never_invents_taken, _check_a_round_matches_titles_by_name_key,
+                  _check_close_says_what_rew_did,
                   _check_listing_never_read_as_rew, _check_ambiguous_capture, _check_close_swallows_only_rew,
                   _check_intake_gate_names_an_unreadable_project_json, _check_close_checks_stage_refusals,
                   _check_naming_load_error_named, _check_round_lookups_read_the_state_strictly,
@@ -9396,14 +9563,15 @@ def _main(argv):
                 print()
             taken, checks = round_.get("taken") or {}, round_.get("checks") or {}
             for title in round_.get("expected", []):
-                row = taken.get(title) or {}
+                held = _row_for(taken, title)            # by `title_key`: a row on disk under another spelling (#153)
+                row = taken.get(held) or {}
                 # A taken title reads its own verdict; one the round did not take reads its check (T-1). A superseded
                 # row is no capture (N17): the line says what it was corrected to.
                 superseded = row.get("superseded_by")
-                verdict = {} if superseded else (row.get("verified") if title in taken else checks.get(title)) or {}
+                verdict = {} if superseded else (row.get("verified") if held is not None else checks.get(title)) or {}
                 if verdict.get("ok"):
                     print(f"OK      {title}")
-                elif title in (round_.get("skipped") or {}):
+                elif _row_for(round_.get("skipped") or {}, title) is not None:
                     print(f"SKIP    {title}")
                 elif superseded:
                     print(f"UNUSABLE {title} — superseded by {superseded}")
@@ -9423,9 +9591,12 @@ def _main(argv):
             return 1 if left else 0
         elif cmd == "capture-taken":
             round_ = p.record_capture(args[0])
-            entry = round_["taken"][args[0].strip()]
+            # Stored under the list's own title when typed in another spelling of it (#153): it raised KeyError here.
+            stored = _on_list(round_, args[0])[0]
+            entry = round_["taken"][stored]
             print(
                 f"{args[0]} recorded"
+                + (f" as {stored} -- the round's own title for it" if stored != args[0].strip() else "")
                 + ("" if entry["planned"] else " (unplanned -- not on this round's list)")
             )
         elif cmd == "capture-import":

@@ -748,6 +748,13 @@ def cross_check_rew(process_state, glossary, snapshots, project_data=None):
     return out
 
 
+def _title_key(title, glossary=None):
+    """A round title's identity (#153): `naming.name_key` of its parse, or `("raw", title)` for one the grammar does
+    not read -- the same rule as `process.title_key`, read with the glossary `validate_series` is given here."""
+    key = naming.name_key(naming.parse_name(str(title).strip(), glossary))
+    return key if key is not None else ("raw", str(title).strip())
+
+
 def round_verdict(titles, round_, glossary=None):
     """What REW holds against what the round asked for -- with a capture DECIDED against kept
     apart from one still owed (skill #32).
@@ -766,7 +773,16 @@ def round_verdict(titles, round_, glossary=None):
     """
     expected = [str(x) for x in (round_.get("expected") or []) if str(x).strip()]
     verdict = naming.validate_series(titles, expected, glossary)
-    decided = {str(t): (entry or {}).get("reason") for t, entry in (round_.get("skipped") or {}).items()}
+    # A skip is matched to the list by `name_key` (#153, hub #269), as REW's titles are: `r-L_01 (sw)` skipped is
+    # the `r-L_1 (sw)` asked for, and is reported under the list's title -- what a front-end's card reads. A round
+    # on disk before `capture-skip` wrote the list's title holds it as typed.
+    listed = {}
+    for name in expected:
+        listed.setdefault(_title_key(name, glossary), name)
+    decided = {}
+    for t, entry in (round_.get("skipped") or {}).items():
+        t = str(t)
+        decided[t if t in expected else listed.get(_title_key(t, glossary), t)] = (entry or {}).get("reason")
     verdict["skipped"] = dict(decided)
     verdict["skipped_unplanned"] = sorted(t for t in decided if t not in expected)
     # An optional capture ("if you have time", skill #80) is on the list and not a gap: named apart, never MISSING.
@@ -3550,6 +3566,15 @@ def _selftest():
     assert round_label("17") == "_17" and round_label("v_001") == "v_001"
     done = round_verdict(["w-L_01 (sw)", "r-R_01 (sw)"], round_)
     assert done["complete"] and done["missing"] == [], done
+    # #153 (hub #269): a skip typed in another spelling of a title on the list is that title's skip -- not MISSING,
+    # not unplanned -- and is reported under the list's title, the one a front-end's card reads.
+    round_key = {"id": "cap_003", "phase": "0", "version": "1", "expected": ["w-L_1 (sw)", "r-L_1", "r-R_1 (sw)"],
+                 "optional": ["r-R_1 (sw)"], "skipped": {"r-L_01": {"at": "t", "reason": "rears muted"},
+                                                         "r-R_01 (sw)": {"at": "t", "reason": "no time"}}}
+    rv_key = round_verdict(["w-L_01 (sw)"], round_key)
+    assert (rv_key["missing"], rv_key["missing_optional"], rv_key["skipped_unplanned"], rv_key["complete"]) == \
+        ([], [], [], True), rv_key
+    assert rv_key["skipped"] == {"r-L_1": "rears muted", "r-R_1 (sw)": "no time"}, rv_key
     # skill #36: what this build did not establish is named, and so is a source that is gone --
     # reported, never gated. `L/R`, `1/6-oct` and a URL in prose are not paths.
     alive = tempfile.mkdtemp(prefix="autosound_source_")
