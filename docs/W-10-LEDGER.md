@@ -84,14 +84,15 @@ end.
 | 51 | group seat: silent failures (also the fixes' re-review) | opus · high | Silent failures 3 + Windows | 08:54 | 09:00 | 1 Important — a REGRESSION from T15's fix round (the `-answer` strip joins two reviews; one critique dropped), 4 Minor |
 | 52 | group seat: tests | opus · high | Silent failures 3 + Windows | 08:54 | 08:59 | 3 Important (#166 tested with a record TCC does not send — the real one still gives two; #158's readlink stand-in doubles the prefix on Windows; #167's CLI check passes on the old code), 11 Minor |
 | 53 | implementer T17b #149 (the installers' Codex link) | opus · high | Agent start | 08:54 | 09:06 | `67789c5`; 11 sh cases + a mutation test; ps1 cases wait for Windows CI |
-| 54 | group fix round Silent failures 3 + Windows text (resumed) | opus · high | Silent failures 3 + Windows | 09:00 | | |
+| 54 | group fix round Silent failures 3 + Windows text (resumed) | opus · high | Silent failures 3 + Windows |  | 09:14 | `0d7db2c` (#166 the five rules) `c98a06c` `42cf66f` `cd5a6cc` `06a7176`; exit codes 0 per module; ruff, encoding-check clean |
 | 55 | group fix round Installers (resumed) | opus · high | Installers | 09:06 | | |
 | 56 | task review T17b #149 | opus · high | Agent start | 09:06 | 09:10 | no Important; 6 Minor (ownership by prefix; a failed link under --codex; doctor; repoint gap) |
 | 57 | group seat: silent failures | opus · high | Agent start | 09:06 | 09:12 | 4 Important (a moved rule nobody reads; project-context eval queries cannot fail; AGENTS/CLAUDE.md say the gate does what it does not; a stale Codex link off PATH), 4 Minor |
 | 58 | group seat: tests | opus · high | Agent start | 09:06 | 09:11 | 3 Important (#170 index keying untested; #149 ps1 link never run; the uninstall only read), 6 Minor |
-| 59 | Agent start group fix (a1): SKILL.md, capabilities (T18's implementer) | opus · medium | Agent start | 09:12 | | |
-| 60 | Agent start group fix (a2): the trigger eval (T20's implementer) | opus · medium | Agent start | 09:12 | | |
-| 61 | Agent start group fix (a3): project seed (T17a's implementer) | opus · high | Agent start | 09:12 | | |
+| 59 | Agent start group fix (a1): SKILL.md, capabilities (T18's implementer) | opus · medium | Agent start |  | 09:14 | `c54ce26`; SKILL.md 17,416 bytes before the Map |
+| 60 | Agent start group fix (a2): the trigger eval (T20's implementer) | opus · medium | Agent start | 09:12 | 09:15 | `78da32e`; 68 queries (62 neutral, 17 project) |
+| 61 | Agent start group fix (a3): project seed (T17a's implementer) | opus · high | Agent start | 09:12 | 09:14 | `5170fb7`; the gate's sentence made true; existing projects keep the old one |
+| 62 | the trigger eval, three live runs (claude -p, sonnet-4-6, 3 workers) | — | Agent start | 09:15 | | |
 
 ## Quality notes
 
