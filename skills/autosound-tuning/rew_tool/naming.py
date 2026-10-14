@@ -33,7 +33,9 @@ has.
   says what a measurement is and what it is for. It makes ANOTHER measurement in the SAME series:
   `r-L_17 (sw) noXO` is not `r-L_17 (sw)`, and both are `_17` (the user, 2026-09-16). It is kept in
   `params`, and `name_key` counts it with the modifier. A position among it (`x0`, `p3`) is still a
-  position (skill #34).
+  position (skill #34). A level is one too, written after the method (`sw_3 (sw) 86dB`); typed
+  before it (`sw_3 86dB (sw)`) it reads as the same capture, and the `note` offers the after-form
+  (#155, the Arbiter 2026-10-06: read both, write after).
 
 The glossary is per-car and **not** a fixed list: this is the module's whole point. One project
 has no rear speakers and a disabled centre; generating `r-L_2` or `c_2` for it would invent
@@ -107,6 +109,25 @@ _TAGGED_RE = re.compile(
 _UNVERSIONED_RE = re.compile(
     r"^(?P<body>[^()]+?)\s*\((?P<method>[A-Za-z]+)\)(?:\s+(?P<tail>\S.*?))?\s*$"
 )
+# A LEVEL typed between `_N` and the method (#155, hub #261; the Arbiter's ruling 2026-10-06: read both, write after):
+# `sw_3 86dB (sw)` is the capture `sw_3 (sw) 86dB`. Tried last, in place of a refusal only (`_match_title`): every
+# title that parsed before parses to the same parts. The level folds into `params` ahead of any tail.
+_LEVEL_RE = re.compile(
+    r"^(?P<body>.+)_(?P<version>\d+|final)(?P<control>ctl|rep)?"
+    r"\s+(?P<level>[+-]?\d+(?:[.,]\d+)?\s*dB)\s*\((?P<method>[A-Za-z]+)\)(?:\s+(?P<tail>\S.*?))?\s*$"
+)
+
+
+def _match_title(text):
+    """The grammar's match for `text`, or None: `_NAME_RE`, `_TAGGED_RE`, an `(imp)` with no `_N`, then a level before
+    the method -- which takes only titles the forms before it refuse (an unversioned sweep or RTA is a refusal)."""
+    match = _NAME_RE.match(text) or _TAGGED_RE.match(text)
+    if match:
+        return match
+    unversioned = _UNVERSIONED_RE.match(text)
+    if unversioned and unversioned.group("method").lower() == METHOD_IMPEDANCE:
+        return unversioned
+    return _LEVEL_RE.match(text) or unversioned
 _POS_RE = re.compile(r"^(?P<code>.+?)\s+(?P<pos>p[1-9]|x0)$")
 _POS_WORD_RE = re.compile(r"(?<!\S)(?:p[1-9]|x0)(?!\S)")
 _CTL_RE = re.compile(r"^(?P<code>.+?)-(?P<ctl>ctl[0-9])$")
@@ -149,10 +170,16 @@ def canonical_title(title):
     The series is split off where the grammar splits it -- the LAST `_` before `<N>` or `final` -- and only what is
     in front of it goes through `canonical_code`: `sw_1`, `w-L_2` and `ALL+C_25` come back as they are, `w_L (imp)`
     is `w-L (imp)`. A text with no series and no method is a bare name, read whole: `w_L` is `w-L`.
+
+    A level typed before the method moves behind it (#155): `sw_3 86dB (sw) x0` -> `sw_3 (sw) 86dB x0`.
     """
     text = str(title or "")
-    match = _NAME_RE.match(text) or _TAGGED_RE.match(text) or _UNVERSIONED_RE.match(text)
+    match = _match_title(text)
     end = match.end("body") if match else len(text)
+    if match and match.re is _LEVEL_RE:
+        tail = f" {match.group('tail')}" if match.group("tail") else ""
+        return (canonical_code(text[:end]) + text[end:match.start("level")].rstrip()
+                + f" ({match.group('method')}) {match.group('level')}{tail}")
     return canonical_code(text[:end]) + text[end:]
 
 
@@ -484,7 +511,7 @@ def explain_name(title, glossary=None):
     text = str(title or "").strip()
     if not text:
         return None, "an empty title"
-    match = _NAME_RE.match(text) or _TAGGED_RE.match(text) or _UNVERSIONED_RE.match(text)
+    match = _match_title(text)
     if not match:
         return None, ("not in the grammar: `<code>_<N> (sw|rta)` or `<code> (imp)`, a clarification "
                       "after the method (naming-and-structure.md §3)")
@@ -500,6 +527,11 @@ def explain_name(title, glossary=None):
     body = parts["body"].strip()
     position = parts.get("pos2")
     tail = parts.get("tail")
+    level = parts.get("level")
+    if level:
+        # #155: a level before the method is the clarification it is after it, first in line -- so the key is the
+        # after-form's.
+        tail = f"{level} {tail}" if tail else level
     if tail:
         found = _POS_WORD_RE.findall(tail)
         if len(found) > 1:
@@ -548,8 +580,14 @@ def explain_name(title, glossary=None):
         # reason as a refusal.
         body = canonical_code(body)
         note = (f"`{head}` read as `{canonical_code(head)}`: a code is written with `-`, and `_` only begins the "
-                f"series number -- this title in the one notation is `{canonical_title(text)}` "
-                f"(naming-and-structure.md §3)")
+                f"series number")
+    if level:
+        # #155 (the Arbiter's ruling, 2026-10-06: read both, write after): read, and the note offers the written form. The
+        # reason slot stays None, as for S-079.
+        note = ((note + "; ") if note else "") + (f"the level `{' '.join(level.split())}` read as a clarification "
+                                                  f"after the method")
+    if note:
+        note += f" -- this title in the one notation is `{canonical_title(text)}` (naming-and-structure.md §3)"
     # `L m-tw` is `L m+tw` with the tweeter inverted -- the same measurement as `L m+tw_52 (rta) inv`, so the
     # inversion joins the clarification the way `inv` typed after the method does: `inv` for a two-member
     # junction, `inv:<member>` where a longer chain has to say which (skill #66).
@@ -871,6 +909,37 @@ def _check_productions():
         assert got["control"] in role, (title, got["control"], role)
 
 
+def _check_level_before_method():
+    """#155 (hub #261, the Arbiter 2026-10-06: read both, write after): a level typed between `_N` and the method
+    (`sw_3 86dB (sw)`) is the capture `sw_3 (sw) 86dB` -- same parts, same key -- and the note names the after-form."""
+    for before, after, params, position in (
+            ("sw_3 86dB (sw)", "sw_3 (sw) 86dB", "86dB", None),
+            ("w-L_4 -3.5 dB (rta)", "w-L_4 (rta) -3.5 dB", "-3.5 dB", None),
+            ("sw_3 86dB (sw) x0", "sw_3 (sw) 86dB x0", "86dB", "x0"),
+            ("sw_3 86dB (sw) noXO", "sw_3 (sw) 86dB noXO", "86dB noXO", None),
+            ("m-L_49ctl 80dB (sw)", "m-L_49ctl (sw) 80dB", "80dB", None)):
+        got, why = explain_name(before)
+        assert why is None and got is not None, (before, why)
+        assert got["method"] in ("sw", "rta") and got["params"] == params and got["position"] == position, (before, got)
+        assert got["version_n"] == parse_name(after)["version_n"], (before, got)
+        assert name_key(got) == name_key(parse_name(after)), (before, name_key(got), name_key(parse_name(after)))
+        assert got["note"] and f"`{after}`" in got["note"], (before, got["note"])
+        assert canonical_title(before) == after, (before, canonical_title(before), after)
+        assert parse_name(after)["note"] is None, f"{after!r} is the written form and carries no note"
+    got = parse_name("sw_3 86dB (sw)")
+    assert (got["code"], got["version"], got["version_n"]) == ("sw", "3", 3), got
+    # Both notes at once: a side typed with `_` and a level before the method -- one canonical title.
+    both = parse_name("w_L_3 86dB (sw)")
+    assert both["code"] == "w-L" and "`w-L_3 (sw) 86dB`" in both["note"], both
+    # A titled level stays a clarification (the 2026-09-16 rule): not the plain expected capture.
+    assert name_key(parse_name("sw_3 86dB (sw)")) != name_key(parse_name("sw_3 (sw)"))
+    # A bare number is not a level: still refused.
+    got, why = explain_name("sw_3 86 (sw)")
+    assert got is None and why, why
+    # An impedance sweep with no `_N` reads as it did.
+    assert parse_name("w-L (imp) 86dB")["params"] == "86dB"
+
+
 def _check_bom_glossary_read():
     """A `glossary.json` saved with a UTF-8 BOM -- older Windows Notepad saves so -- is a glossary (#134, batch 4's
     re-review, Out of Scope 1). `Glossary.load` opened it as `utf-8`, the BOM failed the JSON, and it read as no
@@ -1182,7 +1251,7 @@ def _selftest():
     touches disk.
     """
     failures = []
-    for check in (_check_productions, _check_bom_glossary_read, _check_for_project_strict,
+    for check in (_check_productions, _check_level_before_method, _check_bom_glossary_read, _check_for_project_strict,
                   _check_cli_reads_the_glossary_strictly, _check_dangling_glossary_link,
                   _check_dangling_link_repair_fits, _check_lenient_read_of_a_project_json_not_an_object,
                   _check_lenient_read_of_a_glossary_not_an_object):
@@ -1471,7 +1540,8 @@ def _selftest():
           "after the method is another measurement in the same series (#34), (imp) without `_N` (#33), refusals "
           "with a reason, and no ledger version for `_N` (#37); a match the comparison NORMALISED says the title on disk differs and names the canonical one to rename it to (#47); "
           "a driver's side typed with `_` is read as `-`, with a note, and the series is left alone (S-079); any "
-          "other `_` in a code is refused, the old `D_` prefix by name (#232)")
+          "other `_` in a code is refused, the old `D_` prefix by name (#232); a level typed before the method is the capture "
+          "with it after, and the note offers that form (#155)")
     return 0
 
 
