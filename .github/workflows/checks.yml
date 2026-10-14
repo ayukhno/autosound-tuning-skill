@@ -501,6 +501,7 @@ jobs:
         run: python -m pip install --upgrade pip numpy scipy matplotlib ruff==0.12.0
       - name: rew_tool selftests on Windows, under Git for Windows' bash (#158)
         id: rew-tool-selftests-windows
+        # Until its first runs are read and ours fixed (#158): remove this line then, and the hub gates on the job.
         continue-on-error: true
         shell: pwsh
         env:
@@ -512,5 +513,14 @@ jobs:
           if (-not $bash) { Write-Host "::error::no Git for Windows bash beside $git"; exit 1 }
           $env:PYTHON = ((Get-Command python -ErrorAction Stop).Source) -replace '\\', '/'
           Write-Host "bash: $bash; PYTHON: $env:PYTHON"
-          & $bash scripts/run-selftests.sh
-          exit $LASTEXITCODE
+          $log = Join-Path $env:RUNNER_TEMP "rew-tool-selftests-windows.log"
+          & $bash scripts/run-selftests.sh 2>&1 | Tee-Object -FilePath $log
+          $rc = $LASTEXITCODE
+          # continue-on-error leaves the job green (the group round): the failures are named on the run's page, so
+          # nobody reads a green job as a passing Windows run. The flag goes when this step is green (#158).
+          if ($rc -ne 0) {
+            $failed = @(Select-String -Path $log -Pattern '^FAILED: ' | ForEach-Object { $_.Line })
+            $names = @(Select-String -Path $log -Pattern '^  FAIL ' | ForEach-Object { ($_.Line -split '\s+')[2] })
+            Write-Host "::warning::rew_tool selftests on Windows FAILED (exit $rc; continue-on-error until #158 makes this step required): $($failed -join ' ') -- $($names -join ', ')"
+          }
+          exit $rc
