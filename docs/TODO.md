@@ -1669,6 +1669,13 @@ A finding for the next collection (PR #175's CI run 38558929626, attempt 1): `pr
 writes each). It passed in runs 38548157486 and 38549352727 and on the rerun; W-10 left the lock's acquire path as it
 was (`4796d49` changed only `_drop`). Recorded, not diagnosed: not a user's case, but a red CI by chance.
 
+For W-11 (the Arbiter, 2026-10-14: «У W-11»): the skill's halves of tcc #198 and tcc #199 were never ticketed to the
+skill, so v3.1.4 went out without them. #198 (hub #268, PAS-015): REW reset its SPL calibration between two rounds
+(`splOffsetdB` 103.35 → 120.0, every level +16.65 dB) and the round check said nothing — the method brings rounds to
+one base, its math in `verify.py`; the bench does it today with `scripts/levelbase.py`. #199 (hub #260, PAS-013):
+`under` and `level` set through TCC's `start_capture`, a verdict for unplanned takes. TCC sends what the method must
+compute as a ticket (its plan: «the skill's halves of #198/#199 ticketed first»); TCC's own halves stay in its W-10.
+
 The Windows selftests step of `installers-windows` is required since CI run 38548157486 (all 67 passed): hub #278's
 receipt names `installers-windows`.
 
