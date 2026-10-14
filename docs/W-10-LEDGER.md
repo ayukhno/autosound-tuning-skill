@@ -77,10 +77,12 @@ end.
 | 44 | task review T13 #159 | opus · high | Silent failures 3 | 08:37 | 08:40 | 1 Important (cwd's .critic-env still read and applied), 3 Minor |
 | 45 | task review T15 #166 | opus · high | Silent failures 3 | 08:37 | 08:42 | 1 Important (a duplicate keeps the weaker record), 4 Minor; TCC's clipboard record confirmed (no review path) |
 | 46 | task review T14 #165 | opus · high | Silent failures 3 | 08:37 | 08:42 | 1 CRITICAL (rew_tool selftest red at the commit — the implementer reported green; the controller reproduced exit 70), 1 Important (strict glossary silently accepts a malformed one), 2 Minor |
-| 47 | fix round Silent failures 3: T13 T14 T15 + project_io (resumed) | opus · high | Silent failures 3 | 08:42 | | |
-| 48 | re-review of the Captures group fix | opus · high | Captures | 08:47 | | |
+| 47 | fix round Silent failures 3: T13 T14 T15 + project_io (resumed) | opus · high | Silent failures 3 | 08:42 | 08:54 | `8f1a332` `f991c10` `5cfe825` `c65c8fd`; exit codes checked per module this time |
+| 48 | re-review of the Captures group fix | opus · high | Captures | 08:47 | 08:53 | group fix accepted; 2 Minor (the AMBIGUOUS fix not in the stored issue — TCC's card shows issues; a window between two REW reads) |
 | 49 | group seat: silent failures (also the fixes' re-review) | opus · high | Installers | 08:49 | | |
 | 50 | group seat: tests | opus · high | Installers | 08:49 | | |
+| 51 | group seat: silent failures (also the fixes' re-review) | opus · high | Silent failures 3 + Windows | 08:54 | | |
+| 52 | group seat: tests | opus · high | Silent failures 3 + Windows | 08:54 | | |
 
 ## Quality notes
 
@@ -103,7 +105,7 @@ end.
 
 | group | issues | plan | built | group seats: Important+ | fix rounds | red CI | merged |
 |---|---|---|---|---|---|---|---|
-| Captures | #153–#156 | | | | | | |
+| Captures | #153–#156 | PLAN-W-10 T1–T4 | `5f4a22c` `bf54719` · `bebab42` `b2eb99f` `74bbdfb` `d23d73e` `306bd4c` · `3a6eeb3` `a4dc01f` · group fix `1efad5c` `291dea7` `43a3d6a` `a6ed7cc` `df65abc` | task reviews 5 Important; seats 7 Important (3 behaviour) | 3 per task + 1 group | | |
 | Windows | #158 | | | | | | |
 | Installers | #157, #160–#164, #171, #172 | | | | | | |
 | Agent start | #149, #150, #170 | | | | | | |
