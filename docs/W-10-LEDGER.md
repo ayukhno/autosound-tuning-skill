@@ -11,16 +11,17 @@ red CI runs, per group. Times are UTC.
 |---|---|
 | 2026-10-14 07:20 | `ok` on all 23 issues (#149, #150, #153–#173) |
 | 2026-10-14 07:25 | five code maps started (sonnet · medium), one per group |
+| 2026-10-14 07:40 | `docs/PLAN-W-10.md` written by the session from the maps; waits for «го» |
 
 ## Agent runs
 
 | # | role | model · effort | group | started | ended | result |
 |---|---|---|---|---|---|---|
-| 1 | code map | sonnet · medium | Captures | 07:25 | | |
-| 2 | code map | sonnet · medium | Installers + Windows CI | 07:25 | | |
-| 3 | code map | sonnet · medium | Silent failures 3 + Windows text | 07:25 | | |
-| 4 | code map | sonnet · medium | Agent start | 07:25 | | |
-| 5 | code map | sonnet · medium | Method text | 07:25 | | |
+| 1 | code map | sonnet · medium | Captures | 07:25 | 07:28 | 144 s, 43 tool calls, 133k tokens |
+| 2 | code map | sonnet · medium | Installers + Windows CI | 07:25 | 07:27 | 128 s, 42 tool calls, 102k tokens |
+| 3 | code map | sonnet · medium | Silent failures 3 + Windows text | 07:25 | 07:30 | 185 s, 57 tool calls, 127k tokens |
+| 4 | code map | sonnet · medium | Agent start | 07:25 | 07:26 | 76 s, 28 tool calls, 67k tokens |
+| 5 | code map | sonnet · medium | Method text | 07:25 | 07:27 | 84 s, 26 tool calls, 63k tokens |
 
 ## Per group
 
