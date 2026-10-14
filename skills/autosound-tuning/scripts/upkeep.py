@@ -77,9 +77,10 @@ _BOUNDED = []
 
 
 def _bounded_run():
-    """`rew_tool/bounded_run.py` (#167), loaded by its path once -- or None where this copy has none: the installers'
-    keep-local step (install.sh `keep_local`, install.ps1 `Save-LocalChanges`) copies this file, gates/side_effect.py
-    and console.py alone, and there a child runs under `subprocess.run` as it did before #167."""
+    """`rew_tool/bounded_run.py` (#167), loaded by its path once -- or None where this copy has none. The installers'
+    keep-local step (install.sh `keep_local`, install.ps1 `Save-LocalChanges`) copies this file, gates/side_effect.py,
+    console.py and bounded_run.py out of the new tag -- each only when the tag has it -- so only an older tag without
+    bounded_run.py leaves it out, and a child then runs under `subprocess.run` as it did before #167."""
     if not _BOUNDED:
         import importlib.util
         path = os.path.join(SKILL_DIR, "rew_tool", "bounded_run.py")

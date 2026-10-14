@@ -109,9 +109,10 @@ _BOUNDED = []
 
 
 def _bounded_run():
-    """`rew_tool/bounded_run.py` (#167), loaded by its path once -- or None where this copy has none beside it: the
-    installers' keep-local step (install.sh `keep_local`, install.ps1 `Save-LocalChanges`) copies upkeep.py, this file
-    and console.py alone, and there gh runs under `subprocess.run` as it did before #167."""
+    """`rew_tool/bounded_run.py` (#167), loaded by its path once -- or None where this copy has none beside it. The
+    installers' keep-local step (install.sh `keep_local`, install.ps1 `Save-LocalChanges`) copies upkeep.py, this file,
+    console.py and bounded_run.py out of the new tag -- each only when the tag has it -- so only an older tag without
+    bounded_run.py leaves it out, and gh then runs under `subprocess.run` as it did before #167."""
     if not _BOUNDED:
         import importlib.util
         import os
