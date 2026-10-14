@@ -96,6 +96,7 @@ end.
 | 63 | T17b fix round (b) (resumed) | opus · high | Agent start | 09:25 | 09:38 | 796 s; `f2af045` — (b) all eight, and CI run 2's: 8.3 short paths, Invoke-Upstream returned output+True as success (a real bug), the consistency script's FAIL recap |
 | 64 | FINAL branch review, origin/main..0078659 | fable · high | the wave | 09:47 | 10:00 | 689 s, 262k tokens; NOT ready: 1 Critical (the Windows selftests claim unproven — continue-on-error hid 62 of 67 failing), 5 Important (Upgrading short; the Codex manifest's encoding 5.1↔7; the link's repoint wording; the level's spelling; the eval README), 4 Minor; the four groups hold end to end; a TCC must-know list |
 | 65 | final fix: installers I2, M3, M1 (resumed) | opus · high | Installers | 10:00 | | |
+| 66 | Windows selftests to green, then the step required (resumed; may push and dispatch CI) | opus · high | Windows | 10:05 | | |
 
 ## Quality notes
 
@@ -124,7 +125,7 @@ end.
 | 38542204702 | 09:25 | `99bddb2` | after the Installers' and SF3's group fixes | red, further on: installers-windows passed the #161 probe; its consistency step fails T17b's six ps1 Codex-link cases (8.3 short paths) and the file:// upstream-child probe; Ubuntu selftests — installers and tag-check (a Linux-only case; the runner's 12-line tail cut the FAIL line); installers-ubuntu, engine, gate green |
 | 38543860362 | 09:38 | `f2af045` | after T17b's fix round | red, narrower: Windows passed its consistency step (the Codex-link and module-path cases green there) and failed the #162 RunAs probe (an elevated child's answer not yet written); Ubuntu — the ps1 Codex cases ran under the image's pwsh, where no junction exists (the hidden Linux-only failure); fixed by the controller `0078659` |
 | 38544832522 | 09:46 | `0078659` | the two harness fixes | GREEN on all five jobs — but the Windows selftests step (continue-on-error) failed almost every module: the manifest checked out CRLF, `--selftest\r`; fixed `d3b3ec2` |
-| 38545884702 | 09:55 | `d3b3ec2` | the CR fix | |
+| 38545884702 | 09:55 | `d3b3ec2` | the CR fix | green on all five jobs; the Windows selftests step really ran: 61 of 67 pass — bounded_run (CRLF, the interrupt's tree kill), contract (a copy counted twice), and four temp-folder leaks (git's read-only files) fail |
 
 ## Per group
 
