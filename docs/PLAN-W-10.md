@@ -235,10 +235,11 @@ Control page (re-fetched, cited): start interactive (`claude --remote-control` /
 network drop for as long as it lasts — server mode gives up after ~10 min; the laptop awake, on power, sleep off, REW
 open, the `.mdat` saved; capture rounds short, `capture-check` before leaving the car; `session-close --check` at
 each block boundary; recovery by `--continue`/`--resume` within ~4 h, else a fresh session reads `process show` and
-the CONTINUE block; listening verdicts typed or spoken to the session. The session OFFERS this way of working — the
-plan and the questions followed on the phone through Claude's own apps — and builds nothing for it: no phone page (the
-Arbiter, 2026-10-14: «того що вміє Клауд за замовчанням достатньо. все що треба — запропонувати користувачу таку
-можливість»). Translations only where a translated file changes (the SKILL.md pointer).
+the CONTINUE block; listening verdicts typed or spoken to the session. And one offer, built nowhere: the plan of the
+day reachable on the web — the session offers to publish it as a page with Claude's own means (an Artifact, opened in
+any browser), and the person says yes or no (the Arbiter, 2026-10-14: «того що вміє Клауд за замовчанням достатньо.
+все що треба — запропонувати користувачу таку можливість»; «це не про телефон, а про доступ до плану через web»). No
+page generator, no tool. Translations only where a translated file changes (the SKILL.md pointer).
 
 Group seats on the Method text diff: one review (docs).
 
