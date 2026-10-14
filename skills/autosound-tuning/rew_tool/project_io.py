@@ -279,6 +279,32 @@ def repair_for(exc, writing=False):
     return _REPAIR_RETRY
 
 
+def plain_path(p):
+    """`p` as a person writes it (#158): Windows' extended-length prefix taken off -- `\\\\?\\C:\\x` is `C:\\x`, and
+    `\\\\?\\UNC\\srv\\share\\x` is `\\\\srv\\share\\x`. `os.readlink` returns a link's target with it there, and a
+    refusal naming the target read `\\\\?\\C:\\...`. Any other path, and anything that is no string, as it is. Pure."""
+    if not isinstance(p, str):
+        return p
+    if p.startswith("\\\\?\\UNC\\"):
+        return "\\\\" + p[len("\\\\?\\UNC\\"):]
+    if p.startswith("\\\\?\\"):
+        return p[len("\\\\?\\"):]
+    return p
+
+
+def oserror_words(exc):
+    """What a refusal says of `exc` (#158): an `OSError` as `<strerror>: <filename>` -- and ` -> <filename2>` for a
+    move -- the names as written; its `strerror` alone when it names no file. `str()` of one says `[Errno 2] ...:
+    '<filename>'`, the name's repr, so on Windows every backslash came doubled. Anything else, and an `OSError` with no
+    `strerror`, is `str(exc)`. Pure."""
+    if not isinstance(exc, OSError) or not exc.strerror:
+        return str(exc)
+    if exc.filename is None:
+        return exc.strerror
+    words = f"{exc.strerror}: {exc.filename}"
+    return words + (f" -> {exc.filename2}" if exc.filename2 is not None else "")
+
+
 def cannot_open(path, exc):
     """The `Unreadable` to raise for `path`, which `exc` -- an `OSError` other than `FileNotFoundError` -- refused to
     open: a folder in its place said as one, anything else with the repair its cause allows (`repair_for`). For a
@@ -1249,13 +1275,34 @@ def _check_two_writers_one_reader():
         _drop(signals)
 
 
+def _check_paths_as_written():
+    """#158: a path is said as Windows writes it. `plain_path` takes the extended-length prefix off what `os.readlink`
+    returns there -- `\\\\?\\C:\\x` is `C:\\x`, `\\\\?\\UNC\\srv\\share\\x` is `\\\\srv\\share\\x` -- and leaves any other
+    path as it is. `oserror_words` says an `OSError` as `<strerror>: <filename>`, the name as written: `str()` gave
+    `[Errno 2] ...: 'C:\\\\car\\\\dsp_profile.json'`, its repr, every backslash doubled. Literal Windows paths, on any
+    system."""
+    for raw, want in ((r"\\?\C:\car\glossary.json", r"C:\car\glossary.json"),
+                      (r"\\?\UNC\nas\cars\glossary.json", r"\\nas\cars\glossary.json"),
+                      (r"C:\car\glossary.json", r"C:\car\glossary.json"), ("/car/glossary.json", "/car/glossary.json"),
+                      (r"\\nas\cars\g.json", r"\\nas\cars\g.json"), ("", "")):
+        assert plain_path(raw) == want, (raw, plain_path(raw), want)
+    missing = FileNotFoundError(2, "No such file or directory", r"C:\Авто\car\dsp_profile.json")
+    assert oserror_words(missing) == r"No such file or directory: C:\Авто\car\dsp_profile.json", oserror_words(missing)
+    moved = PermissionError(13, "Access is denied", r"C:\a.tmp", None, r"C:\a.json")
+    assert oserror_words(moved) == r"Access is denied: C:\a.tmp -> C:\a.json", oserror_words(moved)
+    assert oserror_words(OSError(28, "No space left on device")) == "No space left on device"
+    assert oserror_words(ValueError("not a number: 'x'")) == "not a number: 'x'"
+    assert oserror_words(OSError("plain words")) == "plain words"
+
+
 def _selftest():
     failures, seen = [], {}
     for check in (_check_text_and_json, _check_binary_temp, _check_foreign_tmp, _check_replace_fails_clean,
                   _check_write_fails_clean,
                   _check_replace_retry, _check_private_mode, _check_create_exclusive, _check_append_line,
                   _check_durable, _check_append_refused, _check_read_json, _check_newer_schema,
-                  _check_every_writer_moves, _check_says_what_it_did_not_check, _check_two_writers_one_reader):
+                  _check_every_writer_moves, _check_says_what_it_did_not_check, _check_two_writers_one_reader,
+                  _check_paths_as_written):
         try:
             seen[check.__name__] = check()
         except Exception as exc:  # noqa: BLE001 -- each check is reported by name; one failing must not hide the rest

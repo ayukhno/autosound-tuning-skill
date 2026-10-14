@@ -1374,14 +1374,14 @@ def _main(argv=None):
         if getattr(type(exc), "is_busy", False):
             return _write_lock().busy_exit(exc)
         if getattr(type(exc), "exit_code", None) == 2:
-            print(f"error: {exc}", file=sys.stderr)
+            print(f"error: {_project_io().oserror_words(exc)}", file=sys.stderr)
             return 2
         # A profile or a draft that is there and cannot be read, or that a newer method wrote (#136): a refusal naming
         # it and its repair, exit 1, not a traceback. So is a project folder the lock cannot be made in, and a new one
         # the interview's first draft cannot make (#141, `write_lock.make_folder`).
         if not getattr(exc, "is_unreadable", False):
             raise
-        print(f"error: {exc}", file=sys.stderr)
+        print(f"error: {_project_io().oserror_words(exc)}", file=sys.stderr)
         return 1
 
 
@@ -1476,7 +1476,7 @@ def _run(args):
         try:
             value = set_setting(args.project_dir, args.path, args.value)
         except (OSError, ValueError) as exc:
-            print(f"refused: {exc}", file=sys.stderr)
+            print(f"refused: {_project_io().oserror_words(exc)}", file=sys.stderr)   # #158: as written
             return 2
         print(json.dumps({"set": args.path, "value": value}, ensure_ascii=False))
         return 0
@@ -1499,7 +1499,7 @@ def _run(args):
             # The profile is written and the draft is still there (F M-9): what landed, and what the person does.
             if not getattr(type(exc), "draft_left", False):
                 raise
-            print(f"error: {exc}", file=sys.stderr)
+            print(f"error: {_project_io().oserror_words(exc)}", file=sys.stderr)
             return 1
         print(f"wrote {path}")
         return 0
@@ -2151,6 +2151,25 @@ def _check_no_profile_makes_nothing():
     assert not failures, "\n  ".join(["refused with no profile:"] + failures)
 
 
+def _check_a_refusal_says_the_path_as_written():
+    """#158: a refusal names a file as Windows writes it. `set-setting` with no profile said `refused: [Errno 2] No such
+    file or directory: 'C:\\\\car\\\\dsp_profile.json'` -- the name's repr, every backslash doubled -- where it now says
+    `refused: No such file or directory: C:\\car\\dsp_profile.json` (`project_io.oserror_words`). The refusal is a
+    stand-in raising with a literal Windows path, on any system."""
+    pj = _siblings().load("project.py")
+    windows = r"C:\Авто\car\dsp_profile.json"
+    real = globals()["set_setting"]
+
+    def refusing(*args, **kwargs):
+        raise FileNotFoundError(2, "No such file or directory", windows)
+    globals()["set_setting"] = refusing
+    try:
+        rc, _out, err = pj._run_cli(_main, ["set-setting", "car", "channel_gain.step_db", "0.5"])
+    finally:
+        globals()["set_setting"] = real
+    assert (rc, err) == (2, f"refused: No such file or directory: {windows}\n"), (rc, err)
+
+
 def _check_the_interview_makes_its_new_folder():
     """The interview's first write makes the project folder where it is not there yet (#141, R23): `start` makes it and
     the draft -- the lock makes nothing there, a hold on a missing folder being this process's thread lock alone -- and
@@ -2236,7 +2255,8 @@ def _selftest():
                   _check_writers_go_through_the_move, _check_refresh_names_an_unreadable_entry,
                   _check_a_held_lock_answers_75, _check_a_bad_timeout_is_a_usage_error,
                   _check_no_load_and_save_outside_update, _check_writers_read_with_the_lock_held,
-                  _check_no_profile_makes_nothing, _check_the_interview_makes_its_new_folder):
+                  _check_no_profile_makes_nothing, _check_the_interview_makes_its_new_folder,
+                  _check_a_refusal_says_the_path_as_written):
         try:
             ran[check.__name__] = check()
         except AssertionError as exc:

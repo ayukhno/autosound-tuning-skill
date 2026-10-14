@@ -258,7 +258,7 @@ def read_glossary_file(path, project_dir):
     if own is None:
         if os.path.islink(path):
             try:
-                target = os.readlink(path)
+                target = io_.plain_path(os.readlink(path))     # #158: Windows says it `\\?\C:\...`
                 if not os.path.isabs(target):        # relative to the link's folder, not to where a command runs
                     target = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(path)), target))
             except OSError:
@@ -1337,6 +1337,33 @@ def _check_dangling_glossary_link():
         shutil.rmtree(d, ignore_errors=True)
 
 
+def _check_a_link_target_as_written():
+    """#158: the refusal of a link to nothing names its target as written. On Windows `os.readlink` returns it with the
+    extended-length prefix -- `\\\\?\\C:\\...` -- and the refusal said that; `project_io.plain_path` takes it off.
+    `os.readlink` is a stand-in that answers as Windows does, on any system that makes links."""
+    import shutil
+    import tempfile
+    d = tempfile.mkdtemp(prefix="autosound_naming_link_prefix_")
+    real = os.readlink
+    try:
+        link, gone = os.path.join(d, "glossary.json"), os.path.join(d, "shared", "glossary.json")
+        try:
+            os.symlink(gone, link)
+        except (OSError, NotImplementedError):
+            print("  (no symbolic links on this system: the link to nothing was not made)")
+            return
+        os.readlink = lambda path, *a, **kw: "\\\\?\\" + real(path, *a, **kw)
+        try:
+            read_glossary_file(link, d)
+            said = "read, not refused"
+        except Exception as exc:  # noqa: BLE001 -- the refusal is under test
+            said = str(exc)
+        assert said.startswith(f"{link} is a link to {gone}, which is not there"), said
+    finally:
+        os.readlink = real
+        shutil.rmtree(d, ignore_errors=True)
+
+
 def _check_dangling_link_repair_fits():
     """The repair for a `glossary.json` that is a link to nothing fits the project (batch 4's re-review N4-M5): "remove
     the link, and the glossary project.json keeps is read" only where `project.json` keeps one -- where it keeps none,
@@ -1387,7 +1414,8 @@ def _selftest():
                   _check_bom_glossary_read, _check_for_project_strict,
                   _check_cli_reads_the_glossary_strictly, _check_dangling_glossary_link,
                   _check_dangling_link_repair_fits, _check_lenient_read_of_a_project_json_not_an_object,
-                  _check_lenient_read_of_a_glossary_not_an_object, _check_lenient_read_of_inner_shapes):
+                  _check_lenient_read_of_a_glossary_not_an_object, _check_lenient_read_of_inner_shapes,
+                  _check_a_link_target_as_written):
         try:
             check()
         except AssertionError as exc:
