@@ -2387,14 +2387,14 @@ def _check_the_door_records_the_review():
                 failures.append(f"recorded, and still asked to be recorded: {err[-300:]!r}")
             # The same file a second time: nothing added.
             try:
-                if _record_review_step(project, "gemini", "m", rel, "api") is not False:
+                if not _record_review_step(project, "gemini", "m", rel, "api").get("already_recorded"):
                     failures.append("recording the same file again did not say it was there")
             except Exception as exc:  # noqa: BLE001 -- a raise is this check's finding
                 failures.append(f"recording the same file again raised {exc!r}")
             if len(calls(project, rel)) != 1:
                 failures.append(f"the same file recorded twice: {len(calls(project, rel))} critic_called name it")
             # TCC recorded the call before the door, and another call after it: any `critic_called` naming the file
-            # holds it, not only the last. Under the vendor the door names (#166: a round is its file and its vendor).
+            # holds it, not only the last (#166: the same file is one record).
             third = os.path.join("process", "reviews", f"{stamp}-critic-3.md")
             journal = process_mod.Process(os.path.join(project, "process"))
             journal.record_reviewer("gemini", "m", review=third, mode="api")
@@ -2405,6 +2405,13 @@ def _check_the_door_records_the_review():
             if back != third or len(calls(project, third)) != 1 or len(calls(project)) != before:
                 failures.append(f"a call the journal already holds, not last: returned {back!r}, "
                                 f"{len(calls(project, third))} event(s) name it, {len(calls(project)) - before} added")
+            # TCC's clipboard record (no review, `unknown` / `?`, its step), then the door's review: it completes that
+            # record, keeps its step, and says so (#166, rule 5).
+            journal.record_reviewer("unknown", "?", step="4.1", mode="clipboard")
+            fourth, err = scene.persist("critic", "the fourth critique", "m", "api", vendor="gemini", record=True)
+            kept = process_mod.Process(os.path.join(project, "process")).load()["reviewer"] or {}
+            if (kept.get("review"), kept.get("step")) != (fourth, "4.1") or ", completing " not in err:
+                failures.append(f"completing TCC's record: the state {kept!r}, said {err.strip()[-300:]!r}")
             # Refused -- the lock held by another writer; a state that cannot be read: said, the line to run by hand,
             # and the review returned.
             entered, release = threading.Event(), threading.Event()
@@ -5208,14 +5215,14 @@ def _record_review_step(project, vendor, model, rel, mode):
     the state's `reviewer`, through `Process(<project>/process).record_reviewer` -- `state/process.py` loaded by its
     path -- which takes the project's writer lock. The review call is over by then: no reviewer runs under the lock.
 
-    True when recorded; False when the journal holds this review's round already (#166): `record_reviewer` looks, under
-    the writer lock, for a `critic_called` of the same round (`process.review_round`: the file's base, a package and
-    its answer alike) and vendor, and returns it, adding nothing. The look was here, outside the lock, and matched the
-    file's name alone. A refusal raises as `record_reviewer` raises it -- `is_busy`, `is_unreadable`, the lock's wait
-    a usage error (`exit_code` 2), a `ProcessError`."""
+    Returns what `record_reviewer` answers (#166), which sorts the record under the writer lock (process-schema.md's
+    five rules): `already_recorded` when the journal holds this review, `completes` when it answers a request recorded
+    before it (TCC's clipboard record, a package), else a record of its own. The look was here, outside the lock, and
+    matched the file's name alone. A refusal raises as `record_reviewer` raises it -- `is_busy`, `is_unreadable`, the
+    lock's wait a usage error (`exit_code` 2), a `ProcessError`."""
     process_mod = _siblings().load("state/process.py")
     proc = process_mod.Process(os.path.join(project, "process"))
-    return not proc.record_reviewer(vendor, model, review=rel, mode=mode).get("already_recorded")
+    return proc.record_reviewer(vendor, model, review=rel, mode=mode)
 
 
 class _RecordFault(Exception):
@@ -5321,11 +5328,14 @@ def _persist_review(role, text, model, mode, vendor=None, record=False):
         print(f">> The review above stands: it is filed as {rel} and printed in full -- do not ask for it again",
               file=sys.stderr)
         raise _RecordFault(rel) from exc
-    if recorded:
+    if recorded.get("already_recorded"):
+        print(f">> The journal already records this review ({recorded.get('review')}): nothing added", file=sys.stderr)
+    elif recorded.get("completes"):
+        print(f">> Recorded in the journal as the reviewer step (critic_called, {vendor} {model}), completing "
+              f"{recorded['completes']}: do not record it again", file=sys.stderr)
+    else:
         print(f">> Recorded in the journal as the reviewer step (critic_called, {vendor} {model}): do not record it "
               "again", file=sys.stderr)
-    else:
-        print(">> The journal already records this review (critic_called): nothing added", file=sys.stderr)
     return rel
 
 

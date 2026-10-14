@@ -114,12 +114,25 @@ spelling of a listed one (#153): `title` is then the list's, the round's own, an
 `capture_verified` carries `bands` -- `{title: {"band_hz": [lo, hi], "band_source": "rew"|"asked"}}` -- the band each
 sweep was judged over (#154).
 
-`critic_called` carries its `phase`, and is one per review round (#166): the round is `review_round` of `review`
-(the file's base, `-package`, `-answer[-N]` and `.md` stripped) with the vendor (equal but for case, or one of
-`unknown`, `?`, none). A record that adds nothing to the round's last one is not written -- `record_reviewer` returns
-the round's record with `already_recorded: True`; one that adds the answer to a package or a vendor to an unknown one
-completes it: the state's `reviewer` is the merged record, and the event appended carries `completes: <review>`. A
-record without `review` is no round, and is always added.
+`critic_called` carries its `phase`. One review is one record (#166) -- `record_reviewer` sorts each record, under
+the writer lock, by five rules:
+
+1. A record names a review file or none. Two naming the same file are one record: the second adds nothing
+   (`already_recorded`), unless it adds a vendor or a model the first lacked -- then it completes it.
+2. Two different answer files are never one record: `<b>.md` and `<b>-answer.md` (the door's name for an answer
+   when `<b>.md` is another writer's review) are two reviews.
+3. A request -- a package `<b>-package.md`, or TCC's clipboard record: no review, vendor `unknown`/`?`/none, its
+   step -- is completed by at most one answer: the first later record of its base (`<b>.md`, `<b>-answer[-N].md`);
+   for a review-less one, the first later record with a review and a vendor whose step is its own or none. The
+   state's `reviewer` becomes the two merged (the answer's file, vendor and model; the request's step where the
+   answer names none), and the event appended carries `completes: <the package's file, or the request's at>`. A
+   second answer is a record of its own: two opinions are two.
+4. An answer recorded before its package is never completed by it: the package adds nothing (`already_recorded`,
+   the answer returned).
+5. `process.py reviewer` says which: `reviewer recorded: <vendor> / <model> ...`, `... (completes <request>)`, or
+   `reviewer already recorded (<file>): nothing added`; the door says the same of its own record.
+
+A record without a review and with a vendor named is no request, and is always a record of its own.
 
 `user_decision` is the Arbiter's half of the conversation, recorded as the answer rather than as
 prose about it. `invalidates` carries the same shape as `config_change.impact`, so a ruling that
