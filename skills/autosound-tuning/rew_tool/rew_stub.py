@@ -68,7 +68,8 @@ class Measurement:
     """One served measurement: an impulse response with its time base, or an RTA curve."""
 
     def __init__(self, title, ir=None, sample_rate=96000, start_time_s=0.0, *, rta=None,
-                 timing_reference="Loopback", timing_offset_s=0.0, notes="", uid=None):
+                 timing_reference="Loopback", timing_offset_s=0.0, notes="", uid=None,
+                 start_freq=F_LOW, end_freq=F_HIGH):
         self.title = title
         self.ir = None if ir is None else np.asarray(ir, dtype=float)
         self.fs = int(sample_rate)
@@ -78,12 +79,16 @@ class Measurement:
         self.timing_offset_s = float(timing_offset_s)
         self.notes = notes
         self.uid = uid or str(_uuid.uuid4())
+        # The range REW lists for it (`startFreq`/`endFreq`), which the capture gate judges it over (#154): a sub
+        # swept 20-200 Hz says so. The served curve keeps the stub's one grid; only the listing carries the range.
+        self.start_freq, self.end_freq = start_freq, end_freq
         self._fr = None
 
     def record(self, mid):
         rec = {"id": mid, "title": self.title, "uuid": self.uid, "date": "2026-01-01 00:00:00",
-               "notes": self.notes, "sampleRate": self.fs, "startFreq": F_LOW, "endFreq": F_HIGH,
-               "timingReference": self.timing_reference, "timingOffset": self.timing_offset_s}
+               "notes": self.notes, "sampleRate": self.fs, "startFreq": self.start_freq,
+               "endFreq": self.end_freq, "timingReference": self.timing_reference,
+               "timingOffset": self.timing_offset_s}
         if self.ir is not None:
             k = int(np.argmax(np.abs(self.ir)))
             rec["timeOfIRStartSeconds"] = self.start_time_s
@@ -311,6 +316,8 @@ def _selftest():
         # and the capture gate reads a served sweep as a valid measurement
         v = _verify.verdict("w-L_1 (sw)", listing)
         assert v["exists"] and v["valid"] and v["stats"]["capture_rate_hz"] == fs, v
+        # ...over its own range as listed (#154): the default record names 20-20000, so nothing here moved.
+        assert (v["stats"]["band_hz"], v["stats"]["band_source"]) == ([F_LOW, F_HIGH], "rew"), v["stats"]
         assert abs(v["stats"]["peak_time_ms"] - d / fs * 1000) < 1e-3, v["stats"]   # sub-sample refined, 4 decimals
         # Two channels 20 dB apart, read the way `predict --rew` reads them: the level relation
         # must come back as designed. The SAME two channels through REW's default form are one
@@ -319,9 +326,17 @@ def _selftest():
         import predict as _predict
         loud = Measurement("w-L_9 (sw)", ir, fs, 0.0)
         quiet = Measurement("sw_9 (sw)", ir * 0.1, fs, 0.0)
-        url2, server2 = serve([loud, quiet])
+        # A sub swept 20-200 Hz, as REW lists it (#154): its own range on the record, judged over it.
+        sub = Measurement("sw_1 (sw)", ir, fs, 0.0, start_freq=20.0, end_freq=200.0)
+        url2, server2 = serve([loud, quiet, sub])
         rew_api.BASE_URL = url2
         try:
+            listed = rew_api.get_measurements()
+            assert (listed["3"]["startFreq"], listed["3"]["endFreq"]) == (20.0, 200.0), listed["3"]
+            assert (listed["1"]["startFreq"], listed["1"]["endFreq"]) == (F_LOW, F_HIGH), listed["1"]
+            v_sub = _verify.verdict("sw_1 (sw)", listed)
+            assert v_sub["valid"] and v_sub["stats"]["band_hz"] == [20.0, 200.0], v_sub
+            assert v_sub["stats"]["band_source"] == "rew", v_sub
             grid = np.asarray([60.0, 80.0, 100.0])
             h_loud, _ = _predict.load_solo_rew("w-L_9 (sw)", grid)
             h_quiet, _ = _predict.load_solo_rew("sw_9 (sw)", grid)
