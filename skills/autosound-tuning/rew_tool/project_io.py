@@ -311,14 +311,14 @@ def cannot_open(path, exc):
     reader that opens one of the method's files itself (`process.py`'s journal), as `read_json` and `append_line` do."""
     if os.path.isdir(path):
         return Unreadable(path, "is a directory, not a file", _REPAIR_FOLDER)
-    return Unreadable(path, f"cannot be opened ({exc})", repair_for(exc))
+    return Unreadable(path, f"cannot be opened ({oserror_words(exc)})", repair_for(exc))   # #158
 
 
 def cannot_append(path, exc):
     """The `Unreadable` to raise for `path`, which reads and refused the append `exc` names (m4): `cannot be appended to
     (...)`, with a write's repair -- a read-only journal is not one that "cannot be opened". One wording for one cause,
     whether the look before a state write or the append itself meets it."""
-    return Unreadable(path, f"cannot be appended to ({exc})", repair_for(exc, writing=True))
+    return Unreadable(path, f"cannot be appended to ({oserror_words(exc)})", repair_for(exc, writing=True))
 
 
 #: What a refusal calls a JSON value: JSON's words, not Python's type names ("null", not "NoneType").
@@ -1293,6 +1293,12 @@ def _check_paths_as_written():
     assert oserror_words(OSError(28, "No space left on device")) == "No space left on device"
     assert oserror_words(ValueError("not a number: 'x'")) == "not a number: 'x'"
     assert oserror_words(OSError("plain words")) == "plain words"
+    held = PermissionError(13, "Access is denied", r"C:\car\process\journal.jsonl")
+    opened, appended = cannot_open(r"C:\car\process\journal.jsonl", held), \
+        cannot_append(r"C:\car\process\journal.jsonl", held)
+    assert opened.reason == r"cannot be opened (Access is denied: C:\car\process\journal.jsonl)", opened.reason
+    assert appended.reason == r"cannot be appended to (Access is denied: C:\car\process\journal.jsonl)", \
+        appended.reason
 
 
 def _selftest():
