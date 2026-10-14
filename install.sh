@@ -402,10 +402,13 @@ clt_present() { if on_mac; then xcode-select -p >/dev/null 2>&1; else return 0; 
 # byte that is not, and with no iconv every byte outside printable ASCII is a `?` -- a `--skill-ref $'v\xff'` made a
 # receipt that was not JSON. sed, byte by byte, and not ${var//}: bash 5.2's patsub_replacement gives `&` and `\` in a
 # replacement meanings of their own. iconv's own exit is not read: glibc's ends 1 after dropping a byte, its text whole.
+# Through UTF-16 and back: macOS's iconv -c lets a 4- or 5-byte sequence above U+10FFFF through UTF-8 to UTF-8 as it
+# was, and UTF-16 cannot hold one -- it is dropped there, or becomes a `?`, JSON either way.
 json_str() {  # json_str <text>
   _js_text="$(printf '%s' "$1" | LC_ALL=C tr -d '\001-\037')"
   if have iconv; then
-    _js_text="$(printf '%s' "$_js_text" | iconv -c -f UTF-8 -t UTF-8 2>/dev/null)" || true
+    _js_text="$(printf '%s' "$_js_text" | iconv -c -f UTF-8 -t UTF-16LE 2>/dev/null \
+                | iconv -c -f UTF-16LE -t UTF-8 2>/dev/null)" || true
   else
     _js_text="$(printf '%s' "$_js_text" | LC_ALL=C sed 's/[^ -~]/?/g')"
   fi
@@ -1040,7 +1043,7 @@ if [ -n "$CLAUDE_BIN" ]; then
   say "  ✓ $("$CLAUDE_BIN" --version 2>/dev/null || echo present)"
 else
   say "  the official installer, claude.ai/install.sh:"
-  if run bash -c 'set -o pipefail; curl -fsSL https://claude.ai/install.sh | bash'; then
+  if run "${BASH:-bash}" -c 'set -o pipefail; curl -fsSL https://claude.ai/install.sh | bash'; then
     in_local_bin claude && manifest_add claude
   else
     warn "Claude Code did not install. Nothing can run a session without it; when the network is"

@@ -164,8 +164,9 @@ jobs:
   # libraries there. A real `install.sh`, the method only, unattended: it must end 3, installed and NOT ready, with numpy
   # named in its receipt and in its verdict line -- not 0 and "Installed." over a python3 that cannot run the method.
   # Real downloads (the method's signed tag, Claude Code), hence the time limit; not the reviewer's (`--no-reviewer`): a
-  # third party's download that fails says nothing about the exit contract. Claude Code's installer may be missing too
-  # (`| sh` under dash; next wave's pool) -- the job holds the verdict to the receipt, whatever else it names.
+  # third party's download that fails says nothing about the exit contract. Claude Code's installer is bash, piped to
+  # bash (#157): a shell's syntax error in the log fails the job; Claude Code missing without one is its download, a
+  # warning -- the job holds the verdict to the receipt, whatever else it names.
   installers-ubuntu:
     needs: gate
     if: needs.gate.outputs.run == 'true'

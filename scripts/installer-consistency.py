@@ -596,7 +596,12 @@ def tag_rule_problems(sh, ps1):
 
 #: json_str's input and what its output reads as (#172): with iconv a byte that is not UTF-8 is dropped and a UTF-8
 #: letter kept; without iconv every byte outside printable ASCII is a `?`. Either way the text is JSON.
-JSON_STR_CASES = ((b'a\xff"b', 'a"b', 'a?"b'), ("é".encode("utf-8"), "é", "??"), (b"v\xff", "v", "v?"))
+JSON_STR_CASES = ((b'a\xff"b', 'a"b', 'a?"b'), ("é".encode("utf-8"), "é", "??"), (b"v\xff", "v", "v?"),
+                  ("Київ".encode("utf-8"), "Київ", "?" * 8), ("🎵".encode("utf-8"), "🎵", "????"),
+                  # Above U+10FFFF: macOS's iconv -c passed these through as they were (the T5 review) -- a byte
+                  # dropped or a `?`, either is JSON.
+                  (b"v\xf4\x90\x80\x80", ("v", "v?"), "v????"), (b"v\xf7\xbf\xbf\xbf", ("v", "v?"), "v????"),
+                  (b"v\xf8\x88\x80\x80\x80", ("v", "v?"), "v?????"))
 
 
 def shell_text_problems(sh):
@@ -633,7 +638,7 @@ def shell_text_problems(sh):
             except ValueError as exc:
                 got = f"not JSON ({exc}): {r.stdout!r}"
             want = with_iconv if iconv else without
-            if r.returncode != 0 or got != want:
+            if r.returncode != 0 or (got not in want if isinstance(want, tuple) else got != want):
                 out.append(f"install.sh json_str {word}{'' if iconv else ' with no iconv'}: exit {r.returncode}, "
                            f"{got!r}, want 0 and {want!r} -- stderr {r.stderr.decode('utf-8', 'replace')[-160:]!r} (#172)")
     return out
