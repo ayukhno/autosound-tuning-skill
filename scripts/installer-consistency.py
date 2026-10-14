@@ -617,6 +617,11 @@ def shell_text_problems(sh):
     out = []
     if re.search(r"claude\.ai/install\.sh \| sh\b", sh):
         out.append("install.sh still pipes Claude Code's installer to `sh` -- dash cannot run it (#157)")
+    # The group round: `run sh -c 'set -o pipefail; ... | bash'` passed the count above, and dash stops on `-o pipefail`
+    # without a syntax error -- the wrapper is pinned, bash running the pipe under pipefail.
+    step = ("""  if run "${BASH:-bash}" -c 'set -o pipefail; curl -fsSL https://claude.ai/install.sh | bash'; then""")
+    if [ln for ln in sh.splitlines() if not ln.lstrip().startswith("#")].count(step) != 1:
+        out.append(f"install.sh does not run Claude Code's installer as exactly `{step.strip()}` (#157)")
     if sh.count("curl -fsSL https://claude.ai/install.sh | bash") < 3:
         out.append("install.sh does not run and name Claude Code's installer as `curl -fsSL https://claude.ai/install.sh "
                    "| bash` (the step, its hint, the end's line) (#157)")

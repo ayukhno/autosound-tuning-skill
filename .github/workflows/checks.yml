@@ -224,6 +224,20 @@ jobs:
             grep -i 'syntax error' "$log" | head -n 3
             exit 1
           fi
+          # ...and in the Claude Code step, no shell's error of any kind: dash stops on `set -o pipefail` with "Illegal
+          # option", a missing command says "not found" -- no syntax error in either (the group round). The step must
+          # have run Claude's installer at all: a runner that already has `claude` would leave this check empty.
+          claude_step="$(awk '/==> Claude Code/{on=1} /==> The tuning method/{on=0} on' "$log")"
+          if ! printf '%s\n' "$claude_step" | grep -F 'the official installer, claude.ai/install.sh:' >/dev/null; then
+            echo "::error::the Claude Code step did not run Claude's installer (claude already on the runner?) -- the check of its shell proves nothing (#157). The step said:"
+            printf '%s\n' "$claude_step" | head -n 8
+            exit 1
+          fi
+          if printf '%s\n' "$claude_step" | grep -Ei 'syntax error|illegal option|command not found|: not found|unbound variable|bad substitution' >/dev/null; then
+            echo "::error::the Claude Code step has a shell's error -- its installer was run by a shell it was not written for (#157). Its lines:"
+            printf '%s\n' "$claude_step" | grep -Ei 'syntax error|illegal option|command not found|: not found|unbound variable|bad substitution' | head -n 3
+            exit 1
+          fi
           if [ "$rc" = 0 ]; then
             echo "::error::install.sh ended READY (exit 0) on an externally managed /usr/bin/python3 -- pip took the libraries anyway, and this job expects 3: installed, NOT ready"
             exit 1
