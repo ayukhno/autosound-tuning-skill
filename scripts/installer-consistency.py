@@ -86,6 +86,8 @@ CHANNEL_CASES = (
     # skill #108: the STABLE pick goes through the same function, so a name that is not a release never wins.
     (["v3.0.49", "v3.x", "v3.9"], "v3.0.49"),
     (["v0.1.44", "v0.x", "v0.1.45"], "v0.1.45"),
+    # #171: the beta channel takes a candidate for a newer version over the release before it.
+    (["v3.1.2", "beta-v3.1.3-rc1"], "beta-v3.1.3-rc1"),
     ([], ""),
 )
 #: What install.ps1's `Select-NewestOnChannel` must still carry. Read, not run: there is no
@@ -651,7 +653,7 @@ def selection_problems(sh, ps1):
     # The stop is `stop` (#142): it writes the receipt, here into a temp XDG_DATA_HOME, under the call's own `set -u`.
     functions, missing = cut_functions(sh, ("say", "warn", "pretty", "have", "on_mac", "runs_ok", "usable",
                                             "json_str", "write_receipt", "stop", "is_release_tag",
-                                            "newest_on_channel", "read_tags", "pick_method_ref"))
+                                            "newest_on_channel", "read_tags", "pick_method_ref", "settled_by_name"))
     if missing:
         return [f"install.sh: no `{name}() {{ ... }}` -- the method's tag pick cannot be run" for name in missing]
     bash, why = find_bash()
@@ -675,7 +677,8 @@ def selection_problems(sh, ps1):
                  ("", None, 128, None, "0", False, 1, None, unreadable + ("Could not resolve host: github.com",), ()),
                  ("", None, 128, SSL_SAYS, "0", False, 1, None, unreadable + ("SSL certificate problem: self-signed",),
                   ("no network?",)),
-                 ("main", None, 0, None, "0", False, 0, "main", ("UNSIGNED",), ()),
+                 # #164: the pick names a branch and says nothing of it -- settled_by_name says it, below.
+                 ("main", None, 0, None, "0", False, 0, "main", (), ("is not a release",)),
                  ("v3.0.33", None, 128, None, "0", False, 0, "v3.0.33", (), ("UNSIGNED",)),
                  ("", tags, 0, None, "0", False, 0, "v3.1.10", (), ("UNSIGNED",)),
                  ("", None, 128, SSL_SAYS, "1", False, 0, "v3.*",
@@ -718,6 +721,35 @@ def selection_problems(sh, ps1):
                            + (f", a receipt saying {want_status!r} (#142)" if want_status else ", no receipt")
                            + (f", and no git run -- it ran {ran_git!r}" if nogit else "")
                            + f" -- stderr {got_err.strip()[-220:]!r} (T-37)")
+        # #164: the full path -- the pick, then the signature step every ref passes -- says a branch is not a release
+        # exactly once; a dry run's placeholders (the tag globs, when no tag could be read) never, and keep "would".
+        # #171: the stable pick takes `v` names only -- a candidate for a newer version stays out though the stand-in
+        # git lists it whatever the glob; the beta channel's order takes it.
+        pair = Path(tmp, "pair")
+        pair.write_bytes(b"v3.1.2\nbeta-v3.1.3-rc1\n")
+        full = (("main", None, 128, "0", 'settled_by_name "$ref" v3.0.67', "main", 1, ()),
+                ("", None, 128, "1", 'settled_by_name "$ref" v3.0.67; settled_by_name "v*" v0.1.45', "v3.*", 0,
+                 ("would check the signature of v3.*", "would check the signature of v*")),
+                ("", pair, 0, "0", ":", "v3.1.2", 0, ()))
+        for j, (given, offered, stub_rc, dry, then, want_ref, unsigned, words) in enumerate(full):
+            script = (f'set -euo pipefail\nexport PATH="$(cd "{stub_dir.as_posix()}" && pwd)":"/usr/bin:$PATH"\n'
+                      'SKILL_REPO="https://github.com/ayukhno/autosound-tuning-skill.git"\nSKILL_TAG_GLOB="v3.*"\n'
+                      f'DRY_RUN={dry}\n' + functions
+                      + f'ref="$(pick_method_ref "{given}")" || exit $?\nprintf "REF=[%s]\\n" "$ref"\n{then}\n')
+            env = dict(os.environ, STUB_RC=str(stub_rc), STUB_TAGS=offered.as_posix() if offered else "",
+                       HOME=tmp, XDG_DATA_HOME=str(Path(tmp, f"data-full-{j}")))
+            env.pop("STUB_SAYS", None)
+            env.pop("STUB_LOG", None)
+            r = subprocess.run([bash, "-s"], input=script.encode("utf-8"), capture_output=True, env=env)
+            said = r.stdout.decode("utf-8", "replace") + r.stderr.decode("utf-8", "replace")
+            if (r.returncode != 0 or f"REF=[{want_ref}]" not in said or said.count("is not a release") != unsigned
+                    or any(w not in said for w in words)):
+                out.append(f"install.sh pick_method_ref {given or '(no --skill-ref)'}"
+                           f"{' over ' + offered.read_text().replace(chr(10), ' ').strip() if offered else ''}"
+                           f"{', a dry run' if dry == '1' else ''}, then `{then}`: exit {r.returncode}, want 0, "
+                           f"REF=[{want_ref}], 'is not a release' {unsigned} time(s) (said {said.count('is not a release')})"
+                           + (f" and {' + '.join(map(repr, words))}" if words else "")
+                           + f" -- said {said.strip()[-260:]!r} (#164, #171)")
     except OSError as exc:
         out.append(f"the tag pick's fixtures could not be made ({exc}) -- unrun is not agreed")
     finally:
@@ -762,7 +794,51 @@ def selection_problems(sh, ps1):
     if wrong:
         out.append("the installers still have a way to an unchecked `main` or default branch: " + "; ".join(wrong)
                    + " (T-37)")
+    out.extend(one_unsigned_line_problems(sh, ps1, pick_ps1.group(0) if pick_ps1 else ""))
     return out
+
+
+def one_unsigned_line_problems(sh, ps1, pick_ps1):
+    """#164 and #171, READ: the UNSIGNED line lives in settled_by_name / Test-SettledByName alone, said before a dry
+    run's "would check" unless the ref is a glob (the dry run's placeholder); the stable picks keep `v` names only, by
+    an explicit `^v` right after the tag list is read, and the beta channel's picks do not. install.sh's half is also
+    RUN above; install.ps1's under PowerShell, where there is one (ps1_run_problems)."""
+    wrong = []
+    unsigned = "is not a release: it is installed UNSIGNED, unchecked"
+    for where, text in (("install.sh", sh), ("install.ps1", ps1)):
+        lines = [ln for ln in text.splitlines() if unsigned in ln and not ln.lstrip().startswith("#")]
+        if len(lines) != 1:
+            wrong.append(f"{where} says {unsigned!r} on {len(lines)} lines -- once, in its settled-by-name step")
+    settled_sh = re.search(r"^settled_by_name\(\) \{.*?^\}", sh, re.M | re.S)
+    settled_ps = re.search(r"^function Test-SettledByName \{.*?^\}", ps1, re.M | re.S)
+    for where, body, glob, dry in (("install.sh settled_by_name", settled_sh, "*'*'*",
+                                    '\n  if [ "$DRY_RUN" = 1 ]; then'),
+                                   ("install.ps1 Test-SettledByName", settled_ps, "$Ref -match '[*?]'",
+                                    "\n    if ($DryRun) {")):
+        text = body.group(0) if body else ""
+        at_glob, at_unsigned, at_dry = text.find(glob), text.find(unsigned), text.find(dry)
+        if not (0 <= at_glob < at_unsigned < at_dry):
+            wrong.append(f"{where} does not guard a glob ({glob}), then say a name is not a release, before a dry "
+                         f"run's 'would check' -- a dry run's placeholder would be said UNSIGNED, or a branch's dry "
+                         f"run not at all")
+    pick_sh = re.search(r"^pick_method_ref\(\) \{.*?^\}", sh, re.M | re.S)
+    if not pick_sh or """printf '%s\\n' "$TAGS_READ" | grep '^v' | newest_on_channel""" not in pick_sh.group(0):
+        wrong.append("install.sh pick_method_ref does not keep `v` names only (`grep '^v'`) before newest_on_channel")
+    tcc_sh = re.search(r'^    else\n      # Release-shaped tags only, as the method.s \(skill #108\)[^\n]*\n(.*?)^    fi\n',
+                       sh, re.M | re.S)
+    if not tcc_sh or "grep '^v'" not in tcc_sh.group(1):
+        wrong.append("install.sh's stable app pick does not keep `v` names only (`grep '^v'`)")
+    beta_sh = re.search(r'^  if read_tags "\$SKILL_REPO" "\$SKILL_TAG_GLOB" "\$SKILL_BETA_GLOB"; then\n(.*?)^  fi\n', sh,
+                        re.M | re.S)
+    if not beta_sh or "grep '^v'" in beta_sh.group(1) or "newest_on_channel" not in beta_sh.group(1):
+        wrong.append("install.sh's beta pick of the method does not take candidates through newest_on_channel")
+    if "Where-Object { $_ -cmatch '^v' }" not in pick_ps1:
+        wrong.append("install.ps1 Select-MethodRef does not keep `v` names only (`Where-Object { $_ -cmatch '^v' }`)")
+    if "$tccTags = @($names | Where-Object { $_ -cmatch '^v' } |" not in ps1:
+        wrong.append("install.ps1's stable app pick does not keep `v` names only (`Where-Object { $_ -cmatch '^v' }`)")
+    if "if ($Channel -eq \"beta\") { $TccRef = Select-NewestOnChannel $names }" not in ps1:
+        wrong.append("install.ps1's beta pick of the app does not take candidates through Select-NewestOnChannel")
+    return [f"the UNSIGNED line and the stable pick (#164, #171): {w}" for w in wrong]
 
 
 def checkout_problems(sh, ps1):
@@ -1437,7 +1513,25 @@ def powershell_env(environ=None):
 
 
 #: The functions of install.ps1 that its end and its probes need, cut out as they stand.
-PS1_RUN_FUNCTIONS = ("Stop-Installer", "Write-Receipt", "Add-Missing", "Say", "Warn", "Pretty", "Run", "Test-Quiet")
+PS1_RUN_FUNCTIONS = ("Stop-Installer", "Write-Receipt", "Add-Missing", "Say", "Warn", "Pretty", "Run", "Test-Quiet",
+                     "Test-ReleaseTag", "Test-SettledByName", "Select-MethodRef", "Select-NewestOnChannel")
+#: #164, #171: install.ps1's tag pick over a stand-in tag list -- Read-ReleaseTags answers $script:StubTags, or nothing
+#: with $script:StubWhy -- then the signature step every ref passes. (case, body, the words, how many times "is not a
+#: release" is said.)
+PS1_PICK_HEAD = ('$SkillRepo = "https://example.invalid/skill.git"\n$SkillTagGlob = "v3.*"\n'
+                 '$SkillSignedFrom = "v3.0.64"\n$script:TagsWhy = ""\n$script:StubTags = @()\n$script:StubWhy = ""\n'
+                 'function Read-ReleaseTags { param([string]$Repo, [string[]]$Globs) $script:TagsWhy = $script:StubWhy; '
+                 'return @($script:StubTags) }\n')
+PS1_PICK_CASES = (
+    ("pick-main", '$ref = Select-MethodRef "main"\nWrite-Host "REF=[$ref]"\n$null = Test-SettledByName $ref $SkillSignedFrom\n',
+     ("REF=[main]", "main is not a release: it is installed UNSIGNED, unchecked"), 1),
+    ("pick-placeholders-dry", '$DryRun = $true\n$script:StubWhy = "no git yet"\n$ref = Select-MethodRef ""\n'
+     'Write-Host "REF=[$ref]"\n$null = Test-SettledByName $ref $SkillSignedFrom\n$null = Test-SettledByName "v*" "v0.1.45"\n',
+     ("REF=[v3.*]", "would install the newest v3.* release (not readable here: no git yet)",
+      "would check the signature of v3.*", "would check the signature of v*"), 0),
+    ("pick-stable", '$script:StubTags = @("v3.1.2", "beta-v3.1.3-rc1")\nWrite-Host "STABLE=[$(Select-MethodRef \'\')]"\n'
+     'Write-Host "BETA=[$(Select-NewestOnChannel @(\'v3.1.2\', \'beta-v3.1.3-rc1\'))]"\n',
+     ("STABLE=[v3.1.2]", "BETA=[beta-v3.1.3-rc1]"), 0))
 
 
 def ps1_run_problems(ps1):
@@ -1510,6 +1604,12 @@ def ps1_run_problems(ps1):
                   f'Write-Host "R-absent=$(Run {{ & \'{nothere}\' }} \'nothing\')"\n'
                   f'Write-Host "R-zero=$(Run {{ & \'{py}\' -c \'import sys; sys.exit(0)\' }} \'zero\')"\n'
                   f'Write-Host "R-three=$(Run {{ & \'{py}\' -c \'import sys; sys.exit(3)\' }} \'three\')"\n')
+        for case, body, words, unsigned in PS1_PICK_CASES:
+            rc, said, _ = run_case(case, PS1_PICK_HEAD + body)
+            if rc != 0 or any(w not in said for w in words) or said.count("is not a release") != unsigned:
+                out.append(f"install.ps1's tag pick under {Path(shell).name}, {case}: exit {rc}, want 0, "
+                           f"{' + '.join(map(repr, words))} and 'is not a release' {unsigned} time(s) (said "
+                           f"{said.count('is not a release')}) -- said {said.strip()[-300:]!r} (#164, #171)")
         rc, said, _ = run_case("probes", probes)
         want = {"Q-absent": "False", "Q-zero": "True", "Q-three": "False", "R-absent": "False", "R-zero": "True",
                 "R-three": "False"}

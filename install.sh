@@ -1049,15 +1049,21 @@ fi
 # TCC's `_verdict_by_name`: the app's tag is fetched only when it must be.
 settled_by_name() {  # settled_by_name <ref> <first signed tag>
   _sn_ref="$1"; _sn_from="$2"
-  if [ "$DRY_RUN" = 1 ]; then say "  would check the signature of $_sn_ref"; return 0; fi
-  if [ "${AUTOSOUND_SKIP_TAG_VERIFY:-}" = 1 ]; then
-    warn "the signature of $_sn_ref is NOT checked: AUTOSOUND_SKIP_TAG_VERIFY=1 is set (a developer's switch)"
-    return 0
-  fi
-  # Only the rule's own "no" settles a name: any other failure of it goes on to the signature, which refuses.
+  # A dry run's placeholder -- the tag glob, when no tag could be read -- is not a name: a real run checks the newest
+  # release it stands for (#164). The reverted d9a9e5e said it UNSIGNED.
+  case "$_sn_ref" in
+    *'*'*|*'?'*) if [ "$DRY_RUN" = 1 ]; then say "  would check the signature of $_sn_ref"; return 0; fi ;;
+  esac
+  # Only the rule's own "no" settles a name: any other failure of it goes on to the signature, which refuses. That "no"
+  # is said here, the one place every ref passes, and before a dry run's line: the pick says nothing of it (#164).
   _sn_rel=0; is_release_tag "$_sn_ref" || _sn_rel=$?
   if [ "$_sn_rel" = 1 ]; then
     warn "$_sn_ref is not a release: it is installed UNSIGNED, unchecked"
+    return 0
+  fi
+  if [ "$DRY_RUN" = 1 ]; then say "  would check the signature of $_sn_ref"; return 0; fi
+  if [ "${AUTOSOUND_SKIP_TAG_VERIFY:-}" = 1 ]; then
+    warn "the signature of $_sn_ref is NOT checked: AUTOSOUND_SKIP_TAG_VERIFY=1 is set (a developer's switch)"
     return 0
   fi
   [ "$_sn_rel" = 0 ] || return 1
@@ -1187,6 +1193,7 @@ checkout_method() {
     # A dry run on a Mac without Apple's tools has no git to ask: /usr/bin/git there opens Apple's window (#142).
     if [ "$DRY_RUN" = 1 ] && ! usable git; then
       say "  would fetch $_co_ref into $(pretty "$_co_dir"), check it, and check it out (no git yet)"
+      [ -n "$_co_tag" ] || settled_by_name "$_co_ref" "$SKILL_SIGNED_FROM"
       return 0
     fi
     _co_had=""
@@ -1240,6 +1247,8 @@ checkout_method() {
   fi
   if [ "$DRY_RUN" = 1 ]; then
     say "  would fetch $_co_ref into $(pretty "$_co_dir"), check it, and check it out"
+    # No signature step is reached here: a name that is not a release is said by settled_by_name all the same (#164).
+    [ -n "$_co_tag" ] || settled_by_name "$_co_ref" "$SKILL_SIGNED_FROM"
     return 0
   fi
   # Made here, so removed here when it fails -- an empty folder already at that path too, which holds nothing to lose
@@ -1288,15 +1297,16 @@ read_tags() {  # read_tags <repo> <glob>...
 # that goes to stdout -- the caller takes it with $(...) -- and installer-consistency.py runs this with a `git` that
 # has no network.
 pick_method_ref() {  # pick_method_ref <the --skill-ref name, or "">
+  # A name that is not a release is said UNSIGNED by its signature step, settled_by_name, once (#164).
   if [ -n "$1" ]; then
-    is_release_tag "$1" || warn "$1 is not a release: it is installed UNSIGNED, unchecked"
     printf '%s\n' "$1"
     return 0
   fi
-  # Release-shaped tags only (skill #108): `sort -V` put a `v3.x` above every release.
+  # Release-shaped tags only (skill #108): `sort -V` put a `v3.x` above every release. And `v` names only, in so many
+  # words (#171): the glob alone kept a candidate's `beta-` out.
   _pm_ref=""
   if read_tags "$SKILL_REPO" "$SKILL_TAG_GLOB"; then
-    _pm_ref="$(printf '%s\n' "$TAGS_READ" | newest_on_channel)" || _pm_ref=""
+    _pm_ref="$(printf '%s\n' "$TAGS_READ" | grep '^v' | newest_on_channel)" || _pm_ref=""
     [ -n "$_pm_ref" ] || TAGS_WHY="the remote lists no $SKILL_TAG_GLOB release"
   fi
   if [ -n "$_pm_ref" ]; then printf '%s\n' "$_pm_ref"; return 0; fi
@@ -1639,8 +1649,11 @@ if [ "$MODE" = "tcc" ]; then
       TCC_REF_HOW=" (beta channel)"
       read_tags "$TCC_REPO" "$TCC_TAG_GLOB" "$TCC_BETA_GLOB" && _tcc_read=1
     else
-      # Release-shaped tags only, as the method's (skill #108).
-      read_tags "$TCC_REPO" "$TCC_TAG_GLOB" && _tcc_read=1
+      # Release-shaped tags only, as the method's (skill #108), and `v` names only (#171).
+      if read_tags "$TCC_REPO" "$TCC_TAG_GLOB"; then
+        _tcc_read=1
+        TAGS_READ="$(printf '%s\n' "$TAGS_READ" | grep '^v')" || TAGS_READ=""
+      fi
     fi
     if [ "$_tcc_read" = 1 ]; then
       TCC_REF="$(printf '%s\n' "$TAGS_READ" | newest_on_channel)" || TCC_REF=""

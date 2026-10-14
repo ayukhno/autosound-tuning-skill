@@ -992,12 +992,16 @@ if (Test-Path $Py3) {
 # mirror of settled_by_name in install.sh.
 function Test-SettledByName {
     param([string]$Ref, [string]$SignedFrom)
+    # A dry run's placeholder -- the tag glob, when no tag could be read -- is not a name: a real run checks the newest
+    # release it stands for (#164). The reverted d9a9e5e said it UNSIGNED.
+    if ($DryRun -and $Ref -match '[*?]') { Say "would check the signature of $Ref"; return $true }
+    # Said here, the one place every ref passes, and before a dry run's line: Select-MethodRef says nothing of it (#164).
+    if (-not (Test-ReleaseTag $Ref)) { Warn "$Ref is not a release: it is installed UNSIGNED, unchecked"; return $true }
     if ($DryRun) { Say "would check the signature of $Ref"; return $true }
     if ($env:AUTOSOUND_SKIP_TAG_VERIFY -eq "1") {
         Warn "the signature of $Ref is NOT checked: AUTOSOUND_SKIP_TAG_VERIFY=1 is set (a developer's switch)"
         return $true
     }
-    if (-not (Test-ReleaseTag $Ref)) { Warn "$Ref is not a release: it is installed UNSIGNED, unchecked"; return $true }
     $ver = ($Ref -replace '^beta-', '') -replace '-rc[0-9]+\z', ''
     if ([version]($ver -replace '^v', '') -lt [version]($SignedFrom -replace '^v', '')) {
         Say "$Ref predates signed tags (they start at $SignedFrom) -- installed without a signature check"
@@ -1163,7 +1167,11 @@ function Sync-MethodCheckout {
     if (Test-ReleaseTag $Ref) { $spec = "+refs/tags/${Ref}:refs/tags/${Ref}"; $want = "refs/tags/${Ref}^{commit}"; $tagRef = "refs/tags/${Ref}" }
     if (Test-Path (Join-Path $Dir ".git")) {
         # A dry run on Windows without Git has no git to ask (#142).
-        if ($DryRun -and -not (Have git)) { Say "would fetch $Ref into $(Pretty $Dir), check it, and check it out (no git yet)"; return $true }
+        if ($DryRun -and -not (Have git)) {
+            Say "would fetch $Ref into $(Pretty $Dir), check it, and check it out (no git yet)"
+            if (-not $tagRef) { $null = Test-SettledByName $Ref $SkillSignedFrom }
+            return $true
+        }
         $had = ""
         if ($tagRef) { $had = "$(& git -C $Dir rev-parse --verify --quiet $tagRef 2>$null)".Trim() }
         # CHECKED, both of them, and the mirror of install.sh. Unchecked, a network blip or a
@@ -1216,7 +1224,13 @@ function Sync-MethodCheckout {
         $script:NotTheTag = $true
         return $false
     }
-    if ($DryRun) { Say "would fetch $Ref into $(Pretty $Dir), check it, and check it out"; return $true }
+    if ($DryRun) {
+        Say "would fetch $Ref into $(Pretty $Dir), check it, and check it out"
+        # No signature step is reached here: a name that is not a release is said by Test-SettledByName all the same
+        # (#164).
+        if (-not $tagRef) { $null = Test-SettledByName $Ref $SkillSignedFrom }
+        return $true
+    }
     # Made here, so removed here when it fails -- an empty folder already at that path too, which holds nothing to lose
     # (`git clone` takes an empty one as well); one with anything in it is not touched.
     if ((Test-Path $Dir) -and @(Get-ChildItem -LiteralPath $Dir -Force -ErrorAction SilentlyContinue).Count -gt 0) {
@@ -1277,19 +1291,18 @@ function Read-ReleaseTags {
 }
 
 # The method's version (T-37, #142) -- the mirror of pick_method_ref in install.sh: the name given with -SkillRef (a
-# name that is not a release is said UNSIGNED), or the newest release tag; $null when none could be read, and the
-# caller stops -- an empty ls-remote installed an unchecked `main`. A dry run changes nothing, so there an unreadable
-# list is said and the run goes on (#142): it stopped a dry run on Windows without Git, blaming the network. The stop
-# itself is the caller's: Stop-Installer's `return` ends the script only from its top level.
+# name that is not a release is said UNSIGNED once, by Test-SettledByName: #164), or the newest release tag; $null
+# when none could be read, and the caller stops -- an empty ls-remote installed an unchecked `main`. A dry run changes
+# nothing, so there an unreadable list is said and the run goes on (#142): it stopped a dry run on Windows without Git,
+# blaming the network. The stop itself is the caller's: Stop-Installer's `return` ends the script only from its top
+# level.
 function Select-MethodRef {
     param([string]$Given)
-    if ($Given) {
-        if (-not (Test-ReleaseTag $Given)) { Warn "$Given is not a release: it is installed UNSIGNED, unchecked" }
-        return $Given
-    }
-    # Release-shaped tags only (skill #108): a `v3.x` sorted above every release and installed unchecked.
-    $tags = @(@(Read-ReleaseTags $SkillRepo @($SkillTagGlob)) | Where-Object { Test-ReleaseTag $_ } |
-              Sort-Object { [version]($_ -replace '^v', '') })
+    if ($Given) { return $Given }
+    # Release-shaped tags only (skill #108): a `v3.x` sorted above every release and installed unchecked. And `v` names
+    # only, in so many words (#171): the glob alone kept a candidate's `beta-` out, and [version] throws on one.
+    $tags = @(@(Read-ReleaseTags $SkillRepo @($SkillTagGlob)) | Where-Object { $_ -cmatch '^v' } |
+              Where-Object { Test-ReleaseTag $_ } | Sort-Object { [version]($_ -replace '^v', '') })
     if ($tags.Count -gt 0) { return $tags[-1] }
     if (-not $script:TagsWhy) { $script:TagsWhy = "the remote lists no $SkillTagGlob release" }
     if ($DryRun) {
@@ -1594,8 +1607,9 @@ if ($Mode -eq "tcc") {
             if (-not $script:TagsWhy) {
                 if ($Channel -eq "beta") { $TccRef = Select-NewestOnChannel $names }
                 else {
-                    # Release-shaped tags only, as the method's (skill #108).
-                    $tccTags = @($names | Where-Object { Test-ReleaseTag $_ } | Sort-Object { [version]($_ -replace '^v', '') })
+                    # Release-shaped tags only, as the method's (skill #108), and `v` names only (#171).
+                    $tccTags = @($names | Where-Object { $_ -cmatch '^v' } | Where-Object { Test-ReleaseTag $_ } |
+                                 Sort-Object { [version]($_ -replace '^v', '') })
                     if ($tccTags.Count -gt 0) { $TccRef = $tccTags[-1] }
                 }
                 if (-not $TccRef) { $script:TagsWhy = "the remote lists no release" }
