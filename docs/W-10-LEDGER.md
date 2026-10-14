@@ -9,7 +9,7 @@ red CI runs, per group. Times are UTC.
 
 | when | what |
 |---|---|
-| 2026-10-14 07:20 | `ok` on all 23 issues (#149, #150, #153–#173) |
+| 2026-10-14 07:20 | `ok` on all 23 issues (#149, #150, #153–#173); #169 lost it at 07:33 (deferred), so 22 |
 | 2026-10-14 07:25 | five code maps started (sonnet · medium), one per group |
 | 2026-10-14 07:31 | `docs/PLAN-W-10.md` written by the session from the maps; waits for «го» |
 | 2026-10-14 07:34 | the Arbiter: #169 off the wave (a deferred task), no phone page; the plan cut to 19 tasks for 22 issues |
@@ -61,13 +61,17 @@ end.
 
 | task | effort | time | defects (Important / Minor) | rework |
 |---|---|---|---|---|
-| #163 help one-liner | high | 147 s, 89k tokens | 0 / 2 (+1 pool-worthy) | one round, by Haiku, all three done (`518b55b`) |
+| #163 help one-liner | high | 147 s, 89k tokens (the first turn); with its rework 285 s, ≈110k | 0 / 2 (+1 pool-worthy) | one round, by Haiku, all three done (`518b55b`) |
 | release bookkeeping (15 files, 28 pins, 3 versions, CHANGELOG heading + index, two status lines) | xhigh | ~110 s, 77k tokens, 11 tool uses | 0 / 0 | none; it caught the brief's own miscount (26 pins → 28) |
 
 The result for H-019: on mechanical work from a brief that holds the exact text, Haiku 5.5 at high and xhigh needed no
 Important fix; at xhigh it checked the brief against the tree and reported the difference instead of following it.
 
 ## Agent runs
+
+In all (the independent evaluation's count from the session transcript, 2026-10-14): 47 runs — 45 `Agent`
+calls and 2 seen only by their notification — and 28 resumes by `SendMessage`; hub #284's «≈ 66» is the same order.
+A resumed agent's tokens below are its cumulative total, not the round's, where a row says so.
 
 | # | role | model · effort | group | started | ended | result |
 |---|---|---|---|---|---|---|
@@ -110,7 +114,7 @@ Important fix; at xhigh it checked the brief against the tree and reported the d
 | 37 | implementer T8 #163 — the Haiku trial | haiku · high | Installers | 08:22 | 08:24 | 147 s, 17 tool calls, 89k tokens; `089d3b3`; red first (5), then green; CRLF kept |
 | 38 | review of the Haiku T8 (trial count) | opus · high | Installers | 08:24 | 08:28 | no Important, no functional defect; 2 Minor in the checker (~10 min), 1 pool-worthy (the header comment's `main`); the trailer names Opus — the brief's fault, not Haiku's |
 | 39 | Haiku T8 rework (resumed) | haiku · high | Installers | 08:28 | 08:31 | `518b55b`; all three, each red on a scratch copy first |
-| 40 | fix round Installers T5 T7 T9 (resumed) | opus · high | Installers | 08:29 | 08:49 | 1010 s, 377k tokens; `7a4b723` `d0fad70` `fdf548d` `b5cb0ab`, + `eb3cc4c` (bounded_run kept local) and `ac4b0a2` (#158 CI: job `installers-windows`) |
+| 40 | fix round Installers T5 T7 T9 (resumed) | opus · high | Installers | 08:29 | 08:49 | 1010 s, 377k tokens cumulative for the resumed agent (the round ≈110k); `7a4b723` `d0fad70` `fdf548d` `b5cb0ab`, + `eb3cc4c` (bounded_run kept local) and `ac4b0a2` (#158 CI: job `installers-windows`) |
 | 41 | Captures group fix: process.py part (T1's implementer) | opus · high | Captures | 08:37 | 08:47 | 557 s; `1efad5c`; TCC unaffected by the OK line's band suffix (it re-reads state, not stdout — checked by the controller) |
 | 42 | Captures group fix: naming.py part (T2/T3's implementer) | opus · high | Captures | 08:37 | 08:39 | `291dea7`; 461 old titles unchanged; verified live by the controller |
 | 43 | Captures group fix: verify part (T4's implementer) | opus · high | Captures | 08:37 | 08:39 | `43a3d6a` `a6ed7cc` `df65abc` |
@@ -125,7 +129,7 @@ Important fix; at xhigh it checked the brief against the tree and reported the d
 | 52 | group seat: tests | opus · high | Silent failures 3 + Windows | 08:54 | 08:59 | 3 Important (#166 tested with a record TCC does not send — the real one still gives two; #158's readlink stand-in doubles the prefix on Windows; #167's CLI check passes on the old code), 11 Minor |
 | 53 | implementer T17b #149 (the installers' Codex link) | opus · high | Agent start | 08:54 | 09:06 | `67789c5`; 11 sh cases + a mutation test; ps1 cases wait for Windows CI |
 | 54 | group fix round Silent failures 3 + Windows text (resumed) | opus · high | Silent failures 3 + Windows |  | 09:14 | `0d7db2c` (#166 the five rules) `c98a06c` `42cf66f` `cd5a6cc` `06a7176`; exit codes 0 per module; ruff, encoding-check clean |
-| 55 | group fix round Installers (resumed) | opus · high | Installers | 09:06 | 09:25 | 1114 s, 465k tokens; 11 commits `40a4d47`..`404b6d4`, `99bddb2`, + the #167 shell=True CI step `694ef37` |
+| 55 | group fix round Installers (resumed) | opus · high | Installers | 09:06 | 09:25 | 1114 s, 465k tokens cumulative (the round ≈88k); 11 commits `40a4d47`..`404b6d4`, `99bddb2`, + the #167 shell=True CI step `694ef37` |
 | 56 | task review T17b #149 | opus · high | Agent start | 09:06 | 09:10 | no Important; 6 Minor (ownership by prefix; a failed link under --codex; doctor; repoint gap) |
 | 57 | group seat: silent failures | opus · high | Agent start | 09:06 | 09:12 | 4 Important (a moved rule nobody reads; project-context eval queries cannot fail; AGENTS/CLAUDE.md say the gate does what it does not; a stale Codex link off PATH), 4 Minor |
 | 58 | group seat: tests | opus · high | Agent start | 09:06 | 09:11 | 3 Important (#170 index keying untested; #149 ps1 link never run; the uninstall only read), 6 Minor |
@@ -177,8 +181,8 @@ Important fix; at xhigh it checked the brief against the tree and reported the d
 | group | issues | plan | built | group seats: Important+ | fix rounds | red CI | merged |
 |---|---|---|---|---|---|---|---|
 | Captures | #153–#156 | PLAN-W-10 T1–T4 | `5f4a22c` `bf54719` · `bebab42` `b2eb99f` `74bbdfb` `d23d73e` `306bd4c` · `3a6eeb3` `a4dc01f` · group fix `1efad5c` `291dea7` `43a3d6a` `a6ed7cc` `df65abc` | task reviews 5 Important; seats 7 Important (3 behaviour) | 3 per task + 1 group | | 2026-10-14 ~10:35 |
-| Windows | #158 | | | | | | 2026-10-14 ~10:35 |
-| Installers | #157, #160–#164, #171, #172 | | | | | | 2026-10-14 ~10:35 |
-| Agent start | #149, #150, #170 | | | | | | 2026-10-14 ~10:35 |
-| Silent failures 3 | #159, #165–#167 | | | | | | 2026-10-14 ~10:35 |
+| Windows | #158 | with Silent failures 3 | one implementer and one seat pair with SF3 — see that row | | | | 2026-10-14 ~10:35 |
+| Installers | #157, #160–#164, #171, #172 | PLAN-W-10 T5–T9 | see Agent runs | task reviews 5 Important · seats 8 (silent-failure 3, tests 5) · CI found `Invoke-Upstream` counting output as success, which no review saw | 4 | 38537781090 (the #161 probe), 38543860362 (the RunAs probe), 38547555900 (the MSYS stand-in) | 2026-10-14 ~10:35 |
+| Agent start | #149, #150, #170 | PLAN-W-10 T17a, T17b, #170 | see Agent runs | task reviews 2 Important (T17a) · seats 7 (silent-failure 4, tests 3) | 3 | 38542204702 (T17b's ps1 Codex-link cases, 8.3 short paths) | 2026-10-14 ~10:35 |
+| Silent failures 3 | #159, #165–#167 (+ #158) | PLAN-W-10 T12–T16 | see Agent runs | task reviews 1 Critical (T14's selftest red where its implementer reported green) + 3 Important · seats 4 (silent-failure 1 — a regression the T15 fix made, tests 3) | 3 | 38545884702 (green, but the Windows selftests step failed 6 of 67; fixed in `4796d49`) | 2026-10-14 ~10:35 |
 | Method text | #168, #173 | — (docs) | `4e03328` `0efbbe8` `8895f6a` · `f4ad845` `3046d55` | 5 Important (docs review) | 1 | | 2026-10-14 ~10:35 |
