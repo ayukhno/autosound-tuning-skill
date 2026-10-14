@@ -116,8 +116,14 @@ _UNVERSIONED_RE = re.compile(
 # title that parsed before parses to the same parts. The level folds into `params` ahead of any tail.
 _LEVEL_RE = re.compile(
     r"^(?P<body>.+)_(?P<version>\d+|final)(?P<control>ctl|rep)?"
-    r"\s+(?P<level>[+-]?\d+(?:[.,]\d+)?\s*dB)\s*\((?P<method>[A-Za-z]+)\)(?:\s+(?P<tail>\S.*?))?\s*$"
+    r"\s+(?P<level>[+-]?\d+(?:[.,]\d+)?\s*(?i:dB))\s*\((?P<method>[A-Za-z]+)\)(?:\s+(?P<tail>\S.*?))?\s*$"
 )
+
+
+def _level_text(level):
+    """A level as it is written: the unit `dB` in any case typed (`86db`), the spacing collapsed (`86  dB` -> `86 dB`)."""
+    m = re.match(r"(?P<n>[+-]?\d+(?:[.,]\d+)?)(?P<gap>\s*)", level)
+    return f"{m.group('n')}{' ' if m.group('gap') else ''}dB"
 
 
 def _match_title(text):
@@ -154,7 +160,8 @@ _SIDE_UNDERSCORE_RE = re.compile(r"(?<![A-Za-z0-9])([a-z][a-z0-9]*)_([LR])(?![A-
 # refused, naming the form the grammar reads -- the letter after the method, a clarification: `w-L_7 (sw) D`.
 _CONFIG_PREFIX_RE = re.compile(r"^(?P<letter>[A-Z])_(?=\S)")
 _LETTER_SERIES_RE = re.compile(
-    r"^(?P<body>.+)_(?P<letter>[A-Z])(?P<version>\d+)(?P<control>ctl|rep)?(?:\s+(?P<level>[+-]?\d+(?:[.,]\d+)?\s*dB))?"
+    r"^(?P<body>.+)_(?!(?:p[1-9]|x0)\b)(?P<letter>[A-Za-z])(?P<version>\d+)(?P<control>ctl|rep)?"
+    r"(?:\s+(?P<pos>p[1-9]|x0))?(?:\s+(?P<level>[+-]?\d+(?:[.,]\d+)?\s*(?i:dB)))?"
     r"(?:\s*\((?P<method>[A-Za-z]+)\)(?:\s+(?P<tail>\S.*?))?)?\s*$"
 )
 
@@ -162,7 +169,13 @@ _LETTER_SERIES_RE = re.compile(
 def _letter_after(body, version, control, method, tail, letter):
     """The title with its configuration letter after the method, as a clarification (#156): `w-L_7 (sw) D x0`. With no
     method typed, the slot is named, not guessed."""
-    name = f"{canonical_code(body.strip())}_{version}{control or ''} ({method or '<method>'}) {letter}"
+    body = body.strip()
+    prefix = _CONFIG_PREFIX_RE.match(body)
+    if prefix:
+        # `D_L_E7`: the old prefix's letter goes after the method too, so the form named is final (`L_7 (sw) D E`).
+        body = body[prefix.end():]
+        letter = prefix.group("letter") if prefix.group("letter") == letter else f"{prefix.group('letter')} {letter}"
+    name = f"{canonical_code(body)}_{version}{control or ''} ({method or '<method>'}) {letter}"
     return f"{name} {tail}" if tail else name
 
 
@@ -194,7 +207,7 @@ def canonical_title(title):
     if match and match.re is _LEVEL_RE:
         tail = f" {match.group('tail')}" if match.group("tail") else ""
         return (canonical_code(text[:end]) + text[end:match.start("level")].rstrip()
-                + f" ({match.group('method')}) {match.group('level')}{tail}")
+                + f" ({match.group('method')}) {_level_text(match.group('level'))}{tail}")
     return canonical_code(text[:end]) + text[end:]
 
 
@@ -530,9 +543,11 @@ def explain_name(title, glossary=None):
     if not match or (match.groupdict().get("version") is None and match.group("method").lower() != METHOD_IMPEDANCE):
         lettered = _LETTER_SERIES_RE.match(text)
         if lettered:
-            body_, version_, control_, method_, level_, tail_, letter_ = lettered.group(
-                "body", "version", "control", "method", "level", "tail", "letter")
-            after = _letter_after(body_, version_, control_, method_, " ".join(filter(None, (level_, tail_))), letter_)
+            body_, version_, control_, method_, pos_, level_, tail_, letter_ = lettered.group(
+                "body", "version", "control", "method", "pos", "level", "tail", "letter")
+            level_ = _level_text(level_) if level_ else None
+            after = _letter_after(body_, version_, control_, method_,
+                                  " ".join(filter(None, (level_, tail_, pos_))), letter_)
             return None, (f"`_{lettered.group('letter')}{lettered.group('version')}`: a letter in front of the series "
                           f"number is not read, `_N` is the series number only -- the letter goes after the method, "
                           f"as a clarification: `{after}` (naming-and-structure.md §3)")
@@ -551,7 +566,7 @@ def explain_name(title, glossary=None):
     body = parts["body"].strip()
     position = parts.get("pos2")
     tail = parts.get("tail")
-    level = parts.get("level")
+    level = _level_text(parts["level"]) if parts.get("level") else None
     if level:
         # #155: a level before the method is the clarification it is after it, first in line -- so the key is the
         # after-form's.
@@ -591,8 +606,11 @@ def explain_name(title, glossary=None):
             if version is None:
                 where = f"an impedance sweep is not tied to a configuration: `{rest}`"
             else:
+                # The body as typed keeps a position or `-ctl1` typed there; the rest goes after the letter: the
+                # local tail (a level merged in, #155) and a position typed after `_N` (review of 74bbdfb).
+                extra = " ".join(filter(None, (tail, None if pm else position)))
                 after = _letter_after(rest[:match.end("body") - prefix.end()], version, parts.get("control"),
-                                      parts.get("method"), parts.get("tail") or parts.get("pos2"), letter)
+                                      parts.get("method"), extra, letter)
                 where = f"the letter goes after the method, as a clarification: `{after}`"
             return None, (f"`{letter}_` is an old configuration prefix, not part of a code -- {where} "
                           f"(naming-and-structure.md §3)")
@@ -609,7 +627,7 @@ def explain_name(title, glossary=None):
     if level:
         # #155 (the Arbiter's ruling, 2026-10-06: read both, write after): read, and the note offers the written form. The
         # reason slot stays None, as for S-079.
-        note = ((note + "; ") if note else "") + (f"the level `{' '.join(level.split())}` read as a clarification "
+        note = ((note + "; ") if note else "") + (f"the level `{level}` read as a clarification "
                                                   f"after the method")
     if note:
         note += f" -- this title in the one notation is `{canonical_title(text)}` (naming-and-structure.md §3)"
@@ -963,6 +981,11 @@ def _check_level_before_method():
     assert got is None and why, why
     # An impedance sweep with no `_N` reads as it did.
     assert parse_name("w-L (imp) 86dB")["params"] == "86dB"
+    # The unit read in any case, written `dB`, its spacing collapsed (review of bebab42).
+    for before, after in (("sw_3 86db (sw)", "sw_3 (sw) 86dB"), ("sw_3 86  DB (sw) x0", "sw_3 (sw) 86 dB x0")):
+        got, why = explain_name(before)
+        assert why is None and canonical_title(before) == after, (before, why, canonical_title(before))
+        assert name_key(got) == name_key(parse_name(after)) and f"`{after}`" in got["note"], (before, got)
 
 
 def _check_letter_before_series():
@@ -975,7 +998,11 @@ def _check_letter_before_series():
                                  ("w-L_S12 (sw) x0", "w-L_12 (sw) S x0", "S"),
                                  ("w_L_D7 (sw)", "w-L_7 (sw) D", "D"),
                                  ("w-L_D7 86dB (sw)", "w-L_7 (sw) D 86dB", "D 86dB"),
-                                 ("D_L_7 (rta)", "L_7 (rta) D", "D")):
+                                 ("D_L_7 (rta)", "L_7 (rta) D", "D"),
+                                 ("D_L_D7 (sw)", "L_7 (sw) D", "D"),         # the suggestion is final
+                                 ("D_L_E7 (sw)", "L_7 (sw) D E", "D E"),
+                                 ("w-L_D7 x0 (sw)", "w-L_7 (sw) D x0", "D"),  # a position before the method
+                                 ("w-L_d7 (sw)", "w-L_7 (sw) d", "d")):       # a lowercase letter
         got, why = explain_name(title)
         assert got is None and why and f"`{after}`" in why, (title, why)
         parsed = parse_name(after)
@@ -1531,10 +1558,16 @@ def _selftest():
     # #156 (hub #259): the refusal names a form the grammar READS -- the letter after the method, a clarification.
     for title, new in (("D_L_7 (rta) m-L: lev=-4.5, PK=-2", "`L_7 (rta) D m-L: lev=-4.5, PK=-2`"),
                        ("D_L w+m_7 (rta) inv", "`L w+m_7 (rta) D inv`"), ("D_SW+Ws_9 (rta)", "`SW+Ws_9 (rta) D`"),
-                       ("D_w-L (imp) case35l", "`w-L (imp) case35l`"), ("D_w_L_7 (sw)", "`w-L_7 (sw) D`")):
+                       ("D_w-L (imp) case35l", "`w-L (imp) case35l`"), ("D_w_L_7 (sw)", "`w-L_7 (sw) D`"),
+                       ("D_L_7 86dB (sw)", "`L_7 (sw) D 86dB`"), ("D_L_7 86dB (sw) x0", "`L_7 (sw) D 86dB x0`")):
         got, why = explain_name(title)
         assert got is None and "`D_` is an old configuration prefix" in why and new in why, (title, why)
         assert parse_name(new.strip("`")) is not None, (title, new)
+    # The level and the position survive the suggestion: it is the capture meant, by key (review of 74bbdfb).
+    for title, meant in (("D_L_7 86dB (sw)", "L_7 (sw) D 86dB"), ("D_L_7 86dB (sw) x0", "L_7 (sw) D 86dB x0"),
+                         ("D_L_7 (rta) x0", "L_7 (rta) D x0")):
+        named = re.search(r"clarification: `([^`]+)`", explain_name(title)[1]).group(1)
+        assert name_key(parse_name(named)) == name_key(parse_name(meant)), (title, named, meant)
     got, why = explain_name("sw_f_1 (sw)")
     assert got is None and "`sw_f`: a code has no `_`" in why, why
     assert parse_name("D_L_7 (rta)", Glossary({"channels": [{"code": "w-L"}], "sides": {"L": ["w-L"]}})) is None
