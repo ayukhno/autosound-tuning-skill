@@ -24,6 +24,13 @@ red CI runs, per group. Times are UTC.
 | 3 | code map | sonnet · medium | Silent failures 3 + Windows text | 07:25 | 07:30 | 185 s, 57 tool calls, 127k tokens |
 | 4 | code map | sonnet · medium | Agent start | 07:25 | 07:26 | 76 s, 28 tool calls, 67k tokens |
 | 5 | code map | sonnet · medium | Method text | 07:25 | 07:27 | 84 s, 26 tool calls, 63k tokens |
+| 6 | implementer T1 #153 | opus · high | Captures | 07:57 | | |
+| 7 | implementer T2+T3 #155 #156 | opus · high | Captures | 07:57 | | |
+| 8 | implementer T4 #154 | opus · high | Captures | 07:57 | | |
+| 9 | implementer T5–T7, T9 (#157 #172 #164 #171 #160 #161 #162) | opus · high | Installers | 07:57 | | |
+| 10 | researcher T21 #173 | opus · medium | Method text | 07:57 | | |
+| 11 | implementer T18 #150 | opus · medium | Agent start | 08:01 | | |
+| 12 | implementer T20 #170 | opus · medium | Agent start | 08:01 | | |
 
 ## Per group
 
