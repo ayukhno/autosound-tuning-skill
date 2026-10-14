@@ -1629,7 +1629,7 @@ four assessment lines, and nothing is built before his `ok` on that task. Resume
 
 ## S-104 · W-10 · v3.1.4 — everything outside the audit and what earlier waves left
 
-**Status**: open 2026-10-14 · milestone `W-10 · v3.1.4` (milestone 9) opened on the Arbiter's «збір закінчили» with 23 issues, each with the four assessment lines and its group; `ok` on 22 (his «бери все», the same message) — #169 «learn to listen» left the milestone, a deferred task not taken (his «відкладені задачі ми не беремо»), and no phone plan page is built (Claude's own apps are enough; #168 offers that way of working); built without the superpowers engine — the second arm of hub H-022, so the PR carries `Engine: none`; next: the plan `docs/PLAN-W-10.md` on branch `wave-2026-10-14`, its cost, then his «го»
+**Status**: open 2026-10-14 · milestone `W-10 · v3.1.4` (milestone 9) opened on the Arbiter's «збір закінчили» with 23 issues, each with the four assessment lines and its group; `ok` on 22 (his «бери все», the same message) — #169 «learn to listen» left the milestone, a deferred task not taken (his «відкладені задачі ми не беремо»), and no phone plan page is built (Claude's own apps are enough; #168 offers that way of working); five items deferred earlier until the audit's waves were done stay on it on his word (#154, #155, #156, #163, #168: «лишити всі пʼять»); built without the superpowers engine — the second arm of hub H-022, so the PR carries `Engine: none`; next: the plan `docs/PLAN-W-10.md` on branch `wave-2026-10-14`, its cost, then his «го»
 
 The ranking and the assessment: `docs/W-10-CANDIDATES.md`. The groups (`hub:seam`, one review per group):
 - **Captures** (all `Risk: high`): #153 hub #269, #154 hub #247, #155 hub #261, #156 hub #259;
