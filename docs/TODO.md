@@ -1629,7 +1629,7 @@ four assessment lines, and nothing is built before his `ok` on that task. Resume
 
 ## S-104 · W-10 · v3.1.4 — everything outside the audit and what earlier waves left
 
-**Status**: open 2026-10-14 · milestone `W-10 · v3.1.4` (milestone 9) opened on the Arbiter's «збір закінчили» with 23 issues, each with the four assessment lines and its group; `ok` on all (his «бери все», the same message); built without the superpowers engine — the second arm of hub H-022, so the PR carries `Engine: none`; next: the plan `docs/PLAN-W-10.md` on branch `wave-2026-10-14`, its cost, then his «го»
+**Status**: open 2026-10-14 · milestone `W-10 · v3.1.4` (milestone 9) opened on the Arbiter's «збір закінчили» with 23 issues, each with the four assessment lines and its group; `ok` on 22 (his «бери все», the same message) — #169 «learn to listen» left the milestone, a deferred task not taken (his «відкладені задачі ми не беремо»), and no phone plan page is built (Claude's own apps are enough; #168 offers that way of working); built without the superpowers engine — the second arm of hub H-022, so the PR carries `Engine: none`; next: the plan `docs/PLAN-W-10.md` on branch `wave-2026-10-14`, its cost, then his «го»
 
 The ranking and the assessment: `docs/W-10-CANDIDATES.md`. The groups (`hub:seam`, one review per group):
 - **Captures** (all `Risk: high`): #153 hub #269, #154 hub #247, #155 hub #261, #156 hub #259;
@@ -1637,7 +1637,7 @@ The ranking and the assessment: `docs/W-10-CANDIDATES.md`. The groups (`hub:seam
 - **Installers** (all `Risk: high` but #163): #157, #160, #161, #162, #163 (S-099), #164, #171, #172;
 - **Agent start**: #149, #150, #170;
 - **Silent failures 3**: #159, #165, #166, #167;
-- **Method text**: #168 hub #258, #169 hub #113, #173 (S-101's boost path, research first).
+- **Method text**: #168 hub #258, #173 (S-101's boost path, research first). Off the wave: #169 hub #113, deferred.
 
 Not on the milestone: S-017, S-021, S-055, S-059 wait for a run, S-001 for the first `frozen` run, #26 is a 3.2.x
 candidate; the audit's closed items come back only as findings from use (`docs/AUDIT-2026-10-CLOSE.md`).
@@ -1755,7 +1755,7 @@ Recorded, not diagnosed.
 
 ## S-098 · After v3.1.1: what waits for the Arbiter's word
 
-**Status**: waiting 2026-10-14 · item 2 is on W-10's milestone as #169 (S-104) · was: waiting 2026-10-03 · item 1 done: hub #245 closed — `78e457d` (PR #132), `tag-check.sh --at`; item 3 dropped — TCC's pin is TCC's own call, it reads the tags itself (the Arbiter: «а яким боком ти до переводу ТСС на тег скіла?»); item 2 waits · was: waiting 2026-10-03 · the Arbiter: «я сам скажу» — none of it is started · resume: `hub/bin/role skill --resume 205e26fb-aa4b-4093-abf7-2fec0b06a86b`
+**Status**: waiting 2026-10-14 · item 2 stays deferred (the Arbiter: «відкладені задачі ми не беремо»; #169 off W-10) · was: waiting 2026-10-03 · item 1 done: hub #245 closed — `78e457d` (PR #132), `tag-check.sh --at`; item 3 dropped — TCC's pin is TCC's own call, it reads the tags itself (the Arbiter: «а яким боком ти до переводу ТСС на тег скіла?»); item 2 waits · was: waiting 2026-10-03 · the Arbiter: «я сам скажу» — none of it is started · resume: `hub/bin/role skill --resume 205e26fb-aa4b-4093-abf7-2fec0b06a86b`
 
 v3.1.0 and v3.1.1 are out and closed (catalog and `Latest` on `v3.1.1`, hub #238 #239 #244 closed). Three things are
 open, each for the Arbiter to start:

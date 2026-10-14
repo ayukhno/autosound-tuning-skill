@@ -1,7 +1,7 @@
 # PLAN W-10 · v3.1.4 — everything outside the audit, without the engine
 
 **Status:** written 2026-10-14 on branch `wave-2026-10-14` from five code maps (sonnet · medium, 07:25–07:30 UTC);
-waits for the Arbiter's «го». `ok` on all 23 issues (his «бери все», 2026-10-14). Built without `superpowers`
+waits for the Arbiter's «го». `ok` on 22 issues (his «бери все», 2026-10-14); #169 «learn to listen» is off the wave, deferred with hub #113 (his «відкладені задачі ми не беремо», the same day). Built without `superpowers`
 (hub H-022, the second arm): the PR carries `Engine: none`; the ledger is `docs/W-10-LEDGER.md`.
 
 Paths: `SK` = `skills/autosound-tuning`, `RT` = `SK/rew_tool`, `N` = `RT/naming.py`, `P` = `RT/state/process.py`,
@@ -34,9 +34,8 @@ Three lanes run at once, on files that do not overlap:
 |---|---|---|
 | **A** — `N`, `P`, `V`, `RT/contract.py` | Captures (T1–T4) | Silent failures 3 (T13–T16), then Windows' text half (T12) |
 | **B** — `install.sh`, `install.ps1`, `install.cmd`, `scripts/installer-consistency.py`, `checks.yml` | Installers (T5–T9) | Windows CI (T12's CI half), then #149's installer link (T17b) |
-| **C** — `SK/references/`, `docs/`, `SK/SKILL.md`, `SK/evals/` | Method text #173, #169 (T21, T19) | Agent start #150, #170, #149 seed (T18, T20, T17a), then #168 (T22) |
+| **C** — `SK/references/`, `docs/`, `SK/SKILL.md`, `SK/evals/` | Method text #173 (T21) | Agent start #150, #170, #149 seed (T18, T20, T17a), then #168 (T22) |
 
-The phone plan page (T23) comes last and starts with its own design step (below).
 
 ## Group Captures — `Risk: high`, lane A
 
@@ -229,17 +228,6 @@ in a proposal with advice: which dip classes could ever be boosted (minimum phas
 PASS, stable across the ellipsoid), a cap, a headroom check, or none. No code: the change, if any, is a later task on
 the Arbiter's ruling.
 
-**T19 · #169 — «learn to listen».** feature (text), M + S; uk/de/pl through the Advisor.
-T19a: a `learn` route — per characteristic c01…c17, one track that is on streaming, chosen from `test-tracks.md`'s
-link rows (`c08` Ch.09, `c09` Ch.05, `c11` Ch.17, `c06`/`c14` Ch.27, `c15`/`c16` Ch.23 …; the link rows are the
-method's data, so where the Arbiter's examples name another number the row wins and the text says which), its "sounds
-right / sounds wrong" from the dictionary, and an A/B exercise on one's own system (a band bypassed, a channel
-muted). It lives in the cheat sheet's routes table as route `learn` (so `listening.py` reads it) plus the exercise
-column; `listening.py check`/`coverage` stay green. T19b: `competition.md`'s AYA index marks 08, 13, 23–27 «adapted
-to the stage» and the rest «basic recording», the basic ones with their streaming identity where it is known (an
-unknown one is said as unknown, not guessed). Translations of the cheat sheet and `test-tracks.md` by the Advisor; the
-session checks their structure.
-
 **T22 · #168 — working from the phone.** docs, M. A section "Working from the phone, and when the link drops" in
 `references/core/process-control.md` after "The phase boundary" (`:128`); one pointer in SKILL.md beside Pre-Session
 item 4 (from T18's headroom) and one in `capture-session-sheet.md` before BLOCK 0. Content, from Anthropic's Remote
@@ -247,14 +235,10 @@ Control page (re-fetched, cited): start interactive (`claude --remote-control` /
 network drop for as long as it lasts — server mode gives up after ~10 min; the laptop awake, on power, sleep off, REW
 open, the `.mdat` saved; capture rounds short, `capture-check` before leaving the car; `session-close --check` at
 each block boundary; recovery by `--continue`/`--resume` within ~4 h, else a fresh session reads `process show` and
-the CONTINUE block; listening verdicts typed or spoken to the session. Translations only where a translated file
-changes (the SKILL.md pointer).
-
-**T23 · #169's phone plan page — a new tool, split off.** feature, L. A new issue on the milestone, opened by the
-session. It needs design first: `feature-dev:code-explorer` on `RT/intake_form.py` (the one HTML-page generator) and
-`process.py`'s plan, then 2–3 `feature-dev:code-architect` with different focuses — above all how a verdict gets back
-to the laptop (a file, localhost, or through the Remote Control session of T22). The approaches go to the Arbiter with
-advice; the build follows his choice, `Risk: high` if it writes verdicts into the project's state.
+the CONTINUE block; listening verdicts typed or spoken to the session. The session OFFERS this way of working — the
+plan and the questions followed on the phone through Claude's own apps — and builds nothing for it: no phone page (the
+Arbiter, 2026-10-14: «того що вміє Клауд за замовчанням достатньо. все що треба — запропонувати користувачу таку
+можливість»). Translations only where a translated file changes (the SKILL.md pointer).
 
 Group seats on the Method text diff: one review (docs).
 
@@ -266,14 +250,13 @@ Group seats on the Method text diff: one review (docs).
 3. One PR with `Engine: none` in its body → its full CI on every system → `git merge --ff-only` → the candidate
    `beta-v3.1.4-rc1` on that commit.
 4. A ticket to TCC (hub #278 ask 2): N2 as TCC's re-pin PR run on all three systems, not a local run; and the receipts
-   on hub #247, #259, #261, #269, #274, #258, #113, #278 name the tag.
+   on hub #247, #259, #261, #269, #274, #258, #278 name the tag.
 5. The Arbiter's VM run on the candidate: a double click on `install.cmd`, `/setup` from a pwsh 7 window, `codex`
    listing the skill. Then his release word; `Latest` set by the skill.
 
 ## Cost
 
-24 tasks (T23 split off) in six groups. Agent runs, roughly: Captures ~17, Installers ~14, Silent failures 3 ~13,
-Agent start ~8, Method text ~6 plus T23's design ~4 and its build ~4, Windows ~3 plus a few CI rounds, the final
-review 2 — about 70, against W-9's ~30 for seven tasks under the old weight. Machine time ~25–30 h; with three lanes,
-~12–16 h of wall clock, two days with the stops. T20's three eval runs and T19's translations add model calls outside
-this count. T23 alone is ~5–6 h of it.
+19 tasks for 22 issues in six groups. Agent runs, roughly: Captures ~17, Installers ~14, Silent failures 3 ~13, Agent
+start ~8, Method text ~3, Windows ~3 plus a few CI rounds, the final review 2 — about 60, against W-9's ~30 for seven
+tasks under the old weight. Machine time ~20–24 h; with three lanes, ~10–13 h of wall clock, two days with the stops.
+T20's three eval runs add model calls outside this count.

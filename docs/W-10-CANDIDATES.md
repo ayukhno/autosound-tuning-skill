@@ -1,7 +1,7 @@
 # W-10 candidates — outside the audit, and what earlier waves left
 
 **Status:** a ranking for the Arbiter's review, 2026-10-14, on his word «вибери всі задачі 1) які поза аудитом, 2) які
-залишились з попередніх хвиль. прорангуй і оціни». The milestone `W-10 · v3.1.4` opened on his «збір закінчили» the same day, with `ok` on all (S-104).
+залишились з попередніх хвиль. прорангуй і оціни». The milestone `W-10 · v3.1.4` opened on his «збір закінчили» the same day, with `ok` on all but #169, which stays deferred (S-104).
 Every item was checked unfixed at `dcb77da`.
 
 Sources: the bus queue `to:skill` (hub #247 #258 #259 #261 #269 #274 #278, deferred #113), this repo's issues (#149
@@ -34,7 +34,7 @@ weight (`hub:seam`). Complexity: XS < 1 h · S ~1–2 h · M ~half a day · L a 
 | 16 | #166 | Under TCC the clipboard route can record one review round twice | S-103 | defect | high (seam) | S | opus | Silent failures 3 |
 | 17 | #167 | On Windows `subprocess.run(timeout=…)` waits without bound when `gh`'s grandchild holds the pipe | S-103 | defect | ordinary | M | opus | Silent failures 3 |
 | 18 | #168 | Remote Control: start on the computer, tune from the phone — how the method plans for its time limits | hub #258 HUB-084 | feature (text) | ordinary | M | opus | Method text |
-| 19 | #169 | «Learn to listen»: a `learn` route on streaming tracks, AYA tracks marked adapted/basic, the phone plan page as a mechanism | hub #113 PAS-005 | feature | ordinary | L | opus + the Advisor | Method text |
+| 19 | #169 | «Learn to listen»: a `learn` route on streaming tracks, AYA tracks marked adapted/basic, the phone plan page as a mechanism | hub #113 PAS-005 | feature | ordinary | L | opus + the Advisor | — off the wave: deferred (the Arbiter, 2026-10-14) |
 | 20 | #170 | The trigger eval cannot measure the TCC bug-report queries (0/3) nor resume inside a project | S-103 | infra | ordinary | M | opus | Agent start |
 | 21 | #171 | Stable picks keep `beta-…` out by glob alone; a `^v` filter makes it explicit | S-103 | infra | high (installer) | XS | opus | Installers |
 | 22 | #172 | `json_str` (install.sh) passes invalid UTF-8 through when there is no python3 | S-103 | defect | high (installer) | S | opus | Installers |
@@ -42,7 +42,7 @@ weight (`hub:seam`). Complexity: XS < 1 h · S ~1–2 h · M ~half a day · L a 
 
 **Groups** (one theme, one review per group, `hub:seam`): **Captures** 1–4 — all `Risk: high`, the full loop; **Windows**
 6; **Installers** 5, 10–14, 21, 22 — all `Risk: high`; **Agent start** 7, 8, 20; **Silent failures 3** 9, 15–17;
-**Method text** 18, 19.
+**Method text** 18, 23. Item 19 is off the wave: a deferred task, not taken (the Arbiter, 2026-10-14).
 
 **Advice for the cut:** Captures + Windows + item 5 + Agent start's 7 and 8 — what the car and TCC hit now, about
 8–10 h of machine time; Installers and Silent failures 3 next wave, unless the Arbiter wants them now; 18–23 after.
