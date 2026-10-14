@@ -456,3 +456,27 @@ jobs:
               print("\n".join(failures))
               sys.exit(1)
           print(f"the key guard on Windows: {len(checks)} checks OK")
+
+      # #158 (hub #278 ask 1): every rew_tool module's selftest on Windows -- the manifest part of scripts/run-selftests.sh
+      # (SELFTEST_ONLY_TOOL=1), with the ubuntu `selftests` job's libraries. Under Git for Windows' bash, found BY PATH
+      # beside git: a plain `bash` here may be WSL's launcher (the comment over this job). PYTHON is setup-python's, in
+      # forward slashes for that bash. A module that cannot run on Windows by its nature gets a `skip-win <path>
+      # <reason>` line in scripts/selftests.txt, printed as a skip. continue-on-error for its first runs: their failures
+      # are read and the ones that are ours fixed, then the step is made required.
+      - name: install the rew_tool selftests' libraries (Windows)
+        run: python -m pip install --upgrade pip numpy scipy matplotlib ruff==0.12.0
+      - name: rew_tool selftests on Windows, under Git for Windows' bash (#158)
+        id: rew-tool-selftests-windows
+        continue-on-error: true
+        shell: pwsh
+        env:
+          SELFTEST_ONLY_TOOL: "1"
+        run: |
+          $git = (Get-Command git -ErrorAction Stop).Source
+          $root = Split-Path (Split-Path $git -Parent) -Parent
+          $bash = @((Join-Path $root "bin\bash.exe"), (Join-Path $root "usr\bin\bash.exe")) | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $bash) { Write-Host "::error::no Git for Windows bash beside $git"; exit 1 }
+          $env:PYTHON = ((Get-Command python -ErrorAction Stop).Source) -replace '\\', '/'
+          Write-Host "bash: $bash; PYTHON: $env:PYTHON"
+          & $bash scripts/run-selftests.sh
+          exit $LASTEXITCODE

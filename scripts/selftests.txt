@@ -1,5 +1,7 @@
 # Every rew_tool module's selftest: <path> <argv...>. A module on disk that is neither listed here nor on
 # a 'skip' line FAILS the run (#133): a new module is listed, never discovered silently.
+# 'skip-win <path> <reason>' (#158): a module listed here with its argv whose selftest cannot run on Windows by its
+# nature -- left out there (Git for Windows' bash), printed as a skip; it runs everywhere else.
 skills/autosound-tuning/rew_tool/analysis.py --selftest
 skills/autosound-tuning/rew_tool/atf_eq.py --selftest
 skills/autosound-tuning/rew_tool/bind.py --selftest

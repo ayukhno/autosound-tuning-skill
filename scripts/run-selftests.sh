@@ -27,6 +27,12 @@ TOOL="${SELFTEST_TOOL:-skills/autosound-tuning/rew_tool}"
 MANIFEST="${SELFTEST_MANIFEST:-scripts/selftests.txt}"
 PY="${PYTHON:-python3}"
 LIMIT="${SELFTEST_TIMEOUT:-300}"
+# Windows -- Git for Windows' bash (MINGW/MSYS) or Cygwin -- reads the manifest's `skip-win` lines (#158); elsewhere they
+# skip nothing. SELFTEST_WINDOWS=1/0 says it for the runner's own selftest.
+ON_WINDOWS="${SELFTEST_WINDOWS:-}"
+if [ -z "$ON_WINDOWS" ]; then
+  case "$(uname -s 2>/dev/null)" in MINGW*|MSYS*|CYGWIN*) ON_WINDOWS=1 ;; *) ON_WINDOWS=0 ;; esac
+fi
 export REW_API_URL="http://127.0.0.1:1"   # refused at once on every platform (TCC's conftest does the same)
 export no_proxy="127.0.0.1,localhost${no_proxy:+,$no_proxy}" NO_PROXY="127.0.0.1,localhost${NO_PROXY:+,$NO_PROXY}"
 unset PYTHONOPTIMIZE   # -O strips every assert, and a selftest whose asserts are gone passes: never inherited
@@ -199,13 +205,35 @@ if [ "${1:-}" = "--selftest" ]; then
   [ "$rc" -eq 0 ] || { printf 'runner selftest: locally a NOT RUN is counted, not failed (rc %s)\n%s\n' "$rc" "$out"; exit 1; }
   want '^  --   plot\.py +skipped: a plotting helper$'
   last_is "all 1 checks passed; NOT RUN: skipped.py"
+  # #158: a skip-win line leaves its module out on Windows only, printed as a skip line is; elsewhere the module runs.
+  # One without a reason, for a file not on disk, or for a module not listed with its argv fails on every system.
+  mkdir -p "$tmp/t3" "$tmp/t4"
+  cp "$tmp/t/good.py" "$tmp/t3/"; cp "$tmp/t/good.py" "$tmp/t4/"; cp "$tmp/t2/plot.py" "$tmp/t4/lone.py"
+  printf '%s\n' "$tmp/t3/good.py" "skip-win $tmp/t3/good.py a POSIX-only check" > "$tmp/m3.txt"
+  out="$(SELFTEST_ONLY_TOOL=1 SELFTEST_TOOL="$tmp/t3" SELFTEST_MANIFEST="$tmp/m3.txt" SELFTEST_WINDOWS=1 CI=true \
+         bash "$SELF" 2>&1)"; rc=$?
+  [ "$rc" -eq 0 ] || { printf 'runner selftest: a valid skip-win line on Windows fails nothing (rc %s)\n%s\n' "$rc" "$out"; exit 1; }
+  want '^  --   good\.py +skipped on Windows: a POSIX-only check$'
+  last_is "all 0 checks passed"
+  out="$(SELFTEST_ONLY_TOOL=1 SELFTEST_TOOL="$tmp/t3" SELFTEST_MANIFEST="$tmp/m3.txt" SELFTEST_WINDOWS=0 CI=true \
+         bash "$SELF" 2>&1)"; rc=$?
+  [ "$rc" -eq 0 ] || { printf 'runner selftest: off Windows a skip-win module runs (rc %s)\n%s\n' "$rc" "$out"; exit 1; }
+  last_is "all 1 checks passed"
+  printf '%s\n' "$tmp/t4/good.py" "skip $tmp/t4/lone.py a helper" "skip-win $tmp/t4/good.py" \
+                "skip-win $tmp/t4/gone.py a reason" "skip-win $tmp/t4/lone.py a reason" > "$tmp/m4.txt"
+  out="$(SELFTEST_ONLY_TOOL=1 SELFTEST_TOOL="$tmp/t4" SELFTEST_MANIFEST="$tmp/m4.txt" SELFTEST_WINDOWS=0 CI=true \
+         bash "$SELF" 2>&1)"; rc=$?
+  want '^  FAIL good\.py .*skip-win line without a reason'
+  want '^  FAIL gone\.py .*skip-win line names a file not on disk'
+  want '^  FAIL lone\.py .*skip-win line for a module not listed with its argv'
+  last_is "FAILED: 3 of 4 -- good.py gone.py lone.py"
   # The linter with no ruff and no uvx anywhere -- an empty PATH -- is NOT RUN, counted as such, never a pass. In a
   # subshell: this run's counters and PATH are not touched.
   out="$(pass=0 fail=0 notrun=0; failed=(); skipped=(); PATH=""; lint_with_ruff
          echo "pass=$pass fail=$fail notrun=$notrun skipped=${skipped[*]:-}")"
   want '^  --   ruff +NOT RUN: no uvx and no ruff here$'
   last_is "pass=0 fail=0 notrun=1 skipped=ruff"
-  ok_line="runner selftest OK -- every failure is named and counted in the verdict: a usage text, rc 1 under an OK line, an OK line not last, rc 3, a module that prints it skipped, a timeout, a missing or unlisted module (one in a subfolder too), a bad skip line or one hiding a selftest; no ruff anywhere is NOT RUN; a child left behind, or deaf to TERM, is stopped; checks see REW at the dead port, with asserts on, each in an empty TMPDIR of its own that one leaving anything there fails, the count named (a TMPDIR locked by its check counted too, one it removed said), and that the runner removes"
+  ok_line="runner selftest OK -- every failure is named and counted in the verdict: a usage text, rc 1 under an OK line, an OK line not last, rc 3, a module that prints it skipped, a timeout, a missing or unlisted module (one in a subfolder too), a bad skip line or one hiding a selftest, a skip-win line left out on Windows only and a bad one failed; no ruff anywhere is NOT RUN; a child left behind, or deaf to TERM, is stopped; checks see REW at the dead port, with asserts on, each in an empty TMPDIR of its own that one leaving anything there fails, the count named (a TMPDIR locked by its check counted too, one it removed said), and that the runner removes"
   # In a full run this line is the runner's own last line, read by the same rules as every check's: it must read as a
   # pass. One that named the NOT RUN word counted the runner itself as NOT RUN -- and failed CI -- while all passed.
   if says_not_run "$ok_line" || ! says_ok "$ok_line"; then
@@ -385,8 +413,36 @@ fi
 echo
 echo "rew_tool selftests ($PY)"
 listed=()
+# skip-win <path> <reason> (#158): a module listed on its own line too, whose selftest cannot run on Windows by its
+# nature -- left out there, and printed as a skip line is; it runs everywhere else. The path must be on disk, listed,
+# and the reason given, or the line fails the run on every system: it must not be able to silence a module.
+winskip=(); winwhy=(); regular=()
+while read -r first rest || [ -n "$first" ]; do
+  case "$first" in
+    skip-win) path="${rest%%[[:space:]]*}"; reason="${rest#"$path"}"; reason="${reason#"${reason%%[![:space:]]*}"}"
+              winskip+=("$path"); winwhy+=("$reason") ;;
+    ''|'#'*|skip) ;;
+    *) regular+=("$first") ;;
+  esac
+done < "$MANIFEST"
+i=0
+while [ "$i" -lt "${#winskip[@]}" ]; do
+  path="${winskip[$i]}"; name="${path#"$TOOL"/}"
+  if [ ! -f "$path" ]; then
+    fail=$((fail + 1)); failed+=("${name:-skip-win}")
+    printf '  FAIL %-24s skip-win line names a file not on disk (%s)
+' "${name:-skip-win}" "$MANIFEST"
+  elif [ -z "${winwhy[$i]}" ]; then
+    fail=$((fail + 1)); failed+=("$name"); printf '  FAIL %-24s skip-win line without a reason (%s)
+' "$name" "$MANIFEST"
+  elif ! printf '%s\n' "${regular[@]:-}" | grep -xF -- "$path" >/dev/null; then
+    fail=$((fail + 1)); failed+=("$name")
+    printf '  FAIL %-24s skip-win line for a module not listed with its argv (%s)\n' "$name" "$MANIFEST"
+  fi
+  i=$((i + 1))
+done
 while read -r first rest || [ -n "$first" ]; do     # `||`: a last line without its newline still counts
-  case "$first" in ''|'#'*) continue ;; esac
+  case "$first" in ''|'#'*|skip-win) continue ;; esac
   # skip <path> <reason>: the file is on disk, the reason is given, and the file has no selftest of its own -- a skip
   # line must not be able to silence a module. A valid one is printed, so what the run left out is seen.
   if [ "$first" = skip ]; then
@@ -407,6 +463,14 @@ while read -r first rest || [ -n "$first" ]; do     # `||`: a last line without 
   fi
   listed+=("$first")
   name="${first#"$TOOL"/}"
+  if [ "$ON_WINDOWS" = 1 ] && [ -f "$first" ]; then
+    i=0; why=""
+    while [ "$i" -lt "${#winskip[@]}" ]; do
+      if [ "${winskip[$i]}" = "$first" ] && [ -n "${winwhy[$i]}" ]; then why="${winwhy[$i]}"; fi
+      i=$((i + 1))
+    done
+    if [ -n "$why" ]; then printf '  --   %-24s skipped on Windows: %s\n' "$name" "$why"; continue; fi
+  fi
   if [ ! -f "$first" ]; then
     fail=$((fail + 1)); failed+=("$name"); printf '  FAIL %-24s listed in %s, not on disk\n' "$name" "$MANIFEST"; continue
   fi
