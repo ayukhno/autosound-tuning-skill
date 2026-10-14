@@ -1649,6 +1649,10 @@ The ranking and the assessment: `docs/W-10-CANDIDATES.md`. The groups (`hub:seam
 - **Silent failures 3**: #159, #165, #166, #167;
 - **Method text**: #168 hub #258, #173 (S-101's boost path, research first). Off the wave: #169 hub #113, deferred.
 
+A finding for the next collection (#170's first neutral run, 2026-10-14): in a folder that names nothing, the
+description fires on 10 of 26 car-audio queries (resume, de/pl, EMMA, TCC bug reports) — the old runs' numbers were
+lifted by a run folder named `autosound-hub`. The description's recall is the next wave's question, not this one's.
+
 The Windows selftests step of `installers-windows` runs with `continue-on-error` until it is green on this wave's PR;
 then the flag goes (a `::warning::` names failures meanwhile, `404b6d4`), and hub #278's receipt names `installers-windows`.
 

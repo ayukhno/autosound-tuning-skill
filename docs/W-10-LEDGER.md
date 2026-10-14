@@ -92,7 +92,7 @@ end.
 | 59 | Agent start group fix (a1): SKILL.md, capabilities (T18's implementer) | opus · medium | Agent start |  | 09:14 | `c54ce26`; SKILL.md 17,416 bytes before the Map |
 | 60 | Agent start group fix (a2): the trigger eval (T20's implementer) | opus · medium | Agent start | 09:12 | 09:15 | `78da32e`; 68 queries (62 neutral, 17 project) |
 | 61 | Agent start group fix (a3): project seed (T17a's implementer) | opus · high | Agent start | 09:12 | 09:14 | `5170fb7`; the gate's sentence made true; existing projects keep the old one |
-| 62 | the trigger eval, three live runs (claude -p, sonnet-4-6, 3 workers) | — | Agent start | 09:15 | | |
+| 62 | the trigger eval, three live runs (claude -p, sonnet-4-6, 3 workers) | — | Agent start | 09:15 | 09:36 | run 1: 52/68 (439 s) — all 16 misses are neutral should-fire (recall 10/26), no false fire, project 11/11; runs 2 and 3 void (one query each gave no result in 120 s — load); two runs to repeat |
 | 63 | T17b fix round (b) (resumed) | opus · high | Agent start | 09:25 | | |
 
 ## Quality notes
