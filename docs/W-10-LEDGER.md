@@ -43,13 +43,19 @@ end.
 | 14 | implementer T17a #149 | opus · high | Agent start | 08:02 | 08:08 | `4def84f` |
 | 15 | task review T4 #154 | opus · high | Captures | 08:03 | 08:06 | no Critical/Important in code; 1 Important (docs), 3 Minor; the check_captures case is covered through verify() (process.py is T1's) |
 | 16 | task review T2+T3 #155 #156 | opus · high | Captures | 08:05 | 08:07 | 140 s; T2 no Important (2 Minor); T3 1 Important (the D_ form drops a level), 3 Minor |
-| 17 | docs review #168 #173 | opus · high | Method text | 08:06 | | |
+| 17 | docs review #168 #173 | opus · high | Method text | 08:06 | 08:11 | 5 Important (2 in #168, 3 in #173), 7 Minor; quotes and code refs all correct |
 | 18 | fix round T4 #154 (the implementer resumed) | opus · high | Captures | 08:06 | 08:08 | `a4dc01f`; all three items |
-| 19 | task review T1 #153 | opus · high | Captures | 08:07 | | |
-| 20 | fix round T2+T3 (the implementer resumed) | opus · high | Captures | 08:07 | | |
-| 21 | re-review T4 fix | opus · high | Captures | 08:08 | | |
-| 22 | task review T17a #149 | opus · high | Agent start | 08:08 | | |
+| 19 | task review T1 #153 | opus · high | Captures | 08:07 | 08:10 | 2 Important (capture-check asks REW the list's title; check_captures writes un-normalised rows), 4 Minor |
+| 20 | fix round T2+T3 (the implementer resumed) | opus · high | Captures | 08:07 | 08:09 | `d23d73e`; all four items |
+| 21 | re-review T4 fix | opus · high | Captures | 08:08 | 08:09 | fix accepted, no regression |
+| 22 | task review T17a #149 | opus · high | Agent start | 08:08 | 08:12 | 2 Important (OSError traceback; no next step when the skill is missing), 3 Minor |
 | 23 | implementer T13, T16, T15, T14, T12 text (#159 #167 #166 #165 #158) | opus · high | Silent failures 3 + Windows | 08:09 | | |
+| 24 | re-review T2+T3 fix | opus · high | Captures | 08:09 | 08:11 | four fixes accepted; 1 Important — a REGRESSION the fix made (the unit recased → two keys for one capture); 305 old titles unchanged |
+| 25 | fix round T1 #153 (the implementer resumed) | opus · high | Captures | 08:10 | | |
+| 26 | fix round T22 #168 (resumed) | opus · medium | Method text | 08:11 | | |
+| 27 | fix round T21 #173 (resumed) | opus · medium | Method text | 08:11 | | |
+| 28 | fix of the regression T2 #155 (resumed) | opus · high | Captures | 08:11 | | |
+| 29 | fix round T17a #149 (resumed) | opus · high | Agent start | 08:12 | | |
 
 ## Per group
 
