@@ -1,6 +1,10 @@
 # Trigger eval set
 
-`trigger-eval-set.json` — 51 queries (since 2026-10-13; 34 before): 25 that should trigger — a tune from scratch,
+`trigger-eval-set.json` — 62 queries (since 2026-10-14; 51 from 2026-10-13, 34 before), each with a `"context"`:
+`"neutral"` (an empty folder) or `"project"` (a seeded tuning project, below). The 2026-10-14 eleven: a TCC feature
+request, feedback to the maintainers, bare "continue" / «продовжуємо» / "where were we" and a bare "file an issue" in a
+project, which should fire; a feature request for another app, a GitHub task in a repo named `hub`, an issue for the
+autosound-hub governance docs, and bare "continue" and "file an issue" in an empty folder, which should not. The 51: 25 that should trigger — a tune from scratch,
 casual English, imaging, an EMMA round, an MMM sweep, a house curve, uk/de/pl asks, resuming a tune (by name, inside a
 project folder, and TCC's two openers), a bug report or feedback on the skill or TCC in en/uk/de/pl — and 26
 near-misses that should not: home audio and studio monitors, a speaker, box, impedance or crossover question with no
@@ -54,6 +58,16 @@ held.
 - `--settings <json-or-file>` and `--no-session-persistence` are handed to every `claude -p` as they are.
 - `--absent <skill>` (repeatable): a skill that must not be in a run's list (a plugin's or a synced copy's
   `<prefix>:<skill>` counts).
+- `--cwd DIR`: the folder the neutral queries run in. By default a fresh `trigger_eval_*` folder under the system temp
+  folder, removed after the run. A folder inside a git repository, or whose path names `autosound`, `hub` or `skill`,
+  is refused in one line (exit 2): the model reads the path, and from a folder named for the hub it took the TCC bug
+  reports for a GitHub task there (#170). The folders are printed on stderr and in the JSON (`cwd`, `project_cwd`).
+- `--project-fixture`: the queries whose `"context"` is `"project"` run in a fresh `trigger_eval_project_*` folder
+  seeded as a tuning project: the `CLAUDE.md` that `rew_tool/project_seed.py` `write_claude_md` writes (its first line
+  loads the skill), stubs of `autosound_context.md`, `process/process-state.json` and `state/dsp-state.md`. Without
+  the flag those queries are not run; stderr says how many, the JSON has `skipped_project`, and the score is over the
+  queries that ran.
+- `--keep-folders`: keep the folders the runner made, to look into them after.
 - `--selftest`: the runner's own mechanics against a stand-in `claude` on PATH, offline (it is in
   `scripts/run-selftests.sh`).
 
@@ -195,3 +209,20 @@ so for every run here and for the baseline, which keeps the comparison like with
 nothing would say more. Inside a project the `CLAUDE.md` names the gate. Resuming inside a project folder fires 1/3 in
 English and 0/3 in Ukrainian, "continue my car-audio tune" 1/3, the pure status question 0/3 (the limit above). TCC's
 two openers fire 3/3 on both.
+
+## Runs of 2026-10-14 (#170)
+
+The 62-query set, each neutral query in a fresh folder under the system temp folder, each project query in the seeded
+project:
+
+```
+python3 evals/run_trigger_eval.py --eval-set evals/trigger-eval-set.json --model claude-sonnet-4-6 --workers 4 \
+  --settings '{"skillOverrides":{"rew-car-audio-tuning":"off"},"disableAllHooks":true}' \
+  --absent rew-car-audio-tuning --no-session-persistence --project-fixture
+```
+
+| run (UTC) | score | should fire, fired | should not, fired | neutral | project | the TCC bug reports (4) |
+|---|---|---|---|---|---|---|
+| 1 · | | | | | | |
+| 2 · | | | | | | |
+| 3 · | | | | | | |

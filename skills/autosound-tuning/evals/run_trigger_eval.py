@@ -18,11 +18,95 @@ or is cut off at `--timeout` -- without a result event (the problem carries the 
 stderr), or could not start is void: it is named, the rest are cancelled, no score is printed, and the runner exits
 1. `--settings` and `--no-session-persistence` are handed to every `claude -p`; e.g. hide a synced skill with
 `--settings '{"skillOverrides":{"rew-car-audio-tuning":"off"}}' --absent rew-car-audio-tuning` (#145).
+Every `claude -p` starts in a folder that names nothing (#170): a fresh one under the system temp folder, or `--cwd`.
+A folder inside a git repository, or whose path names `autosound`, `hub` or `skill`, is refused: the model reads the
+path, and in a folder named for the hub it took "file an issue" for a GitHub task there. A query whose `"context"` is
+`"project"` runs in a seeded tuning project instead (`--project-fixture`): the `CLAUDE.md` that
+`rew_tool/project_seed.py` writes, `autosound_context.md`, `process/` and `state/`. Without the flag those queries
+are not run, and the run says how many.
 `--selftest` runs the mechanics against a stand-in `claude` on PATH, offline.
 """
-import argparse, json, os, select, subprocess, sys, time
+import argparse, json, os, select, shutil, subprocess, sys, tempfile, time
 from concurrent.futures import CancelledError, ProcessPoolExecutor, as_completed
 from pathlib import Path
+
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_REPO_GUESS = str(Path(_HERE).parents[2])               # the checkout this runner lives in
+
+#: The folder a query runs in: an empty one, or a seeded tuning project.
+CONTEXTS = ("neutral", "project")
+#: Words a run folder's path must not hold: the model reads the path as a hint of what the request is about.
+NAMED_WORDS = ("autosound", "hub", "skill")
+
+
+def cwd_problem(folder: str):
+    """Why `folder` cannot be a run folder, or None: it must exist, sit outside every git repository, and its path
+    must not name `autosound`, `hub` or `skill` (in any case)."""
+    real = os.path.realpath(folder)
+    if not os.path.isdir(real):
+        return f"{folder} is not a folder"
+    words = [w for w in NAMED_WORDS if w in real.lower()]
+    if words:
+        return f"its path names {', '.join(repr(w) for w in words)}, which the model reads as what the request is about"
+    probe = real
+    while True:
+        if os.path.exists(os.path.join(probe, ".git")):
+            return f"it is inside the git repository {probe}, which the model would read as the project"
+        parent = os.path.dirname(probe)
+        if parent == probe:
+            return None
+        probe = parent
+
+
+def fresh_folder(prefix: str) -> str:
+    """A new empty folder under the system temp folder that `cwd_problem` passes; its random name is drawn again if
+    it happens to spell a refused word. Raises RuntimeError when the temp folder itself is refused."""
+    for _ in range(5):
+        folder = tempfile.mkdtemp(prefix=prefix)
+        problem = cwd_problem(folder)
+        if problem is None:
+            return folder
+        os.rmdir(folder)
+    raise RuntimeError(f"no usable folder under the system temp folder {tempfile.gettempdir()}: {problem}; "
+                       f"point TMPDIR elsewhere or pass --cwd")
+
+
+#: The fixture's stand-ins. What loads the skill in a project is its CLAUDE.md, which is the seed's own.
+_FIXTURE_FILES = {
+    "autosound_context.md": "# Autosound context\n\nCar: a hatchback. DSP: an 8-channel processor. Front 3-way active, "
+                            "a sub in the boot.\n\n## 5. Channel codes\n\n`sw`, `w-L/R`, `m-L/R`, `tw-L/R`\n",
+    os.path.join("process", "process-state.json"): '{"phase": "time_alignment", "step": "delay pass 2"}\n',
+    os.path.join("state", "dsp-state.md"): "# DSP state\n\nCrossovers set; delays: pass 1 done, pass 2 next.\n",
+}
+
+
+def seed_project(folder: str) -> str:
+    """Make `folder` a tuning project as a person's looks on day one of a tune; returns it."""
+    sys.path.insert(0, os.path.join(os.path.dirname(_HERE), "rew_tool"))
+    try:
+        import project_seed
+    finally:
+        sys.path.pop(0)
+    if not project_seed.write_claude_md(folder):
+        raise RuntimeError(f"{folder} already holds a CLAUDE.md")
+    for rel, text in _FIXTURE_FILES.items():
+        path = os.path.join(folder, rel)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(text)
+    return folder
+
+
+def load_items(path: str) -> list:
+    """The eval set, each item with its `context` ("neutral" when not given). Raises ValueError on a context that is
+    neither, naming the query."""
+    items = json.loads(Path(path).read_text(encoding="utf-8"))
+    for it in items:
+        it.setdefault("context", "neutral")
+        if it["context"] not in CONTEXTS:
+            raise ValueError(f"query {it['query'][:60]!r} has context {it['context']!r}: it is one of "
+                             f"{', '.join(CONTEXTS)}")
+    return items
 
 
 def claude_argv(query: str, model: str, settings=None, no_persist=False) -> list:
@@ -65,15 +149,14 @@ STDERR_LINES = 5
 
 
 def run_one(query: str, skill_name: str, model: str, timeout: int, settings=None, no_persist=False,
-            absent=()) -> dict:
-    """{"triggered", "problem", "init"} for one query. A problem with the init skill list ends the run at once. A run
+            absent=(), cwd=None) -> dict:
+    """{"triggered", "problem", "init"} for one query, its `claude -p` started in `cwd`. A problem with the init skill list ends the run at once. A run
     that ends -- or that `timeout` cuts off -- without a result event measured nothing: a problem too, carrying the
     last lines `claude -p` wrote to stderr, never a "not triggered" (#148)."""
-    import tempfile
     cmd = claude_argv(query, model, settings, no_persist)
     env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
     err = tempfile.TemporaryFile()                       # its stderr: a file, so no pipe fills while it runs
-    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=err, env=env)
+    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=err, env=env, cwd=cwd)
     buf = ""
     pending = False   # inside a Skill tool_use block
     acc = ""
@@ -168,6 +251,9 @@ _FAKE = r'''#!{python}
 import json, os, sys
 with open(os.environ["FAKE_CLAUDE_ARGV"], "a", encoding="utf-8") as fh:
     fh.write(json.dumps(sys.argv[1:]) + "\n")
+if os.environ.get("FAKE_CLAUDE_CWD"):           # where it was started, and the query it was given
+    with open(os.environ["FAKE_CLAUDE_CWD"], "a", encoding="utf-8") as fh:
+        fh.write(json.dumps({{"cwd": os.getcwd(), "query": sys.argv[2]}}) + "\n")
 mode = os.environ["FAKE_CLAUDE_MODE"]
 lists = {{"ok": ["autosound-tuning", "anthropic-skills:pdf"], "plugin": ["autosound-tuning:autosound-tuning"],
          "other": ["autosound-tuning", "anthropic-skills:rew-car-audio-tuning"], "ours-missing": ["anthropic-skills:pdf"]}}
@@ -202,8 +288,7 @@ else:
 
 
 def _selftest() -> int:
-    import shutil, tempfile
-    tmp = tempfile.mkdtemp(prefix="trigger_eval_")
+    tmp = fresh_folder("trigger_eval_")
     saved = {k: os.environ.get(k) for k in ("PATH", "FAKE_CLAUDE_ARGV", "FAKE_CLAUDE_MODE")}
     try:
         fake = os.path.join(tmp, "claude")
@@ -325,12 +410,111 @@ def _selftest() -> int:
                 if mode == "other":
                     assert len(out["results"]) < 6, "every query ran: none was cancelled"
 
+
+        def _check_it_runs_in_a_temp_folder():
+            # #170: every claude -p started in the runner's own folder, whose path named the hub -- and the model
+            # took "file an issue" for a GitHub task there. Now a neutral query runs in a fresh folder under the
+            # system temp folder, and a project query in a seeded tuning project; neither is the repository.
+            sets = os.path.join(tmp, "set-ctx.json")
+            with open(sets, "w", encoding="utf-8") as fh:
+                json.dump([{"query": "n0", "should_trigger": False},
+                           {"query": "p0", "should_trigger": True, "context": "project"},
+                           {"query": "n1", "should_trigger": False, "context": "neutral"}], fh)
+            cwd_log = os.path.join(tmp, "cwd.jsonl")
+            open(cwd_log, "w").close()
+            env = dict(os.environ, FAKE_CLAUDE_MODE="quiet-ok", FAKE_CLAUDE_CWD=cwd_log)
+            done = subprocess.run([sys.executable, os.path.abspath(__file__), "--eval-set", sets, "--model", "m",
+                                   "--workers", "1", "--project-fixture", "--keep-folders"], capture_output=True,
+                                  text=True, encoding="utf-8", timeout=120, env=env, cwd=_HERE)
+            assert done.returncode == 0, (done.returncode, done.stderr[-800:])
+            out = json.loads(done.stdout)
+            with open(cwd_log, encoding="utf-8") as fh:
+                seen = {r["query"]: os.path.realpath(r["cwd"]) for r in map(json.loads, fh)}
+            neutral, project = os.path.realpath(out["cwd"]), os.path.realpath(out["project_cwd"])
+            system_tmp = os.path.realpath(tempfile.gettempdir())
+            try:
+                assert seen == {"n0": neutral, "n1": neutral, "p0": project}, (seen, out["cwd"], out["project_cwd"])
+                for folder in (neutral, project):
+                    assert folder.startswith(system_tmp + os.sep), (folder, system_tmp)
+                    assert not folder.startswith(os.path.realpath(_REPO_GUESS)), folder
+                    assert cwd_problem(folder) is None, (folder, cwd_problem(folder))
+                assert neutral != project and not os.listdir(neutral), (neutral, os.listdir(neutral))
+                with open(os.path.join(project, "CLAUDE.md"), encoding="utf-8") as fh:
+                    assert "Load the `autosound-tuning` skill" in fh.read(), "the fixture's CLAUDE.md is not the seed's"
+                for name in ("autosound_context.md", "process", "state"):
+                    assert os.path.exists(os.path.join(project, name)), name
+                assert f"cwd: {out['cwd']}" in done.stderr and f"project cwd: {out['project_cwd']}" in done.stderr, \
+                    done.stderr
+                assert [r["context"] for r in out["results"]] == ["neutral", "project", "neutral"], out["results"]
+            finally:
+                shutil.rmtree(neutral, ignore_errors=True)
+                shutil.rmtree(project, ignore_errors=True)
+            # without --project-fixture a project query is not run, and the run says so; its folders are removed
+            open(cwd_log, "w").close()
+            done = subprocess.run([sys.executable, os.path.abspath(__file__), "--eval-set", sets, "--model", "m",
+                                   "--workers", "1"], capture_output=True, text=True, encoding="utf-8", timeout=120,
+                                  env=env)
+            assert done.returncode == 0, (done.returncode, done.stderr[-800:])
+            out = json.loads(done.stdout)
+            assert out["total"] == 2 and out["passed"] == 2 and out["skipped_project"] == 1, out
+            assert out["project_cwd"] is None and "--project-fixture" in done.stderr, done.stderr
+            assert not os.path.exists(out["cwd"]), "the runner's own folder was left behind"
+            with open(cwd_log, encoding="utf-8") as fh:
+                assert sorted(json.loads(r)["query"] for r in fh) == ["n0", "n1"]
+
+        def _check_a_named_or_repo_cwd_is_refused():
+            sets = os.path.join(tmp, "set1.json")
+            with open(sets, "w", encoding="utf-8") as fh:
+                json.dump([{"query": "q", "should_trigger": False}], fh)
+            named = os.path.join(tmp, "my-autosound-runs")
+            repo = os.path.join(tmp, "plain", "inner")
+            os.makedirs(named, exist_ok=True)
+            os.makedirs(os.path.join(tmp, "plain", ".git"), exist_ok=True)
+            os.makedirs(repo, exist_ok=True)
+            env = dict(os.environ, FAKE_CLAUDE_MODE="quiet-ok")
+            for folder, why in ((named, "autosound"), (repo, "git repository"), (os.path.join(tmp, "Hub"), "hub"),
+                                (os.path.join(tmp, "skills-x"), "skill")):
+                os.makedirs(folder, exist_ok=True)
+                done = subprocess.run([sys.executable, os.path.abspath(__file__), "--eval-set", sets, "--model", "m",
+                                       "--cwd", folder], capture_output=True, text=True, encoding="utf-8",
+                                      timeout=60, env=env)
+                assert done.returncode == 2 and not done.stdout, (folder, done.returncode, done.stdout[-300:])
+                lines = done.stderr.strip().splitlines()
+                assert len(lines) == 1 and why in lines[0] and "refused" in lines[0], (folder, done.stderr)
+            assert cwd_problem(os.path.join(tmp, "plain")) and "git" in cwd_problem(repo)
+
+        def _check_every_context_is_valid():
+            with open(os.path.join(_HERE, "trigger-eval-set.json"), encoding="utf-8") as fh:
+                items = json.load(fh)
+            bad = [it["query"][:50] for it in items if it.get("context", "neutral") not in CONTEXTS]
+            assert not bad, bad
+            load_items(os.path.join(_HERE, "trigger-eval-set.json"))       # the loader takes the real set
+            project = [it["query"] for it in items if it.get("context") == "project"]
+            assert any(q.startswith("resume my car-audio tune") for q in project), project
+            assert any(q.startswith("I'm in my car's tuning project folder") for q in project), project
+            pairs = {}
+            for it in items:
+                pairs.setdefault(it["query"], set()).add(it.get("context", "neutral"))
+            assert {"neutral", "project"} <= pairs.get("file an issue", set()), "a bare 'file an issue' in both"
+            assert {"neutral", "project"} <= pairs.get("continue", set()), "a bare 'continue' in both"
+            sets = os.path.join(tmp, "set-bad.json")
+            with open(sets, "w", encoding="utf-8") as fh:
+                json.dump([{"query": "q", "should_trigger": False, "context": "car"}], fh)
+            try:
+                load_items(sets)
+            except ValueError as exc:
+                assert "'car'" in str(exc) and "neutral" in str(exc), exc
+            else:
+                raise AssertionError("a context that is neither neutral nor project was taken")
+
         for check in (_check_trigger_read_with_the_list_seen, _check_init_list_named,
                       _check_a_run_cut_short_is_a_problem, _check_a_run_cut_short_voids_the_run,
-                      _check_arguments_reach_claude, _check_a_void_run_exits_1, _check_a_void_run_has_no_score):
+                      _check_arguments_reach_claude, _check_a_void_run_exits_1, _check_a_void_run_has_no_score,
+                      _check_it_runs_in_a_temp_folder, _check_a_named_or_repo_cwd_is_refused,
+                      _check_every_context_is_valid):
             try:
                 check()
-            except AssertionError as exc:
+            except (AssertionError, NameError, KeyError, ValueError, OSError) as exc:
                 failures.append(f"{check.__name__}: {exc}")
         assert not failures, "\n".join(failures)
     finally:
@@ -346,7 +530,11 @@ def _selftest() -> int:
           "timeout cuts off, with the last lines claude -p wrote to stderr (a last line with no line end is still "
           "read); "
           "--settings and --no-session-persistence reach every claude -p; a void run exits 1 and prints no score, "
-          "a query it cancelled is not counted, and a query that could not start voids it")
+          "a query it cancelled is not counted, and a query that could not start voids it; every claude -p runs in "
+          "a fresh folder under the system temp folder, a project query in a seeded tuning project with the seed's "
+          "CLAUDE.md (not run without --project-fixture), and the runner's folders are removed after; a --cwd inside "
+          "a git repository or naming autosound, hub or skill is refused in one line; every query's context is "
+          "neutral or project")
     return 0
 
 
@@ -362,62 +550,110 @@ def main():
                     help="handed to every `claude -p`: no run is saved to disk")
     ap.add_argument("--absent", action="append", default=[], metavar="SKILL",
                     help="a skill that must not be in any run's init skill list (repeatable)")
+    ap.add_argument("--cwd", metavar="DIR",
+                    help="the folder the neutral queries run in (default: a fresh one under the system temp folder); "
+                         "one inside a git repository, or whose path names autosound, hub or skill, is refused")
+    ap.add_argument("--project-fixture", action="store_true",
+                    help='run the queries whose "context" is "project" in a seeded tuning project (a fresh folder '
+                         "under the system temp folder); without it they are not run")
+    ap.add_argument("--keep-folders", action="store_true",
+                    help="keep the folders the runner made (they are removed after the run); --cwd is never removed")
     ap.add_argument("--selftest", action="store_true", help="the mechanics, against a stand-in claude, offline")
     a = ap.parse_args()
     if a.selftest:
         return _selftest()
     if not a.eval_set:
         ap.error("--eval-set is required")
+    try:
+        items = load_items(a.eval_set)
+    except ValueError as exc:
+        print(f"run_trigger_eval: the eval set is refused: {exc}", file=sys.stderr)
+        return 2
+    if a.cwd is not None:
+        problem = cwd_problem(a.cwd)
+        if problem:
+            print(f"run_trigger_eval: --cwd {a.cwd} is refused: {problem}", file=sys.stderr)
+            return 2
 
-    items = json.loads(Path(a.eval_set).read_text(encoding="utf-8"))
-    results, problems = {}, []
+    made = []                                            # the folders this run made, removed at its end
+    try:
+        try:
+            cwd = a.cwd if a.cwd is not None else fresh_folder("trigger_eval_")
+            if a.cwd is None:
+                made.append(cwd)
+            project_cwd = None
+            if a.project_fixture:
+                project_cwd = fresh_folder("trigger_eval_project_")
+                made.append(project_cwd)
+                seed_project(project_cwd)
+        except RuntimeError as exc:
+            print(f"run_trigger_eval: {exc}", file=sys.stderr)
+            return 2
+        return _run(a, items, cwd, project_cwd)
+    finally:
+        if not a.keep_folders:
+            for folder in made:
+                shutil.rmtree(folder, ignore_errors=True)
+
+
+def _run(a, items: list, cwd: str, project_cwd) -> int:
+    """Score `items` -- the neutral ones in `cwd`, the project ones in `project_cwd` (not run when it is None)."""
+    run_items = [(i, it) for i, it in enumerate(items) if it["context"] == "neutral" or project_cwd is not None]
+    skipped = len(items) - len(run_items)
+    print(f"cwd: {cwd}", file=sys.stderr)
+    print(f"project cwd: {project_cwd}" if project_cwd else
+          f"project cwd: none -- {skipped} project quer(ies) not run (pass --project-fixture)", file=sys.stderr)
+    results, problems = {}, []                           # by the item's index: one query may stand in both contexts
     started = time.time()
     with ProcessPoolExecutor(max_workers=a.workers) as ex:
         fut = {ex.submit(run_one, it["query"], a.skill_name, a.model, a.timeout, a.settings,
-                         a.no_session_persistence, tuple(a.absent)): it for it in items}
+                         a.no_session_persistence, tuple(a.absent),
+                         project_cwd if it["context"] == "project" else cwd): (i, it) for i, it in run_items}
         for f in as_completed(fut):
-            it = fut[f]
+            i, it = fut[f]
             try:
                 got = f.result()
             except CancelledError:
                 continue                                 # the run was void before this query started
             except Exception as e:                       # a query that could not run is no "not triggered"
                 got = {"triggered": False, "problem": f"the query could not run: {e!r}", "init": None}
-            results[it["query"]] = (got, it["should_trigger"])
+            results[i] = got
             if got["problem"] and not problems:
                 for other in fut:
                     other.cancel()                       # the run is void: start no more queries
             if got["problem"]:
-                problems.append(f"{it['query'][:60]!r}: {got['problem']}")
+                problems.append(f"{it['query'][:60]!r} ({it['context']}): {got['problem']}")
     duration = round(time.time() - started, 1)
 
     passed = 0
-    for it in items:
-        q = it["query"]
-        if q not in results:
+    for i, it in run_items:
+        if i not in results:
             continue
-        got, should = results[q]
-        ok = (got["triggered"] == should)
+        got = results[i]
+        ok = (got["triggered"] == it["should_trigger"])
         passed += ok
-        print(f"  [{'PASS' if ok else 'FAIL'}] triggered={got['triggered']!s:5} expected={should!s:5}  {q[:66]}",
-              file=sys.stderr)
+        print(f"  [{'PASS' if ok else 'FAIL'}] triggered={got['triggered']!s:5} expected={it['should_trigger']!s:5} "
+              f"{it['context']:7}  {it['query'][:60]}", file=sys.stderr)
     absent = ", ".join(a.absent) or "no other skill checked"
     if problems:                                         # a void run has no score: what ran is not a sample
         print(f"\nthe run is void -- {len(problems)} quer(ies) could not be scored:", file=sys.stderr)
         for line in problems:
             print(f"  {line}", file=sys.stderr)
-        print(f"no score: the run is void ({len(results)} of {len(items)} queries ran, {duration} s)",
+        print(f"no score: the run is void ({len(results)} of {len(run_items)} queries ran, {duration} s)",
               file=sys.stderr)
     else:
         print(f"\ninit skill list: {a.skill_name} in all {len(results)} runs, {absent} in none", file=sys.stderr)
-        print(f"{passed}/{len(items)} passed in {duration} s", file=sys.stderr)
-    print(json.dumps({"passed": None if problems else passed, "total": len(items), "void": bool(problems),
+        print(f"{passed}/{len(run_items)} passed in {duration} s (cwd {cwd}"
+              f"{', project cwd ' + project_cwd if project_cwd else ''})", file=sys.stderr)
+    print(json.dumps({"passed": None if problems else passed, "total": len(run_items), "void": bool(problems),
+                      "skipped_project": skipped, "cwd": cwd, "project_cwd": project_cwd,
                       "model": a.model, "duration_s": duration,
                       "claude_argv": claude_argv("<query>", a.model, a.settings, a.no_session_persistence),
                       "init": {"skill": a.skill_name, "absent": a.absent, "problems": problems},
-                      "results": [{"query": q, "triggered": g["triggered"], "should_trigger": s,
-                                   "problem": g["problem"], "init": g["init"]}
-                                  for q, (g, s) in results.items()]}, indent=2, ensure_ascii=False))
+                      "results": [{"query": it["query"], "context": it["context"], "triggered": results[i]["triggered"],
+                                   "should_trigger": it["should_trigger"], "problem": results[i]["problem"],
+                                   "init": results[i]["init"]}
+                                  for i, it in run_items if i in results]}, indent=2, ensure_ascii=False))
     return 1 if problems else 0
 
 

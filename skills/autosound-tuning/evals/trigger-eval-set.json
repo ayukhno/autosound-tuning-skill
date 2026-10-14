@@ -1,206 +1,312 @@
 [
   {
     "query": "the vocal image keeps pulling left toward the A-pillar in my passat, cant get a centered stage. help me fix the imaging with time alignment",
-    "should_trigger": true
+    "should_trigger": true,
+    "context": "neutral"
   },
   {
     "query": "prepping for an EMMA round next month, need help setting crossover points, slopes and delays on my helix 3-way active front",
-    "should_trigger": true
+    "should_trigger": true,
+    "context": "neutral"
   },
   {
     "query": "took an MMM sweep, midbass has a fat hump around 90hz and the top feels dull. what EQ gets me closer to the ResoNix Laid-Back curve?",
-    "should_trigger": true
+    "should_trigger": true,
+    "context": "neutral"
   },
   {
     "query": "im building a sealed plywood enclosure for my noisy 3d printer to cut fan noise, what internal volume and foam do i need?",
-    "should_trigger": false
+    "should_trigger": false,
+    "context": "neutral"
   },
   {
     "query": "my home bookshelf speakers are rated 6 ohm, my vintage marantz says 8 ohm minimum. is it safe to drive them?",
-    "should_trigger": false
+    "should_trigger": false,
+    "context": "neutral"
   },
   {
     "query": "can you explain the physics of why a high-Qts driver prefers a bigger enclosure? just trying to understand thiele-small theory, no project",
-    "should_trigger": false
+    "should_trigger": false,
+    "context": "neutral"
   },
   {
     "query": "designing a 3d-printed enclosure box in fusion 360 for my raspberry pi cluster, need mounting standoffs and airflow",
-    "should_trigger": false
+    "should_trigger": false,
+    "context": "neutral"
   },
   {
     "query": "what 12 inch subwoofer should i buy for my car under $250, mostly rap and edm?",
-    "should_trigger": false
+    "should_trigger": false,
+    "context": "neutral"
   },
   {
     "query": "theres an annoying rattle/resonance in my car door around 60 km/h while driving, how do i track down and fix the buzz?",
-    "should_trigger": false
+    "should_trigger": false,
+    "context": "neutral"
   },
   {
     "query": "measuring the input impedance of an op-amp circuit on my breadboard with a function generator, getting weird numbers",
-    "should_trigger": false
+    "should_trigger": false,
+    "context": "neutral"
   },
   {
     "query": "what does Vas actually mean in a speaker spec sheet?",
-    "should_trigger": false
+    "should_trigger": false,
+    "context": "neutral"
   },
   {
     "query": "help me dial in a flat reference target curve for my studio nearfield monitors for mixing",
-    "should_trigger": false
+    "should_trigger": false,
+    "context": "neutral"
   },
   {
     "query": "im measuring the characteristic impedance of a coax cable for an antenna project, 50 ohm vs 75 ohm",
-    "should_trigger": false
+    "should_trigger": false,
+    "context": "neutral"
   },
   {
     "query": "hi, I would like to setup my car audio. could you help me?",
-    "should_trigger": true
+    "should_trigger": true,
+    "context": "neutral"
   },
   {
     "query": "can you help me tune my speakers? staging feels off and vocals pull to the left",
-    "should_trigger": true
+    "should_trigger": true,
+    "context": "neutral"
   },
   {
     "query": "i want to create a custom house curve (EPY) for fun, maybe for EMMA later — how do i build one?",
-    "should_trigger": true
+    "should_trigger": true,
+    "context": "neutral"
   },
   {
     "query": "help me set up my home theater receiver and speaker layout for dolby atmos",
-    "should_trigger": false
+    "should_trigger": false,
+    "context": "neutral"
   },
   {
     "query": "допоможи налаштувати автозвук у машині — процесор, затримки, кросовери; образ липне вліво до динаміка",
-    "should_trigger": true
+    "should_trigger": true,
+    "context": "neutral"
   },
   {
     "query": "хочу з нуля налаштувати автозвук на своїй машині, є REW і Helix",
-    "should_trigger": true
+    "should_trigger": true,
+    "context": "neutral"
   },
   {
     "query": "kannst du mir helfen mein Car-HiFi einzumessen? DSP Laufzeitkorrektur im Auto stimmt nicht",
-    "should_trigger": true
+    "should_trigger": true,
+    "context": "neutral"
   },
   {
     "query": "pomóż mi ze strojeniem DSP w aucie — opóźnienia czasowe, zwrotnice i korektor",
-    "should_trigger": true
+    "should_trigger": true,
+    "context": "neutral"
   },
   {
     "query": "допоможи налаштувати домашній кінотеатр і колонки у вітальні",
-    "should_trigger": false
+    "should_trigger": false,
+    "context": "neutral"
   },
   {
     "query": "hilf mir mein Wohnzimmer-Heimkino und die HiFi-Anlage einzustellen",
-    "should_trigger": false
+    "should_trigger": false,
+    "context": "neutral"
   },
   {
     "query": "jak ustawić głośniki w komputerze do grania i filmów?",
-    "should_trigger": false
+    "should_trigger": false,
+    "context": "neutral"
   },
   {
     "query": "resume my car-audio tune — remind me the current crossover and delay settings on my helix",
-    "should_trigger": true
+    "should_trigger": true,
+    "context": "project"
   },
   {
     "query": "продовжуємо тюн авто, нагадай на чому зупинились — кросовери, затримки, гейни й полярність",
-    "should_trigger": true
+    "should_trigger": true,
+    "context": "neutral"
   },
   {
     "query": "на чому ми зупинились у тюні авто минулого разу? який зараз стан DSP?",
-    "should_trigger": true
+    "should_trigger": true,
+    "context": "neutral"
   },
   {
     "query": "let's resume — where did we leave off on my code project yesterday?",
-    "should_trigger": false
+    "should_trigger": false,
+    "context": "neutral"
   },
   {
     "query": "продовжуємо роботу над проєктом, нагадай на чому зупинились минулого разу?",
-    "should_trigger": false
+    "should_trigger": false,
+    "context": "neutral"
   },
   {
     "query": "what's my current state? remind me where we left off",
-    "should_trigger": false
+    "should_trigger": false,
+    "context": "neutral"
   },
   {
     "query": "Ich habe einen Helix DSP im Auto und will endlich die Laufzeitkorrektur und die Trennfrequenzen richtig einmessen. Wie fange ich an?",
-    "should_trigger": true
+    "should_trigger": true,
+    "context": "neutral"
   },
   {
     "query": "Mein Wohnzimmer-Subwoofer brummt bei bestimmten Frequenzen. Wie messe ich meinen Hörraum mit REW ein?",
-    "should_trigger": false
+    "should_trigger": false,
+    "context": "neutral"
   },
   {
     "query": "Mam procesor DSP w aucie i chcę ustawić opóźnienia czasowe oraz zwrotnice. Od czego zacząć strojenie?",
-    "should_trigger": true
+    "should_trigger": true,
+    "context": "neutral"
   },
   {
     "query": "Szukam nowych głośników do salonu, jakie kolumny podłogowe polecacie do 5000 zł?",
-    "should_trigger": false
+    "should_trigger": false,
+    "context": "neutral"
   },
   {
     "query": "something in TCC is broken -- the capture panel froze when I pressed Done and my last two measurements are gone. can you file an issue for it?",
-    "should_trigger": true
+    "should_trigger": true,
+    "context": "neutral"
   },
   {
     "query": "оформи ішью: у TCC після оновлення не відкривається вікно кривих, вилітає з помилкою",
-    "should_trigger": true
+    "should_trigger": true,
+    "context": "neutral"
   },
   {
     "query": "Ich möchte einen Fehler in der Autosound-TCC-App melden: beim Einlesen der Messungen aus REW stürzt sie ab.",
-    "should_trigger": true
+    "should_trigger": true,
+    "context": "neutral"
   },
   {
     "query": "Chcę zgłosić błąd w aplikacji Autosound TCC — po aktualizacji okno pomiarów się nie otwiera. Załóż issue.",
-    "should_trigger": true
+    "should_trigger": true,
+    "context": "neutral"
   },
   {
     "query": "the autosound tuning skill kept proposing EQ before the delays were set -- put together the feedback package for its maintainers",
-    "should_trigger": true
+    "should_trigger": true,
+    "context": "neutral"
   },
   {
     "query": "file an issue in my react repo: the date picker crashes on safari when the month changes",
-    "should_trigger": false
+    "should_trigger": false,
+    "context": "neutral"
   },
   {
     "query": "report a bug to the python maintainers -- json.loads hangs on a 2 GB file",
-    "should_trigger": false
+    "should_trigger": false,
+    "context": "neutral"
   },
   {
     "query": "building DIY bookshelf speakers -- what crossover points and slopes should i use for a 6.5 inch woofer and a 1 inch tweeter?",
-    "should_trigger": false
+    "should_trigger": false,
+    "context": "neutral"
   },
   {
     "query": "measuring my living room with REW -- how do i set the speaker distances and delays on my AV receiver so the sub lines up with the mains?",
-    "should_trigger": false
+    "should_trigger": false,
+    "context": "neutral"
   },
   {
     "query": "the stereo image of my studio monitors pulls to the left at the mix position, how do i fix the imaging?",
-    "should_trigger": false
+    "should_trigger": false,
+    "context": "neutral"
   },
   {
     "query": "what is a Linkwitz-Riley crossover and why is it 24 dB per octave?",
-    "should_trigger": false
+    "should_trigger": false,
+    "context": "neutral"
   },
   {
     "query": "Helix or Audison -- which DSP should i buy for my car?",
-    "should_trigger": false
+    "should_trigger": false,
+    "context": "neutral"
   },
   {
     "query": "continue my car-audio tune from last time -- what's the crossover, time-alignment and gain state on each channel?",
-    "should_trigger": true
+    "should_trigger": true,
+    "context": "project"
   },
   {
     "query": "I'm in my car's tuning project folder (autosound_context.md, process/ and state/ are here). let's continue where we left off",
-    "should_trigger": true
+    "should_trigger": true,
+    "context": "project"
   },
   {
     "query": "я в теці проєкту своєї машини (тут autosound_context.md, process/ і state/) — продовжимо з того місця, де зупинились",
-    "should_trigger": true
+    "should_trigger": true,
+    "context": "project"
   },
   {
     "query": "Resume this tuning project. Read state from disk first, call get_tcc_state and get_pending_signals, then tell me where we are and what the next step is. Instructions from TCC are always in English; answer me in the project's language — `language` in get_tcc_state is the one the Arbiter chose.",
-    "should_trigger": true
+    "should_trigger": true,
+    "context": "project"
   },
   {
     "query": "Start a tuning session for this project. Read state from disk, call get_tcc_state, then tell me where we are and what the next step is. Instructions from TCC are always in English; answer me in the project's language — `language` in get_tcc_state is the one the Arbiter chose.",
-    "should_trigger": true
+    "should_trigger": true,
+    "context": "project"
+  },
+  {
+    "query": "TCC should let me export the sheet as CSV, can you request that?",
+    "should_trigger": true,
+    "context": "neutral"
+  },
+  {
+    "query": "send the maintainers my notes on the delay phase",
+    "should_trigger": true,
+    "context": "project"
+  },
+  {
+    "query": "continue",
+    "should_trigger": true,
+    "context": "project"
+  },
+  {
+    "query": "продовжуємо",
+    "should_trigger": true,
+    "context": "project"
+  },
+  {
+    "query": "where were we",
+    "should_trigger": true,
+    "context": "project"
+  },
+  {
+    "query": "file an issue",
+    "should_trigger": true,
+    "context": "project"
+  },
+  {
+    "query": "request a dark mode in my Notion clone",
+    "should_trigger": false,
+    "context": "neutral"
+  },
+  {
+    "query": "in my hub repo on GitHub, open a pull request that bumps eslint to the latest version",
+    "should_trigger": false,
+    "context": "neutral"
+  },
+  {
+    "query": "file an issue for the autosound-hub repo governance docs",
+    "should_trigger": false,
+    "context": "neutral"
+  },
+  {
+    "query": "continue",
+    "should_trigger": false,
+    "context": "neutral"
+  },
+  {
+    "query": "file an issue",
+    "should_trigger": false,
+    "context": "neutral"
   }
 ]
