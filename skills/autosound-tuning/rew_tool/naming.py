@@ -113,10 +113,12 @@ _UNVERSIONED_RE = re.compile(
 )
 # A LEVEL typed between `_N` and the method (#155, hub #261; the Arbiter's ruling 2026-10-06: read both, write after):
 # `sw_3 86dB (sw)` is the capture `sw_3 (sw) 86dB`. Tried last, in place of a refusal only (`_match_title`): every
-# title that parsed before parses to the same parts. The level folds into `params` ahead of any tail.
+# title that parsed before parses to the same parts. The level folds into `params` ahead of any tail; a position
+# typed after it (`sw_3 86dB x0 (sw)`) is the position typed after the method.
 _LEVEL_RE = re.compile(
     r"^(?P<body>.+)_(?P<version>\d+|final)(?P<control>ctl|rep)?"
-    r"\s+(?P<level>[+-]?\d+(?:[.,]\d+)?\s*(?i:dB))\s*\((?P<method>[A-Za-z]+)\)(?:\s+(?P<tail>\S.*?))?\s*$"
+    r"\s+(?P<level>[+-]?\d+(?:[.,]\d+)?\s*(?i:dB))(?:\s+(?P<pos2>p[1-9]|x0))?"
+    r"\s*\((?P<method>[A-Za-z]+)\)(?:\s+(?P<tail>\S.*?))?\s*$"
 )
 
 
@@ -206,9 +208,9 @@ def canonical_title(title):
     match = _match_title(text)
     end = match.end("body") if match else len(text)
     if match and match.re is _LEVEL_RE:
-        tail = f" {match.group('tail')}" if match.group("tail") else ""
+        after = " ".join(filter(None, (_level_text(match.group("level")), match.group("pos2"), match.group("tail"))))
         return (canonical_code(text[:end]) + text[end:match.start("level")].rstrip()
-                + f" ({match.group('method')}) {_level_text(match.group('level'))}{tail}")
+                + f" ({match.group('method')}) {after}")
     return canonical_code(text[:end]) + text[end:]
 
 
@@ -554,6 +556,12 @@ def explain_name(title, glossary=None):
             level_ = _level_text(level_) if level_ else None
             after = _letter_after(body_, version_, control_, method_,
                                   " ".join(filter(None, (level_, tail_, pos_))), letter_)
+            if explain_name(after)[1]:
+                # A form the grammar would refuse in turn is not offered (group fix 7): its own reason is the real one
+                # -- `(foo)` is no method, two positions are a typo, and with no method there is no form to name.
+                return None, explain_name(after)[1] if method_ else ("not in the grammar: `<code>_<N> (sw|rta)` or "
+                                                                     "`<code> (imp)`, a clarification after the method "
+                                                                     "(naming-and-structure.md §3)")
             return None, (f"`_{lettered.group('letter')}{lettered.group('version')}`: a letter in front of the series "
                           f"number is not read, `_N` is the series number only -- the letter goes after the method, "
                           f"as a clarification: `{after}` (naming-and-structure.md §3)")
@@ -581,6 +589,9 @@ def explain_name(title, glossary=None):
         found = _POS_WORD_RE.findall(tail)
         if len(found) > 1:
             return None, f"two positions after the method: {', '.join(found)}"
+        if found and position:
+            # only the level form holds both (`sw_3 86dB x0 (sw) p1`): one position before the method, one after
+            return None, f"a position on both sides of the method: `{position}` and `{found[0]}`"
         if found:
             position = found[0]
             tail = _POS_WORD_RE.sub(" ", tail)
@@ -814,7 +825,9 @@ def validate_series(titles, expected, glossary=None):
     missing = [name for key, name in wanted.items() if key not in present]
     extra = [p["title"] for key, p in present.items() if key not in wanted]
     matched = {name: present[key]["title"] for key, name in wanted.items() if key in present}
-    renames = {actual: name for name, actual in matched.items() if actual != name}
+    # The target is the WRITTEN form of the expected title (group fix 3): a list typed with a level before the method
+    # (`sw_3 86dB (sw)`) does not ask REW's `sw_3 (sw) 86dB` to be renamed to it.
+    renames = {actual: canonical_title(name) for name, actual in matched.items() if actual != canonical_title(name)}
     return {
         "expected": expected,
         "found": [name for key, name in wanted.items() if key in present],
@@ -999,6 +1012,19 @@ def _check_level_before_method():
         assert canonical_title(before) == written, (before, canonical_title(before), written)
         assert name_key(parse_name(canonical_title(before))) == name_key(got), before
         assert f"`{written}`" in got["note"], (before, got["note"])
+    # A level and a position before the method (group fix 7): read, the key the after-form's.
+    for before, after in (("sw_3 86dB x0 (sw)", "sw_3 (sw) 86dB x0"),
+                          ("sw_3 86dB p3 (sw) noXO", "sw_3 (sw) 86dB p3 noXO")):
+        got, why = explain_name(before)
+        assert why is None and got["position"] == after.split()[3], (before, why, got)
+        assert name_key(got) == name_key(parse_name(after)) and canonical_title(before) == after, (before, got)
+    got, why = explain_name("sw_3 86dB x0 (sw) p1")
+    assert got is None and "a position on both sides of the method" in str(why), why
+    # The rename a check offers names the written (after) form, never the before-form a list was typed in (group fix 3).
+    seen = validate_series(["sw_3 (sw) 86dB"], ["sw_3 86dB (sw)"])
+    assert seen["complete"] and seen["renames"] == {}, seen
+    seen = validate_series(["sw_03 (sw) 86dB"], ["sw_3 86dB (sw)"])
+    assert seen["renames"] == {"sw_03 (sw) 86dB": "sw_3 (sw) 86dB"}, seen
 
 
 def _check_letter_before_series():
@@ -1020,6 +1046,11 @@ def _check_letter_before_series():
         assert got is None and why and f"`{after}`" in why, (title, why)
         parsed = parse_name(after)
         assert parsed is not None and parsed["params"] == letter, (after, parsed)
+    # A suggestion the grammar would refuse is not offered: the refusal names the real reason (group fix 7).
+    for title, reason in (("w-L_D7 (foo)", "`(foo)` is not a method"), ("w-L_D7 (sw) p1 p2", "two positions"),
+                          ("w-L_D7", "not in the grammar"), ("w-L_D7 (imp)", "a code has no `_`")):
+        got, why = explain_name(title)
+        assert got is None and reason in why and "letter goes after the method" not in why, (title, why)
         assert parsed["version_n"] == int(re.search(r"_(\d+)", after).group(1)), parsed
 
 
