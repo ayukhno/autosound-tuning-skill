@@ -1627,9 +1627,24 @@ S-062, S-064 (with TCC's half, hub #217 SKL-056), S-065, S-066. When he says to 
 four assessment lines, and nothing is built before his `ok` on that task. Resume: `hub/bin/role skill --resume
 6b9c70d1-4094-4337-a1fd-23976307dfc2`.
 
+## S-104 · W-10 · v3.1.4 — everything outside the audit and what earlier waves left
+
+**Status**: open 2026-10-14 · milestone `W-10 · v3.1.4` (milestone 9) opened on the Arbiter's «збір закінчили» with 23 issues, each with the four assessment lines and its group; `ok` on all (his «бери все», the same message); built without the superpowers engine — the second arm of hub H-022, so the PR carries `Engine: none`; next: the plan `docs/PLAN-W-10.md` on branch `wave-2026-10-14`, its cost, then his «го»
+
+The ranking and the assessment: `docs/W-10-CANDIDATES.md`. The groups (`hub:seam`, one review per group):
+- **Captures** (all `Risk: high`): #153 hub #269, #154 hub #247, #155 hub #261, #156 hub #259;
+- **Windows**: #158 hub #274 + hub #278 ask 1;
+- **Installers** (all `Risk: high` but #163): #157, #160, #161, #162, #163 (S-099), #164, #171, #172;
+- **Agent start**: #149, #150, #170;
+- **Silent failures 3**: #159, #165, #166, #167;
+- **Method text**: #168 hub #258, #169 hub #113, #173 (S-101's boost path, research first).
+
+Not on the milestone: S-017, S-021, S-055, S-059 wait for a run, S-001 for the first `frozen` run, #26 is a 3.2.x
+candidate; the audit's closed items come back only as findings from use (`docs/AUDIT-2026-10-CLOSE.md`).
+
 ## S-103 · W-9's reviews: the pool for the next collection
 
-**Status**: open 2026-10-13 · recorded, not diagnosed; each waits for its wave (a finding ships earlier only on the Arbiter's «терміново»)
+**Status**: open 2026-10-14 · on W-10's milestone (S-104): each item below is the issue `docs/W-10-CANDIDATES.md` names for it; it closes with v3.1.4 · was: open 2026-10-13 · recorded, not diagnosed; each waits for its wave (a finding ships earlier only on the Arbiter's «терміново»)
 
 From W-9's task, group and final reviews (the ledger `.superpowers/sdd/PLAN-W-9/progress.md` holds the evidence until the wave closes):
 - **hub #274 (TCC-055): three selftests fail on Windows at v3.1.3** (the Arbiter, 2026-10-13: the next wave; the cross-product gate is hub #275, SKL-072) — `naming.py` `_check_dangling_glossary_link` and `contract.py` `_check_dangling_glossary_link_refused` (`os.readlink` gives the target with `\\?\` in front), `dsp_profile.py` `_check_no_profile_makes_nothing` (the refusal quotes `FileNotFoundError`'s repr, backslashes doubled). The behaviour is right; what a person on Windows reads is not. The `installers-windows` CI job runs only some selftests — TCC's asks: the person's text on Windows, all of `run-selftests.sh` in the Windows job, the tag that carries it (TCC marks the three `xfail` strict meanwhile). TCC corrects its #267 answer: on Windows its lock makes no `process/`; nothing to change in `_require_home`.
@@ -1728,7 +1743,7 @@ design, not reproduced).
 
 ## S-099 · The installers' own help shows a one-liner pinned to an old tag (install.sh) or to `main` (install.ps1)
 
-**Status**: deferred 2026-10-06 · not in W-8: the Arbiter, «спочатку зробити задачі аудіта, а потім все інше» — returns when the audit's waves are done (S-101) · was: open 2026-10-03 · in the pool for the next wave (the Arbiter: «запиши») · found while building hub #245
+**Status**: open 2026-10-14 · on W-10's milestone as #163 (S-104) · was: deferred 2026-10-06 · not in W-8: the Arbiter, «спочатку зробити задачі аудіта, а потім все інше» — returns when the audit's waves are done (S-101) · was: open 2026-10-03 · in the pool for the next wave (the Arbiter: «запиши») · found while building hub #245
 
 `install.sh --help` ends with an example of passing an option through the one-liner:
 `curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.46/install.sh | bash -s -- --terminal`
@@ -1740,7 +1755,7 @@ Recorded, not diagnosed.
 
 ## S-098 · After v3.1.1: what waits for the Arbiter's word
 
-**Status**: waiting 2026-10-03 · item 1 done: hub #245 closed — `78e457d` (PR #132), `tag-check.sh --at`; item 3 dropped — TCC's pin is TCC's own call, it reads the tags itself (the Arbiter: «а яким боком ти до переводу ТСС на тег скіла?»); item 2 waits · was: waiting 2026-10-03 · the Arbiter: «я сам скажу» — none of it is started · resume: `hub/bin/role skill --resume 205e26fb-aa4b-4093-abf7-2fec0b06a86b`
+**Status**: waiting 2026-10-14 · item 2 is on W-10's milestone as #169 (S-104) · was: waiting 2026-10-03 · item 1 done: hub #245 closed — `78e457d` (PR #132), `tag-check.sh --at`; item 3 dropped — TCC's pin is TCC's own call, it reads the tags itself (the Arbiter: «а яким боком ти до переводу ТСС на тег скіла?»); item 2 waits · was: waiting 2026-10-03 · the Arbiter: «я сам скажу» — none of it is started · resume: `hub/bin/role skill --resume 205e26fb-aa4b-4093-abf7-2fec0b06a86b`
 
 v3.1.0 and v3.1.1 are out and closed (catalog and `Latest` on `v3.1.1`, hub #238 #239 #244 closed). Three things are
 open, each for the Arbiter to start:
