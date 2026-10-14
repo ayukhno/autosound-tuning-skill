@@ -116,7 +116,7 @@ end.
 | run | when | head | why | result |
 |---|---|---|---|---|
 | 38537781090 | 08:49 | `f991c10` | `workflow_dispatch` — the wave touches Windows (checks.yml's own rule) | red: installers-windows at the #161 probe (SQL Server's path; later steps skipped); selftests — encoding-check (side_effect, bounded_run: fixed `33b84cf`) and ruff (installer-consistency `import json`); installers-ubuntu, engine, gate green |
-| 38542204702 | 09:25 | `99bddb2` | after the Installers' and SF3's group fixes | |
+| 38542204702 | 09:25 | `99bddb2` | after the Installers' and SF3's group fixes | red, further on: installers-windows passed the #161 probe; its consistency step fails T17b's six ps1 Codex-link cases (8.3 short paths) and the file:// upstream-child probe; Ubuntu selftests — installers and tag-check (a Linux-only case; the runner's 12-line tail cut the FAIL line); installers-ubuntu, engine, gate green |
 
 ## Per group
 
