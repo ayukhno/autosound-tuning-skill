@@ -748,10 +748,14 @@ def selection_problems(sh, ps1):
         # git lists it whatever the glob; the beta channel's order takes it.
         pair = Path(tmp, "pair")
         pair.write_bytes(b"v3.1.2\nbeta-v3.1.3-rc1\n")
+        beta_only = Path(tmp, "beta-only")
+        beta_only.write_bytes(b"beta-v3.1.3-rc1\n")
         full = (("main", None, 128, "0", 'settled_by_name "$ref" v3.0.67', "main", 1, ()),
                 ("", None, 128, "1", 'settled_by_name "$ref" v3.0.67; settled_by_name "v*" v0.1.45', "v3.*", 0,
                  ("would check the signature of v3.*", "would check the signature of v*")),
-                ("", pair, 0, "0", ":", "v3.1.2", 0, ()))
+                ("", pair, 0, "0", ":", "v3.1.2", 0, ()),
+                # ...and a list of candidates alone is no stable release (a dry run says so and goes on).
+                ("", beta_only, 0, "1", ":", "v3.*", 0, ("the remote lists no v3.* release",)))
         for j, (given, offered, stub_rc, dry, then, want_ref, unsigned, words) in enumerate(full):
             script = (f'set -euo pipefail\nexport PATH="$(cd "{stub_dir.as_posix()}" && pwd)":"/usr/bin:$PATH"\n'
                       'SKILL_REPO="https://github.com/ayukhno/autosound-tuning-skill.git"\nSKILL_TAG_GLOB="v3.*"\n'
@@ -842,12 +846,14 @@ def one_unsigned_line_problems(sh, ps1, pick_ps1):
             wrong.append(f"{where} does not guard a glob ({glob}), then say a name is not a release, before a dry "
                          f"run's 'would check' -- a dry run's placeholder would be said UNSIGNED, or a branch's dry "
                          f"run not at all")
+    def code_of(text):                                  # a commented `grep '^v'` filters nothing (the test seat)
+        return "\n".join(ln for ln in text.splitlines() if not ln.lstrip().startswith("#"))
     pick_sh = re.search(r"^pick_method_ref\(\) \{.*?^\}", sh, re.M | re.S)
-    if not pick_sh or """printf '%s\\n' "$TAGS_READ" | grep '^v' | newest_on_channel""" not in pick_sh.group(0):
+    if not pick_sh or """printf '%s\\n' "$TAGS_READ" | grep '^v' | newest_on_channel""" not in code_of(pick_sh.group(0)):
         wrong.append("install.sh pick_method_ref does not keep `v` names only (`grep '^v'`) before newest_on_channel")
     tcc_sh = re.search(r'^    else\n      # Release-shaped tags only, as the method.s \(skill #108\)[^\n]*\n(.*?)^    fi\n',
                        sh, re.M | re.S)
-    if not tcc_sh or "grep '^v'" not in tcc_sh.group(1):
+    if not tcc_sh or "grep '^v'" not in code_of(tcc_sh.group(1)):
         wrong.append("install.sh's stable app pick does not keep `v` names only (`grep '^v'`)")
     beta_sh = re.search(r'^  if read_tags "\$SKILL_REPO" "\$SKILL_TAG_GLOB" "\$SKILL_BETA_GLOB"; then\n(.*?)^  fi\n', sh,
                         re.M | re.S)
@@ -1939,9 +1945,15 @@ PS1_PICK_CASES = (
      'Write-Host "REF=[$ref]"\n$null = Test-SettledByName $ref $SkillSignedFrom\n$null = Test-SettledByName "v*" "v0.1.45"\n',
      ("REF=[v3.*]", "would install the newest v3.* release (not readable here: no git yet)",
       "would check the signature of v3.*", "would check the signature of v*"), 0),
-    ("pick-stable", '$script:StubTags = @("v3.1.2", "beta-v3.1.3-rc1")\nWrite-Host "STABLE=[$(Select-MethodRef \'\')]"\n'
+    # The test seat: Sort-Object swallows [version]'s throw on a `beta-` name, so the old code may pick v3.1.2 too --
+    # $Error counts it. A list of candidates alone is no stable release.
+    ("pick-stable", '$script:StubTags = @("v3.1.2", "beta-v3.1.3-rc1")\n$e0 = $Error.Count\n$s = Select-MethodRef \'\'\n'
+     'Write-Host "STABLE=[$s] ERRORS=$($Error.Count - $e0)"\n'
      'Write-Host "BETA=[$(Select-NewestOnChannel @(\'v3.1.2\', \'beta-v3.1.3-rc1\'))]"\n',
-     ("STABLE=[v3.1.2]", "BETA=[beta-v3.1.3-rc1]"), 0))
+     ("STABLE=[v3.1.2] ERRORS=0", "BETA=[beta-v3.1.3-rc1]"), 0),
+    ("pick-candidates-only", '$DryRun = $true\n$script:StubTags = @("beta-v3.1.3-rc1")\n$e0 = $Error.Count\n'
+     '$s = Select-MethodRef \'\'\nWrite-Host "STABLE=[$s] ERRORS=$($Error.Count - $e0)"\n',
+     ("STABLE=[v3.*] ERRORS=0", "the remote lists no v3.* release"), 0))
 
 
 def ps1_run_problems(ps1):
