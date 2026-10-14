@@ -427,12 +427,16 @@ clt_present() { if on_mac; then xcode-select -p >/dev/null 2>&1; else return 0; 
 # was, and UTF-16 cannot hold one -- it is dropped there, or becomes a `?`, JSON either way.
 json_str() {  # json_str <text>
   _js_text="$(printf '%s' "$1" | LC_ALL=C tr -d '\001-\037')"
+  _js_clean=""
   if have iconv; then
-    _js_text="$(printf '%s' "$_js_text" | iconv -c -f UTF-8 -t UTF-16LE 2>/dev/null \
-                | iconv -c -f UTF-16LE -t UTF-8 2>/dev/null)" || true
-  else
-    _js_text="$(printf '%s' "$_js_text" | LC_ALL=C sed 's/[^ -~]/?/g')"
+    _js_clean="$(printf '%s' "$_js_text" | iconv -c -f UTF-8 -t UTF-16LE 2>/dev/null \
+                 | iconv -c -f UTF-16LE -t UTF-8 2>/dev/null)" || true
   fi
+  # No iconv, or one that is there and gave nothing for a text that is not empty (it failed): the `?` path.
+  if [ -z "$_js_clean" ] && [ -n "$_js_text" ]; then
+    _js_clean="$(printf '%s' "$_js_text" | LC_ALL=C sed 's/[^ -~]/?/g')"
+  fi
+  _js_text="$_js_clean"
   printf '"%s"' "$(printf '%s' "$_js_text" | LC_ALL=C sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')"
 }
 

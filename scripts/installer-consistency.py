@@ -631,10 +631,14 @@ def shell_text_problems(sh):
     bash, why = find_bash()
     if not bash:
         return out + [f"{why} -- install.sh's json_str cannot be run, and unrun is not agreed (#172)"]
-    for iconv in (True, False):
+    # (the group round) an iconv that is there and fails -- exit 1, nothing out -- takes the no-iconv path: its empty
+    # text made every field of the receipt "".
+    for mode in ("iconv", "no iconv", "an iconv that fails"):
+        iconv = mode == "iconv"
         if iconv and not shutil.which("iconv"):
             continue
-        deny = "" if iconv else 'have() { [ "$1" != iconv ] && command -v "$1" >/dev/null 2>&1; }\n'
+        deny = {"iconv": "", "no iconv": 'have() { [ "$1" != iconv ] && command -v "$1" >/dev/null 2>&1; }\n',
+                "an iconv that fails": "iconv() { return 1; }\n"}[mode]
         for raw, with_iconv, without in JSON_STR_CASES:
             word = "$'" + "".join(f"\\x{b:02x}" for b in raw) + "'"
             script = ("set -euo pipefail\n" + functions + deny + f"json_str {word}\n").encode("utf-8")
@@ -645,7 +649,7 @@ def shell_text_problems(sh):
                 got = f"not JSON ({exc}): {r.stdout!r}"
             want = with_iconv if iconv else without
             if r.returncode != 0 or (got not in want if isinstance(want, tuple) else got != want):
-                out.append(f"install.sh json_str {word}{'' if iconv else ' with no iconv'}: exit {r.returncode}, "
+                out.append(f"install.sh json_str {word}{'' if iconv else ' with ' + mode}: exit {r.returncode}, "
                            f"{got!r}, want 0 and {want!r} -- stderr {r.stderr.decode('utf-8', 'replace')[-160:]!r} (#172)")
     return out
 
