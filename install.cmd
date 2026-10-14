@@ -51,7 +51,9 @@ REM and PowerShell, running .\install.cmd, starts   /c ""PATH" OPTIONS"   or
 REM /c ""PATH""  -- /c and this file's name too, which is all the old test
 REM asked: a PowerShell run printed its exit code and waited on pause (#162).
 REM Compared after delayed expansion, so no quote or ampersand in a path is
-REM parsed as part of these lines.
+REM parsed as part of these lines. A launcher of some other program that starts
+REM it as  cmd /c "PATH"  gets no pause: only Explorer's two forms hold the
+REM window, and a window that closes there is that launcher's own.
 set "DOUBLECLICKED="
 set "SELF=%~f0"
 set "CMDLINE=!cmdcmdline!"

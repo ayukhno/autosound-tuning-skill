@@ -1497,8 +1497,10 @@ def plugin_check_problems(sh, ps1):
 
 
 #: #161: a cmdlet, as install.ps1 spells one -- Verb-Noun, the verb one PowerShell approves of.
-PS1_CMDLET = re.compile(r"(?<![\w$.-])(?:Add|Clear|ConvertFrom|ConvertTo|Expand|ForEach|Get|Import|Invoke|Join|Measure|"
-                        r"New|Out|Remove|Resolve|Select|Set|Sort|Split|Start|Stop|Test|Where|Write)-[A-Z]\w*")
+PS1_CMDLET = re.compile(r"(?<![\w$.-])(?:Add|Clear|Compress|ConvertFrom|ConvertTo|Copy|Disable|Enable|Expand|Format|"
+                        r"ForEach|Get|Import|Invoke|Join|Measure|Move|New|Out|Pop|Push|Read|Register|Remove|Rename|"
+                        r"Resolve|Restart|Resume|Select|Set|Sort|Split|Start|Stop|Suspend|Tee|Test|Unblock|Update|Wait|"
+                        r"Where|Write)-[A-Z]\w*")
 
 
 def windows_start_problems(ps1, cmd):
@@ -1509,13 +1511,19 @@ def windows_start_problems(ps1, cmd):
     out = []
     code = "\n".join(ln for ln in ps1.splitlines() if not ln.lstrip().startswith("#"))
     param_end = re.search(r"^\[CmdletBinding\(\)\]\nparam\(\n.*?^\)\n", code, re.M | re.S)
-    reset_def = re.search(r"^\$Ps51ModulePath = \{ if \(\$PSVersionTable\.PSEdition -eq 'Desktop'\) \{ "
-                          r"\$env:PSModulePath = [^\n]*\} \}$", code, re.M)
+    # The T9 review: only a path that holds PowerShell 7's folders is reset -- under the README one-liner the person's
+    # own window keeps its Documents\WindowsPowerShell\Modules and what its profile added -- and the user's
+    # Documents folder (where 5.1 itself looks, OneDrive's when redirected) leads, no empty entry anywhere.
+    reset_def = re.search(r"^\$Ps51ModulePath = \{ if \(\$PSVersionTable\.PSEdition -eq 'Desktop' -and "
+                          r"\$env:PSModulePath -match '\\\\PowerShell\\\\'\) \{ [^\n]*\} \}$", code, re.M)
     reset_run = re.search(r"^\. \$Ps51ModulePath$", code, re.M)
     body = reset_def.group(0) if reset_def else ""
-    lacking = [w for w in ("[Environment]::GetEnvironmentVariable('PSModulePath', 'Machine')",
+    lacking = [w for w in ("[Environment]::GetFolderPath('MyDocuments')", "'\\WindowsPowerShell\\Modules'",
+                           "[Environment]::GetEnvironmentVariable('PSModulePath', 'Machine')",
                            "[Environment]::GetEnvironmentVariable('PSModulePath', 'User')", "($PSHOME + '\\Modules')",
-                           "-join ';'") if w not in body]
+                           "-split ';') -ne '')", "-join ';'") if w not in body]
+    if body and not body.find("GetFolderPath('MyDocuments')") < body.find("'PSModulePath', 'Machine'"):
+        lacking.append("the Documents folder first")
     if not param_end or not reset_def or not reset_run or lacking or '"' in body or PS1_CMDLET.search(body):
         out.append("install.ps1 has no `$Ps51ModulePath = { if ($PSVersionTable.PSEdition -eq 'Desktop') { "
                    "$env:PSModulePath = ... } }` run by `. $Ps51ModulePath` -- the machine's and the user's values and "
@@ -1532,7 +1540,8 @@ def windows_start_problems(ps1, cmd):
                    "`$cmd = \"$Ps51ModulePath; ...` (#161)")
     # #162: Explorer starts a .cmd as `cmd.exe /c ""<full path>" "`; PowerShell as `/c ""<path>" <args>"`.
     want = ('set "SELF=%~f0"', 'set "CMDLINE=!cmdcmdline!"', 'set "CMDTAIL=!CMDLINE:*/c =!"',
-            'set "EXPLORER=""!SELF!" ""', 'if /i "!CMDTAIL!"=="!EXPLORER!" set "DOUBLECLICKED=1"')
+            'set "EXPLORER=""!SELF!" ""', 'set "RUNAS="!SELF!" "', 'if /i "!CMDTAIL!"=="!EXPLORER!" set "DOUBLECLICKED=1"',
+            'if /i "!CMDTAIL!"=="!RUNAS!" set "DOUBLECLICKED=1"')
     lacking = [w for w in want if w not in cmd]
     if lacking or re.search(r'find /i "/c"', cmd, re.I):
         out.append(f"install.cmd does not tell a double click by Explorer's exact command line -- lacking {lacking}"

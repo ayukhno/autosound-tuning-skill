@@ -80,10 +80,14 @@ param(
 # Windows PowerShell 5.1 started from a PowerShell 7 window -- the plugin's /setup there, a person's pwsh -- inherits
 # PowerShell 7's PSModulePath, and cannot load its own modules from it: Get-FileHash (gh's) and Expand-Archive (the
 # upstream installers') then fail, "not recognized" (#161, R50's CI 37866508892). So 5.1 takes its own module path
-# back -- the machine's and the user's values, and $PSHOME\Modules -- before its first cmdlet; every child it starts
-# inherits it, and Invoke-Upstream hands the same line to its child PowerShell, which a PowerShell 7 run starts too.
-# One line, no cmdlet and no double quote in it: it is passed to that child as -Command text.
-$Ps51ModulePath = { if ($PSVersionTable.PSEdition -eq 'Desktop') { $env:PSModulePath = (([Environment]::GetEnvironmentVariable('PSModulePath', 'Machine'), [Environment]::GetEnvironmentVariable('PSModulePath', 'User'), ($PSHOME + '\Modules')) -ne $null -ne '') -join ';' } }
+# back, before its first cmdlet -- only when the path holds PowerShell 7's folders (`\PowerShell\`, never 5.1's
+# `\WindowsPowerShell\`): under the README one-liner this is the person's own window, whose path and profile additions
+# stay as they are otherwise. 5.1's own is the user's Documents\WindowsPowerShell\Modules (OneDrive's, when Documents
+# is redirected; left out when there is no Documents folder), the machine's and the user's values, and
+# $PSHOME\Modules, with no empty entry. Every child it starts inherits it, and Invoke-Upstream hands the same line to
+# its child PowerShell, which a PowerShell 7 run starts too. One line, no cmdlet and no double quote in it: it is
+# passed to that child as -Command text.
+$Ps51ModulePath = { if ($PSVersionTable.PSEdition -eq 'Desktop' -and $env:PSModulePath -match '\\PowerShell\\') { $ps51Docs = [Environment]::GetFolderPath('MyDocuments'); if ($ps51Docs) { $ps51Docs += '\WindowsPowerShell\Modules' }; $env:PSModulePath = (((($ps51Docs, [Environment]::GetEnvironmentVariable('PSModulePath', 'Machine'), [Environment]::GetEnvironmentVariable('PSModulePath', 'User'), ($PSHOME + '\Modules')) -join ';') -split ';') -ne '') -join ';' } }
 . $Ps51ModulePath
 # -Log <file>: a full transcript, for reading a run that happened on somebody else's machine. A
 # `| Tee-Object` on the outside sees none of this script's own lines (they go to the host, not

@@ -292,13 +292,15 @@ jobs:
           if ($errors.Count) { $errors | ForEach-Object { Write-Host $_.ToString() }; exit 1 }
           Write-Host "install.ps1 parses: 0 errors"
       # #161: Windows PowerShell 5.1 started from PowerShell 7 -- the plugin's /setup in a pwsh window -- inherits pwsh's
-      # PSModulePath and cannot load its own Get-FileHash and Expand-Archive. This step is pwsh: the powershell.exe it
-      # starts inherits that path, and runs both cmdlets after install.ps1's own reset line, cut out of it as it stands.
-      # The same probe without the reset is said, not judged: whether it fails depends on the runner's modules.
+      # PSModulePath and cannot load its own Get-FileHash and Expand-Archive. This step is pwsh, and starts powershell.exe
+      # through `cmd /c`, as that chain does (pwsh may clean its own paths for a powershell.exe it starts directly). The
+      # child first asserts that pwsh's path arrived -- or the probe would prove nothing -- then runs install.ps1's own
+      # reset line, cut out of it as it stands, then both cmdlets; after the reset no `\PowerShell\` folder and no empty
+      # entry is left. The same probe without the reset is said, not judged: whether it fails depends on the runner.
       - name: install.ps1's module path reset, Windows PowerShell 5.1 started from pwsh (#161)
         shell: pwsh
         run: |
-          Write-Host "pwsh's PSModulePath, which powershell.exe inherits here: $env:PSModulePath"
+          Write-Host "pwsh's PSModulePath, which the child inherits: $env:PSModulePath"
           $line = @(Get-Content install.ps1 | Where-Object { $_ -match '^\$Ps51ModulePath = \{' })
           if ($line.Count -ne 1) { Write-Host "::error::install.ps1 has no one-line `$Ps51ModulePath = { ... } to run"; exit 1 }
           $dir = Join-Path $env:RUNNER_TEMP "psmodulepath"
@@ -306,6 +308,9 @@ jobs:
           Set-Content -Path (Join-Path $dir "a.txt") -Value "a file to hash and to zip"
           Compress-Archive -Path (Join-Path $dir "a.txt") -DestinationPath (Join-Path $dir "a.zip") -Force
           $env:PROBE_DIR = $dir
+          $arrived = @'
+          if ($env:PSModulePath -notmatch '\\PowerShell\\') { Write-Host "pwsh's module path did not reach Windows PowerShell 5.1: $env:PSModulePath"; exit 3 }
+          '@
           $probe = @'
           $ErrorActionPreference = "Stop"
           $d = $env:PROBE_DIR
@@ -314,23 +319,60 @@ jobs:
           if (-not (Test-Path (Join-Path $d "out\a.txt"))) { throw "Expand-Archive left no a.txt" }
           Write-Host "Get-FileHash ($h) and Expand-Archive ran under Windows PowerShell $($PSVersionTable.PSVersion)"
           '@
-          Set-Content -Path (Join-Path $dir "without.ps1") -Value $probe
-          Set-Content -Path (Join-Path $dir "with.ps1") -Value ($line[0] + "`n. `$Ps51ModulePath`n" + $probe)
-          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $dir "without.ps1")
-          Write-Host "without the reset: exit $LASTEXITCODE (said, not judged)"
-          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $dir "with.ps1")
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host "::error::Windows PowerShell 5.1 under pwsh's PSModulePath could not run Get-FileHash and Expand-Archive after install.ps1's reset (exit $LASTEXITCODE)"
+          $after = @'
+          if ($env:PSModulePath -match '\\PowerShell\\' -or $env:PSModulePath -match ';;|^;|;$') { Write-Host "after the reset the path still holds pwsh's folders or an empty entry: $env:PSModulePath"; exit 4 }
+          Write-Host "after the reset: $env:PSModulePath"
+          '@
+          Set-Content -Path (Join-Path $dir "without.ps1") -Value ($arrived + "`n" + $probe)
+          Set-Content -Path (Join-Path $dir "with.ps1") -Value ($arrived + "`n" + $line[0] + "`n. `$Ps51ModulePath`n" + $after + "`n" + $probe)
+          & cmd /c powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $dir "without.ps1")
+          Write-Host "without the reset: exit $LASTEXITCODE (said, not judged -- 3 means pwsh's path did not arrive)"
+          & cmd /c powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $dir "with.ps1")
+          $rc = $LASTEXITCODE
+          if ($rc -eq 3) { Write-Host "::error::pwsh's PSModulePath did not reach powershell.exe through cmd /c -- the probe proves nothing"; exit 1 }
+          if ($rc -ne 0) {
+            Write-Host "::error::Windows PowerShell 5.1 under pwsh's PSModulePath, after install.ps1's reset: exit $rc (4: the path left wrong; else Get-FileHash or Expand-Archive failed)"
             exit 1
           }
-          Write-Host "after the reset: Get-FileHash and Expand-Archive run"
-      # #162: install.cmd started from PowerShell is no double click -- no "Finished with exit code", no pause. Its stdin
-      # empty and a deadline, so a pause that is reached all the same cannot hold the job. The double click itself is
-      # checked on a Windows machine by a person (the Arbiter, on the VM, with the candidate).
-      - name: install.cmd from PowerShell holds no window open (#162)
+          Write-Host "through cmd /c, after the reset: Get-FileHash and Expand-Archive run"
+      # #162: install.cmd holds its window open for a double click only. Its detection lines, cut out of it as they
+      # stand, go into a probe .cmd that writes what it decided: Start-Process starts it as Explorer does
+      # (`cmd.exe /c ""<path>" "`) and must read 1; `-Verb RunAs` (Run as administrator) too, where the runner lets it
+      # run; `& .\probe.cmd` from PowerShell, with options and without (`/c ""<path>""`), and `cmd /c` must read nothing.
+      # Then install.cmd itself, from PowerShell: the help, exit 0, no exit-code line, no pause -- its stdin empty and a
+      # deadline, so a pause reached all the same cannot hold the job.
+      - name: install.cmd tells a double click from a PowerShell start (#162)
         shell: pwsh
-        timeout-minutes: 3
+        timeout-minutes: 5
         run: |
+          $lines = @(Get-Content install.cmd)
+          $from = [array]::IndexOf($lines, 'set "DOUBLECLICKED="')
+          $to = [array]::IndexOf($lines, 'if /i "!CMDTAIL!"=="!RUNAS!" set "DOUBLECLICKED=1"')
+          if ($from -lt 0 -or $to -lt $from) { Write-Host "::error::install.cmd has no detection lines to cut out ($from..$to)"; exit 1 }
+          $dir = Join-Path $env:RUNNER_TEMP "dblclick"
+          New-Item -ItemType Directory -Force -Path $dir | Out-Null
+          $probe = Join-Path $dir "probe.cmd"
+          $out = Join-Path $dir "out.txt"
+          Set-Content -Path $probe -Encoding ascii -Value (@('@echo off', 'setlocal EnableDelayedExpansion') + $lines[$from..$to] + @('echo [!DOUBLECLICKED!]>"%~dp0out.txt"'))
+          function Read-Decision { if (Test-Path $out) { $v = (Get-Content $out -Raw).Trim(); Remove-Item $out; return $v } else { return "(nothing written)" } }
+          $bad = @()
+          Start-Process -FilePath $probe -Wait -WindowStyle Hidden
+          $got = Read-Decision; Write-Host "Start-Process (Explorer's form): $got"; if ($got -ne "[1]") { $bad += "Start-Process read $got, want [1]" }
+          # Run as administrator only where it cannot ask: UAC off, or an administrator it does not prompt.
+          $uac = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -ErrorAction SilentlyContinue
+          if ($uac -and ($uac.EnableLUA -eq 0 -or $uac.ConsentPromptBehaviorAdmin -eq 0)) {
+            try {
+              Start-Process -FilePath $probe -Verb RunAs -Wait -WindowStyle Hidden -ErrorAction Stop
+              $got = Read-Decision; Write-Host "Start-Process -Verb RunAs: $got"
+              if ($got -ne "[1]") { $bad += "Start-Process -Verb RunAs read $got, want [1]" }
+            } catch { Write-Host "::warning::Start-Process -Verb RunAs did not run on this runner ($($_.Exception.Message)) -- the administrator's form is not checked here" }
+          } else {
+            Write-Host "::warning::UAC would ask on this runner (EnableLUA $($uac.EnableLUA), ConsentPromptBehaviorAdmin $($uac.ConsentPromptBehaviorAdmin)) -- Run as administrator's form is not checked here"
+          }
+          & $probe; $got = Read-Decision; Write-Host "& probe.cmd: $got"; if ($got -ne "[]") { $bad += "& probe.cmd read $got, want []" }
+          & $probe -Help; $got = Read-Decision; Write-Host "& probe.cmd -Help: $got"; if ($got -ne "[]") { $bad += "& probe.cmd -Help read $got, want []" }
+          & cmd /c $probe; $got = Read-Decision; Write-Host "cmd /c probe.cmd: $got"; if ($got -ne "[]") { $bad += "cmd /c probe.cmd read $got, want []" }
+          if ($bad.Count) { $bad | ForEach-Object { Write-Host "::error::install.cmd's double-click test: $_" }; exit 1 }
           $said = ($null | & .\install.cmd -Help 2>&1 | Out-String)
           $rc = $LASTEXITCODE
           Write-Host $said
@@ -342,7 +384,7 @@ jobs:
             Write-Host "::error::install.cmd -Help from PowerShell ended $rc, or printed no help"
             exit 1
           }
-          Write-Host "install.cmd -Help from PowerShell: the help, exit 0, no exit-code line and no pause"
+          Write-Host "install.cmd: a double click (and Run as administrator) holds the window; PowerShell and cmd /c do not"
       # The reviewer's key on Windows lives in a file only this user's login can open (DPAPI, the Arbiter's
       # decision of 2026-09-23, hub #197). The author's Mac cannot run it, so a real Windows does: a round trip,
       # the value absent from the file, and a key in the user environment (the registry) moved into the store.
