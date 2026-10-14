@@ -1465,7 +1465,9 @@ def _check_a_link_target_as_written():
         except (OSError, NotImplementedError):
             print("  (no symbolic links on this system: the link to nothing was not made)")
             return
-        os.readlink = lambda path, *a, **kw: "\\\\?\\" + real(path, *a, **kw)
+        # The prefix added only where the system's own readlink gave none: Windows' already carries it.
+        os.readlink = lambda path, *a, **kw: (lambda t: t if t.startswith("\\\\?\\") else "\\\\?\\" + t)(
+            real(path, *a, **kw))
         try:
             read_glossary_file(link, d)
             said = "read, not refused"
