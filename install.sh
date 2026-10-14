@@ -1206,14 +1206,16 @@ put_tag_back() {  # put_tag_back <dir> <refs/tags/name, or ""> <its value before
 checkout_method() {
   _co_dir="$1"; _co_ref="$2"; _co_what="$3"
   _co_spec="$_co_ref"; _co_want="FETCH_HEAD^{commit}"; _co_tag=""
+  # A dry run's words: a release is checked, a name that is not one is not -- it is said UNSIGNED (#164).
+  _co_does=" and check it out"
   if is_release_tag "$_co_ref"; then
     _co_spec="+refs/tags/$_co_ref:refs/tags/$_co_ref"; _co_want="refs/tags/$_co_ref^{commit}"
-    _co_tag="refs/tags/$_co_ref"
+    _co_tag="refs/tags/$_co_ref"; _co_does=", check it, and check it out"
   fi
   if [ -d "$_co_dir/.git" ]; then
     # A dry run on a Mac without Apple's tools has no git to ask: /usr/bin/git there opens Apple's window (#142).
     if [ "$DRY_RUN" = 1 ] && ! usable git; then
-      say "  would fetch $_co_ref into $(pretty "$_co_dir"), check it, and check it out (no git yet)"
+      say "  would fetch $_co_ref into $(pretty "$_co_dir")$_co_does (no git yet)"
       [ -n "$_co_tag" ] || settled_by_name "$_co_ref" "$SKILL_SIGNED_FROM"
       return 0
     fi
@@ -1268,7 +1270,7 @@ checkout_method() {
     return 3
   fi
   if [ "$DRY_RUN" = 1 ]; then
-    say "  would fetch $_co_ref into $(pretty "$_co_dir"), check it, and check it out"
+    say "  would fetch $_co_ref into $(pretty "$_co_dir")$_co_does"
     # No signature step is reached here: a name that is not a release is said by settled_by_name all the same (#164).
     [ -n "$_co_tag" ] || settled_by_name "$_co_ref" "$SKILL_SIGNED_FROM"
     return 0

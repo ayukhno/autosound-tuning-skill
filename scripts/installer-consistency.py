@@ -850,6 +850,15 @@ def one_unsigned_line_problems(sh, ps1, pick_ps1):
         wrong.append("install.ps1's stable app pick does not keep `v` names only (`Where-Object { $_ -cmatch '^v' }`)")
     if "if ($Channel -eq \"beta\") { $TccRef = Select-NewestOnChannel $names }" not in ps1:
         wrong.append("install.ps1's beta pick of the app does not take candidates through Select-NewestOnChannel")
+    # The T6 review: a branch's dry run said "would fetch main ..., check it, and check it out" over "installed
+    # UNSIGNED, unchecked" -- the check is said for a release only, in both of each installer's dry-run lines.
+    for where, text, name, var in (("install.sh", sh, r"^checkout_method\(\) \{.*?^\}", "$_co_does"),
+                                   ("install.ps1", ps1, r"^function Sync-MethodCheckout \{.*?^\}", "$does")):
+        fn = re.search(name, text, re.M | re.S)
+        lines = [ln for ln in (fn.group(0) if fn else "").splitlines() if "would fetch " in ln]
+        if len(lines) != 2 or any(var not in ln or "check it, and" in ln for ln in lines):
+            wrong.append(f"{where}'s dry-run fetch lines do not take the check from {var} -- a branch's dry run says "
+                         f"it is checked and UNSIGNED at once")
     return [f"the UNSIGNED line and the stable pick (#164, #171): {w}" for w in wrong]
 
 

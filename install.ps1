@@ -1195,10 +1195,12 @@ function Sync-MethodCheckout {
     param([string]$Dir, [string]$Ref, [string]$What)
     $spec = $Ref; $want = 'FETCH_HEAD^{commit}'; $tagRef = ""
     if (Test-ReleaseTag $Ref) { $spec = "+refs/tags/${Ref}:refs/tags/${Ref}"; $want = "refs/tags/${Ref}^{commit}"; $tagRef = "refs/tags/${Ref}" }
+    # A dry run's words: a release is checked, a name that is not one is not -- it is said UNSIGNED (#164).
+    $does = if ($tagRef) { ", check it, and check it out" } else { " and check it out" }
     if (Test-Path (Join-Path $Dir ".git")) {
         # A dry run on Windows without Git has no git to ask (#142).
         if ($DryRun -and -not (Have git)) {
-            Say "would fetch $Ref into $(Pretty $Dir), check it, and check it out (no git yet)"
+            Say "would fetch $Ref into $(Pretty $Dir)$does (no git yet)"
             if (-not $tagRef) { $null = Test-SettledByName $Ref $SkillSignedFrom }
             return $true
         }
@@ -1256,7 +1258,7 @@ function Sync-MethodCheckout {
         return $false
     }
     if ($DryRun) {
-        Say "would fetch $Ref into $(Pretty $Dir), check it, and check it out"
+        Say "would fetch $Ref into $(Pretty $Dir)$does"
         # No signature step is reached here: a name that is not a release is said by Test-SettledByName all the same
         # (#164).
         if (-not $tagRef) { $null = Test-SettledByName $Ref $SkillSignedFrom }
