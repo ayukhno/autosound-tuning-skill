@@ -1627,9 +1627,19 @@ S-062, S-064 (with TCC's half, hub #217 SKL-056), S-065, S-066. When he says to 
 four assessment lines, and nothing is built before his `ok` on that task. Resume: `hub/bin/role skill --resume
 6b9c70d1-4094-4337-a1fd-23976307dfc2`.
 
+## S-105 · Before the audit's minimum wave: check the sync with TCC still holds
+
+**Status**: чекає 2026-10-14 · not now — at the start of the wave after W-10, before anything is built (the Arbiter, 2026-10-14: «ми це вже робили, коли мінімізували аудит — запиши перевірити перед тим як робити (робити не зараз)»)
+
+The audit was minimised on 2026-10-13 and moved one wave later (`docs/AUDIT-2026-10-CLOSE.md`): G8 phase 1 and G7,
+both TCC's. The sync with TCC was done then — TCC's answer on hub #273 (SKL-071) went to the hub as TCC-056 (hub #276),
+and the user decided A–D with it (hub #272, #278). Before that wave builds, check that it still holds against what W-10
+changed at the seam (S-104: round titles by `name_key`, `verdict`'s own band, the level and letter forms, one review
+record per round, the lenient glossary's shapes, `predict`'s exits); a difference is a ticket to TCC, not a guess.
+
 ## S-104 · W-10 · v3.1.4 — everything outside the audit and what earlier waves left
 
-**Status**: open 2026-10-14 · milestone `W-10 · v3.1.4` (milestone 9) opened on the Arbiter's «збір закінчили» with 23 issues, each with the four assessment lines and its group; `ok` on 22 (his «бери все», the same message) — #169 «learn to listen» left the milestone, a deferred task not taken (his «відкладені задачі ми не беремо»), and no phone plan page is built (Claude's own apps are enough; #168 offers that way of working); five items deferred earlier until the audit's waves were done stay on it on his word (#154, #155, #156, #163, #168: «лишити всі пʼять»); built without the superpowers engine — the second arm of hub H-022, so the PR carries `Engine: none`; next: the plan `docs/PLAN-W-10.md` on branch `wave-2026-10-14`, its cost, then his «го»
+**Status**: open 2026-10-14 · milestone `W-10 · v3.1.4` (milestone 9) opened on the Arbiter's «збір закінчили» with 23 issues, each with the four assessment lines and its group; `ok` on 22 (his «бери все», the same message) — #169 «learn to listen» left the milestone, a deferred task not taken (his «відкладені задачі ми не беремо»), and no phone plan page is built (Claude's own apps are enough; #168 offers that way of working); five items deferred earlier «until the audit's waves are done» stay on it on his word, although the audit is minimised and moved one wave later, not done (#154, #155, #156, #163 «беремо»; #168 only its text and the offer of Claude's own means, «на цьому все по ній»); «го» given 2026-10-14; built without the superpowers engine — the second arm of hub H-022, so the PR carries `Engine: none`; next: the plan `docs/PLAN-W-10.md` on branch `wave-2026-10-14`, its cost, then his «го»
 
 The ranking and the assessment: `docs/W-10-CANDIDATES.md`. The groups (`hub:seam`, one review per group):
 - **Captures** (all `Risk: high`): #153 hub #269, #154 hub #247, #155 hub #261, #156 hub #259;
@@ -1640,7 +1650,7 @@ The ranking and the assessment: `docs/W-10-CANDIDATES.md`. The groups (`hub:seam
 - **Method text**: #168 hub #258, #173 (S-101's boost path, research first). Off the wave: #169 hub #113, deferred.
 
 Not on the milestone: S-017, S-021, S-055, S-059 wait for a run, S-001 for the first `frozen` run, #26 is a 3.2.x
-candidate; the audit's closed items come back only as findings from use (`docs/AUDIT-2026-10-CLOSE.md`).
+candidate. The audit is minimised, not closed: its minimum is the wave after this one (`docs/AUDIT-2026-10-CLOSE.md`, S-105).
 
 ## S-103 · W-9's reviews: the pool for the next collection
 

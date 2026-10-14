@@ -59,6 +59,8 @@ weight (`hub:seam`). Complexity: XS < 1 h · S ~1–2 h · M ~half a day · L a 
 
 ## Left out as audit
 
-The audit closed at its minimum (`docs/AUDIT-2026-10-CLOSE.md`, both items TCC's). Its closed items come back only as
-findings from use: J1b, J1c, J3b, J4b (a per-call REW deadline, kept as a small pool task), J5, J6b–J6d, S3, S4b, S5,
-J7's rest — including S-103's README/FAQ «two visits» line (P1). S-100 stays the audit's record.
+The audit is minimised, not closed (`docs/AUDIT-2026-10-CLOSE.md`, the Arbiter 2026-10-13): its minimum — G8 phase 1
+and G7, both TCC's — goes one wave later, after this one; the sync with TCC was done when it was minimised, and is
+checked again before that wave (S-105). The items the minimum dropped come back only as findings from use: J1b, J1c,
+J3b, J4b (a per-call REW deadline, kept as a small pool task), J5, J6b–J6d, S3, S4b, S5, J7's rest — including
+S-103's README/FAQ «two visits» line (P1). S-100 stays the audit's record.
