@@ -474,6 +474,23 @@ jobs:
               sys.exit(1)
           print(f"the key guard on Windows: {len(checks)} checks OK")
 
+      # #167: rew_tool/bounded_run.py ends a shell=True call at its deadline on Windows -- the whole tree through cmd.exe,
+      # a grandchild that sleeps 30 s included -- and hands back what it had printed. `shell: bash` on a Windows runner
+      # is Git for Windows' bash; from the repo root. Before the continue-on-error step below, so a failure is red.
+      - name: a timeout ends a shell=True call (#167)
+        shell: bash
+        run: |
+          python - <<'EOF'
+          import subprocess, sys, time
+          sys.path.insert(0, "skills/autosound-tuning/rew_tool")
+          import bounded_run as b
+          s = "import subprocess, sys, time; subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)']); print('started', flush=True); time.sleep(30)"
+          t = time.monotonic()
+          rc, out, err, timed_out = b.run_bounded([sys.executable, "-c", s], 2, shell=True)
+          took = time.monotonic() - t
+          print("shell=True:", rc, timed_out, round(took, 1), out.strip())
+          sys.exit(0 if timed_out and took < 2 + b.REAP_S + 3 and "started" in out else 1)
+          EOF
       # #158 (hub #278 ask 1): every rew_tool module's selftest on Windows -- the manifest part of scripts/run-selftests.sh
       # (SELFTEST_ONLY_TOOL=1), with the ubuntu `selftests` job's libraries. Under Git for Windows' bash, found BY PATH
       # beside git: a plain `bash` here may be WSL's launcher (the comment over this job). PYTHON is setup-python's, in
