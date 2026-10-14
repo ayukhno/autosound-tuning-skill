@@ -92,9 +92,10 @@ end.
 | 59 | Agent start group fix (a1): SKILL.md, capabilities (T18's implementer) | opus · medium | Agent start |  | 09:14 | `c54ce26`; SKILL.md 17,416 bytes before the Map |
 | 60 | Agent start group fix (a2): the trigger eval (T20's implementer) | opus · medium | Agent start | 09:12 | 09:15 | `78da32e`; 68 queries (62 neutral, 17 project) |
 | 61 | Agent start group fix (a3): project seed (T17a's implementer) | opus · high | Agent start | 09:12 | 09:14 | `5170fb7`; the gate's sentence made true; existing projects keep the old one |
-| 62 | the trigger eval, three live runs (claude -p, sonnet-4-6, 3 workers) | — | Agent start | 09:15 | 09:36 | run 1: 52/68 (439 s) — all 16 misses are neutral should-fire (recall 10/26), no false fire, project 11/11; runs 2 and 3 void (one query each gave no result in 120 s — load); two runs to repeat |
+| 62 | the trigger eval, three live runs (claude -p, sonnet-4-6, 3 workers) | — | Agent start | 09:15 | 09:36 | run 1: 52/68 (439 s) — all 16 misses are neutral should-fire (recall 10/26), no false fire, project 11/11; runs 2 and 3 void (one query each gave no result in 120 s — load); two runs to repeat; runs 4–5 (2 workers): run 4 52/68 again, run 5 void — two whole runs agree, 14 of 16 misses the same |
 | 63 | T17b fix round (b) (resumed) | opus · high | Agent start | 09:25 | 09:38 | 796 s; `f2af045` — (b) all eight, and CI run 2's: 8.3 short paths, Invoke-Upstream returned output+True as success (a real bug), the consistency script's FAIL recap |
-| 64 | FINAL branch review, origin/main..0078659 | fable · high | the wave | 09:47 | | |
+| 64 | FINAL branch review, origin/main..0078659 | fable · high | the wave | 09:47 | 10:00 | 689 s, 262k tokens; NOT ready: 1 Critical (the Windows selftests claim unproven — continue-on-error hid 62 of 67 failing), 5 Important (Upgrading short; the Codex manifest's encoding 5.1↔7; the link's repoint wording; the level's spelling; the eval README), 4 Minor; the four groups hold end to end; a TCC must-know list |
+| 65 | final fix: installers I2, M3, M1 (resumed) | opus · high | Installers | 10:00 | | |
 
 ## Quality notes
 
