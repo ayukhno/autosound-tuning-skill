@@ -52,9 +52,9 @@ end.
 | 23 | implementer T13, T16, T15, T14, T12 text (#159 #167 #166 #165 #158) | opus · high | Silent failures 3 + Windows | 08:09 | | |
 | 24 | re-review T2+T3 fix | opus · high | Captures | 08:09 | 08:11 | four fixes accepted; 1 Important — a REGRESSION the fix made (the unit recased → two keys for one capture); 305 old titles unchanged |
 | 25 | fix round T1 #153 (the implementer resumed) | opus · high | Captures | 08:10 | | |
-| 26 | fix round T22 #168 (resumed) | opus · medium | Method text | 08:11 | | |
-| 27 | fix round T21 #173 (resumed) | opus · medium | Method text | 08:11 | | |
-| 28 | fix of the regression T2 #155 (resumed) | opus · high | Captures | 08:11 | | |
+| 26 | fix round T22 #168 (resumed) | opus · medium | Method text | 08:11 | 08:12 | `8895f6a`; all items; docs — no re-review |
+| 27 | fix round T21 #173 (resumed) | opus · medium | Method text | 08:11 | 08:12 | `3046d55`; all items; docs — no re-review |
+| 28 | fix of the regression T2 #155 (resumed) | opus · high | Captures | 08:11 | 08:12 | `306bd4c`; verified by the controller with a live probe (5 pairs share one key with their canonical form; old titles parse as before) — no re-review agent |
 | 29 | fix round T17a #149 (resumed) | opus · high | Agent start | 08:12 | | |
 
 ## Per group
@@ -66,4 +66,4 @@ end.
 | Installers | #157, #160–#164, #171, #172 | | | | | | |
 | Agent start | #149, #150, #170 | | | | | | |
 | Silent failures 3 | #159, #165–#167 | | | | | | |
-| Method text | #168, #173 | | | | | | |
+| Method text | #168, #173 | — (docs) | `4e03328` `0efbbe8` `8895f6a` · `f4ad845` `3046d55` | 5 Important (docs review) | 1 | | |
