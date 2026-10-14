@@ -15,6 +15,13 @@ red CI runs, per group. Times are UTC.
 | 2026-10-14 07:34 | the Arbiter: #169 off the wave (a deferred task), no phone page; the plan cut to 19 tasks for 22 issues |
 | 2026-10-14 07:57 | «го» (the Arbiter: «155,156,154,163 — беремо. 168 … інформування та стандартні засоби … го!») |
 
+## The Haiku trial
+
+The Arbiter, 2026-10-14: «для механічних задач спробувати Хайку 5.5». `hub:seam` names a Sonnet trial for mechanical
+work; this wave runs Haiku 5.5 · medium on #163 and on the release bookkeeping's version bumps instead, each reviewed on
+opus. Counted per task: defects the review finds, rework rounds, time. The result goes to the hub (H-019) at the wave's
+end.
+
 ## Agent runs
 
 | # | role | model · effort | group | started | ended | result |
