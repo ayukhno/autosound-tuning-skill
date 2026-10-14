@@ -49,6 +49,6 @@ Each closed item comes back as an ordinary finding if it bites in use.
 ## How the remaining work is run
 
 By SKL-070 (hub #272), A and B: the full review loop only for risky code (data writes, locks, signatures, installers, the
-seam between the products) — G8 phase 1 is such code; one review for ordinary code; one final review per wave; models by
-role. The re-pin order and N2 stay: the skill tags first, TCC runs its suite on each skill candidate, TCC re-pins in its
+seam between the products) — G8 phase 1 is such code; ordinary code gets its group's review and none per task; one final
+review per wave; models by role (`hub:seam`, decided by the user 2026-10-14, hub #278). The re-pin order and N2 stay: the skill tags first, TCC runs its suite on each skill candidate, TCC re-pins in its
 next wave.
