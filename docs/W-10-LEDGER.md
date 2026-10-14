@@ -14,6 +14,33 @@ red CI runs, per group. Times are UTC.
 | 2026-10-14 07:31 | `docs/PLAN-W-10.md` written by the session from the maps; waits for «го» |
 | 2026-10-14 07:34 | the Arbiter: #169 off the wave (a deferred task), no phone page; the plan cut to 19 tasks for 22 issues |
 | 2026-10-14 07:57 | «го» (the Arbiter: «155,156,154,163 — беремо. 168 … інформування та стандартні засоби … го!») |
+| 2026-10-14 10:25 | PR #174 opened (`Engine: none`); its CI run 38549352727 is the release's test run |
+| 2026-10-14 ~10:35 | PR #174's CI run 38549352727 green on all five jobs; main fast-forwarded to `a5dd51d` (PR merged) |
+| 2026-10-14 ~10:38 | the candidate `beta-v3.1.4-rc1` on `a5dd51d` (tag-check --candidate: 5 of 5; Good "git" signature) |
+| 2026-10-14 ~10:40 | hub #283 (SKL-073) to TCC: N2 as its re-pin PR run on three systems + the seam list; hub #278 closed done |
+| 2026-10-14 ~11:00 | the Arbiter's VM run on rc1 (Windows-ARM64) — see below |
+| 2026-10-14 11:36 | TCC's N2 answer on hub #283 (TCC PR #214, run 38555923376): every failure TCC's (the re-pin, tcc #200) or a likely flake; the skill's own: none blocking, three optional |
+| 2026-10-14 ~11:45 | the Arbiter: «rc2, тоді реліз» — the three optional in rc2, then the release |
+
+## The Arbiter's VM run on rc1
+
+2026-10-14 ~11:00 UTC, Windows-ARM64. `install.cmd` double-clicked from `C:\w10 rc1!` (a space and a `!`) — the window
+held, «Finished with exit code 0»; `.\install.cmd -DryRun` from PowerShell — no pause, exit 0; the candidate installed
+by the README's two-line form with `-SkillRef beta-v3.1.4-rc1` — exit 0, receipt `ready`, `method_ref` the candidate,
+`missing: []`, `codex_link: kept` (made by the double-click run, whose local install.ps1 was the candidate's); the
+junction `~\.agents\skills\autosound-tuning` → `~\.claude\skills\.autosound-tuning-src\skills\autosound-tuning`;
+Codex lists `autosound-tuning:autosound-tuning` (the prefix looks like a plugin's — not proven to come from the link).
+#161's 5.1-under-pwsh-7 run skipped: no pwsh 7 on the VM; the Windows CI's probe covers it.
+
+## N2 on rc1 and rc2
+
+TCC's re-pin PR #214 at `a5dd51d` (run 38555923376): macOS 17, Ubuntu 18, Windows 21 failures, each named with its
+owner on hub #283. TCC's: gap 1 (#153, key matching — 11 tests), gap 3 (#154, the window's own band — 6), the hub #274
+xfail now XPASS (3), all for the re-pin (tcc #200); one Ubuntu flake (a git child racing a temp folder's cleanup).
+The skill's, optional, all three in rc2: `installer-consistency`'s #161 `module-path-pwsh` case expected the
+Documents entry first where `GetFolderPath('MyDocuments')` says `''` (TCC's tests set `USERPROFILE` to a bare folder;
+the reset rightly leaves the entry out); two invalid escapes in that script's docstrings (`\M`, `\i`); no `### Upgrading`
+line for #153. rc2 changes only that script and CHANGELOG — no new N2.
 
 ## The Haiku trial
 
@@ -133,9 +160,9 @@ end.
 
 | group | issues | plan | built | group seats: Important+ | fix rounds | red CI | merged |
 |---|---|---|---|---|---|---|---|
-| Captures | #153–#156 | PLAN-W-10 T1–T4 | `5f4a22c` `bf54719` · `bebab42` `b2eb99f` `74bbdfb` `d23d73e` `306bd4c` · `3a6eeb3` `a4dc01f` · group fix `1efad5c` `291dea7` `43a3d6a` `a6ed7cc` `df65abc` | task reviews 5 Important; seats 7 Important (3 behaviour) | 3 per task + 1 group | | |
-| Windows | #158 | | | | | | |
-| Installers | #157, #160–#164, #171, #172 | | | | | | |
-| Agent start | #149, #150, #170 | | | | | | |
-| Silent failures 3 | #159, #165–#167 | | | | | | |
-| Method text | #168, #173 | — (docs) | `4e03328` `0efbbe8` `8895f6a` · `f4ad845` `3046d55` | 5 Important (docs review) | 1 | | |
+| Captures | #153–#156 | PLAN-W-10 T1–T4 | `5f4a22c` `bf54719` · `bebab42` `b2eb99f` `74bbdfb` `d23d73e` `306bd4c` · `3a6eeb3` `a4dc01f` · group fix `1efad5c` `291dea7` `43a3d6a` `a6ed7cc` `df65abc` | task reviews 5 Important; seats 7 Important (3 behaviour) | 3 per task + 1 group | | 2026-10-14 ~10:35 |
+| Windows | #158 | | | | | | 2026-10-14 ~10:35 |
+| Installers | #157, #160–#164, #171, #172 | | | | | | 2026-10-14 ~10:35 |
+| Agent start | #149, #150, #170 | | | | | | 2026-10-14 ~10:35 |
+| Silent failures 3 | #159, #165–#167 | | | | | | 2026-10-14 ~10:35 |
+| Method text | #168, #173 | — (docs) | `4e03328` `0efbbe8` `8895f6a` · `f4ad845` `3046d55` | 5 Important (docs review) | 1 | | 2026-10-14 ~10:35 |

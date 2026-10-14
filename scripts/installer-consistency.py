@@ -2161,9 +2161,9 @@ def keep_local_run_problems(sh, ps1):
 
 def windows_start_problems(ps1, cmd):
     """#161 and #162, READ (the Windows job RUNS both): install.ps1 under Windows PowerShell 5.1 resets PSModulePath to
-    5.1's own -- the machine's and the user's values and $PSHOME\Modules -- before its first cmdlet, and hands the same
+    5.1's own -- the machine's and the user's values and $PSHOME\\Modules -- before its first cmdlet, and hands the same
     reset to the child PowerShell of every upstream installer; install.cmd tells a double click by Explorer's exact
-    command line, not by `/c` and its own name, which PowerShell's `& .\install.cmd` has too."""
+    command line, not by `/c` and its own name, which PowerShell's `& .\\install.cmd` has too."""
     out = []
     code = "\n".join(ln for ln in ps1.splitlines() if not ln.lstrip().startswith("#"))
     param_end = re.search(r"^\[CmdletBinding\(\)\]\nparam\(\n.*?^\)\n", code, re.M | re.S)
@@ -2459,7 +2459,10 @@ def ps1_run_problems(ps1):
                 ("module-path-pwsh", f"$env:PSModulePath = {pwsh_path}\n" + reset
                  + ". $Ps51ModulePath\nWrite-Host \"LEFT=$(@(& $Ps51PwshFolders).Count)\"\n"
                  "Write-Host \"EMPTY=$($env:PSModulePath -match ';;|^;|;$')\"\n"
-                 "Write-Host \"FIRST=$($env:PSModulePath.StartsWith([Environment]::GetFolderPath('MyDocuments') + "
+                 # No Documents folder (a USERPROFILE set to a bare folder, as TCC's tests do): GetFolderPath says ''
+                 # and the reset rightly leaves the entry out -- there is nothing to put first.
+                 "$docs = [Environment]::GetFolderPath('MyDocuments')\n"
+                 "Write-Host \"FIRST=$((-not $docs) -or $env:PSModulePath.StartsWith($docs + "
                  "'\\WindowsPowerShell\\Modules'))\"\n", ("LEFT=0", "EMPTY=False", "FIRST=True")),
                 ("module-path-upstream-child", reset + f"$env:CHILD_DIR = '{child_dir}'\nSay 'the parent is ready'\n"
                  f"$env:PSModulePath = {pwsh_path} + ';' + $env:PSModulePath\n"

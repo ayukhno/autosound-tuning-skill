@@ -249,6 +249,9 @@ superpowers engine (hub H-022); the ledger is `docs/W-10-LEDGER.md`.
 
 - **Titles in the old letter-before-the-series form** (`w-L_D7 (sw)`) are refused now with the form to use; rename
   them once in REW (`w-L_7 (sw) D`) — the measurement's uuid survives a rename.
+- **Capture rounds match by the series key** (#153): a take typed `w-L_01 (sw)` stands under the list's `w-L_1 (sw)`
+  (the typed spelling kept as `as_in_rew`), and `capture-supersede` between two spellings of one key is refused as
+  "corrected to itself". A front end that matched raw titles reads the method's list or matches by `naming.name_key`.
 - **`capture-check`'s OK line** now ends with the band judged; a front end that matched the bare line reads a prefix.
 - **An existing project's `CLAUDE.md`** (and an `AGENTS.md` written by an earlier W-10 build) still says the feedback
   gate de-identifies and asks for consent — it does not; the session does (`feedback-loop.md` step 2). Seeded files
