@@ -368,7 +368,9 @@ files win. A copy of the contract in the project (the intake made one until v3.1
 project's, the root has none) is said with a line to move it to the root, and a `rew_analitic/` copy that differs from
 the root's is named, by `doctor` and in each review's run. Each answered review adds a line to
 `<project>/audit-trail.md`. So **launch Claude from the project directory**
-(CWD = the car you're tuning). `PROJECT_MIRROR` defaults to `$PWD/rew_analitic`.
+(CWD = the car you're tuning). `PROJECT_MIRROR` defaults to `$AUTOSOUND_PROJECT_DIR/rew_analitic`, and to
+`$PWD/rew_analitic` only when no project is stated: with the project stated, a `rew_analitic/` in `$PWD` is not read
+(its `.critic-env`, its advisor memory, its contract copy) and is said in one line.
 
 > ⚠️ If the Critic ever cites a vehicle/history you don't recognise, it loaded a *different* project's context — fix the path here (or `PROJECT_MIRROR`), don't argue with the output.
 

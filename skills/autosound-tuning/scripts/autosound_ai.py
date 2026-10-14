@@ -96,7 +96,21 @@ if sys.platform == "win32":
 
 # Налаштування шляхів
 CWD = os.getcwd()
-PROJECT_MIRROR = os.environ.get("PROJECT_MIRROR", os.path.join(CWD, "rew_analitic"))
+
+
+def _default_mirror(environ, cwd):
+    """The project's mirror folder (#159): `PROJECT_MIRROR`, else `<AUTOSOUND_PROJECT_DIR>/rew_analitic`, else
+    `<cwd>/rew_analitic`. The project came last, after the working folder: a terminal session with the project stated
+    and no mirror, started from another car's folder, read that car's `.critic-env` and advisor memory. Pure: the
+    environment and the working folder are given."""
+    stated = environ.get("PROJECT_MIRROR")
+    if stated:
+        return stated
+    project = environ.get("AUTOSOUND_PROJECT_DIR")
+    return os.path.join(project or cwd, "rew_analitic")
+
+
+PROJECT_MIRROR = _default_mirror(os.environ, CWD)
 # AUTOSOUND_DIR (optional cross-project canon) is resolved from env below, after .critic-env loads.
 
 def machine_config_path():
@@ -382,6 +396,19 @@ def context_lines():
         "delete the copy" for copy in context_copies_that_differ()]
 
 
+def cwd_mirror_line():
+    """The line a review's run and `doctor` say when the working folder holds a `rew_analitic/` the door does not read
+    (#159): `AUTOSOUND_PROJECT_DIR` is set, `PROJECT_MIRROR` is not, and the mirror is the project's. None otherwise --
+    with `PROJECT_MIRROR` set (TCC always sets it) the choice is stated, and the working folder's is nobody's guess."""
+    if os.environ.get("PROJECT_MIRROR") or not os.environ.get("AUTOSOUND_PROJECT_DIR"):
+        return None
+    here = os.path.join(CWD, "rew_analitic")
+    if not os.path.isdir(here) or os.path.normcase(os.path.abspath(here)) == os.path.normcase(
+            os.path.abspath(PROJECT_MIRROR)):
+        return None
+    return f"! {here} is not read: AUTOSOUND_PROJECT_DIR is set, and the mirror is the project's, {PROJECT_MIRROR}"
+
+
 def _same_text(path, reference):
     """True when the file at `path` holds `reference`'s text, line endings aside."""
     texts = []
@@ -395,12 +422,14 @@ def contract_copies_that_differ():
     """Every copy of the tuning contract where the door read one before the skill's -- `rew_analitic/`
     (`PROJECT_MIRROR`), the working folder, the project of `review_project_dir` and its `rew_analitic/` -- that is not
     the skill's text (#143, I-5). None of them is read any more; one that differs reads like the protocol and is not
-    it. A copy that cannot be read is counted with them: it is not the skill's either, as far as anyone can tell."""
+    it. A copy that cannot be read is counted with them: it is not the skill's either, as far as anyone can tell. The
+    working folder only while `AUTOSOUND_PROJECT_DIR` is unset (#159): with it set, a copy there is another folder's."""
     skill = os.path.join(SKILL_DIR, "assets", CONTRACT_NAME)
     project = review_project_dir()
     seen = {os.path.normcase(os.path.realpath(skill))}
     found = []
-    for folder in (PROJECT_MIRROR, CWD, project, os.path.join(project, "rew_analitic")):
+    here = () if os.environ.get("AUTOSOUND_PROJECT_DIR") else (CWD,)
+    for folder in (PROJECT_MIRROR, *here, project, os.path.join(project, "rew_analitic")):
         path = os.path.abspath(os.path.join(folder, CONTRACT_NAME))
         key = os.path.normcase(os.path.realpath(path))
         if key in seen or not os.path.isfile(path):
@@ -2816,6 +2845,99 @@ def _check_another_folders_context_is_never_read():
     assert not failures, "\n  ".join(["another folder's context:"] + failures)
 
 
+def _check_the_mirror_follows_the_project():
+    """#159: with `AUTOSOUND_PROJECT_DIR` set and `PROJECT_MIRROR` unset, the mirror is `<project>/rew_analitic`, never
+    the working folder's: a terminal session started from another car's folder read that car's `.critic-env`, its
+    advisor memory and named its contract copy. The working folder's `rew_analitic/`, there and not used, is said once
+    on stderr. `_default_mirror` in its four cases; then the door imported in a child from another car's folder."""
+    failures = []
+    cwd, project, mirror = os.path.join("x", "here"), os.path.join("x", "car"), os.path.join("x", "set")
+    for label, environ, want in (
+            ("nothing set", {}, os.path.join(cwd, "rew_analitic")),
+            ("the project", {"AUTOSOUND_PROJECT_DIR": project}, os.path.join(project, "rew_analitic")),
+            ("the mirror", {"PROJECT_MIRROR": mirror}, mirror),
+            ("both", {"PROJECT_MIRROR": mirror, "AUTOSOUND_PROJECT_DIR": project}, mirror)):
+        got = _default_mirror(environ, cwd)
+        if got != want:
+            failures.append(f"_default_mirror, {label}: {got!r}, not {want!r}")
+    top = tempfile.mkdtemp(prefix="autosound_ai_mirror_follows_")
+
+    def write(path, text):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(text)
+    try:
+        other, project = os.path.join(top, "other-car"), os.path.join(top, "car")
+        write(os.path.join(project, "project.json"), "{}")
+        write(os.path.join(project, "autosound_context.md"), "# THE CAR\n")
+        write(os.path.join(other, "project.json"), "{}")
+        write(os.path.join(other, "autosound_context.md"), "# ANOTHER CAR\n")
+        write(os.path.join(other, "data-contract-template.md"), "# another car's contract copy\n")
+        theirs = os.path.join(other, "rew_analitic")
+        write(os.path.join(theirs, "autosound_context.md"), "# ANOTHER CAR, mirrored\n")
+        write(os.path.join(theirs, ".critic-env"), "AUTOSOUND_CRITIC_MODEL=another-cars-model\n")
+        write(os.path.join(theirs, "depth-advisor-memory.md"), "# ANOTHER CAR's memory\n")
+        write(os.path.join(theirs, "data-contract-template.md"), "# another car's mirrored contract copy\n")
+        probe = ("import importlib.util, json, sys\n"
+                 "spec = importlib.util.spec_from_file_location('door', sys.argv[1])\n"
+                 "m = importlib.util.module_from_spec(spec)\n"
+                 "spec.loader.exec_module(m)\n"
+                 "print(json.dumps({'mirror': m.PROJECT_MIRROR, 'env': m.ENV_FILES_USED, 'context': m.CONTEXT,\n"
+                 "                  'memory': m.ADVISOR_MEMORY, 'copies': m.contract_copies_that_differ(),\n"
+                 "                  'model': m.os.environ.get('AUTOSOUND_CRITIC_MODEL'),\n"
+                 "                  'line': m.cwd_mirror_line()}))\n")
+        env = {k: v for k, v in os.environ.items()
+               if k not in ("PROJECT_MIRROR", "ADVISOR_MEMORY", "AUTOSOUND_DIR", "AUTOSOUND_CRITIC_MODEL")}
+        env.update(AUTOSOUND_PROJECT_DIR=project, XDG_CONFIG_HOME=os.path.join(top, "config"),
+                   APPDATA=os.path.join(top, "config"), AUTOSOUND_KEYSTORE="off")
+        done = subprocess.run([sys.executable, "-c", probe, os.path.abspath(__file__)], cwd=other, env=env,
+                              capture_output=True, text=True, encoding="utf-8", timeout=60)
+        try:
+            seen = json.loads(done.stdout.strip().splitlines()[-1])
+        except (ValueError, IndexError):
+            seen = None
+        if not seen:
+            failures.append(f"the child said nothing readable: rc {done.returncode}, {done.stderr.strip()[-400:]!r}")
+        else:
+            real = os.path.realpath(other)
+            leaked = [f"{what} {path}" for what in ("env", "copies") for path in seen[what]
+                      if os.path.realpath(path).startswith(real + os.sep)]
+            for what in ("mirror", "context", "memory"):
+                if seen[what] and os.path.realpath(seen[what]).startswith(real + os.sep):
+                    leaked.append(f"{what} {seen[what]}")
+            if leaked or seen["model"] == "another-cars-model":
+                failures.append(f"another car's folder was read: {leaked}, the model {seen['model']!r}")
+            if os.path.realpath(seen["mirror"]) != os.path.realpath(os.path.join(project, "rew_analitic")):
+                failures.append(f"the mirror is {seen['mirror']}, not the project's")
+            line = seen["line"] or ""
+            named = line[2:].split(" is not read", 1)[0] if line.startswith("! ") else ""
+            if not named or os.path.realpath(named) != os.path.realpath(theirs) \
+                    or "is not read: AUTOSOUND_PROJECT_DIR is set, and the mirror is the project's" not in line:
+                failures.append(f"the unused mirror said as {line!r}")
+        # The line rides a review's run once, on stderr; with `PROJECT_MIRROR` set (TCC always sets it) it is not said.
+        pkg = os.path.join(top, "proposal.md")
+        write(pkg, "Check the proposal.")
+        stated = os.environ.pop("PROJECT_MIRROR", None)
+        try:
+            with _DoorScene(CWD=other, PROJECT_MIRROR=os.path.join(project, "rew_analitic"),
+                            CONTEXT=os.path.join(project, "autosound_context.md")) as scene:
+                os.environ["AUTOSOUND_PROJECT_DIR"] = project
+                _code, _out, err = scene.run("ask", pkg, "--via", "clipboard")
+                said = [ln for ln in err.splitlines() if "is not read: AUTOSOUND_PROJECT_DIR is set" in ln]
+                if len(said) != 1:
+                    failures.append(f"a review's run said the unused mirror {len(said)} times: {err.strip()[-300:]!r}")
+                os.environ["PROJECT_MIRROR"] = os.path.join(project, "rew_analitic")
+                if cwd_mirror_line() is not None:
+                    failures.append(f"with PROJECT_MIRROR set the line is said: {cwd_mirror_line()!r}")
+                os.environ.pop("PROJECT_MIRROR", None)
+        finally:
+            if stated is not None:
+                os.environ["PROJECT_MIRROR"] = stated
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["the mirror follows the project:"] + failures)
+
+
 def _check_the_audit_trail_is_the_projects():
     """#143, I-21: a review's line in the audit trail lands at `<project>/audit-trail.md` -- the project the review is
     about, `review_project_dir`'s -- where it landed in `rew_analitic/`. A folder that is no project gets none, as it
@@ -3434,6 +3556,7 @@ def _selftest():
                   _check_a_fault_in_the_record_is_not_a_refusal,
                   _check_an_omp_review_names_its_vendor, _check_the_contract_is_the_skills_own,
                   _check_the_context_is_the_roots, _check_another_folders_context_is_never_read,
+                  _check_the_mirror_follows_the_project,
                   _check_the_audit_trail_is_the_projects, _check_the_hand_line_stays_last_beside_an_old_trail,
                   _check_the_key_guard_says_when_git_cannot,
                   _check_the_key_guard_refuses_what_git_would_take, _check_the_key_guard_keeps_gits_repair,
@@ -5456,6 +5579,9 @@ def main():
     lost = lost_pins() if role == "doctor" or role in REVIEW_TASKS else None
     if lost:
         print(lost, file=sys.stderr)
+    unused = cwd_mirror_line() if role == "doctor" or role in REVIEW_TASKS else None
+    if unused:
+        print(unused, file=sys.stderr)
     if role == "doctor":
         success = run_doctor(smoke="--no-smoke" not in sys.argv, via=via)
         sys.exit(0 if success else 1)
