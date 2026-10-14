@@ -42,7 +42,13 @@ def _git(project_dir, *args, env=None):
                           encoding="utf-8", errors="replace", env=env, timeout=60)
 
 
+#: What `_gh` answers for a gh that did not answer in its deadline (#167): not "absent" -- gh is there.
+NO_ANSWER = subprocess.CompletedProcess(["gh"], None, "", "no answer in 30 s")
+
+
 def _gh(*args):
+    """gh's `CompletedProcess`; None where there is no gh (or `AUTOSOUND_NO_GH=1`) or it cannot start; `NO_ANSWER`
+    for one past its 30 s, its tree killed (#167)."""
     gh = shutil.which("gh")
     # AUTOSOUND_NO_GH=1: a self-test (or a machine that wants none of it) never reaches GitHub from here.
     if not gh or os.environ.get("AUTOSOUND_NO_GH") == "1":
@@ -50,15 +56,20 @@ def _gh(*args):
     import bounded_run                       # #167: a deadline that ends the call on Windows too
     try:
         return bounded_run.run([gh, *args], 30, encoding="utf-8", errors="replace")
-    except (OSError, subprocess.TimeoutExpired):
+    except subprocess.TimeoutExpired:
+        return NO_ANSWER
+    except OSError:
         return None
 
 
 def gh_state():
-    """"signed-in", "signed-out" or "absent"."""
+    """"signed-in", "signed-out", "absent" -- or "no-answer" (#167): a gh that did not answer `auth status` in its
+    30 s is there, and was read as absent, which stopped offering the backup without a word."""
     r = _gh("auth", "status")
     if r is None:
         return "absent"
+    if r is NO_ANSWER:
+        return "no-answer"
     return "signed-in" if r.returncode == 0 else "signed-out"
 
 
@@ -116,7 +127,8 @@ def init(project_dir):
 
 
 def status(project_dir):
-    """`{"repo", "remote", "gh", "init", "offer"}`: what the project has, and the one command for what it lacks."""
+    """`{"repo", "remote", "gh", "init", "offer"}`: what the project has, and the one command for what it lacks. `gh` is
+    `gh_state()`'s: "signed-in", "signed-out", "absent" or "no-answer" (#167)."""
     project_dir = os.path.abspath(project_dir)
     here = os.path.abspath(__file__)
     out = {"repo": is_repo(project_dir), "remote": None, "gh": gh_state(), "init": None, "offer": None}
@@ -140,6 +152,9 @@ def status_lines(project_dir):
         return [f"no backup of this project on GitHub (gh is signed in): `{st['offer']}` -- only with the user's yes"]
     if not st["remote"] and st["gh"] == "signed-out":
         return ["no backup of this project on GitHub: gh is installed but not signed in (`gh auth login --web`)"]
+    if not st["remote"] and st["gh"] == "no-answer":
+        return ["no backup of this project on GitHub, and gh did not answer `gh auth status` in 30 s (a network that "
+                "answers nothing?): run `gh auth status` once it can"]
     return []
 
 
@@ -178,6 +193,14 @@ def _selftest():
             assert ok2 and "a repository already" in line2, line2          # a second run changes nothing
             st2 = status(proj)
             assert st2["repo"] and st2["gh"] == "absent" and st2["offer"] is None and status_lines(proj) == [], st2
+            # #167: a gh that does not answer in its 30 s is its own state, said in one line -- not "absent", which
+            # stopped offering the backup as if gh were not installed.
+            globals()["_gh"] = lambda *a: NO_ANSWER
+            st3 = status(proj)
+            said = status_lines(proj)
+            assert st3["gh"] == "no-answer" and st3["offer"] is None and len(said) == 1 \
+                and "did not answer" in said[0], (st3, said)
+            globals()["_gh"] = lambda *a: None
             # a folder inside another repository is not a repository of its own
             inner = os.path.join(proj, "sub")
             os.makedirs(inner)

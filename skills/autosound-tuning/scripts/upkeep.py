@@ -1307,6 +1307,20 @@ def _check_a_patch_that_does_not_come_is_refused(fx):
     assert seen == [120] and refused.exit_code == 3 and "no answer in 120 s" in str(refused), (seen, refused)
 
 
+def _check_run_answers_on_the_bounded_path(fx):
+    """#167: `run` through `bounded_run` answers as it did through `subprocess.run`: a child's code and its words, a
+    program that is not there 127, a child past its deadline 124 `no answer in N s` -- its tree killed, never an
+    exception."""
+    import sys
+    assert _bounded_run() is not None, "upkeep.run does not find rew_tool/bounded_run.py"
+    got = run([sys.executable, "-c", "import sys; print('out'); sys.stderr.write('err'); sys.exit(3)"])
+    assert got == (3, "out\n", "err"), got
+    rc, _out, err = run([os.path.join(fx["tmp"], "no-such-program-167")])
+    assert rc == 127 and err, (rc, err)
+    got = run([sys.executable, "-c", "import time; time.sleep(30)"], timeout=1)
+    assert got == (124, "", "no answer in 1 s"), got
+
+
 def _check_the_gh_download_has_a_deadline(fx):
     """#146 (T-49): gh's release archive is fetched with `urlopen(..., timeout=60)`, as its checksums are -- it came
     by `urlretrieve`, which takes no timeout, and a download that stalled held `tools` for ever. One that fails is the
@@ -1664,7 +1678,7 @@ def _selftest_in(tmp):
     # #146 (T-49): the patch's diff, gh's download and its archive -- each has its end.
     failures = []
     for check in (_check_a_patch_that_does_not_come_is_refused, _check_the_gh_download_has_a_deadline,
-                  _check_a_tar_member_out_of_its_folder_is_refused):
+                  _check_a_tar_member_out_of_its_folder_is_refused, _check_run_answers_on_the_bounded_path):
         try:
             check({"tmp": tmp, "env": env})
         except AssertionError as exc:

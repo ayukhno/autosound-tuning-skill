@@ -2979,18 +2979,32 @@ def _check_a_cli_runs_bounded():
     2 s deadline is `TimeoutExpired` within the deadline plus `REAP_S`, what it said kept. On Windows `subprocess.run`
     waited there for the grandchild (the proof there is CI's)."""
     import time
+    bounded = _siblings().load("bounded_run.py")
+    top = tempfile.mkdtemp(prefix="autosound_ai_cli_bounded_")
+    pid_file = os.path.join(top, "grandchild.pid")
     stand_in = ("import subprocess, sys, time\n"
-                "subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)'])\n"
+                "p = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)'])\n"
+                f"open({pid_file!r}, 'w', encoding='utf-8').write(str(p.pid))\n"
                 "print('started', flush=True)\n"
                 "time.sleep(30)\n")
-    reap = _siblings().load("bounded_run.py").REAP_S
     t0 = time.monotonic()
     try:
-        _run_child([sys.executable, "-c", stand_in], capture_output=True, text=True, encoding="utf-8", timeout=2)
-        raise AssertionError("a CLI past its deadline answered")
-    except subprocess.TimeoutExpired as exc:
-        took = time.monotonic() - t0
-        assert took < 2 + reap + 3 and "started" in (exc.output or ""), (took, exc.output)
+        try:
+            _run_child([sys.executable, "-c", stand_in], capture_output=True, text=True, encoding="utf-8", timeout=2)
+            raise AssertionError("a CLI past its deadline answered")
+        except subprocess.TimeoutExpired as exc:
+            took = time.monotonic() - t0
+            said = exc.output.decode("utf-8", "replace") if isinstance(exc.output, bytes) else (exc.output or "")
+            assert took < 2 + bounded.REAP_S + 3 and "started" in said, (took, said)
+        with open(pid_file, encoding="utf-8") as fh:
+            grandchild = int(fh.read())
+        deadline = time.monotonic() + 5
+        while bounded._alive(grandchild) and time.monotonic() < deadline:
+            time.sleep(0.1)
+        # `subprocess.run` killed the CLI alone: its grandchild lived on (and on Windows held the call).
+        assert not bounded._alive(grandchild), f"the CLI's grandchild {grandchild} outlived its deadline"
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
 
 
 def _check_the_audit_trail_is_the_projects():

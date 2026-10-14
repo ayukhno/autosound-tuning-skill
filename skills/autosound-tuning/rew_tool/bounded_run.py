@@ -191,9 +191,93 @@ def _check_a_grandchild_holding_stdout_does_not_hold_the_call():
         shutil.rmtree(top, ignore_errors=True)
 
 
+def _pids_of(pid_file, deadline_s=5):
+    """The pids the stand-in wrote to `pid_file` -- its own, then its grandchild's -- once both are there."""
+    deadline = time.monotonic() + deadline_s
+    while time.monotonic() < deadline:
+        try:
+            with open(pid_file, encoding="utf-8") as fh:
+                pids = [int(p) for p in fh.read().split()]
+            if len(pids) == 2:
+                return pids
+        except (OSError, ValueError):
+            pass
+        time.sleep(0.05)
+    raise AssertionError(f"the stand-in wrote no pids to {pid_file}")
+
+
+def _stand_in(pid_file):
+    """A child that starts a 30 s grandchild on its stdout, writes both pids, and sleeps 30 s itself."""
+    return ("import os, subprocess, sys, time\n"
+            "p = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)'])\n"
+            f"open({pid_file!r}, 'w', encoding='utf-8').write(f'{{os.getpid()}} {{p.pid}}')\n"
+            "time.sleep(30)\n")
+
+
+def _gone(pids, deadline_s=5):
+    deadline = time.monotonic() + deadline_s
+    while any(_alive(p) for p in pids) and time.monotonic() < deadline:
+        time.sleep(0.1)
+    return not any(_alive(p) for p in pids)
+
+
+def _check_an_interrupt_kills_the_tree():
+    """An interrupt (Ctrl+C) while the call waits kills the child and its grandchild, then goes on up: a group of its
+    own gets no Ctrl+C from the console, so the tree would outlive the run. The wait is a stand-in that raises
+    `KeyboardInterrupt` once both pids are written."""
+    import shutil
+    top = tempfile.mkdtemp(prefix="bounded_run_interrupt_")
+    pid_file = os.path.join(top, "pids")
+    real = subprocess.Popen.communicate
+
+    def interrupted(self, *args, **kwargs):
+        _pids_of(pid_file)
+        raise KeyboardInterrupt
+    subprocess.Popen.communicate = interrupted
+    try:
+        try:
+            run_bounded([sys.executable, "-c", _stand_in(pid_file)], 30)
+            raise AssertionError("the interrupt did not go on up")
+        except KeyboardInterrupt:
+            pass
+    finally:
+        subprocess.Popen.communicate = real
+    try:
+        pids = _pids_of(pid_file)
+        assert _gone(pids), f"the tree {pids} outlived the interrupt"
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_a_tree_that_does_not_end_is_none():
+    """A tree that does not end within `REAP_S` after its kill answers `returncode` None, timed out -- never a wait
+    without a bound. The kill is a stand-in that kills nothing, so the reap waits out `REAP_S`; the tree is killed after."""
+    import shutil
+    global REAP_S
+    top = tempfile.mkdtemp(prefix="bounded_run_no_end_")
+    pid_file = os.path.join(top, "pids")
+    real_kill, real_reap = globals()["_kill_tree"], REAP_S
+    globals()["_kill_tree"] = lambda proc: None
+    REAP_S = 0.5
+    try:
+        t0 = time.monotonic()
+        rc, _out, _err, timed_out = run_bounded([sys.executable, "-c", _stand_in(pid_file)], 1)
+        took = time.monotonic() - t0
+        assert (rc, timed_out) == (None, True) and took < 1 + 0.5 + 3, (rc, timed_out, took)
+    finally:
+        globals()["_kill_tree"], REAP_S = real_kill, real_reap
+        for pid in (_pids_of(pid_file) if os.path.exists(pid_file) else ()):
+            try:
+                os.kill(pid, signal.SIGTERM)
+            except OSError:
+                pass
+        shutil.rmtree(top, ignore_errors=True)
+
+
 def _selftest():
     failures = []
-    for check in (_check_answers_and_input, _check_a_grandchild_holding_stdout_does_not_hold_the_call):
+    for check in (_check_answers_and_input, _check_a_grandchild_holding_stdout_does_not_hold_the_call,
+                  _check_an_interrupt_kills_the_tree, _check_a_tree_that_does_not_end_is_none):
         try:
             check()
         except AssertionError as exc:
