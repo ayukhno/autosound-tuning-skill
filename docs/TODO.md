@@ -1649,6 +1649,10 @@ The ranking and the assessment: `docs/W-10-CANDIDATES.md`. The groups (`hub:seam
 - **Silent failures 3**: #159, #165, #166, #167;
 - **Method text**: #168 hub #258, #173 (S-101's boost path, research first). Off the wave: #169 hub #113, deferred.
 
+For the next collection (the final review's M3, half done in `d4250f3`): install.ps1 still arms the receipt right
+before the winget Git install, Claude's `Invoke-Upstream` and uv's — a failed download there writes `stopped` over a
+good receipt with nothing changed, as v3.1.3 did. install.sh's equivalents arm after the change.
+
 A finding for the next collection (#170's first neutral run, 2026-10-14): in a folder that names nothing, the
 description fires on 10 of 26 car-audio queries (resume, de/pl, EMMA, TCC bug reports) — the old runs' numbers were
 lifted by a run folder named `autosound-hub`. The description's recall is the next wave's question, not this one's.
