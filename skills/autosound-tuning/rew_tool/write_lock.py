@@ -451,8 +451,7 @@ def _scratch():
 
 
 def _drop(path):
-    import shutil
-    shutil.rmtree(path, ignore_errors=True)
+    _siblings().load("project_io.py").remove_tree(path)     # #158: a file a child still holds, on Windows
 
 
 def _raised(call):

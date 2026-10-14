@@ -689,7 +689,6 @@ def _own_tempdir(selftest):
     @functools.wraps(selftest)
     def run(*args, **kwargs):
         import os
-        import shutil
         import tempfile
         saved = tempfile.tempdir, os.environ.get("TMPDIR")
         own = tempfile.mkdtemp(prefix="selftest_" + os.path.splitext(os.path.basename(__file__))[0] + "_")
@@ -703,8 +702,24 @@ def _own_tempdir(selftest):
                 os.environ.pop("TMPDIR", None)
             else:
                 os.environ["TMPDIR"] = saved[1]
-            shutil.rmtree(own, ignore_errors=True)
+            _remove_tree(own)                               # #158: git's read-only objects, on Windows
     return run
+
+
+def _remove_tree(path):
+    """`project_io.remove_tree` (#158), loaded by its path for this selftest helper -- this module loads no sibling
+    else (the installers' keep-local step copies it without them) -- or `shutil.rmtree` where it is not there."""
+    import importlib.util
+    import os
+    import shutil
+    io_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "project_io.py")
+    if not os.path.isfile(io_path):
+        shutil.rmtree(path, ignore_errors=True)
+        return
+    spec = importlib.util.spec_from_file_location("_autosound_side_effect_project_io", io_path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    module.remove_tree(path)
 
 
 @_own_tempdir

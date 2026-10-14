@@ -305,6 +305,41 @@ def oserror_words(exc):
     return words + (f" -> {exc.filename2}" if exc.filename2 is not None else "")
 
 
+def remove_tree(path, wait_s=5.0):
+    """Remove the folder `path` and all in it; True when it is gone (#158). For the selftests' scratch folders, the one
+    rule every module's selftest that makes a git repository or holds a file follows: `shutil.rmtree(...,
+    ignore_errors=True)` left them on Windows -- git's object files are read-only there, and a file a child that is
+    just ending still holds refuses its delete -- and the runner counts what a selftest leaves (#148). A path refused
+    has the read-only bit cleared, its folder made writable, and is tried again; what is still there is tried again
+    for `wait_s` seconds. Never raises."""
+    import shutil
+    import stat
+
+    def clear(func, p, _exc):
+        for target, mode in ((os.path.dirname(p), stat.S_IRWXU), (p, stat.S_IWRITE | stat.S_IREAD)):
+            try:
+                os.chmod(target, os.stat(target).st_mode | mode)
+            except OSError:
+                pass
+        try:
+            func(p)
+        except OSError:
+            pass
+    deadline = time.monotonic() + wait_s
+    while os.path.lexists(path):
+        try:
+            if sys.version_info >= (3, 12):
+                shutil.rmtree(path, onexc=clear)
+            else:
+                shutil.rmtree(path, onerror=clear)
+        except OSError:
+            pass
+        if not os.path.lexists(path) or time.monotonic() >= deadline:
+            break
+        time.sleep(0.1)
+    return not os.path.lexists(path)
+
+
 def cannot_open(path, exc):
     """The `Unreadable` to raise for `path`, which `exc` -- an `OSError` other than `FileNotFoundError` -- refused to
     open: a folder in its place said as one, anything else with the repair its cause allows (`repair_for`). For a
@@ -1301,6 +1336,25 @@ def _check_paths_as_written():
         appended.reason
 
 
+def _check_remove_tree():
+    """#158: `remove_tree` removes a folder `shutil.rmtree(..., ignore_errors=True)` leaves -- read-only files in a
+    read-only folder, as git's objects are on Windows -- and says so; a path that is not there is gone already."""
+    import stat
+    top = _scratch()
+    sub = os.path.join(top, "objects", "ab")
+    os.makedirs(sub)
+    with open(os.path.join(sub, "cdef"), "wb") as fh:
+        fh.write(b"x")
+    os.chmod(os.path.join(sub, "cdef"), stat.S_IREAD)
+    os.chmod(sub, stat.S_IREAD | stat.S_IEXEC)
+    import shutil
+    shutil.rmtree(top, ignore_errors=True)
+    if os.name != "nt":
+        assert os.path.lexists(os.path.join(sub, "cdef")), "rmtree removed a file in a read-only folder: nothing to show"
+    assert remove_tree(top) is True and not os.path.lexists(top), os.listdir(top) if os.path.exists(top) else None
+    assert remove_tree(top) is True
+
+
 def _selftest():
     failures, seen = [], {}
     for check in (_check_text_and_json, _check_binary_temp, _check_foreign_tmp, _check_replace_fails_clean,
@@ -1308,7 +1362,7 @@ def _selftest():
                   _check_replace_retry, _check_private_mode, _check_create_exclusive, _check_append_line,
                   _check_durable, _check_append_refused, _check_read_json, _check_newer_schema,
                   _check_every_writer_moves, _check_says_what_it_did_not_check, _check_two_writers_one_reader,
-                  _check_paths_as_written):
+                  _check_paths_as_written, _check_remove_tree):
         try:
             seen[check.__name__] = check()
         except Exception as exc:  # noqa: BLE001 -- each check is reported by name; one failing must not hide the rest

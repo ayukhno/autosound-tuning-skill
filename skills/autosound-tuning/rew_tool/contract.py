@@ -2391,7 +2391,7 @@ def _check_a_differing_contract_copy_is_a_warning():
         if before.get("warnings", "missing") != []:
             failures.append(f"no copy: warnings {before.get('warnings', 'missing')!r}")
         with open(skill, "rb") as fh:
-            text = fh.read()
+            text = fh.read().replace(b"\r\n", b"\n")      # a checkout on Windows may hold it in CRLF already
         with open(os.path.join(d, "data-contract-template.md"), "wb") as fh:     # the skill's text, in CRLF
             fh.write(text.replace(b"\n", b"\r\n"))
         with open(os.path.join(d, "rew_analitic", "data-contract-template.md"), "wb") as fh:

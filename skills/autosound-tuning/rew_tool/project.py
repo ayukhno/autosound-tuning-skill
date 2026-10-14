@@ -3030,7 +3030,6 @@ def _own_tempdir(selftest):
     @functools.wraps(selftest)
     def run(*args, **kwargs):
         import os
-        import shutil
         import tempfile
         saved = tempfile.tempdir, os.environ.get("TMPDIR")
         own = tempfile.mkdtemp(prefix="selftest_" + os.path.splitext(os.path.basename(__file__))[0] + "_")
@@ -3044,7 +3043,7 @@ def _own_tempdir(selftest):
                 os.environ.pop("TMPDIR", None)
             else:
                 os.environ["TMPDIR"] = saved[1]
-            shutil.rmtree(own, ignore_errors=True)
+            _project_io().remove_tree(own)                  # #158: git's read-only objects, on Windows
     return run
 
 

@@ -114,7 +114,12 @@ def _alive(pid):
     `os.kill(pid, 0)`, which there ends the process."""
     if os.name == "nt":
         import ctypes
+        from ctypes import wintypes
         kernel = ctypes.windll.kernel32
+        kernel.OpenProcess.restype = wintypes.HANDLE      # a HANDLE, not the default 32-bit int
+        kernel.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
+        kernel.WaitForSingleObject.argtypes = (wintypes.HANDLE, wintypes.DWORD)
+        kernel.CloseHandle.argtypes = (wintypes.HANDLE,)
         handle = kernel.OpenProcess(0x00100000 | 0x1000, False, pid)  # SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION
         if not handle:
             return False
@@ -140,8 +145,10 @@ def _check_answers_and_input():
     """A child that answers: its code, stdout and stderr as text, `\\r\\n` read as `\\n`; `input` reaches its stdin;
     with no input its stdin is empty, never the terminal's."""
     py = sys.executable
-    got = run_bounded([py, "-c", "import sys; sys.stdout.write('a\\r\\nb\\n'); sys.stderr.write('said'); sys.exit(3)"],
-                      30)
+    # The child's bytes, not its text stream: on Windows a text-mode stdout writes `\n` as `\r\n`, so the `\r\n` it
+    # was given went out `\r\r\n` -- two line ends, as a pipe's text mode reads them too.
+    got = run_bounded([py, "-c", "import sys; sys.stdout.buffer.write(b'a\\r\\nb\\n'); sys.stderr.write('said'); "
+                                 "sys.exit(3)"], 30)
     assert got == (3, "a\nb\n", "said", False), got
     got = run_bounded([py, "-c", "import sys; print(sys.stdin.read().upper())"], 30, input="über")
     assert got[:2] == (0, "ÜBER\n") and not got[3], got
@@ -231,6 +238,9 @@ def _check_an_interrupt_kills_the_tree():
     real = subprocess.Popen.communicate
 
     def interrupted(self, *args, **kwargs):
+        # Once: the kill that follows (`taskkill` on Windows) waits through `communicate` too, and an interrupt there
+        # left the tree standing -- the stand-in, not the code under test.
+        subprocess.Popen.communicate = real
         _pids_of(pid_file)
         raise KeyboardInterrupt
     subprocess.Popen.communicate = interrupted

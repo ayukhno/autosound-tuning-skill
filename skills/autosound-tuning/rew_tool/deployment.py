@@ -72,6 +72,26 @@ DECLARED_ENV = "AUTOSOUND_SKILL_ROOT"
 _TIMEOUT = 3.0
 
 
+def _siblings():
+    """`rew_tool/siblings.py`, by its path: how this module reaches a sibling (skill #137).
+
+    The same text in every module that loads a sibling -- only the `here` line differs with the file's folder;
+    scripts/contract-guard.py holds the copies identical.
+    """
+    import hashlib
+    import importlib.util
+    here = os.path.dirname(os.path.realpath(__file__))
+    name = "_autosound_" + hashlib.sha1(here.encode("utf-8")).hexdigest()[:8] + "_siblings"
+    module = sys.modules.get(name)
+    if module is None:
+        spec = importlib.util.spec_from_file_location(name, os.path.join(here, "siblings.py"))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        # Published only once it has run: a thread racing this first call never gets a half-run siblings.py.
+        module = sys.modules.setdefault(name, module)
+    return module
+
+
 def skill_dir():
     """The `skills/autosound-tuning` this module lives in, symlinks resolved."""
     return os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
@@ -484,7 +504,6 @@ def _check_a_plugin_copy_inside_a_repository_is_its_record():
     home's repository, and `describe()` took that HEAD, its `describe` and its branch as the copy's: the recorded sha
     went unread, and the copy was "split" from every checkout of the method (exit 3). Unrecorded, it has no identity
     (""), as a copy in no repository. A checkout of its own inside that home still answers for itself."""
-    import shutil
     import tempfile
     top = tempfile.mkdtemp(prefix="autosound_deployment_home_")
     env = {**os.environ, "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1", "GIT_AUTHOR_NAME": "t",
@@ -544,7 +563,7 @@ def _check_a_plugin_copy_inside_a_repository_is_its_record():
         assert d["sha"] == own_head and len(d["ref"]) >= 7 and own_head.startswith(d["ref"]) and d["branch"] \
             and not d.get("plugin"), f"a checkout of its own inside the home: {d}"
     finally:
-        shutil.rmtree(top, ignore_errors=True)
+        _siblings().load("project_io.py").remove_tree(top)   # #158: git's read-only objects, on Windows
 
 
 def main(argv=None):
