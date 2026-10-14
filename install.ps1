@@ -29,7 +29,7 @@
 # REW detection on a machine that has REW. Windows PowerShell 5.1 (what every Windows ships) or PowerShell 7 -- no syntax newer than
 # 5.1 is used here on purpose. Run it through install.cmd (double-click), or:
 #
-#   irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/main/install.ps1 | iex
+#   irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.1.3/install.ps1 | iex
 #   & ([scriptblock]::Create((irm <same url>))) -Terminal      # with options
 #
 # Usage:
