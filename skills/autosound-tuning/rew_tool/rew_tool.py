@@ -2171,11 +2171,12 @@ def _check_only_rews_failure_is_said_as_rews():
             raise Down(61, "Connection refused")
         api.get_measurements = down
         code, out, err = _run_main("analyze-batch", "_2 (rta)", "--no-targets")
-        if code != 1 or rew_line not in out or "Помилка підключення до REW API" not in out:
+        # REW down stays exit 1, REW's sentence, no traceback -- beside a bug's 70 (#165).
+        if code != 1 or rew_line not in out or "Помилка підключення до REW API" not in out or "Traceback" in err:
             failures.append(f"REW down, analyze-batch: exit {code!r}, said {out.strip()[-300:]!r} {err!r}")
         globals()["analyze_joints"] = lambda *args, **kwargs: down()
         code, out, err = _run_main("analyze-joints", "--joint", "w-L,m-L,400", "--ver", "2")
-        if code != 1 or rew_line not in out:
+        if code != 1 or rew_line not in out or "Traceback" in err:
             failures.append(f"REW down, analyze-joints: exit {code!r}, said {out.strip()[-300:]!r} {err!r}")
 
         def bug():

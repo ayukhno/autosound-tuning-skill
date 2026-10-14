@@ -326,6 +326,9 @@ class Glossary:
         # Any other shape is that part missing -- `list(42)` raised `TypeError`, a row that is a number
         # `AttributeError`, out of the lenient `for_project`, TCC's read of a screen (contract 1). The strict read
         # refuses such a glossary before it gets here (`glossary_shape_problem`).
+        #: What a lenient read left out (#165), as the strict read would refuse it -- "`channels` is no list of
+        #: objects" -- for a front end to say; None for a glossary of the right shape. An addition: no type changed.
+        self.shape_problem = glossary_shape_problem(data)
         data = data if isinstance(data, dict) else {}
         rows = data.get("channels")
         self.channels = [c for c in rows if isinstance(c, dict)] if isinstance(rows, (list, tuple)) else []
@@ -349,7 +352,7 @@ class Glossary:
                 data = json.load(f)
         except (OSError, ValueError):
             return cls()
-        return cls(data) if isinstance(data, dict) else cls()
+        return cls(data)
 
     @classmethod
     def for_project(cls, project_dir, strict=False):
@@ -394,8 +397,10 @@ class Glossary:
                 # (#147, item 7): `data.get` raised `AttributeError` out of TCC's read of a screen.
                 data = {}
             kept = data.get("glossary")
-            glossary = cls.load(standalone) if os.path.isfile(standalone) else cls(kept if isinstance(kept, dict)
-                                                                                   else {})
+            glossary = cls.load(standalone) if os.path.isfile(standalone) else cls(kept)
+            rows = _rows_problem(data.get("channels"), "channels")
+            if rows and glossary.shape_problem is None:
+                glossary.shape_problem = f"project.json's {rows}"
         glossary.follow_project_channels(data.get("channels") or [])
         return glossary
 
@@ -1241,6 +1246,20 @@ def _check_lenient_read_of_inner_shapes():
                 failures.append(f"project.json's channels {rows}: {got}")
         if Glossary.for_project(d).channel_codes(active_only=True) != []:
             failures.append("a hidden row beside a number did not switch its channel off")
+        # What the lenient read dropped is said on the object (`shape_problem`), for a front end to show: the part,
+        # as the strict read names it; None for a glossary of the right shape.
+        if Glossary.for_project(d).shape_problem != "`channels` is no list of objects":
+            failures.append(f"shape_problem over glossary.json's rows: {Glossary.for_project(d).shape_problem!r}")
+        for data, want in (({"pairs": [1]}, "`pairs` is no object"), ([1], "`glossary` is no object"),
+                           ({"channels": [{"code": "w-L"}]}, None), (None, None)):
+            if Glossary(data).shape_problem != want:
+                failures.append(f"shape_problem of {data!r}: {Glossary(data).shape_problem!r}")
+        with open(gpath, "w", encoding="utf-8") as fh:
+            fh.write('{"channels": [{"code": "w-L"}]}')
+        with open(ppath, "w", encoding="utf-8") as fh:
+            fh.write('{"channels": 42}')
+        if Glossary.for_project(d).shape_problem != "project.json's `channels` is no list of objects":
+            failures.append(f"shape_problem over project.json's rows: {Glossary.for_project(d).shape_problem!r}")
         # The strict read -- the method's own readers', and `contract.py check`'s (`read_glossary_file`) -- refuses a
         # wrong shape, naming the file and the part: read past, `{"channels": 42}` was "no glossary yet" and a row that
         # is no object was dropped without a word.
