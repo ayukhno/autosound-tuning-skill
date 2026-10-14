@@ -326,7 +326,10 @@ AGENTS_MD = f"""# This is an autosound tuning project
 In Codex, loading it means reading the skill's `SKILL.md` in full before the first reply: Codex otherwise sees only
 its description. The skill is the folder `autosound-tuning` in the first of these that exists: this project's
 `.claude/skills/autosound-tuning/`, `.agents/skills/autosound-tuning/`, `~/.agents/skills/autosound-tuning/`,
-`~/.claude/skills/autosound-tuning/`. Its `rew_tool/`, `scripts/` and `references/` paths are relative to that
+`~/.claude/skills/autosound-tuning/`. In none of them, say that first, as its own finding: the skill is not where
+Codex can read it (not a version disagreement, not a TCC problem). The way to put it there is
+`skills/autosound-tuning/references/tooling/installation.md` (Codex) in github.com/ayukhno/autosound-tuning-skill.
+Its `rew_tool/`, `scripts/` and `references/` paths are relative to that
 folder; `python3 rew_tool/deployment.py <project>` says whether the copies agree, and
 `python3 rew_tool/contract.py check <project>` reads this project's state. Its rules, tools and phases are the
 skill's, not this folder's.
@@ -883,6 +886,7 @@ def _check_agents_md_loads_the_skill_for_codex():
             assert shared in text, f"{name} does not carry {shared[:40]!r}..."
         assert text.index(SKILL_LOAD_LINE) < text.index("gh issue create"), f"{name}: the load line comes first"
     assert "SKILL.md" in AGENTS_MD and ".claude/skills/autosound-tuning" in AGENTS_MD, "AGENTS.md says no SKILL.md"
+    assert "In none of them" in AGENTS_MD and "installation.md" in AGENTS_MD, "AGENTS.md: no step for a missing skill"
     with tempfile.TemporaryDirectory() as tmp:
         assert write_agents_md(tmp) is True
         with open(os.path.join(tmp, "AGENTS.md"), encoding="utf-8") as fh:

@@ -1818,8 +1818,16 @@ def _main(argv):
                 raise ProjectError(f"{root} is not a project folder (no project.json there); nothing was written")
             import project_seed
             path = os.path.join(root, "AGENTS.md")
-            if project_seed.write_agents_md(root):
-                print(f"wrote {path}: the skill's load line and feedback rule, where Codex reads them")
+            if os.path.lexists(path) and not os.path.isfile(path):
+                what = "a folder" if os.path.isdir(path) else "a link to nothing"
+                raise ProjectError(f"{path} is {what}, not a file Codex can read; left as it is, nothing was written "
+                                   f"-- move it aside and run agents-setup again")
+            try:
+                wrote = project_seed.write_agents_md(root)
+            except OSError as exc:
+                raise ProjectError(f"cannot write {path}: {exc.strerror or exc}; nothing was written") from exc
+            if wrote:
+                print(f"wrote {path} (not committed): the skill's load line and feedback rule, where Codex reads them")
             else:
                 print(f"{path} is already there; left as it is")
         elif cmd == "migrate-fields":
@@ -2807,7 +2815,8 @@ def _check_agents_setup_writes_once():
     """`agents-setup` gives a project made before #149 the `AGENTS.md` Codex reads (the Passat): the first run writes
     the seed's own text and says so, a second run is a no-op that says the file was there, and nothing else in the
     folder changes either time -- no `CLAUDE.md` rewritten, no `project.json` touched. A folder that is no project --
-    gone, or with no `project.json` -- is refused with one line, exit 1, nothing made."""
+    gone, or with no `project.json` -- is refused with one line, exit 1, nothing made; so are an `AGENTS.md` that is a
+    folder or a link to nothing (no file Codex can read, never called "there") and a folder this user may not write."""
     import shutil
     import tempfile
     import project_seed
@@ -2824,7 +2833,8 @@ def _check_agents_setup_writes_once():
         agents = os.path.join(folder, "AGENTS.md")
         rc, out, err = _run_cli(_main, ["project.py", folder, "agents-setup"])
         lines = out.strip().splitlines()
-        if rc != 0 or len(lines) != 1 or not lines[0].startswith("wrote ") or agents not in lines[0] or err:
+        if (rc != 0 or len(lines) != 1 or not lines[0].startswith("wrote ") or agents not in lines[0]
+                or "not committed" not in lines[0] or err):
             failures.append(f"first run: rc {rc}, said {(out + err).strip()[-300:]!r}")
         after = _files_in(folder)
         if after.pop("AGENTS.md", None) != project_seed.AGENTS_MD.encode("utf-8").replace(b"\n", os.linesep.encode()):
@@ -2838,6 +2848,41 @@ def _check_agents_setup_writes_once():
             failures.append(f"second run: rc {rc}, said {(out + err).strip()[-300:]!r}")
         if _files_in(folder) != once:
             failures.append("second run wrote")
+        # An AGENTS.md that is no file Codex can read -- a folder, a link to nothing -- is named, not called "there".
+        for n, kind in enumerate(("folder", "link")):
+            odd = os.path.join(top, f"odd-{kind}")
+            os.makedirs(odd)
+            shutil.copy(os.path.join(folder, "project.json"), odd)
+            if kind == "folder":
+                os.makedirs(os.path.join(odd, "AGENTS.md"))
+            else:
+                try:
+                    os.symlink(os.path.join(odd, "nowhere.md"), os.path.join(odd, "AGENTS.md"))
+                except (OSError, NotImplementedError):
+                    continue                      # Windows without the right to make a link
+            was = sorted(os.listdir(odd))
+            rc, out, err = _run_cli(_main, ["project.py", odd, "agents-setup"])
+            said = (out + err).strip().splitlines()
+            if rc != 1 or len(said) != 1 or not said[0].startswith("error: ") or "Codex" not in said[0]:
+                failures.append(f"AGENTS.md as a {kind}: rc {rc}, said {said}")
+            if sorted(os.listdir(odd)) != was or os.path.lexists(os.path.join(odd, "nowhere.md")):
+                failures.append(f"AGENTS.md as a {kind}: wrote")
+        # A project folder this user may not write to: one line, exit 1, no traceback. Root writes anywhere.
+        if os.name != "nt" and getattr(os, "geteuid", lambda: 0)() != 0:
+            locked = os.path.join(top, "read-only")
+            os.makedirs(locked)
+            shutil.copy(os.path.join(folder, "project.json"), locked)
+            os.chmod(locked, 0o555)
+            try:
+                rc, out, err = _run_cli(_main, ["project.py", locked, "agents-setup"])
+                said = (out + err).strip().splitlines()
+                if (rc != 1 or len(said) != 1 or not said[0].startswith("error: cannot write ")
+                        or "nothing was written" not in said[0]):
+                    failures.append(f"a read-only folder: rc {rc}, said {said[-3:]}")
+                if os.path.lexists(os.path.join(locked, "AGENTS.md")):
+                    failures.append("a read-only folder: AGENTS.md made")
+            finally:
+                os.chmod(locked, 0o755)
         for n, make in enumerate((False, True)):
             gone = os.path.join(top, f"not-a-project-{n}")
             if make:
