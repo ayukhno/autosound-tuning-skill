@@ -1664,6 +1664,11 @@ A finding for the next collection (#170's first neutral run, 2026-10-14): in a f
 description fires on 10 of 26 car-audio queries (resume, de/pl, EMMA, TCC bug reports) — the old runs' numbers were
 lifted by a run folder named `autosound-hub`. The description's recall is the next wave's question, not this one's.
 
+A finding for the next collection (PR #175's CI run 38558929626, attempt 1): `project.py`'s selftest
+`_check_two_writers_lose_nothing` starved on Windows CI — a writer waited its 60 s and got `Busy` (40 back-to-back
+writes each). It passed in runs 38548157486 and 38549352727 and on the rerun; W-10 left the lock's acquire path as it
+was (`4796d49` changed only `_drop`). Recorded, not diagnosed: not a user's case, but a red CI by chance.
+
 The Windows selftests step of `installers-windows` is required since CI run 38548157486 (all 67 passed): hub #278's
 receipt names `installers-windows`.
 

@@ -21,6 +21,10 @@ red CI runs, per group. Times are UTC.
 | 2026-10-14 ~11:00 | the Arbiter's VM run on rc1 (Windows-ARM64) — see below |
 | 2026-10-14 11:36 | TCC's N2 answer on hub #283 (TCC PR #214, run 38555923376): every failure TCC's (the re-pin, tcc #200) or a likely flake; the skill's own: none blocking, three optional |
 | 2026-10-14 ~11:45 | the Arbiter: «rc2, тоді реліз» — the three optional in rc2, then the release |
+| 2026-10-14 12:08 | the candidate `beta-v3.1.4-rc2` on `ac9faa3` (PR #175, CI green after one Windows rerun) |
+| 2026-10-14 ~12:12 | the release bookkeeping on Haiku · xhigh (`71a56cf`), reviewed on opus: 0 defects |
+| 2026-10-14 12:20 | `beta-v3.1.4-rc3` on `71a56cf`, then **v3.1.4** on the same commit (see N2 below) |
+| 2026-10-14 ~12:25 | the milestone closed (22 issues, each with its receipt); hub #247, #258, #259, #261, #269, #274 closed done |
 
 ## The Arbiter's VM run on rc1
 
@@ -42,6 +46,11 @@ Documents entry first where `GetFolderPath('MyDocuments')` says `''` (TCC's test
 the reset rightly leaves the entry out); two invalid escapes in that script's docstrings (`\M`, `\i`); no `### Upgrading`
 line for #153. rc2 changes only that script and CHANGELOG — no new N2.
 
+rc3: the release bookkeeping had to close S-099 (#163) for `pool-closed`, and S-099's old status line names no
+version, so `promotes` refused the release as rc2 plus bookkeeping. The preflight's own way — «cut rc3» — on the
+bookkeeping commit `71a56cf` (CI run 38561983012 green on all five jobs); v3.1.4 promotes rc3 with nothing beside it.
+The CHANGELOG and S-104 say rc2 plus the bookkeeping, which is what rc3 is.
+
 ## The Haiku trial
 
 The Arbiter, 2026-10-14: «для механічних задач спробувати Хайку 5.5». `hub:seam` names a Sonnet trial for mechanical
@@ -53,6 +62,10 @@ end.
 | task | effort | time | defects (Important / Minor) | rework |
 |---|---|---|---|---|
 | #163 help one-liner | high | 147 s, 89k tokens | 0 / 2 (+1 pool-worthy) | one round, by Haiku, all three done (`518b55b`) |
+| release bookkeeping (15 files, 28 pins, 3 versions, CHANGELOG heading + index, two status lines) | xhigh | ~110 s, 77k tokens, 11 tool uses | 0 / 0 | none; it caught the brief's own miscount (26 pins → 28) |
+
+The result for H-019: on mechanical work from a brief that holds the exact text, Haiku 5.5 at high and xhigh needed no
+Important fix; at xhigh it checked the brief against the tree and reported the difference instead of following it.
 
 ## Agent runs
 
@@ -155,6 +168,9 @@ end.
 | 38545884702 | 09:55 | `d3b3ec2` | the CR fix | green on all five jobs; the Windows selftests step really ran: 61 of 67 pass — bounded_run (CRLF, the interrupt's tree kill), contract (a copy counted twice), and four temp-folder leaks (git's read-only files) fail |
 | 38547555900 | ~10:15 | `4796d49` | the six Windows fixes (dispatched by their implementer) | red: installers-windows at its consistency step — the #160 Claude-step case's empty stand-in is not executable under MSYS; every later step skipped; fixed by the controller `580ba0d` |
 | 38548157486 | ~10:15 | `80ac1c3` | the six Windows fixes + the MSYS stand-in | **GREEN on all five jobs; the Windows rew_tool selftests: all 67 checks passed** — continue-on-error removed next |
+| 38549352727 | ~10:25 | `a5dd51d` | PR #174 | green on all five jobs (the release's test run) |
+| 38558929626 | ~11:50 | `ac9faa3` | PR #175 (rc2) | attempt 1 red: installers-windows, the two-writers selftest starved (S-104's pool); attempt 2 (that job rerun) green on all five |
+| 38561983012 | 12:11 | `71a56cf` | the release bookkeeping, push to main | green on all five jobs |
 
 ## Per group
 
