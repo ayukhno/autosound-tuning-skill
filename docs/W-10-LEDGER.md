@@ -81,15 +81,19 @@ end.
 | 48 | re-review of the Captures group fix | opus · high | Captures | 08:47 | 08:53 | group fix accepted; 2 Minor (the AMBIGUOUS fix not in the stored issue — TCC's card shows issues; a window between two REW reads) |
 | 49 | group seat: silent failures (also the fixes' re-review) | opus · high | Installers | 08:49 | 08:55 | 3 Important (keep-local's reset before the arm; the #161 guard matches SQL Server's path — CI red there; continue-on-error hides Windows selftests), 4 Minor |
 | 50 | group seat: tests | opus · high | Installers | 08:49 | 08:58 | 5 Important (the #161 check; #157 fooled by sh -c; #164 dry-run checkout never run; #161 child path never run; #171 ps1 case passes on old code), many Minor |
-| 51 | group seat: silent failures (also the fixes' re-review) | opus · high | Silent failures 3 + Windows | 08:54 | | |
-| 52 | group seat: tests | opus · high | Silent failures 3 + Windows | 08:54 | | |
+| 51 | group seat: silent failures (also the fixes' re-review) | opus · high | Silent failures 3 + Windows | 08:54 | 09:00 | 1 Important — a REGRESSION from T15's fix round (the `-answer` strip joins two reviews; one critique dropped), 4 Minor |
+| 52 | group seat: tests | opus · high | Silent failures 3 + Windows | 08:54 | 08:59 | 3 Important (#166 tested with a record TCC does not send — the real one still gives two; #158's readlink stand-in doubles the prefix on Windows; #167's CLI check passes on the old code), 11 Minor |
 | 53 | implementer T17b #149 (the installers' Codex link) | opus · high | Agent start | 08:54 | | |
+| 54 | group fix round Silent failures 3 + Windows text (resumed) | opus · high | Silent failures 3 + Windows | 09:00 | | |
 
 ## Quality notes
 
 - **A false green (T14, #165).** The implementer's report said every changed module's selftest passed; the task
   review ran rew_tool.py's selftest at 5104af8 and got exit 70, and the controller reproduced it at HEAD. Caught by the
   task review, before any group seat or CI.
+- **A second regression made by a fix (T15, #166).** The task review's Minor «strip `-answer` too» was taken
+  literally; the `-answer` file exists only when `<base>.md` is ANOTHER writer's review, so the two collapsed and a
+  critique was dropped. The group seat caught it by probe.
 - **A regression made by a fix (T2, #155).** The fix round of d23d73e recased the level's unit and gave one capture two
   keys; the re-review caught it; fixed in 306bd4c, verified live.
 - **Repo-wide checks not run locally.** The implementers ran their modules' selftests, not `encoding-check` or ruff,
