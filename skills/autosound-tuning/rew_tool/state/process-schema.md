@@ -63,6 +63,9 @@ panel had nothing real to render and every resume re-derived the phase by re-rea
               "switches": 1},                       //   at most one switch of tripod/driver
     "step": "0.1",                                  // SCR-040: the plan step this round satisfies
     "taken": {"tw-L_1 (sw)": {"at": "…", "planned": true,     // planned=false: not on the list
+      "as_in_rew": "tw-L_01 (sw)",                  // #153: typed in another spelling of a listed title
+                                                    //   (same `name_key`): stored under the list's, this
+                                                    //   is how REW holds it; absent when they agree
       "superseded_by": null,                        // S-039: a row recorded under a WRONG title
                                                     //   stays, dimmed, naming what it was
                                                     //   corrected to. Never deleted, and counted
@@ -76,7 +79,9 @@ panel had nothing real to render and every resume re-derived the phase by re-rea
                                 "applicable": true, "uuid": null, "at": "…",      //   `verified` holds on a
                                 "issues": ["No measurement titled 'tw-L_1 (rta)' (REW holds 4)"]}},  // taken row
     "skipped": {"c_1 (sw)": {"at": "…", "reason": "centre not wired yet",
-                             "planned": true}},    // planned=false: never on the list
+                             "planned": true,      // planned=false: never on the list
+                             "as_typed": "c_01 (sw)"}},  // #153: the skip's typed spelling, stored under
+                                                    //   the list's; not `as_in_rew` -- REW holds no skip
     "reconciled": {"at": "…", "rew": true,          // skill #77 rule 3: the list read against REW's
                    "matched": 4, "extra": ["sw_1 (sw)"],   //   list before closing -- taken is what REW
                    "renames": {"Ms_01 (rta)": "Ms_1 (rta)"},  // holds (`as_in_rew` on a row spelled
@@ -93,6 +98,9 @@ One JSON object per line, oldest first: `{"at": …, "type": …, …}`. Types:
 `step_blocked` · `critic_called` · `config_change` · `capture_task_issued` · `capture_taken` ·
 `capture_skipped` · `capture_round_closed` · `capture_verified` · `session_started` ·
 `session_closed` · `session_reopened` · `user_decision` · `written_by`.
+
+`capture_taken` carries `as_in_rew` and `capture_skipped` carries `as_typed` when the title typed was another
+spelling of a listed one (#153): `title` is then the list's, the round's own, and the field is the spelling typed.
 
 `user_decision` is the Arbiter's half of the conversation, recorded as the answer rather than as
 prose about it. `invalidates` carries the same shape as `config_change.impact`, so a ruling that

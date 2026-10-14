@@ -748,10 +748,11 @@ def cross_check_rew(process_state, glossary, snapshots, project_data=None):
     return out
 
 
-def _title_key(title, glossary=None):
+def _title_key(title):
     """A round title's identity (#153): `naming.name_key` of its parse, or `("raw", title)` for one the grammar does
-    not read -- the same rule as `process.title_key`, read with the glossary `validate_series` is given here."""
-    key = naming.name_key(naming.parse_name(str(title).strip(), glossary))
+    not read -- `process.title_key`'s rule exactly, and so with no glossary: a skip matched here by a rename the
+    glossary knows (`m-L` for `w-L`) would read complete in this report and outstanding at the round's close."""
+    key = naming.name_key(naming.parse_name(str(title).strip()))
     return key if key is not None else ("raw", str(title).strip())
 
 
@@ -778,11 +779,11 @@ def round_verdict(titles, round_, glossary=None):
     # on disk before `capture-skip` wrote the list's title holds it as typed.
     listed = {}
     for name in expected:
-        listed.setdefault(_title_key(name, glossary), name)
+        listed.setdefault(_title_key(name), name)
     decided = {}
     for t, entry in (round_.get("skipped") or {}).items():
         t = str(t)
-        decided[t if t in expected else listed.get(_title_key(t, glossary), t)] = (entry or {}).get("reason")
+        decided[t if t in expected else listed.get(_title_key(t), t)] = (entry or {}).get("reason")
     verdict["skipped"] = dict(decided)
     verdict["skipped_unplanned"] = sorted(t for t in decided if t not in expected)
     # An optional capture ("if you have time", skill #80) is on the list and not a gap: named apart, never MISSING.

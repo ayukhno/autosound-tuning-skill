@@ -1033,11 +1033,14 @@ def _row_for(rows, title):
     return next((row for row in rows if title_key(row) == key), None)
 
 
-def _on_list(round_, title):
+def _on_list(round_, title, rows=None):
     """`(the title a round stores a typed one under, typed)` (#153): the round's own expected (or optional) title when
-    the keys match, the typed one -- stripped -- when it is off the list."""
+    the keys match; off the list, the row of `rows` (the round's `taken` or `skipped`) already holding it in another
+    spelling, so an unplanned capture typed twice is one row; else the typed one, stripped."""
     typed = str(title).strip()
     listed = _row_for(round_.get("expected") or [], typed)
+    if listed is None and rows:
+        listed = _row_for(rows, typed)
     return (typed if listed is None else listed), typed
 
 
@@ -1935,24 +1938,39 @@ class Process:
         glossary = naming.Glossary.for_project(self.project_dir, strict=True)
         expected = [str(x) for x in round_.get("expected") or []]
         verdict = naming.validate_series([str(t) for t in rew_titles], expected, glossary)
-        gone = {t for t in round_.get("taken") or {} if not _is_taken(round_, t)}
-        verdict["matched"] = {n: a for n, a in verdict["matched"].items() if n not in gone}
-        verdict["found"] = [n for n in verdict["found"] if n not in gone]
-        verdict["renames"] = {a: n for a, n in verdict["renames"].items() if n not in gone}
-        verdict["extra"] = [t for t in verdict["extra"] if t not in gone]
+        # Rows are found by `title_key` (#153): a round on disk before it holds them as typed, `w-R_02 (sw)` for the
+        # list's `w-R_2 (sw)`, and an exact lookup added a second row beside it.
+        taken, skipped = round_["taken"], round_["skipped"]
+
+        def gone(title):
+            row = _row_for(taken, title)
+            return row is not None and not _is_taken(round_, row)
+
+        verdict["matched"] = {n: a for n, a in verdict["matched"].items() if not gone(n)}
+        verdict["found"] = [n for n in verdict["found"] if not gone(n)]
+        verdict["renames"] = {a: n for a, n in verdict["renames"].items() if not gone(n)}
+        verdict["extra"] = [t for t in verdict["extra"] if not gone(t)]
         now = _now()
         for name, actual in verdict["matched"].items():
-            entry = round_["taken"].setdefault(name, {"at": now, "planned": True})
-            if actual != name:
-                entry["as_in_rew"] = actual
-            round_["skipped"].pop(name, None)
+            row = _row_for(taken, name)
+            if row is None:
+                row = name
+                taken[row] = {"at": now, "planned": True}
+            if actual != row:
+                taken[row]["as_in_rew"] = actual
+            skip = _row_for(skipped, name)
+            if skip is not None:
+                skipped.pop(skip)
         series = {naming.parse_name(n, glossary).get("version_n") for n in expected if naming.parse_name(n, glossary)}
         series.discard(None)
         for title in verdict["extra"]:
             parsed = naming.parse_name(title, glossary)
             if parsed and parsed.get("version_n") in series:
-                round_["taken"].setdefault(title, {"at": now, "planned": False})
-                round_["skipped"].pop(title, None)
+                if _row_for(taken, title) is None:
+                    taken[title] = {"at": now, "planned": False}
+                skip = _row_for(skipped, title)
+                if skip is not None:
+                    skipped.pop(skip)
         optional = set(round_.get("optional") or [])
         verdict["missing_optional"] = [t for t in verdict["missing"] if t in optional]
         verdict["missing"] = [t for t in verdict["missing"] if t not in optional]
@@ -2027,7 +2045,7 @@ class Process:
         the form `reconcile_captures` writes. A front-end reads `taken` against `expected` as strings.
         """
         state, round_ = self._require_capture()
-        title, typed = _on_list(round_, title)
+        title, typed = _on_list(round_, title, round_["taken"])
         if not title:
             raise ProcessError("a capture needs its REW title")
         planned = title in round_["expected"]
@@ -2632,7 +2650,7 @@ class Process:
         # `record_capture` below stores it there.
         taken = round_.get("taken") or {}
         title = _row_for(taken, title) or title
-        corrected_to, corrected_typed = _on_list(round_, corrected_to)
+        corrected_to, corrected_typed = _on_list(round_, corrected_to, taken)
         if title == corrected_to:
             raise ProcessError(
                 f"{title!r} is corrected to itself — nothing to supersede. If the title is right and "
@@ -2670,7 +2688,7 @@ class Process:
             raise ProcessError(f"skipping {str(title).strip()!r} needs a reason -- it is a decision, not a gap")
         # Under the list's own title when typed in another spelling of it (#153), the typed one kept as `as_typed`:
         # not `as_in_rew`, since a capture skipped is one REW does not hold.
-        title, typed = _on_list(round_, title)
+        title, typed = _on_list(round_, title, round_["skipped"])
         # `planned` for the same reason `record_capture` carries it (TCC-022): `expected[]` is not
         # a closed set, so a reader of a round cannot assume everything in `skipped` was ever asked
         # for. Four rear titles were skipped into rounds that never expected them, and a skip of a
@@ -2740,7 +2758,26 @@ class Process:
         wanted = [str(t) for t in (titles or round_.get("expected") or [])]
         if not wanted:
             raise ProcessError("this round expects no captures — nothing to check")
-        verdicts = verifier.verify(wanted)
+        # Asked of REW as REW holds it, landing on the round's own title (#153): a title typed in REW's spelling is the
+        # list's, and the list's title is asked as its row holds it -- `as_in_rew`, or the row's own spelling on a
+        # round on disk before #153. Asked as the list spells it, REW's exact lookup answered "No measurement titled"
+        # for a capture taken, and the check sent the tuner back for it.
+        held_rows, spelled = round_.get("taken") or {}, {}
+        for typed in wanted:
+            title, typed = _on_list(round_, typed, held_rows)
+            if title in spelled:
+                continue
+            row = _row_for(held_rows, title)
+            entry = held_rows.get(row) if row is not None else None
+            if typed != title:
+                spelled[title] = typed
+            elif isinstance(entry, dict) and entry.get("as_in_rew"):
+                spelled[title] = str(entry["as_in_rew"])
+            else:
+                spelled[title] = row if row is not None else title
+        back = {asked: title for title, asked in spelled.items()}
+        verdicts = [dict(v, name=back.get(v.get("name"), v.get("name")))
+                    for v in verifier.verify(list(spelled.values()))]
         # REW not answering is no verdict on any title (#134): refused before anything is written, so the round and
         # the journal stay as they were and the check is run again once REW is up. What to do next is the caller's to
         # say: `capture-check` says "run it again", `capture-close` closes the round, unchecked.
@@ -2825,7 +2862,10 @@ class Process:
                 if row is not None:
                     taken[row]["verified"] = verified
                 elif verified["exists"] is True:        # taken only when REW holds it (#77) -- never invented
-                    taken[title] = {"at": _now(), "planned": title in live.get("expected", []), "verified": verified}
+                    entry = {"at": _now(), "planned": title in live.get("expected", []), "verified": verified}
+                    if spelled.get(title, title) != title:
+                        entry["as_in_rew"] = spelled[title]     # under the list's title, REW's beside it (#153)
+                    taken[title] = entry
             if session_probe is not None:
                 live["session"] = session_probe
             self._write(state)
@@ -6773,14 +6813,21 @@ def _check_a_round_matches_titles_by_name_key():
     typed one on a taken row, `as_typed` on a skip), and the journal says both; a title off the list stays as typed.
     A round already on disk, its rows under the typed titles, is read by key: nothing outstanding, no OUTSTANDING at
     the close, `capture-check` reads its rows. It was: `w-R_1 (sw)` outstanding, and `capture-taken` raising KeyError
-    at the line that reads back the row."""
+    at the line that reads back the row. A check asks REW for the title REW holds -- the row's `as_in_rew`, or the
+    row's own spelling on disk -- and lands on the list's title; a reconcile finds a row on disk by key."""
     import shutil
     import tempfile
 
-    class Verifier:                               # REW holds every title asked for but the skipped one
+    asked = []
+
+    class Verifier:                               # REW holds only the spellings typed in the car, never the list's
+        held = {"w-R_01 (sw)", "m-R_01 (sw)", "tw-L_01 (sw)", "w-R_02 (sw)", "m-R_02 (sw)", "tw-L_02 (sw)",
+                "w-L_02 (sw)", "w-R_03 (sw)"}
+
         def verify(self, titles):
-            return [{"name": t, "exists": t != "w-L_2 (sw)", "reachable": True, "valid": t != "w-L_2 (sw)",
-                     "issues": [] if t != "w-L_2 (sw)" else [f"No measurement titled {t!r} (REW holds 3)"],
+            asked.extend(titles)
+            return [{"name": t, "exists": t in self.held, "reachable": True, "valid": t in self.held,
+                     "issues": [] if t in self.held else [f"No measurement titled {t!r} (REW holds 8)"],
                      "stats": {}} for t in titles]
 
     top = tempfile.mkdtemp(prefix="autosound_process_name_key_")
@@ -6813,12 +6860,25 @@ def _check_a_round_matches_titles_by_name_key():
         # A title off the list stays as typed, unplanned; superseded by its key, corrected onto the list's title.
         rc, out, err = _run_main(["process.py", d, "capture-taken", "tw-R_01 (sw)"])
         assert rc == 0 and "unplanned" in out and "tw-R_01 (sw)" in p.load()["capture"]["taken"], (rc, out, err)
+        rc, out, err = _run_main(["process.py", d, "capture-taken", "tw-R_1 (sw)"])
+        assert rc == 0 and "tw-R_1 (sw)" not in p.load()["capture"]["taken"], \
+            ("an off-list title in a second spelling is the row already taken", rc, out, err, p.load()["capture"])
         rc, out, err = _run_main(["process.py", d, "capture-supersede", "tw-R_1 (sw)", "tw-L_01 (sw)", "typed R"])
         assert rc == 0, (rc, out, err)
         taken = p.load()["capture"]["taken"]
         assert taken["tw-R_01 (sw)"]["superseded_by"] == "tw-L_1 (sw)" and "tw-R_1 (sw)" not in taken, taken
         assert taken["tw-L_1 (sw)"]["as_in_rew"] == "tw-L_01 (sw)" and taken["tw-L_1 (sw)"]["planned"], taken
         assert p.capture_outstanding() == [], p.capture_outstanding()
+        # The check asks REW for the spelling it holds, and its verdict lands on the list's title.
+        Process._load_verifier = lambda self: Verifier()
+        rc, out, err = _run_main(["process.py", d, "capture-check"])
+        lines = out.splitlines()
+        assert rc == 0 and "OK      w-R_1 (sw)" in lines and "OK      m-R_1 (sw)" in lines \
+            and "OK      tw-L_1 (sw)" in lines and "SKIP    w-L_1 (sw)" in lines, (rc, out, err, asked)
+        assert "w-R_01 (sw)" in asked and "w-R_1 (sw)" not in asked, asked
+        round_ = p.load()["capture"]
+        assert round_["taken"]["w-R_1 (sw)"]["verified"]["ok"] and "w-R_01 (sw)" not in round_["taken"] \
+            and round_["checks"]["w-R_1 (sw)"]["ok"] and "w-R_01 (sw)" not in round_["checks"], round_
         rc, out, err = _run_main(["process.py", d, "capture-close", "--no-rew"])
         assert rc == 0 and "OUTSTANDING" not in out and "0 outstanding" in out and "optional left" not in out, \
             (rc, out, err)
@@ -6836,13 +6896,21 @@ def _check_a_round_matches_titles_by_name_key():
         assert p.capture_outstanding() == [] and _outstanding_optional(round_) == [], round_
         assert p.unusable_captures() == [], p.unusable_captures()
         assert p.open_work()["capture_round"]["outstanding"] == [], p.open_work()
-        Process._load_verifier = lambda self: Verifier()
+        del asked[:]
         rc, out, err = _run_main(["process.py", d, "capture-check"])
         lines = out.splitlines()
-        assert rc == 0 and "OK      w-R_2 (sw)" in lines and "SKIP    w-L_2 (sw)" in lines, (rc, out, err)
+        assert rc == 0 and "OK      w-R_2 (sw)" in lines and "SKIP    w-L_2 (sw)" in lines, (rc, out, err, asked)
+        assert "w-R_02 (sw)" in asked and "w-R_2 (sw)" not in asked, asked
         taken = p.load()["capture"]["taken"]
         assert "w-R_2 (sw)" not in taken and taken["w-R_02 (sw)"]["verified"]["at"] != "t", \
             "a check of the list's title updates the row on disk under REW's spelling, never adds a second"
+        # A reconcile finds the rows on disk by key: no second row beside them; the skip REW holds after all is
+        # popped by key, and its capture taken under the list's title.
+        p.reconcile_captures(["w-R_02 (sw)", "m-R_02 (sw)", "tw-L_02 (sw)", "w-L_02 (sw)"])
+        round_ = p.load()["capture"]
+        assert sorted(round_["taken"]) == ["m-R_02 (sw)", "tw-L_02 (sw)", "w-L_2 (sw)", "w-R_02 (sw)"], round_["taken"]
+        assert round_["skipped"] == {} and round_["taken"]["w-L_2 (sw)"]["as_in_rew"] == "w-L_02 (sw)", round_
+        assert "as_in_rew" not in round_["taken"]["w-R_02 (sw)"], round_["taken"]["w-R_02 (sw)"]
         rc, out, err = _run_main(["process.py", d, "capture-close", "--no-rew"])
         assert rc == 0 and "OUTSTANDING" not in out and "0 outstanding" in out, (rc, out, err)
         ev = [e for e in p.events() if e.get("type") == EV_CAPTURE_CLOSED][-1]
@@ -6852,6 +6920,12 @@ def _check_a_round_matches_titles_by_name_key():
                              optional=["w-L_3 (sw)", "m-R_3 (sw)"])
         assert r3["expected"] == ["w-R_3 (sw)", "w-L_03 (sw)", "m-R_3 (sw)"], r3["expected"]
         assert r3["optional"] == ["w-L_03 (sw)", "m-R_3 (sw)"], r3["optional"]
+        # A check of a title typed in REW's spelling, with no row yet: the row is the list's, REW's spelling beside it.
+        p.check_captures(["w-R_03 (sw)"], verifier=Verifier())
+        round_ = p.load()["capture"]
+        assert "w-R_03 (sw)" not in round_["taken"] and round_["taken"]["w-R_3 (sw)"]["planned"] is True \
+            and round_["taken"]["w-R_3 (sw)"]["as_in_rew"] == "w-R_03 (sw)" and round_["checks"]["w-R_3 (sw)"]["ok"], \
+            round_
     finally:
         Process._load_verifier = real
         shutil.rmtree(top, ignore_errors=True)
@@ -9592,7 +9666,7 @@ def _main(argv):
         elif cmd == "capture-taken":
             round_ = p.record_capture(args[0])
             # Stored under the list's own title when typed in another spelling of it (#153): it raised KeyError here.
-            stored = _on_list(round_, args[0])[0]
+            stored = _on_list(round_, args[0], round_["taken"])[0]
             entry = round_["taken"][stored]
             print(
                 f"{args[0]} recorded"
