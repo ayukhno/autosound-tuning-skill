@@ -295,21 +295,24 @@ jobs:
       # PSModulePath and cannot load its own Get-FileHash and Expand-Archive. This step is pwsh, and starts powershell.exe
       # through `cmd /c`, as that chain does (pwsh may clean its own paths for a powershell.exe it starts directly). The
       # child first asserts that pwsh's path arrived -- or the probe would prove nothing -- then runs install.ps1's own
-      # reset line, cut out of it as it stands, then both cmdlets; after the reset no `\PowerShell\` folder and no empty
-      # entry is left. The same probe without the reset is said, not judged: whether it fails depends on the runner.
+      # two lines, cut out of it as they stand, then both cmdlets; after the reset none of pwsh's own folders (as
+      # $Ps51PwshFolders names them: not SQL Server's Tools\PowerShell\Modules, CI run 38537781090) and no empty entry is
+      # left. The same probe without the reset is said, not judged: whether it fails depends on the runner.
       - name: install.ps1's module path reset, Windows PowerShell 5.1 started from pwsh (#161)
         shell: pwsh
         run: |
           Write-Host "pwsh's PSModulePath, which the child inherits: $env:PSModulePath"
+          $folders = @(Get-Content install.ps1 | Where-Object { $_ -match '^\$Ps51PwshFolders = \{' })
           $line = @(Get-Content install.ps1 | Where-Object { $_ -match '^\$Ps51ModulePath = \{' })
-          if ($line.Count -ne 1) { Write-Host "::error::install.ps1 has no one-line `$Ps51ModulePath = { ... } to run"; exit 1 }
+          if ($line.Count -ne 1 -or $folders.Count -ne 1) { Write-Host "::error::install.ps1 has no one-line `$Ps51PwshFolders and `$Ps51ModulePath to run"; exit 1 }
           $dir = Join-Path $env:RUNNER_TEMP "psmodulepath"
           New-Item -ItemType Directory -Force -Path $dir | Out-Null
           Set-Content -Path (Join-Path $dir "a.txt") -Value "a file to hash and to zip"
           Compress-Archive -Path (Join-Path $dir "a.txt") -DestinationPath (Join-Path $dir "a.zip") -Force
           $env:PROBE_DIR = $dir
           $arrived = @'
-          if ($env:PSModulePath -notmatch '\\PowerShell\\') { Write-Host "pwsh's module path did not reach Windows PowerShell 5.1: $env:PSModulePath"; exit 3 }
+          if (@(& $Ps51PwshFolders).Count -eq 0) { Write-Host "pwsh's module path did not reach Windows PowerShell 5.1: $env:PSModulePath"; exit 3 }
+          Write-Host "pwsh's own folders arrived: $(@(& $Ps51PwshFolders) -join ' ; ')"
           '@
           $probe = @'
           $ErrorActionPreference = "Stop"
@@ -320,11 +323,11 @@ jobs:
           Write-Host "Get-FileHash ($h) and Expand-Archive ran under Windows PowerShell $($PSVersionTable.PSVersion)"
           '@
           $after = @'
-          if ($env:PSModulePath -match '\\PowerShell\\' -or $env:PSModulePath -match ';;|^;|;$') { Write-Host "after the reset the path still holds pwsh's folders or an empty entry: $env:PSModulePath"; exit 4 }
+          if (@(& $Ps51PwshFolders).Count -gt 0 -or $env:PSModulePath -match ';;|^;|;$') { Write-Host "after the reset the path still holds pwsh's folders or an empty entry: $env:PSModulePath"; exit 4 }
           Write-Host "after the reset: $env:PSModulePath"
           '@
-          Set-Content -Path (Join-Path $dir "without.ps1") -Value ($arrived + "`n" + $probe)
-          Set-Content -Path (Join-Path $dir "with.ps1") -Value ($arrived + "`n" + $line[0] + "`n. `$Ps51ModulePath`n" + $after + "`n" + $probe)
+          Set-Content -Path (Join-Path $dir "without.ps1") -Value ($folders[0] + "`n" + $arrived + "`n" + $probe)
+          Set-Content -Path (Join-Path $dir "with.ps1") -Value ($folders[0] + "`n" + $arrived + "`n" + $line[0] + "`n. `$Ps51ModulePath`n" + $after + "`n" + $probe)
           & cmd /c powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $dir "without.ps1")
           Write-Host "without the reset: exit $LASTEXITCODE (said, not judged -- 3 means pwsh's path did not arrive)"
           & cmd /c powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $dir "with.ps1")

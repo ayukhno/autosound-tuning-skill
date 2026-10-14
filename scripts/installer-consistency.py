@@ -1793,33 +1793,47 @@ def windows_start_problems(ps1, cmd):
     out = []
     code = "\n".join(ln for ln in ps1.splitlines() if not ln.lstrip().startswith("#"))
     param_end = re.search(r"^\[CmdletBinding\(\)\]\nparam\(\n.*?^\)\n", code, re.M | re.S)
-    # The T9 review: only a path that holds PowerShell 7's folders is reset -- under the README one-liner the person's
-    # own window keeps its Documents\WindowsPowerShell\Modules and what its profile added -- and the user's
-    # Documents folder (where 5.1 itself looks, OneDrive's when redirected) leads, no empty entry anywhere.
+    # The T9 review: only a path that holds PowerShell 7's own folders is reset -- under the README one-liner the
+    # person's own window keeps its Documents\WindowsPowerShell\Modules and what its profile added -- and the user's
+    # Documents folder (where 5.1 itself looks, OneDrive's when redirected) leads, no empty entry anywhere. The group
+    # round (CI run 38537781090): `-match '\\PowerShell\\'` also took SQL Server's `...\Tools\PowerShell\Modules\`, a
+    # 5.1 entry of the runner's machine value, so pwsh's folders are named exactly: the user's and the machine's
+    # Documents\ / Program Files\PowerShell\Modules, and a Modules folder beside a pwsh.exe ($PSHOME's). Both lines are
+    # RUN under PowerShell where there is one (ps1_run_problems: SQL Server's entry left as it is).
+    folders_def = re.search(r"^\$Ps51PwshFolders = \{ [^\n]*\}$", code, re.M)
     reset_def = re.search(r"^\$Ps51ModulePath = \{ if \(\$PSVersionTable\.PSEdition -eq 'Desktop' -and "
-                          r"\$env:PSModulePath -match '\\\\PowerShell\\\\'\) \{ [^\n]*\} \}$", code, re.M)
+                          r"@\(& \$Ps51PwshFolders\)\.Count -gt 0\) \{ [^\n]*\} \}$", code, re.M)
     reset_run = re.search(r"^\. \$Ps51ModulePath$", code, re.M)
+    folders = folders_def.group(0) if folders_def else ""
     body = reset_def.group(0) if reset_def else ""
     lacking = [w for w in ("[Environment]::GetFolderPath('MyDocuments')", "'\\WindowsPowerShell\\Modules'",
                            "[Environment]::GetEnvironmentVariable('PSModulePath', 'Machine')",
                            "[Environment]::GetEnvironmentVariable('PSModulePath', 'User')", "($PSHOME + '\\Modules')",
                            "-split ';') -ne '')", "-join ';'") if w not in body]
+    lacking += [w for w in ("'\\PowerShell\\Modules'", "$env:ProgramFiles", "'\\pwsh.exe'", "-contains")
+                if w not in folders]
     if body and not body.find("GetFolderPath('MyDocuments')") < body.find("'PSModulePath', 'Machine'"):
         lacking.append("the Documents folder first")
-    if not param_end or not reset_def or not reset_run or lacking or '"' in body or PS1_CMDLET.search(body):
-        out.append("install.ps1 has no `$Ps51ModulePath = { if ($PSVersionTable.PSEdition -eq 'Desktop') { "
-                   "$env:PSModulePath = ... } }` run by `. $Ps51ModulePath` -- the machine's and the user's values and "
-                   "$PSHOME\\Modules, no cmdlet and no double quote in it" + (f"; it lacks {lacking}" if lacking else "")
-                   + " (#161)")
+    if re.search(r"-match '\\\\PowerShell\\\\'", code):
+        lacking.append("no `-match '\\\\PowerShell\\\\'` -- it takes SQL Server's Tools\\PowerShell\\Modules for pwsh's")
+    if (not param_end or not folders_def or not reset_def or not reset_run or lacking or '"' in body + folders
+            or PS1_CMDLET.search(body + folders)):
+        out.append("install.ps1 has no `$Ps51PwshFolders = { ... }` naming pwsh's own module folders and no "
+                   "`$Ps51ModulePath = { if ($PSVersionTable.PSEdition -eq 'Desktop' -and @(& $Ps51PwshFolders).Count "
+                   "-gt 0) { ... } }` run by `. $Ps51ModulePath` -- the Documents folder, the machine's and the user's "
+                   "values and $PSHOME\\Modules, no cmdlet and no double quote in either"
+                   + (f"; it lacks {lacking}" if lacking else "") + " (#161)")
     else:
         first = PS1_CMDLET.search(code, param_end.end())
-        if not param_end.end() <= reset_def.start() < reset_run.start() or (first and first.start() < reset_run.start()):
+        if not param_end.end() <= folders_def.start() < reset_def.start() < reset_run.start() \
+                or (first and first.start() < reset_run.start()):
             out.append(f"install.ps1 runs `{first.group(0) if first else '?'}` before it resets PSModulePath -- under "
                        f"PowerShell 7's module path Windows PowerShell 5.1 cannot load its own cmdlets (#161)")
     upstream = re.search(r"^function Invoke-Upstream \{.*?^\}", ps1, re.M | re.S)
-    if not upstream or '$cmd = "$Ps51ModulePath; [Net.ServicePointManager]' not in upstream.group(0):
+    if not upstream or '$cmd = "`$Ps51PwshFolders = {$Ps51PwshFolders}; $Ps51ModulePath; [Net.ServicePointManager]' \
+            not in upstream.group(0):
         out.append("install.ps1 Invoke-Upstream's child PowerShell does not reset PSModulePath first -- "
-                   "`$cmd = \"$Ps51ModulePath; ...` (#161)")
+                   "`$cmd = \"`$Ps51PwshFolders = {$Ps51PwshFolders}; $Ps51ModulePath; ...` (#161)")
     # #162: Explorer starts a .cmd as `cmd.exe /c ""<full path>" "`; PowerShell as `/c ""<path>" <args>"`.
     want = ('set "SELF=%~f0"', 'set "CMDLINE=!cmdcmdline!"', 'set "CMDTAIL=!CMDLINE:*/c =!"',
             'set "EXPLORER=""!SELF!" ""', 'set "RUNAS="!SELF!" "', 'if /i "!CMDTAIL!"=="!EXPLORER!" set "DOUBLECLICKED=1"',
@@ -1876,7 +1890,7 @@ def powershell_env(environ=None):
 
 
 #: The functions of install.ps1 that its end and its probes need, cut out as they stand.
-PS1_RUN_FUNCTIONS = ("Stop-Installer", "Write-Receipt", "Enter-Change", "Add-Missing", "Say", "Warn", "Pretty", "Run", "Test-Quiet",
+PS1_RUN_FUNCTIONS = ("Stop-Installer", "Write-Receipt", "Enter-Change", "Invoke-Upstream", "Add-Missing", "Say", "Warn", "Pretty", "Run", "Test-Quiet",
                      "Test-ReleaseTag", "Test-SettledByName", "Select-MethodRef", "Select-NewestOnChannel")
 #: #164, #171: install.ps1's tag pick over a stand-in tag list -- Read-ReleaseTags answers $script:StubTags, or nothing
 #: with $script:StubWhy -- then the signature step every ref passes. (case, body, the words, how many times "is not a
@@ -1977,6 +1991,52 @@ def ps1_run_problems(ps1):
                 out.append(f"install.ps1's tag pick under {Path(shell).name}, {case}: exit {rc}, want 0, "
                            f"{' + '.join(map(repr, words))} and 'is not a release' {unsigned} time(s) (said "
                            f"{said.count('is not a release')}) -- said {said.strip()[-300:]!r} (#164, #171)")
+        # #161 (the group round): install.ps1's two module-path lines, cut out as they stand. SQL Server's
+        # Tools\PowerShell\Modules\ is an ordinary 5.1 entry and leaves the path as it was; pwsh's own folders are reset,
+        # the Documents folder first, no empty entry; and Invoke-Upstream's child -- the lines as -Command text, started
+        # from a parent whose path holds pwsh's folders -- runs a local script by a file:// URL that finds none of them
+        # and runs Get-FileHash and Expand-Archive. Only under Windows PowerShell 5.1, where the reset applies.
+        lines = re.findall(r"^\$Ps51(?:PwshFolders|ModulePath) = \{[^\n]*\}$", ps1, re.M)
+        if len(lines) != 2:
+            out.append(f"install.ps1: {len(lines)} module-path lines to run, want $Ps51PwshFolders and $Ps51ModulePath "
+                       f"(#161)")
+        else:
+            reset = "\n".join(lines) + "\n"
+            child_dir = Path(tmp, "upstream-child")
+            child_dir.mkdir()
+            import zipfile
+            with zipfile.ZipFile(child_dir / "a.zip", "w") as zf:
+                zf.writestr("a.txt", "a file to unzip\n")
+            (child_dir / "child.ps1").write_bytes(
+                b'$ErrorActionPreference = "Stop"\r\n'
+                b'if (@(& $Ps51PwshFolders).Count -gt 0) { Write-Host "CHILD-PWSH-LEFT: $env:PSModulePath"; exit 5 }\r\n'
+                b'$z = Join-Path $env:CHILD_DIR "a.zip"\r\n'
+                b'$h = (Get-FileHash -Path $z -Algorithm SHA256).Hash\r\n'
+                b'Expand-Archive -Path $z -DestinationPath (Join-Path $env:CHILD_DIR "out") -Force\r\n'
+                b'Write-Host "CHILD-OK $h"\r\n')
+            pwsh_path = ("$env:ProgramFiles + '\\PowerShell\\7\\Modules;' + $env:ProgramFiles + '\\PowerShell\\Modules;"
+                         "C:\\Windows\\system32\\WindowsPowerShell\\v1.0\\Modules'")
+            cases161 = (
+                ("module-path-sql-server",
+                 "$env:PSModulePath = 'C:\\Windows\\system32\\WindowsPowerShell\\v1.0\\Modules;C:\\Program Files (x86)\\"
+                 "Microsoft SQL Server\\130\\Tools\\PowerShell\\Modules\\'\n$before = $env:PSModulePath\n" + reset
+                 + ". $Ps51ModulePath\nWrite-Host \"SAME=$($env:PSModulePath -ceq $before)\"\n", ("SAME=True",)),
+                ("module-path-pwsh", f"$env:PSModulePath = {pwsh_path}\n" + reset
+                 + ". $Ps51ModulePath\nWrite-Host \"LEFT=$(@(& $Ps51PwshFolders).Count)\"\n"
+                 "Write-Host \"EMPTY=$($env:PSModulePath -match ';;|^;|;$')\"\n"
+                 "Write-Host \"FIRST=$($env:PSModulePath.StartsWith([Environment]::GetFolderPath('MyDocuments') + "
+                 "'\\WindowsPowerShell\\Modules'))\"\n", ("LEFT=0", "EMPTY=False", "FIRST=True")),
+                ("module-path-upstream-child", reset + f"$env:CHILD_DIR = '{child_dir}'\nSay 'the parent is ready'\n"
+                 f"$env:PSModulePath = {pwsh_path} + ';' + $env:PSModulePath\n"
+                 f"$ok = Invoke-Upstream '{(child_dir / 'child.ps1').as_uri()}' 'a local probe'\n"
+                 "Write-Host \"UPSTREAM=$ok\"\n", ("CHILD-OK", "UPSTREAM=True")))
+            for case, body, words in cases161:
+                rc, said, _ = run_case(case, 'Write-Host "EDITION=$($PSVersionTable.PSEdition)"\n' + body)
+                if "EDITION=Desktop" not in said:
+                    continue                            # PowerShell 7: the reset does not apply
+                if rc != 0 or any(w not in said for w in words):
+                    out.append(f"install.ps1's module path under {Path(shell).name}, {case}: exit {rc}, want 0 and "
+                               f"{' + '.join(map(repr, words))} -- said {said.strip()[-300:]!r} (#161)")
         # #160: a stop before the run's first change keeps the last real receipt byte for byte -- the consent declined
         # (its block cut out of install.ps1 and run with an Ask that says no), the consent given and a stop before any
         # change (the tag list, a signature), or a stop anywhere before; from Enter-Change on, it says `stopped`.

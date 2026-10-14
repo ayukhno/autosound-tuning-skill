@@ -83,14 +83,17 @@ param(
 # Windows PowerShell 5.1 started from a PowerShell 7 window -- the plugin's /setup there, a person's pwsh -- inherits
 # PowerShell 7's PSModulePath, and cannot load its own modules from it: Get-FileHash (gh's) and Expand-Archive (the
 # upstream installers') then fail, "not recognized" (#161, R50's CI 37866508892). So 5.1 takes its own module path
-# back, before its first cmdlet -- only when the path holds PowerShell 7's folders (`\PowerShell\`, never 5.1's
-# `\WindowsPowerShell\`): under the README one-liner this is the person's own window, whose path and profile additions
-# stay as they are otherwise. 5.1's own is the user's Documents\WindowsPowerShell\Modules (OneDrive's, when Documents
-# is redirected; left out when there is no Documents folder), the machine's and the user's values, and
-# $PSHOME\Modules, with no empty entry. Every child it starts inherits it, and Invoke-Upstream hands the same line to
-# its child PowerShell, which a PowerShell 7 run starts too. One line, no cmdlet and no double quote in it: it is
-# passed to that child as -Command text.
-$Ps51ModulePath = { if ($PSVersionTable.PSEdition -eq 'Desktop' -and $env:PSModulePath -match '\\PowerShell\\') { $ps51Docs = [Environment]::GetFolderPath('MyDocuments'); if ($ps51Docs) { $ps51Docs += '\WindowsPowerShell\Modules' }; $env:PSModulePath = (((($ps51Docs, [Environment]::GetEnvironmentVariable('PSModulePath', 'Machine'), [Environment]::GetEnvironmentVariable('PSModulePath', 'User'), ($PSHOME + '\Modules')) -join ';') -split ';') -ne '') -join ';' } }
+# back, before its first cmdlet -- only when the path holds one of PowerShell 7's own folders: the user's
+# Documents\PowerShell\Modules, Program Files\PowerShell\Modules, or a Modules folder beside a pwsh.exe (its $PSHOME's).
+# Named exactly: `\PowerShell\` alone also took SQL Server's ...\Tools\PowerShell\Modules\, an ordinary 5.1 entry (CI run
+# 38537781090). Under the README one-liner this is the person's own window, whose path and profile additions stay as
+# they are otherwise. 5.1's own is the user's Documents\WindowsPowerShell\Modules (OneDrive's, when Documents is
+# redirected; left out when there is no Documents folder), the machine's and the user's values, and $PSHOME\Modules,
+# with no empty entry. Every child it starts inherits it, and Invoke-Upstream hands both lines to its child PowerShell,
+# which a PowerShell 7 run starts too. One line each, no cmdlet and no double quote: they are passed to that child as
+# -Command text.
+$Ps51PwshFolders = { $ps51Own = @(); $ps51Home = [Environment]::GetFolderPath('MyDocuments'); if ($ps51Home) { $ps51Own += $ps51Home + '\PowerShell\Modules' }; if ($env:ProgramFiles) { $ps51Own += $env:ProgramFiles + '\PowerShell\Modules' }; foreach ($ps51Entry in (($env:PSModulePath -split ';') -ne '')) { $ps51Bare = $ps51Entry.TrimEnd('\'); try { if (($ps51Own -contains $ps51Bare) -or ($ps51Bare -like '*\Modules' -and [IO.File]::Exists([IO.Path]::GetDirectoryName($ps51Bare) + '\pwsh.exe'))) { $ps51Entry } } catch { $null = $_ } } }
+$Ps51ModulePath = { if ($PSVersionTable.PSEdition -eq 'Desktop' -and @(& $Ps51PwshFolders).Count -gt 0) { $ps51Docs = [Environment]::GetFolderPath('MyDocuments'); if ($ps51Docs) { $ps51Docs += '\WindowsPowerShell\Modules' }; $env:PSModulePath = (((($ps51Docs, [Environment]::GetEnvironmentVariable('PSModulePath', 'Machine'), [Environment]::GetEnvironmentVariable('PSModulePath', 'User'), ($PSHOME + '\Modules')) -join ';') -split ';') -ne '') -join ';' } }
 . $Ps51ModulePath
 # -Log <file>: a full transcript, for reading a run that happened on somebody else's machine. A
 # `| Tee-Object` on the outside sees none of this script's own lines (they go to the host, not
@@ -438,7 +441,7 @@ function Invoke-Upstream {
     # watching the screen should be able to see that happen (HUB-031).
     Say "  the official installer, $($Url -replace '^https://','')"
     # Its module path first (#161): this script may be PowerShell 7, whose PSModulePath the child would inherit.
-    $cmd = "$Ps51ModulePath; [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12; irm '$Url' -UseBasicParsing | iex"
+    $cmd = "`$Ps51PwshFolders = {$Ps51PwshFolders}; $Ps51ModulePath; [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12; irm '$Url' -UseBasicParsing | iex"
     $global:LASTEXITCODE = 0
     if ($Capture) {
         $script:UpstreamOutput = @(& powershell -NoProfile -ExecutionPolicy Bypass -Command $cmd 2>&1 | Out-String -Stream)
