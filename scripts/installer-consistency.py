@@ -1470,6 +1470,51 @@ def plugin_check_problems(sh, ps1):
     return out
 
 
+#: #161: a cmdlet, as install.ps1 spells one -- Verb-Noun, the verb one PowerShell approves of.
+PS1_CMDLET = re.compile(r"(?<![\w$.-])(?:Add|Clear|ConvertFrom|ConvertTo|Expand|ForEach|Get|Import|Invoke|Join|Measure|"
+                        r"New|Out|Remove|Resolve|Select|Set|Sort|Split|Start|Stop|Test|Where|Write)-[A-Z]\w*")
+
+
+def windows_start_problems(ps1, cmd):
+    """#161 and #162, READ (the Windows job RUNS both): install.ps1 under Windows PowerShell 5.1 resets PSModulePath to
+    5.1's own -- the machine's and the user's values and $PSHOME\Modules -- before its first cmdlet, and hands the same
+    reset to the child PowerShell of every upstream installer; install.cmd tells a double click by Explorer's exact
+    command line, not by `/c` and its own name, which PowerShell's `& .\install.cmd` has too."""
+    out = []
+    code = "\n".join(ln for ln in ps1.splitlines() if not ln.lstrip().startswith("#"))
+    param_end = re.search(r"^\[CmdletBinding\(\)\]\nparam\(\n.*?^\)\n", code, re.M | re.S)
+    reset_def = re.search(r"^\$Ps51ModulePath = \{ if \(\$PSVersionTable\.PSEdition -eq 'Desktop'\) \{ "
+                          r"\$env:PSModulePath = [^\n]*\} \}$", code, re.M)
+    reset_run = re.search(r"^\. \$Ps51ModulePath$", code, re.M)
+    body = reset_def.group(0) if reset_def else ""
+    lacking = [w for w in ("[Environment]::GetEnvironmentVariable('PSModulePath', 'Machine')",
+                           "[Environment]::GetEnvironmentVariable('PSModulePath', 'User')", "($PSHOME + '\\Modules')",
+                           "-join ';'") if w not in body]
+    if not param_end or not reset_def or not reset_run or lacking or '"' in body or PS1_CMDLET.search(body):
+        out.append("install.ps1 has no `$Ps51ModulePath = { if ($PSVersionTable.PSEdition -eq 'Desktop') { "
+                   "$env:PSModulePath = ... } }` run by `. $Ps51ModulePath` -- the machine's and the user's values and "
+                   "$PSHOME\\Modules, no cmdlet and no double quote in it" + (f"; it lacks {lacking}" if lacking else "")
+                   + " (#161)")
+    else:
+        first = PS1_CMDLET.search(code, param_end.end())
+        if not param_end.end() <= reset_def.start() < reset_run.start() or (first and first.start() < reset_run.start()):
+            out.append(f"install.ps1 runs `{first.group(0) if first else '?'}` before it resets PSModulePath -- under "
+                       f"PowerShell 7's module path Windows PowerShell 5.1 cannot load its own cmdlets (#161)")
+    upstream = re.search(r"^function Invoke-Upstream \{.*?^\}", ps1, re.M | re.S)
+    if not upstream or '$cmd = "$Ps51ModulePath; [Net.ServicePointManager]' not in upstream.group(0):
+        out.append("install.ps1 Invoke-Upstream's child PowerShell does not reset PSModulePath first -- "
+                   "`$cmd = \"$Ps51ModulePath; ...` (#161)")
+    # #162: Explorer starts a .cmd as `cmd.exe /c ""<full path>" "`; PowerShell as `/c ""<path>" <args>"`.
+    want = ('set "SELF=%~f0"', 'set "CMDLINE=!cmdcmdline!"', 'set "CMDTAIL=!CMDLINE:*/c =!"',
+            'set "EXPLORER=""!SELF!" ""', 'if /i "!CMDTAIL!"=="!EXPLORER!" set "DOUBLECLICKED=1"')
+    lacking = [w for w in want if w not in cmd]
+    if lacking or re.search(r'find /i "/c"', cmd, re.I):
+        out.append(f"install.cmd does not tell a double click by Explorer's exact command line -- lacking {lacking}"
+                   + ("; it still takes `/c` and its own name" if re.search(r'find /i "/c"', cmd, re.I) else "")
+                   + " (#162)")
+    return out
+
+
 def ps1_native_problems(ps1):
     """#142 (SFH 3): install.ps1's Run and Test-Quiet count a native command that could not start as one that ran -- a
     command that is not there sets no exit code, and both read the 0 they had set beforehand. READ (no PowerShell here):
@@ -2335,6 +2380,13 @@ def main():
             problems.extend(found)
         else:
             checked.append(ok_line)
+    windows = windows_start_problems(ps1, cmd)
+    if windows:
+        problems.extend(windows)
+    else:
+        checked.append("install.ps1 under Windows PowerShell 5.1 resets PSModulePath to its own before its first cmdlet, "
+                       "and hands the reset to the upstream installers' child PowerShell; install.cmd holds its window "
+                       "open only for Explorer's exact command line (read; the Windows job runs both) (#161, #162)")
     # install.ps1's end and its probes RUN under PowerShell, where there is one (#142): the Windows job's runner.
     ran_ps1, ps1_ran = ps1_run_problems(ps1)
     if ran_ps1:

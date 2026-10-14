@@ -290,6 +290,58 @@ jobs:
           [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path install.ps1).Path, [ref]$null, [ref]$errors) | Out-Null
           if ($errors.Count) { $errors | ForEach-Object { Write-Host $_.ToString() }; exit 1 }
           Write-Host "install.ps1 parses: 0 errors"
+      # #161: Windows PowerShell 5.1 started from PowerShell 7 -- the plugin's /setup in a pwsh window -- inherits pwsh's
+      # PSModulePath and cannot load its own Get-FileHash and Expand-Archive. This step is pwsh: the powershell.exe it
+      # starts inherits that path, and runs both cmdlets after install.ps1's own reset line, cut out of it as it stands.
+      # The same probe without the reset is said, not judged: whether it fails depends on the runner's modules.
+      - name: install.ps1's module path reset, Windows PowerShell 5.1 started from pwsh (#161)
+        shell: pwsh
+        run: |
+          Write-Host "pwsh's PSModulePath, which powershell.exe inherits here: $env:PSModulePath"
+          $line = @(Get-Content install.ps1 | Where-Object { $_ -match '^\$Ps51ModulePath = \{' })
+          if ($line.Count -ne 1) { Write-Host "::error::install.ps1 has no one-line `$Ps51ModulePath = { ... } to run"; exit 1 }
+          $dir = Join-Path $env:RUNNER_TEMP "psmodulepath"
+          New-Item -ItemType Directory -Force -Path $dir | Out-Null
+          Set-Content -Path (Join-Path $dir "a.txt") -Value "a file to hash and to zip"
+          Compress-Archive -Path (Join-Path $dir "a.txt") -DestinationPath (Join-Path $dir "a.zip") -Force
+          $env:PROBE_DIR = $dir
+          $probe = @'
+          $ErrorActionPreference = "Stop"
+          $d = $env:PROBE_DIR
+          $h = (Get-FileHash -Path (Join-Path $d "a.txt") -Algorithm SHA256).Hash
+          Expand-Archive -Path (Join-Path $d "a.zip") -DestinationPath (Join-Path $d "out") -Force
+          if (-not (Test-Path (Join-Path $d "out\a.txt"))) { throw "Expand-Archive left no a.txt" }
+          Write-Host "Get-FileHash ($h) and Expand-Archive ran under Windows PowerShell $($PSVersionTable.PSVersion)"
+          '@
+          Set-Content -Path (Join-Path $dir "without.ps1") -Value $probe
+          Set-Content -Path (Join-Path $dir "with.ps1") -Value ($line[0] + "`n. `$Ps51ModulePath`n" + $probe)
+          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $dir "without.ps1")
+          Write-Host "without the reset: exit $LASTEXITCODE (said, not judged)"
+          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $dir "with.ps1")
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "::error::Windows PowerShell 5.1 under pwsh's PSModulePath could not run Get-FileHash and Expand-Archive after install.ps1's reset (exit $LASTEXITCODE)"
+            exit 1
+          }
+          Write-Host "after the reset: Get-FileHash and Expand-Archive run"
+      # #162: install.cmd started from PowerShell is no double click -- no "Finished with exit code", no pause. Its stdin
+      # empty and a deadline, so a pause that is reached all the same cannot hold the job. The double click itself is
+      # checked on a Windows machine by a person (the Arbiter, on the VM, with the candidate).
+      - name: install.cmd from PowerShell holds no window open (#162)
+        shell: pwsh
+        timeout-minutes: 3
+        run: |
+          $said = ($null | & .\install.cmd -Help 2>&1 | Out-String)
+          $rc = $LASTEXITCODE
+          Write-Host $said
+          if ($said -match 'Finished with exit code' -or $said -match 'Press any key') {
+            Write-Host "::error::install.cmd run from PowerShell took itself for a double click: it said its exit code and paused"
+            exit 1
+          }
+          if ($rc -ne 0 -or $said -notmatch 'Autosound tuning -- installer for Windows') {
+            Write-Host "::error::install.cmd -Help from PowerShell ended $rc, or printed no help"
+            exit 1
+          }
+          Write-Host "install.cmd -Help from PowerShell: the help, exit 0, no exit-code line and no pause"
       # The reviewer's key on Windows lives in a file only this user's login can open (DPAPI, the Arbiter's
       # decision of 2026-09-23, hub #197). The author's Mac cannot run it, so a real Windows does: a round trip,
       # the value absent from the file, and a key in the user environment (the registry) moved into the store.

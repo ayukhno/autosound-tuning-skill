@@ -42,13 +42,24 @@ REM every supported Windows, so one of these always exists.
 set "PS=powershell"
 where pwsh >nul 2>&1 && set "PS=pwsh"
 
-REM Was this double-clicked, or run from a prompt? When Explorer starts it, the
-REM command line it was started with contains /c -- a prompt does not. It decides
-REM one thing only: whether to hold the window open at the end so the output can
-REM be read instead of vanishing.
+REM Was this double-clicked? It decides one thing only: whether to hold the
+REM window open at the end so the output can be read instead of vanishing.
+REM Explorer starts a .cmd as exactly   cmd.exe /c ""FULL-PATH" "   -- the
+REM opening quote doubled, the full path, a space before the closing quote; its
+REM "Run as administrator" as   cmd.exe /C "FULL-PATH" . A prompt has no /c,
+REM and PowerShell, running .\install.cmd, starts   /c ""PATH" OPTIONS"   or
+REM /c ""PATH""  -- /c and this file's name too, which is all the old test
+REM asked: a PowerShell run printed its exit code and waited on pause (#162).
+REM Compared after delayed expansion, so no quote or ampersand in a path is
+REM parsed as part of these lines.
 set "DOUBLECLICKED="
-echo %cmdcmdline% | find /i "%~nx0" >nul
-if not errorlevel 1 echo %cmdcmdline% | find /i "/c" >nul && set "DOUBLECLICKED=1"
+set "SELF=%~f0"
+set "CMDLINE=!cmdcmdline!"
+set "CMDTAIL=!CMDLINE:*/c =!"
+set "EXPLORER=""!SELF!" ""
+set "RUNAS="!SELF!" "
+if /i "!CMDTAIL!"=="!EXPLORER!" set "DOUBLECLICKED=1"
+if /i "!CMDTAIL!"=="!RUNAS!" set "DOUBLECLICKED=1"
 
 if exist "%PS1%" (
     echo Running %PS1%

@@ -77,6 +77,14 @@ param(
     [switch]$Help,
     [string]$Log = ""
 )
+# Windows PowerShell 5.1 started from a PowerShell 7 window -- the plugin's /setup there, a person's pwsh -- inherits
+# PowerShell 7's PSModulePath, and cannot load its own modules from it: Get-FileHash (gh's) and Expand-Archive (the
+# upstream installers') then fail, "not recognized" (#161, R50's CI 37866508892). So 5.1 takes its own module path
+# back -- the machine's and the user's values, and $PSHOME\Modules -- before its first cmdlet; every child it starts
+# inherits it, and Invoke-Upstream hands the same line to its child PowerShell, which a PowerShell 7 run starts too.
+# One line, no cmdlet and no double quote in it: it is passed to that child as -Command text.
+$Ps51ModulePath = { if ($PSVersionTable.PSEdition -eq 'Desktop') { $env:PSModulePath = (([Environment]::GetEnvironmentVariable('PSModulePath', 'Machine'), [Environment]::GetEnvironmentVariable('PSModulePath', 'User'), ($PSHOME + '\Modules')) -ne $null -ne '') -join ';' } }
+. $Ps51ModulePath
 # -Log <file>: a full transcript, for reading a run that happened on somebody else's machine. A
 # `| Tee-Object` on the outside sees none of this script's own lines (they go to the host, not
 # the pipeline), which is how the first Windows log arrived holding two errors and nothing else.
@@ -397,7 +405,8 @@ function Invoke-Upstream {
     # the four calls in the whole installer that execute code we did not write, and a person
     # watching the screen should be able to see that happen (HUB-031).
     Say "  the official installer, $($Url -replace '^https://','')"
-    $cmd = "[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12; irm '$Url' -UseBasicParsing | iex"
+    # Its module path first (#161): this script may be PowerShell 7, whose PSModulePath the child would inherit.
+    $cmd = "$Ps51ModulePath; [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12; irm '$Url' -UseBasicParsing | iex"
     $global:LASTEXITCODE = 0
     if ($Capture) {
         $script:UpstreamOutput = @(& powershell -NoProfile -ExecutionPolicy Bypass -Command $cmd 2>&1 | Out-String -Stream)
