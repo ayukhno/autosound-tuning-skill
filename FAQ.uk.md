@@ -89,7 +89,7 @@
 - Відкрий **Terminal** (натисни `Cmd + Space` → введи `Terminal` → натисни `Enter`).
 - Встав наступну команду та натисни `Enter`:
    ```bash
-   curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.1.3/install.sh | bash
+   curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.1.4/install.sh | bash
    ```
 - Залежно від системи, інші інсталятори можуть запитувати дозвіл; це нормально. Зачекай 10–20 хвилин уперше на Mac без інструментів розробника, 5–15 на Windows без Git, в іншому разі — кілька хвилин.
 
@@ -101,7 +101,7 @@
 - Відкрий **Windows PowerShell** (натисни Пуск → введи `powershell` → натисни `Enter`).
 - Встав наступну команду та натисни `Enter`:
    ```powershell
-   irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.1.3/install.ps1 | iex
+   irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.1.4/install.ps1 | iex
    ```
 - Залежно від системи, інші інсталятори можуть запитувати дозвіл; це нормально. Зачекай 5–15 хвилин уперше на Windows без Git, в іншому разі — кілька хвилин. Скрипт створить ярлик **REW (API on)** на твоєму робочому столі.
 

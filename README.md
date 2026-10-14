@@ -49,12 +49,12 @@ The app installs with a single command. For hardware and subscriptions, you'll n
 
 **macOS** — open Terminal (⌘-Space, type "terminal", Enter) and paste:
 ```sh
-curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.1.3/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.1.4/install.sh | bash
 ```
 
 **Windows** — open PowerShell (Start, type "powershell", Enter) and paste:
 ```powershell
-irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.1.3/install.ps1 | iex
+irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.1.4/install.ps1 | iex
 ```
 *(The version in the address pins the installer itself; it always installs the newest release.)*
 
@@ -69,11 +69,11 @@ irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.1.3/inst
 
 With options — for example `omp` and the GitHub backup — on macOS:
 ```sh
-curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.1.3/install.sh | bash -s -- --with-omp --github
+curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.1.4/install.sh | bash -s -- --with-omp --github
 ```
 and on Windows, as two lines:
 ```powershell
-$i = irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.1.3/install.ps1
+$i = irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.1.4/install.ps1
 & ([scriptblock]::Create($i)) -WithOmp -GitHub
 ```
 **How it ended** is in the installer's exit code: `0` ready · `1` stopped before the end — a refusal, an error or an interruption; what was done before it stays, and the last lines say what (a stop before the method's step leaves the method as it was) · `2` a wrong option to `install.sh`, or a bad `-Channel` or `-Plugin` to `install.ps1` (PowerShell itself refuses an option it does not know, with `1`) · `3` installed but not ready, its last lines naming what is missing and what to do.

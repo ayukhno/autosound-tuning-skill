@@ -29,7 +29,7 @@
 # REW detection on a machine that has REW. Windows PowerShell 5.1 (what every Windows ships) or PowerShell 7 -- no syntax newer than
 # 5.1 is used here on purpose. Run it through install.cmd (double-click), or:
 #
-#   irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.1.3/install.ps1 | iex
+#   irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.1.4/install.ps1 | iex
 #   & ([scriptblock]::Create((irm <same url>))) -Terminal      # with options
 #
 # Usage:
@@ -259,7 +259,7 @@ $TccBetaGlob   = "beta-v*"
 $UvVersion    = "0.12.10"
 #: This installer's own version, for its receipt (#142): the sha256 there is empty under `irm | iex`. Must equal
 #: install.sh's INSTALLER_VERSION and .claude-plugin/plugin.json's version; the release's bookkeeping moves all three.
-$InstallerVersion = "3.1.3"
+$InstallerVersion = "3.1.4"
 $TccRepo      = "https://github.com/ayukhno/autosound-tcc"
 $SkillHome    = Join-Path $HOME ".claude\skills\autosound-tuning"
 # The checkout lives beside the skill and the skill points at it (a junction) -- see install.sh
