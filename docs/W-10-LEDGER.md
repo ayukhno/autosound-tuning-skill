@@ -70,7 +70,7 @@ end.
 | 37 | implementer T8 #163 — the Haiku trial | haiku · high | Installers | 08:22 | 08:24 | 147 s, 17 tool calls, 89k tokens; `089d3b3`; red first (5), then green; CRLF kept |
 | 38 | review of the Haiku T8 (trial count) | opus · high | Installers | 08:24 | 08:28 | no Important, no functional defect; 2 Minor in the checker (~10 min), 1 pool-worthy (the header comment's `main`); the trailer names Opus — the brief's fault, not Haiku's |
 | 39 | Haiku T8 rework (resumed) | haiku · high | Installers | 08:28 | 08:31 | `518b55b`; all three, each red on a scratch copy first |
-| 40 | fix round Installers T5 T7 T9 (resumed) | opus · high | Installers | 08:31 | | |
+| 40 | fix round Installers T5 T7 T9 (resumed) | opus · high | Installers | 08:29 | 08:49 | 1010 s, 377k tokens; `7a4b723` `d0fad70` `fdf548d` `b5cb0ab`, + `eb3cc4c` (bounded_run kept local) and `ac4b0a2` (#158 CI: job `installers-windows`) |
 | 41 | Captures group fix: process.py part (T1's implementer) | opus · high | Captures | 08:37 | 08:47 | 557 s; `1efad5c`; TCC unaffected by the OK line's band suffix (it re-reads state, not stdout — checked by the controller) |
 | 42 | Captures group fix: naming.py part (T2/T3's implementer) | opus · high | Captures | 08:37 | 08:39 | `291dea7`; 461 old titles unchanged; verified live by the controller |
 | 43 | Captures group fix: verify part (T4's implementer) | opus · high | Captures | 08:37 | 08:39 | `43a3d6a` `a6ed7cc` `df65abc` |
@@ -79,6 +79,8 @@ end.
 | 46 | task review T14 #165 | opus · high | Silent failures 3 | 08:37 | 08:42 | 1 CRITICAL (rew_tool selftest red at the commit — the implementer reported green; the controller reproduced exit 70), 1 Important (strict glossary silently accepts a malformed one), 2 Minor |
 | 47 | fix round Silent failures 3: T13 T14 T15 + project_io (resumed) | opus · high | Silent failures 3 | 08:42 | | |
 | 48 | re-review of the Captures group fix | opus · high | Captures | 08:47 | | |
+| 49 | group seat: silent failures (also the fixes' re-review) | opus · high | Installers | 08:49 | | |
+| 50 | group seat: tests | opus · high | Installers | 08:49 | | |
 
 ## Quality notes
 
@@ -90,6 +92,12 @@ end.
 - **Fixes that did not reach the end (T1, #153).** The first build stored the typed title correctly but the check
   still asked REW the list's spelling; the task review caught it; the group seats found three more behaviour gaps at
   the joins of #153/#154/#155.
+
+## CI runs
+
+| run | when | head | why | result |
+|---|---|---|---|---|
+| 38537781090 | 08:49 | `f991c10` | `workflow_dispatch` — the wave touches Windows (checks.yml's own rule) | |
 
 ## Per group
 
