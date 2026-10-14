@@ -51,7 +51,7 @@ Tone: equal colleagues. Accept a correct critique fully; argue disagreements in 
 2. **Reconcile state from disk — MACHINE FILES FIRST, prose second.** One call for the whole picture: `python3 rew_tool/contract.py check <project>`. **If that report says the project predates a schema field, run `python3 rew_tool/project.py <project> catch-up` there and then — do not ask, and do not carry it as a to-do.** Then the phase and plan (`python3 rew_tool/state/process.py <project>/process show`), the ledger HEAD (multi-slot DSP → the active-slot banner first, `python3 rew_tool/state/state.py --root <project>/state registry render`) and `project.json` (`python3 rew_tool/project.py <project> show`). If prose and the machine files disagree, **the machine files win** — that divergence is itself worth flagging to the user. Ask what the user changed manually. **Reporting all of this costs one word** — *checks: done* — and only a check that FAILED is spoken in sentences (`✍️ Output Style`).
 3. **Banked decisions:** 🟡 items agreed earlier but not yet applied → prompt to apply before proposing anything new.
 4. **STOPPING IS AN EVENT, not a pause in the conversation.** It fires the moment the user says they are done for now, in any language (*good night*, «добраніч»): read intent, not a keyword. The order: `session-close --check` → the record (round, step, rulings, 🟡, ▶️ CONTINUE) → `session-close` → the car's **EXIT CHECKLIST** → the GitHub issue, if any → then start nothing new. Its one home → [`process-control.md`](references/core/process-control.md) § Stopping.
-   Laptop in the car, phone in hand, link dropped → § Working from another device.
+   Away from the laptop, or the link dropped → § Working from another device.
 
 ---
 

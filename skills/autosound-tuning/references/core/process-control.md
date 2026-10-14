@@ -130,7 +130,7 @@ improvising (S-044).
 ## Working from another device, and when the link drops
 
 A day in the car often runs the session from a phone or another browser while the laptop sits in the car. Claude
-Code's own Remote Control does this; nothing in the skill adds to it. What its page
+Code's own Remote Control does this; nothing in the skill builds on it. What its page
 ([code.claude.com/docs/en/remote-control](https://code.claude.com/docs/en/remote-control)) says, and what the method
 adds:
 
@@ -143,14 +143,17 @@ adds:
 * **Rounds short, checked before leaving the car.** An open round's status lives in REW's measurement list, so run
   `capture-check` before stepping away, and keep `process.py <project>/process session-close --check` as the habit at
   each block boundary — it writes nothing and names what is still open (§ Stopping).
-* **When the link drops**: the page brings an interactive session back with `claude --continue` or `claude --resume`
-  (the "about four hours" it names is for server mode's own bring-back). Past that, or on doubt, a fresh session reads
-  `process show` and the ▶️ CONTINUE block, as at any start.
-* **Listening verdicts** are typed or spoken to the session from the device in hand — the record is the same.
+* **When the link drops**: an interactive session reconnects on its own when the network returns; if the indicator
+  shows a failure, or the session says it "could not reach the Remote Control server for about 30 minutes", run
+  `/remote-control` at the laptop. If the `claude` process itself stopped, resume with `claude --continue` or
+  `claude --resume` (the "about four hours" the page names is server mode's own bring-back). If that fails, or on
+  doubt, a fresh session reads `process show` and the ▶️ CONTINUE block, as at any start.
+* **Listening verdicts** are typed to the session from the device in hand — the record is the same.
 
-**The plan of the day on the web — an offer, once.** At the start of a day in the car the session offers the person
-the plan of the day as a page published with Claude's own means (an Artifact page, opened in any browser); the person
-says yes or no. Nothing in the skill builds that page, and the record stays in `process/` and the ledger.
+**The plan of the day on the web — an offer, once per day in the car.** When the session has Claude's Artifact tool,
+at the start of a day in the car it offers the person the plan of the day as a page published with Claude's own means (an Artifact page, opened in any browser); the person
+says yes or no, and a no is not asked again that day. Without that tool (Codex, the TCC front-end) nothing is
+offered. Nothing in the skill builds that page, and the record stays in `process/` and the ledger.
 
 ## The reply after a desk computation
 
