@@ -1672,8 +1672,8 @@ was (`4796d49` changed only `_drop`). Recorded, not diagnosed: not a user's case
 The Windows selftests step of `installers-windows` is required since CI run 38548157486 (all 67 passed): hub #278's
 receipt names `installers-windows`.
 
-Not on the milestone: S-017, S-021, S-055, S-059 wait for a run, S-001 for the first `frozen` run, #26 is a 3.2.x
-candidate. The audit is minimised, not closed: its minimum is the wave after this one (`docs/AUDIT-2026-10-CLOSE.md`, S-105).
+Not on the milestone: S-017, S-021, S-055, S-059 wait for a run, S-001 for the first `frozen` run, #26 is deferred
+with no target version (the Arbiter, 2026-10-14: back on his word). The audit is minimised, not closed: its minimum is the wave after this one (`docs/AUDIT-2026-10-CLOSE.md`, S-105).
 
 ## S-103 · W-9's reviews: the pool for the next collection
 
