@@ -120,7 +120,8 @@ end.
 |---|---|---|---|---|
 | 38537781090 | 08:49 | `f991c10` | `workflow_dispatch` — the wave touches Windows (checks.yml's own rule) | red: installers-windows at the #161 probe (SQL Server's path; later steps skipped); selftests — encoding-check (side_effect, bounded_run: fixed `33b84cf`) and ruff (installer-consistency `import json`); installers-ubuntu, engine, gate green |
 | 38542204702 | 09:25 | `99bddb2` | after the Installers' and SF3's group fixes | red, further on: installers-windows passed the #161 probe; its consistency step fails T17b's six ps1 Codex-link cases (8.3 short paths) and the file:// upstream-child probe; Ubuntu selftests — installers and tag-check (a Linux-only case; the runner's 12-line tail cut the FAIL line); installers-ubuntu, engine, gate green |
-| 38543860362 | 09:38 | `f2af045` | after T17b's fix round | |
+| 38543860362 | 09:38 | `f2af045` | after T17b's fix round | red, narrower: Windows passed its consistency step (the Codex-link and module-path cases green there) and failed the #162 RunAs probe (an elevated child's answer not yet written); Ubuntu — the ps1 Codex cases ran under the image's pwsh, where no junction exists (the hidden Linux-only failure); fixed by the controller `0078659` |
+| 38544832522 | 09:46 | `0078659` | the two harness fixes | |
 
 ## Per group
 
