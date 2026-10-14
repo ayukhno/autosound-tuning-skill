@@ -144,7 +144,8 @@ def verdict(name, measurements=None, f_low=20, f_high=20000):
     A sweep is judged over its OWN range (#154, hub #247): REW's `startFreq`/`endFreq` on its listing record,
     clamped from outside by `f_low`/`f_high` -- the band its stats are read over, reported as `stats["band_hz"]`,
     and the band a curve that stops short of is called truncated. A record REW names no range for is read over
-    `f_low`-`f_high` and never called truncated: there is no range of its own to fall short of.
+    `f_low`-`f_high` and never called truncated: there is no range of its own to fall short of. `stats["band_source"]`
+    says which: "rew" (own range, truncation checked) or "asked" (none listed, truncation not checked).
     """
     # THREE states, not two. `exists` and `valid` were split because "nobody measured it" and "it
     # was measured and cannot be used" are different conversations; `applicable` is the same split
@@ -197,6 +198,9 @@ def verdict(name, measurements=None, f_low=20, f_high=20000):
     # over 20-20000 was "truncated" in every round and its mean diluted by bins it never played (hub #247).
     own = _own_band(entry)
     band_lo, band_hi = (max(own[0], f_low), min(own[1], f_high)) if own else (f_low, f_high)
+    # Where the band came from, so a reader tells a skipped truncation check from a passed one: "rew" -- REW's own
+    # range, checked; "asked" -- REW listed none, read over the asked band and never called truncated. Never an issue.
+    out["stats"]["band_source"] = "rew" if own else "asked"
     if own and band_lo >= band_hi:
         out["issues"].append(f"its own range in REW, {own[0]:g}-{own[1]:g} Hz, lies outside the band asked for, "
                              f"{f_low:g}-{f_high:g} Hz — nothing checked")
@@ -1121,9 +1125,15 @@ def _check_own_band():
                "4": rec("w-R_1 (sw)", "a4", 20.0, None),            # no endFreq
                "5": rec("m-L_1 (sw)", "a5", "20", "x"),             # REW's range not numbers
                "6": rec("tw-L_1 (sw)", "a6", 12.0, 22052.54),       # full range as REW lists it, full curve
-               "7": dict(_RTA_RECORD, startFreq=20.0, endFreq=20000.0)}
+               "7": dict(_RTA_RECORD, startFreq=20.0, endFreq=20000.0),
+               "8": rec("c_1 (sw)", "a8", float("nan"), 200.0),     # NaN
+               "9": rec("c_2 (sw)", "a9", 20.0, float("inf")),      # inf
+               "10": rec("c_3 (sw)", "a10", True, 200.0),           # a bool is no frequency
+               "11": rec("c_4 (sw)", "a11", 200.0, 20.0),           # reversed
+               "12": rec("c_5 (sw)", "a12", -5.0, 200.0)}           # negative
     curves = {"1": curve(20.0, 200.0), "2": curve(20.0, 20000.0, quiet_above=200.0), "3": curve(20.0, 300.0),
               "4": curve(20.0, 300.0), "5": curve(20.0, 300.0), "6": curve(12.0, 22052.54)}
+    curves.update({k: curve(20.0, 300.0) for k in ("8", "9", "10", "11", "12")})
     failures = []
 
     def want(label, cond, got):
@@ -1138,17 +1148,20 @@ def _check_own_band():
         v = verdict("sw_1 (sw)", listing)
         want("a sub over its own 20-200 is valid", v["valid"] and not trunc(v), v["issues"])
         want("its band is its own", v["stats"].get("band_hz") == [20.0, 200.0], v["stats"].get("band_hz"))
+        want("...and says so", v["stats"].get("band_source") == "rew", v["stats"].get("band_source"))
         v = verdict("sw_2 (sw)", listing)
         want("a sub's curve above its range does not dilute it", v["valid"]
              and v["stats"].get("min_dB", 0) >= 70.0 and v["stats"].get("mean_dB", 0) >= 70.0, v["stats"])
         v = verdict("w-L_1 (sw)", listing)
         want("a full-range record stopping at 300 Hz is truncated", not v["valid"] and trunc(v), v["issues"])
         want("...its band is 20-20000", v["stats"].get("band_hz") == [20.0, 20000.0], v["stats"].get("band_hz"))
-        for title in ("w-R_1 (sw)", "m-L_1 (sw)"):
+        want("...checked against REW's range", v["stats"].get("band_source") == "rew", v["stats"].get("band_source"))
+        for title in ("w-R_1 (sw)", "m-L_1 (sw)", "c_1 (sw)", "c_2 (sw)", "c_3 (sw)", "c_4 (sw)", "c_5 (sw)"):
             v = verdict(title, listing)
-            want(f"{title}: no range from REW, no truncation", v["valid"] and not trunc(v), v["issues"])
+            want(f"{title}: no usable range from REW, no truncation", v["valid"] and not trunc(v), v["issues"])
             want(f"{title}: the band falls back to the asked one", v["stats"].get("band_hz") == [20.0, 20000.0],
                  v["stats"].get("band_hz"))
+            want(f"{title}: the skip is said", v["stats"].get("band_source") == "asked", v["stats"].get("band_source"))
         v = verdict("tw-L_1 (sw)", listing)
         want("REW's 12-22052.54 is clamped to the asked 20-20000", v["valid"]
              and v["stats"].get("band_hz") == [20.0, 20000.0], (v["issues"], v["stats"].get("band_hz")))
@@ -1174,6 +1187,9 @@ def _check_own_band():
         want("capture-check's counts", (s["ok"], s["invalid"], s["not_applicable"]) == (4, 1, 1), (s, vs))
         want("capture-check's one invalid is the truncated record",
              [v["name"] for v in vs if _counted_as(v) == "invalid"] == ["w-L_1 (sw)"], vs)
+        vs = verify(["tw-L_1 (sw)", "sw_1 (sw)"], f_low=100, f_high=1000)
+        want("verify passes the band through", [v["stats"].get("band_hz") for v in vs] == [[100, 1000], [100, 200.0]],
+             [v["stats"].get("band_hz") for v in vs])
     assert not failures, "\n  ".join(["each sweep over its own range (#154):"] + failures)
 
 
