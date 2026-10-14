@@ -21,7 +21,9 @@ has.
 * **One notation for codes**: written with `-` (`w-L`). A driver's side typed with `_` (`w_L_3 (sw)`,
   a file `w_L.json`) is read as `-`, and the parse says so in its `note` (S-079): `canonical_title`,
   `canonical_code`. Any other `_` in a code is refused -- the old configuration prefix `D_L_7 (rta)`
-  among them, which is not a channel `D-L` (hub #232).
+  among them, which is not a channel `D-L` (hub #232). A letter in front of the series number
+  (`w-L_D7`, `sw_E3`) is not read either: `_N` is the series number only. Both refusals name the
+  form the grammar reads, the letter after the method as a clarification: `w-L_7 (sw) D` (#156).
 * **Method suffix**: `(sw)` = acoustic sweep, for phase/time/distortion; `(rta)` = MMM RTA, for
   magnitude/tone; `(imp)` = impedance sweep, for a driver's resonance in the install -- the one
   method with no `_N`: an impedance measurement is not tied to a DSP state (skill #33). Phases 0 and 2 want sw and
@@ -147,8 +149,21 @@ CONTROL_CLOSE = ("ctl3", "rep")
 _FIRST_WORD_RE = re.compile(r"^\s*\S+")
 _SIDE_UNDERSCORE_RE = re.compile(r"(?<![A-Za-z0-9])([a-z][a-z0-9]*)_([LR])(?![A-Za-z0-9])")
 # The old configuration prefix (`D_L_7 (rta)`, `D_SW+Ws_9 (rta)`): one capital letter and `_` at the front of a code.
-# The Arbiter, 2026-09-29: «наші префікси були помилкою» -- the letter now goes in front of the series number (`L_D7`).
+# The Arbiter, 2026-09-29: «наші префікси були помилкою». The method then put the letter in front of the series number
+# (`w-L_D7`, `sw_E3`), which the grammar does not read: `_N` is the series number only (#156, hub #259). Both are
+# refused, naming the form the grammar reads -- the letter after the method, a clarification: `w-L_7 (sw) D`.
 _CONFIG_PREFIX_RE = re.compile(r"^(?P<letter>[A-Z])_(?=\S)")
+_LETTER_SERIES_RE = re.compile(
+    r"^(?P<body>.+)_(?P<letter>[A-Z])(?P<version>\d+)(?P<control>ctl|rep)?(?:\s+(?P<level>[+-]?\d+(?:[.,]\d+)?\s*dB))?"
+    r"(?:\s*\((?P<method>[A-Za-z]+)\)(?:\s+(?P<tail>\S.*?))?)?\s*$"
+)
+
+
+def _letter_after(body, version, control, method, tail, letter):
+    """The title with its configuration letter after the method, as a clarification (#156): `w-L_7 (sw) D x0`. With no
+    method typed, the slot is named, not guessed."""
+    name = f"{canonical_code(body.strip())}_{version}{control or ''} ({method or '<method>'}) {letter}"
+    return f"{name} {tail}" if tail else name
 
 
 def canonical_code(code):
@@ -512,6 +527,15 @@ def explain_name(title, glossary=None):
     if not text:
         return None, "an empty title"
     match = _match_title(text)
+    if not match or (match.groupdict().get("version") is None and match.group("method").lower() != METHOD_IMPEDANCE):
+        lettered = _LETTER_SERIES_RE.match(text)
+        if lettered:
+            body_, version_, control_, method_, level_, tail_, letter_ = lettered.group(
+                "body", "version", "control", "method", "level", "tail", "letter")
+            after = _letter_after(body_, version_, control_, method_, " ".join(filter(None, (level_, tail_))), letter_)
+            return None, (f"`_{lettered.group('letter')}{lettered.group('version')}`: a letter in front of the series "
+                          f"number is not read, `_N` is the series number only -- the letter goes after the method, "
+                          f"as a clarification: `{after}` (naming-and-structure.md §3)")
     if not match:
         return None, ("not in the grammar: `<code>_<N> (sw|rta)` or `<code> (imp)`, a clarification "
                       "after the method (naming-and-structure.md §3)")
@@ -567,10 +591,11 @@ def explain_name(title, glossary=None):
             if version is None:
                 where = f"an impedance sweep is not tied to a configuration: `{rest}`"
             else:
-                at = match.start("version") - prefix.end()
-                where = f"the letter goes in front of the series number: `{rest[:at]}{letter}{rest[at:]}`"
-            return None, (f"`{letter}_` is an old configuration prefix, not part of a code -- {where}, a form this "
-                          f"grammar does not read either (naming-and-structure.md §3)")
+                after = _letter_after(rest[:match.end("body") - prefix.end()], version, parts.get("control"),
+                                      parts.get("method"), parts.get("tail") or parts.get("pos2"), letter)
+                where = f"the letter goes after the method, as a clarification: `{after}`"
+            return None, (f"`{letter}_` is an old configuration prefix, not part of a code -- {where} "
+                          f"(naming-and-structure.md §3)")
         return None, (f"`{head}`: a code has no `_` -- `_` only begins the series number, and the one `_` read as "
                       f"`-` is a driver's side (`w_L` is `w-L`) (naming-and-structure.md §3)")
     if canonical_code(head) != head:
@@ -940,6 +965,24 @@ def _check_level_before_method():
     assert parse_name("w-L (imp) 86dB")["params"] == "86dB"
 
 
+def _check_letter_before_series():
+    """#156 (hub #259): a letter in front of the series number (`w-L_D7`, `sw_E3`) is not read inside `_N` -- `_N` is
+    the series number only. The refusal names the form the grammar reads, the letter after the method as a
+    clarification (`w-L_7 (sw) D`), and that form parses with the letter in `params`."""
+    for title, after, letter in (("w-L_D7 (sw)", "w-L_7 (sw) D", "D"), ("sw_E3 (sw)", "sw_3 (sw) E", "E"),
+                                 ("ALL+C+FX_A3 (rta)", "ALL+C+FX_3 (rta) A", "A"),
+                                 ("L w+m_A3 (rta)", "L w+m_3 (rta) A", "A"),
+                                 ("w-L_S12 (sw) x0", "w-L_12 (sw) S x0", "S"),
+                                 ("w_L_D7 (sw)", "w-L_7 (sw) D", "D"),
+                                 ("w-L_D7 86dB (sw)", "w-L_7 (sw) D 86dB", "D 86dB"),
+                                 ("D_L_7 (rta)", "L_7 (rta) D", "D")):
+        got, why = explain_name(title)
+        assert got is None and why and f"`{after}`" in why, (title, why)
+        parsed = parse_name(after)
+        assert parsed is not None and parsed["params"] == letter, (after, parsed)
+        assert parsed["version_n"] == int(re.search(r"_(\d+)", after).group(1)), parsed
+
+
 def _check_bom_glossary_read():
     """A `glossary.json` saved with a UTF-8 BOM -- older Windows Notepad saves so -- is a glossary (#134, batch 4's
     re-review, Out of Scope 1). `Glossary.load` opened it as `utf-8`, the BOM failed the JSON, and it read as no
@@ -1251,7 +1294,8 @@ def _selftest():
     touches disk.
     """
     failures = []
-    for check in (_check_productions, _check_level_before_method, _check_bom_glossary_read, _check_for_project_strict,
+    for check in (_check_productions, _check_level_before_method, _check_letter_before_series,
+                  _check_bom_glossary_read, _check_for_project_strict,
                   _check_cli_reads_the_glossary_strictly, _check_dangling_glossary_link,
                   _check_dangling_link_repair_fits, _check_lenient_read_of_a_project_json_not_an_object,
                   _check_lenient_read_of_a_glossary_not_an_object):
@@ -1484,11 +1528,13 @@ def _selftest():
         assert canonical_code(kept) == kept, (kept, canonical_code(kept))
     assert canonical_code("sw+w_L") == "sw+w-L" and canonical_code("D_w_L") == "D_w-L"
     assert canonical_title("D_L_7 (rta) m-L: lev=-4.5, PK=-2") == "D_L_7 (rta) m-L: lev=-4.5, PK=-2"
-    for title, new in (("D_L_7 (rta) m-L: lev=-4.5, PK=-2", "`L_D7 (rta) m-L: lev=-4.5, PK=-2`"),
-                       ("D_L w+m_7 (rta) inv", "`L w+m_D7 (rta) inv`"), ("D_SW+Ws_9 (rta)", "`SW+Ws_D9 (rta)`"),
-                       ("D_w-L (imp) case35l", "`w-L (imp) case35l`"), ("D_w_L_7 (sw)", "`w_L_D7 (sw)`")):
+    # #156 (hub #259): the refusal names a form the grammar READS -- the letter after the method, a clarification.
+    for title, new in (("D_L_7 (rta) m-L: lev=-4.5, PK=-2", "`L_7 (rta) D m-L: lev=-4.5, PK=-2`"),
+                       ("D_L w+m_7 (rta) inv", "`L w+m_7 (rta) D inv`"), ("D_SW+Ws_9 (rta)", "`SW+Ws_9 (rta) D`"),
+                       ("D_w-L (imp) case35l", "`w-L (imp) case35l`"), ("D_w_L_7 (sw)", "`w-L_7 (sw) D`")):
         got, why = explain_name(title)
         assert got is None and "`D_` is an old configuration prefix" in why and new in why, (title, why)
+        assert parse_name(new.strip("`")) is not None, (title, new)
     got, why = explain_name("sw_f_1 (sw)")
     assert got is None and "`sw_f`: a code has no `_`" in why, why
     assert parse_name("D_L_7 (rta)", Glossary({"channels": [{"code": "w-L"}], "sides": {"L": ["w-L"]}})) is None
@@ -1541,7 +1587,8 @@ def _selftest():
           "with a reason, and no ledger version for `_N` (#37); a match the comparison NORMALISED says the title on disk differs and names the canonical one to rename it to (#47); "
           "a driver's side typed with `_` is read as `-`, with a note, and the series is left alone (S-079); any "
           "other `_` in a code is refused, the old `D_` prefix by name (#232); a level typed before the method is the capture "
-          "with it after, and the note offers that form (#155)")
+          "with it after, and the note offers that form (#155); a letter in front of `_N` is refused, naming the "
+          "letter after the method (#156)")
     return 0
 
 
