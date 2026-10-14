@@ -1950,6 +1950,13 @@ def windows_start_problems(ps1, cmd):
             'set "EXPLORER=""!SELF!" ""', 'set "RUNAS="!SELF!" "', 'if /i "!CMDTAIL!"=="!EXPLORER!" set "DOUBLECLICKED=1"',
             'if /i "!CMDTAIL!"=="!RUNAS!" set "DOUBLECLICKED=1"')
     lacking = [w for w in want if w not in cmd]
+    # (the group round) a `!` in the path: SELF and PS1 are set before delayed expansion is on, and read as !PS1!.
+    at_setlocal = cmd.find("setlocal EnableDelayedExpansion")
+    for line in ('set "SELF=%~f0"', 'set "PS1=%~dp0install.ps1"'):
+        if not 0 <= cmd.find(line) < at_setlocal:
+            lacking.append(f"{line} before setlocal")
+    if "%PS1%" in cmd:
+        lacking.append("no %PS1% (a `!` in the path is eaten after it expands): !PS1!")
     if lacking or re.search(r'find /i "/c"', cmd, re.I):
         out.append(f"install.cmd does not tell a double click by Explorer's exact command line -- lacking {lacking}"
                    + ("; it still takes `/c` and its own name" if re.search(r'find /i "/c"', cmd, re.I) else "")

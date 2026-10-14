@@ -362,15 +362,17 @@ jobs:
         shell: pwsh
         timeout-minutes: 5
         run: |
+          # install.cmd from its first line through the detection -- its own setlocal lines included, which the probe
+          # would otherwise add itself -- in a folder whose name has a space, an & and a ! (the group round).
           $lines = @(Get-Content install.cmd)
           $from = [array]::IndexOf($lines, 'set "DOUBLECLICKED="')
           $to = [array]::IndexOf($lines, 'if /i "!CMDTAIL!"=="!RUNAS!" set "DOUBLECLICKED=1"')
           if ($from -lt 0 -or $to -lt $from) { Write-Host "::error::install.cmd has no detection lines to cut out ($from..$to)"; exit 1 }
-          $dir = Join-Path $env:RUNNER_TEMP "dblclick"
+          $dir = Join-Path $env:RUNNER_TEMP "dbl click (x) & y!"
           New-Item -ItemType Directory -Force -Path $dir | Out-Null
           $probe = Join-Path $dir "probe.cmd"
-          $out = Join-Path $dir "out.txt"
-          Set-Content -Path $probe -Encoding ascii -Value (@('@echo off', 'setlocal EnableDelayedExpansion') + $lines[$from..$to] + @('echo [!DOUBLECLICKED!]>"%~dp0out.txt"'))
+          $out = "$probe.out"
+          Set-Content -Path $probe -Encoding ascii -Value ($lines[0..$to] + @('echo [!DOUBLECLICKED!]>"!SELF!.out"'))
           function Read-Decision { if (Test-Path $out) { $v = (Get-Content $out -Raw).Trim(); Remove-Item $out; return $v } else { return "(nothing written)" } }
           $bad = @()
           Start-Process -FilePath $probe -Wait -WindowStyle Hidden
@@ -388,7 +390,8 @@ jobs:
           }
           & $probe; $got = Read-Decision; Write-Host "& probe.cmd: $got"; if ($got -ne "[]") { $bad += "& probe.cmd read $got, want []" }
           & $probe -Help; $got = Read-Decision; Write-Host "& probe.cmd -Help: $got"; if ($got -ne "[]") { $bad += "& probe.cmd -Help read $got, want []" }
-          & cmd /c $probe; $got = Read-Decision; Write-Host "cmd /c probe.cmd: $got"; if ($got -ne "[]") { $bad += "cmd /c probe.cmd read $got, want []" }
+          Start-Process -FilePath cmd.exe -ArgumentList "/c `"`"$probe`"`"" -Wait -NoNewWindow
+          $got = Read-Decision; Write-Host "cmd /c probe.cmd: $got"; if ($got -ne "[]") { $bad += "cmd /c probe.cmd read $got, want []" }
           if ($bad.Count) { $bad | ForEach-Object { Write-Host "::error::install.cmd's double-click test: $_" }; exit 1 }
           $said = ($null | & .\install.cmd -Help 2>&1 | Out-String)
           $rc = $LASTEXITCODE
@@ -399,6 +402,12 @@ jobs:
           }
           if ($rc -ne 0 -or $said -notmatch 'Autosound tuning -- installer for Windows') {
             Write-Host "::error::install.cmd -Help from PowerShell ended $rc, or printed no help"
+            exit 1
+          }
+          # #163: the help's one-liner names this installer's own release, never main.
+          $version = ([regex]::Match((Get-Content install.ps1 -Raw), '(?m)^\$InstallerVersion\s*=\s*"([^"]+)"')).Groups[1].Value
+          if (-not $version -or $said -notmatch [regex]::Escape("/v$version/install.ps1") -or $said -match '/main/install\.ps1') {
+            Write-Host "::error::install.cmd -Help's one-liner does not name /v$version/install.ps1, or names main (#163)"
             exit 1
           }
           Write-Host "install.cmd: a double click (and Run as administrator) holds the window; PowerShell and cmd /c do not"

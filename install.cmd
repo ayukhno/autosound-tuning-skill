@@ -1,4 +1,11 @@
 @echo off
+REM This file's own path and install.ps1's beside it, set before delayed
+REM expansion is on: a ! in a folder name stays in them, and they are read
+REM as !SELF! and !PS1! below, which are never expanded twice. A setlocal
+REM of their own first, so they do not stay in the window that ran this.
+setlocal DisableDelayedExpansion
+set "SELF=%~f0"
+set "PS1=%~dp0install.ps1"
 setlocal EnableDelayedExpansion
 REM ===========================================================================
 REM  Autosound tuning -- Windows entry point.
@@ -34,7 +41,6 @@ REM  Plain ASCII on purpose: cmd reads this file in the console code page, and
 REM  a stray non-ASCII byte in an echo line prints as junk.
 REM ===========================================================================
 
-set "PS1=%~dp0install.ps1"
 set "PS1URL=https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.1.3/install.ps1"
 
 REM PowerShell 7 if it is here, Windows PowerShell 5.1 otherwise. 5.1 ships with
@@ -55,7 +61,6 @@ REM parsed as part of these lines. A launcher of some other program that starts
 REM it as  cmd /c "PATH"  gets no pause: only Explorer's two forms hold the
 REM window, and a window that closes there is that launcher's own.
 set "DOUBLECLICKED="
-set "SELF=%~f0"
 set "CMDLINE=!cmdcmdline!"
 set "CMDTAIL=!CMDLINE:*/c =!"
 set "EXPLORER=""!SELF!" ""
@@ -63,9 +68,9 @@ set "RUNAS="!SELF!" "
 if /i "!CMDTAIL!"=="!EXPLORER!" set "DOUBLECLICKED=1"
 if /i "!CMDTAIL!"=="!RUNAS!" set "DOUBLECLICKED=1"
 
-if exist "%PS1%" (
-    echo Running %PS1%
-    "%PS%" -NoProfile -ExecutionPolicy Bypass -File "%PS1%" %*
+if exist "!PS1!" (
+    echo Running !PS1!
+    "%PS%" -NoProfile -ExecutionPolicy Bypass -File "!PS1!" %*
 ) else (
     REM Only the .cmd was downloaded, so fetch the script it is a door to. Not
     REM saved to disk first: a saved copy would be quarantined and would go
