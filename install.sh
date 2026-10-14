@@ -1263,8 +1263,14 @@ keep_local() {  # keep_local <dir> <what>; 0 = kept and reset, 1 = left as it wa
   # What the new upkeep.py imports beside it, each with a fallback when missing (bounded_run.py since #167).
   for _kl_f in scripts/upkeep.py rew_tool/gates/side_effect.py rew_tool/console.py rew_tool/bounded_run.py; do
     mkdir -p "$_kl_tmp/skills/autosound-tuning/$(dirname "$_kl_f")"
-    git -C "$_kl_dir" show "FETCH_HEAD:skills/autosound-tuning/$_kl_f" \
-      > "$_kl_tmp/skills/autosound-tuning/$_kl_f" 2>/dev/null || true
+    # Into a temporary name, moved only when git gave it: a file the tag lacks is missing, not an empty module the new
+    # upkeep.py would import (#167).
+    if git -C "$_kl_dir" show "FETCH_HEAD:skills/autosound-tuning/$_kl_f" \
+         > "$_kl_tmp/skills/autosound-tuning/$_kl_f.part" 2>/dev/null; then
+      mv "$_kl_tmp/skills/autosound-tuning/$_kl_f.part" "$_kl_tmp/skills/autosound-tuning/$_kl_f"
+    else
+      rm -f "$_kl_tmp/skills/autosound-tuning/$_kl_f.part"
+    fi
   done
   if [ -z "$_kl_py" ] || [ ! -s "$_kl_tmp/skills/autosound-tuning/scripts/upkeep.py" ]; then
     warn "they cannot be kept automatically here (no python3, or the new version has no upkeep.py)."

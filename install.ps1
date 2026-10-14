@@ -1257,9 +1257,25 @@ function Save-LocalChanges {
     # those the tag has: `git archive` gives nothing at all over one path it does not know.
     $keep = @("skills/autosound-tuning/scripts/upkeep.py", "skills/autosound-tuning/rew_tool/gates/side_effect.py",
               "skills/autosound-tuning/rew_tool/console.py", "skills/autosound-tuning/rew_tool/bounded_run.py")
-    $have = @(& git -C $Dir ls-tree --name-only FETCH_HEAD -- @keep 2>$null)
-    if ($have.Count -gt 0) { & git -C $Dir archive --format=zip -o $zip FETCH_HEAD @have 2>&1 | Out-Null }
+    # git's own answer is read (the group round): a git that could not read the new version said "no upkeep.py".
+    $global:LASTEXITCODE = $null
+    $listed = @(& git -C $Dir ls-tree --name-only FETCH_HEAD -- @keep 2>&1 | ForEach-Object { "$_" })
+    $gitRc = $LASTEXITCODE
+    $have = @($listed | Where-Object { $keep -contains $_ })
+    $gitSaid = @($listed | Where-Object { $keep -notcontains $_ -and $_.Trim() }) | Select-Object -Last 1
+    if ($gitRc -eq 0 -and $have.Count -gt 0) {
+        $global:LASTEXITCODE = $null
+        $archived = @(& git -C $Dir archive --format=zip -o $zip FETCH_HEAD @have 2>&1 | ForEach-Object { "$_" })
+        $gitRc = $LASTEXITCODE
+        $gitSaid = @($archived | Where-Object { $_.Trim() }) | Select-Object -Last 1
+    }
     $ErrorActionPreference = $prev
+    if ($gitRc -ne 0) {
+        Warn "they cannot be kept automatically here: git could not read the new version's files (git ended $gitRc): $gitSaid"
+        Warn "keep them yourself (git -C $(Pretty $Dir) stash), then run this again; nothing was changed."
+        Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
+        return $false
+    }
     if (Test-Path $zip) { Expand-Archive -Path $zip -DestinationPath $tmp -Force }
     $tool = Join-Path $tmp "skills\autosound-tuning\scripts\upkeep.py"
     if (-not (Test-Path $Py3) -or -not (Test-Path $tool)) {

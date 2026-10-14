@@ -1824,15 +1824,25 @@ def keep_local_problems(sh, ps1):
     return out
 
 
-#: A `git` for keep_local alone: `status` names one changed file, the new tag's upkeep.py is a script that says it ran
-#: and fails (it reset the copy, then a locked file stopped its clean), and any other file of the tag is not there.
+#: A `git` for keep_local alone: `status` names one changed file, the new tag's upkeep.py is $UPKEEP_STUB, and any other
+#: file of the tag is not there (an older tag, without bounded_run.py and the rest).
 KEEP_LOCAL_GIT = (b"#!/bin/sh\n"
                   b'case "$*" in\n'
                   b'  *" status "*) echo " M a"; exit 0 ;;\n'
-                  b'  *" show FETCH_HEAD:skills/autosound-tuning/scripts/upkeep.py") '
-                  b"printf 'import sys\\nprint(\"UPKEEP RAN: reset, then a locked file\")\\nsys.exit(1)\\n'; exit 0 ;;\n"
+                  b'  *" show FETCH_HEAD:skills/autosound-tuning/scripts/upkeep.py") cat "$UPKEEP_STUB"; exit 0 ;;\n'
                   b'  *" show "*) echo "fatal: path not in FETCH_HEAD" >&2; exit 128 ;;\n'
                   b"esac\nexit 0\n")
+
+
+#: The new tag's upkeep.py for keep_local's run: it names the files beside it that are there -- (#167) one the tag lacks
+#: must be missing, never an empty file an import then loads -- says it ran, and fails (it reset the copy, then a locked
+#: file stopped its clean).
+KEEP_LOCAL_UPKEEP = (b"import os, sys\n"
+                     b"root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))\n"
+                     b"names = ('rew_tool/gates/side_effect.py', 'rew_tool/console.py', 'rew_tool/bounded_run.py')\n"
+                     b"print('BESIDE', [n for n in names if os.path.exists(os.path.join(root, n))])\n"
+                     b"print('UPKEEP RAN: reset, then a locked file')\n"
+                     b"sys.exit(1)\n")
 
 
 def keep_local_run_problems(sh, ps1):
@@ -1854,15 +1864,20 @@ def keep_local_run_problems(sh, ps1):
         stub.mkdir()
         (stub / "git").write_bytes(KEEP_LOCAL_GIT)
         (stub / "git").chmod(0o755)
+        Path(tmp, "upkeep.py").write_bytes(KEEP_LOCAL_UPKEEP)
         py_dir = Path(sys.executable).parent.as_posix()
         script = (f'export PATH="$(cd "{stub.as_posix()}" && pwd)":"{py_dir}":"/usr/bin:$PATH"\n' + functions
                   + f'DRY_RUN=0\nLOCAL_CHANGES="{Path(tmp, "patches").as_posix()}"\n'
                   + "offer() { return 1; }\nchanging() { echo 'ARMED BEFORE UPKEEP'; }\npython3() { "
                   + f'"{Path(sys.executable).as_posix()}" "$@"; }}\n'
                   + f'keep_local "{Path(tmp, "copy").as_posix()}" "the method"\n')
-        r = subprocess.run([bash, "-s"], input=script.encode("utf-8"), capture_output=True)
+        r = subprocess.run([bash, "-s"], input=script.encode("utf-8"), capture_output=True,
+                           env=dict(os.environ, UPKEEP_STUB=Path(tmp, "upkeep.py").as_posix()))
         said = (r.stdout + r.stderr).decode("utf-8", "replace")
         armed, ran = said.find("ARMED BEFORE UPKEEP"), said.find("UPKEEP RAN")
+        if "BESIDE []" not in said:
+            out.append(f"install.sh keep_local copies a file the new tag does not have as an EMPTY file -- the new upkeep.py "
+                       f"then imports an empty module (#167) -- said {said.strip()[-200:]!r}")
         if r.returncode != 1 or not 0 <= armed < ran or "nothing was reset" in said \
                 or "see above: upkeep says what it kept and reset" not in said:
             out.append(f"install.sh keep_local, the new upkeep.py failing after its reset: exit {r.returncode}, want 1, "
@@ -1987,7 +2002,7 @@ def powershell_env(environ=None):
 
 #: The functions of install.ps1 that its end and its probes need, cut out as they stand.
 PS1_RUN_FUNCTIONS = ("Stop-Installer", "Write-Receipt", "Enter-Change", "Invoke-Upstream", "Sync-MethodCheckout",
-                     "Add-Missing", "Say", "Warn", "Pretty", "Run", "Test-Quiet",
+                     "Save-LocalChanges", "Add-Missing", "Say", "Warn", "Pretty", "Run", "Test-Quiet",
                      "Test-ReleaseTag", "Test-SettledByName", "Select-MethodRef", "Select-NewestOnChannel")
 #: #164, #171: install.ps1's tag pick over a stand-in tag list -- Read-ReleaseTags answers $script:StubTags, or nothing
 #: with $script:StubWhy -- then the signature step every ref passes. (case, body, the words, how many times "is not a
@@ -2116,6 +2131,31 @@ def ps1_run_problems(ps1):
                 out.append(f"install.ps1 Sync-MethodCheckout under {Path(shell).name}, {case}: exit {rc}, want 0, "
                            f"{' + '.join(map(repr, words))}, never {' + '.join(map(repr, never))}, 'is not a release' "
                            f"{unsigned} time(s) -- said {said.strip()[-300:]!r} (#164)")
+        # #167 (the test seat): Save-LocalChanges over a tag without bounded_run.py and the rest -- a repository made
+        # here whose FETCH_HEAD holds only scripts/upkeep.py (KEEP_LOCAL_UPKEEP) and a changed file: `git archive`
+        # takes what ls-tree found, the new upkeep.py runs with nothing beside it, and its failure is said as its own.
+        repo = Path(tmp, "keep-repo")
+        try:
+            genv = dict(os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t", GIT_COMMITTER_NAME="t",
+                        GIT_COMMITTER_EMAIL="t@t", GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1")
+            tool = repo / "skills" / "autosound-tuning" / "scripts" / "upkeep.py"
+            tool.parent.mkdir(parents=True)
+            tool.write_bytes(KEEP_LOCAL_UPKEEP)
+            (repo / "a").write_text("a\n")
+            for args in (("init", "-q"), ("add", "-A"), ("commit", "-q", "-m", "a"), ("fetch", "-q", ".", "HEAD")):
+                subprocess.run(["git", "-C", str(repo), *args], env=genv, capture_output=True, check=True)
+            (repo / "a").write_text("a\nmine\n")
+            body = (f"$Py3 = '{Path(sys.executable)}'\n$LocalChanges = '{Path(tmp, 'patches')}'\n"
+                    "function Offer { param($q) return $false }\n"
+                    f"$kept = Save-LocalChanges '{repo}' 'the method'\nWrite-Host \"KEPT=$kept\"\n")
+            rc, said, _ = run_case("keep-local-older-tag", body)
+            if rc != 0 or "BESIDE []" not in said or "UPKEEP RAN" not in said or "KEPT=False" not in said \
+                    or "cannot be kept automatically" in said or "see above: upkeep says what it kept and reset" not in said:
+                out.append(f"install.ps1 Save-LocalChanges under {Path(shell).name}, a tag without bounded_run.py: exit "
+                           f"{rc} -- want the new upkeep.py run with nothing beside it, its failure said as its own "
+                           f"-- said {said.strip()[-300:]!r} (#167, #160)")
+        except (OSError, subprocess.CalledProcessError) as exc:
+            out.append(f"Save-LocalChanges' fixture repository could not be made ({exc}) -- unrun is not agreed (#167)")
         # #161 (the group round): install.ps1's two module-path lines, cut out as they stand. SQL Server's
         # Tools\PowerShell\Modules\ is an ordinary 5.1 entry and leaves the path as it was; pwsh's own folders are reset,
         # the Documents folder first, no empty entry; and Invoke-Upstream's child -- the lines as -Command text, started
