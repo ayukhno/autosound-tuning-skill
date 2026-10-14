@@ -94,6 +94,7 @@ end.
 | 61 | Agent start group fix (a3): project seed (T17a's implementer) | opus · high | Agent start | 09:12 | 09:14 | `5170fb7`; the gate's sentence made true; existing projects keep the old one |
 | 62 | the trigger eval, three live runs (claude -p, sonnet-4-6, 3 workers) | — | Agent start | 09:15 | 09:36 | run 1: 52/68 (439 s) — all 16 misses are neutral should-fire (recall 10/26), no false fire, project 11/11; runs 2 and 3 void (one query each gave no result in 120 s — load); two runs to repeat |
 | 63 | T17b fix round (b) (resumed) | opus · high | Agent start | 09:25 | 09:38 | 796 s; `f2af045` — (b) all eight, and CI run 2's: 8.3 short paths, Invoke-Upstream returned output+True as success (a real bug), the consistency script's FAIL recap |
+| 64 | FINAL branch review, origin/main..0078659 | fable · high | the wave | 09:47 | | |
 
 ## Quality notes
 
@@ -121,7 +122,8 @@ end.
 | 38537781090 | 08:49 | `f991c10` | `workflow_dispatch` — the wave touches Windows (checks.yml's own rule) | red: installers-windows at the #161 probe (SQL Server's path; later steps skipped); selftests — encoding-check (side_effect, bounded_run: fixed `33b84cf`) and ruff (installer-consistency `import json`); installers-ubuntu, engine, gate green |
 | 38542204702 | 09:25 | `99bddb2` | after the Installers' and SF3's group fixes | red, further on: installers-windows passed the #161 probe; its consistency step fails T17b's six ps1 Codex-link cases (8.3 short paths) and the file:// upstream-child probe; Ubuntu selftests — installers and tag-check (a Linux-only case; the runner's 12-line tail cut the FAIL line); installers-ubuntu, engine, gate green |
 | 38543860362 | 09:38 | `f2af045` | after T17b's fix round | red, narrower: Windows passed its consistency step (the Codex-link and module-path cases green there) and failed the #162 RunAs probe (an elevated child's answer not yet written); Ubuntu — the ps1 Codex cases ran under the image's pwsh, where no junction exists (the hidden Linux-only failure); fixed by the controller `0078659` |
-| 38544832522 | 09:46 | `0078659` | the two harness fixes | |
+| 38544832522 | 09:46 | `0078659` | the two harness fixes | GREEN on all five jobs — but the Windows selftests step (continue-on-error) failed almost every module: the manifest checked out CRLF, `--selftest\r`; fixed `d3b3ec2` |
+| 38545884702 | 09:55 | `d3b3ec2` | the CR fix | |
 
 ## Per group
 
