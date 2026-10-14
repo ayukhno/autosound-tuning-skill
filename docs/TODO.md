@@ -1649,6 +1649,9 @@ The ranking and the assessment: `docs/W-10-CANDIDATES.md`. The groups (`hub:seam
 - **Silent failures 3**: #159, #165, #166, #167;
 - **Method text**: #168 hub #258, #173 (S-101's boost path, research first). Off the wave: #169 hub #113, deferred.
 
+The Windows selftests step of `installers-windows` runs with `continue-on-error` until it is green on this wave's PR;
+then the flag goes (a `::warning::` names failures meanwhile, `404b6d4`), and hub #278's receipt names `installers-windows`.
+
 Not on the milestone: S-017, S-021, S-055, S-059 wait for a run, S-001 for the first `frozen` run, #26 is a 3.2.x
 candidate. The audit is minimised, not closed: its minimum is the wave after this one (`docs/AUDIT-2026-10-CLOSE.md`, S-105).
 
