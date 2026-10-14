@@ -59,20 +59,30 @@ panel had nothing real to render and every resume re-derived the phase by re-rea
                 "names": ["tw-L_1 (sw)"]}, ...],                        //   front-end draws, in the order
                                                     //   the car is taken in -- never the phase plan
     "optional": ["Ws_1 (sw)"],                      // skill #80: on the list, not a gap when left
+    "as_typed": {"sw_1 (sw) 86dB": "sw_1 86dB (sw)"},   // #155: the list is kept in `canonical_title`'s
+                                                    //   form; a title typed otherwise, beside it
     "setup": {"first": "sw", "from": "m-L_0 (sw)",  // skill #78: the method taken first and why;
               "switches": 1},                       //   at most one switch of tripod/driver
     "step": "0.1",                                  // SCR-040: the plan step this round satisfies
     "taken": {"tw-L_1 (sw)": {"at": "…", "planned": true,     // planned=false: not on the list
       "as_in_rew": "tw-L_01 (sw)",                  // #153: typed in another spelling of a listed title
                                                     //   (same `name_key`): stored under the list's, this
-                                                    //   is how REW holds it; absent when they agree
+                                                    //   is how REW holds it; absent when they agree.
+                                                    //   A hint: a check refreshes it from REW's listing
       "superseded_by": null,                        // S-039: a row recorded under a WRONG title
                                                     //   stays, dimmed, naming what it was
                                                     //   corrected to. Never deleted, and counted
                                                     //   nowhere as taken (N17)
+      "superseded_before": null,                    // #153: a re-take over a superseded row -- the
+                                                    //   row stands again, the old one (its
+                                                    //   `superseded_by`) kept here
       "verified": {"ok": true, "exists": true,      // SCR-040: what the arithmetic said (`ambiguous`:
                    "uuid": "9ff4deb9-…",            //   how many REW holds under the title, when
-                   "at": "…", "issues": []}}},      //   more than one). REW's own id — the title is NOT identity
+                   "band_hz": [20.0, 20000.0],      //   more than one; `ambiguous_titles`: REW holds
+                   "band_source": "rew",            //   these spellings of it, #153). #154: the band
+                                                    //   judged over; "asked" = REW listed no range,
+                                                    //   truncation not checked
+                   "at": "…", "issues": []}}},      //   REW's own id — the title is NOT identity
     "checks": {"tw-L_1 (sw)": {"ok": true, "exists": true, "applicable": true,   // #134 (T-1): the last
                                "uuid": "9ff4deb9-…", "at": "…", "issues": []},   //   check of EVERY title,
                "tw-L_1 (rta)": {"ok": false, "exists": false,                     //   held or not -- what
@@ -101,6 +111,8 @@ One JSON object per line, oldest first: `{"at": …, "type": …, …}`. Types:
 
 `capture_taken` carries `as_in_rew` and `capture_skipped` carries `as_typed` when the title typed was another
 spelling of a listed one (#153): `title` is then the list's, the round's own, and the field is the spelling typed.
+`capture_verified` carries `bands` -- `{title: {"band_hz": [lo, hi], "band_source": "rew"|"asked"}}` -- the band each
+sweep was judged over (#154).
 
 `critic_called` is one per review round (#166): `record_reviewer` adds none when one of the same round
 (`review_round`: the `review` file's base, `-package` and `.md` stripped) and vendor (equal but for case, or one of

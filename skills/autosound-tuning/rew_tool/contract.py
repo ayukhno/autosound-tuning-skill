@@ -3576,6 +3576,18 @@ def _selftest():
     assert (rv_key["missing"], rv_key["missing_optional"], rv_key["skipped_unplanned"], rv_key["complete"]) == \
         ([], [], [], True), rv_key
     assert rv_key["skipped"] == {"r-L_1": "rears muted", "r-R_1 (sw)": "no time"}, rv_key
+    # ...by the rule the round's close matches by (#153's group round, item 10): `process.title_key` and this module's
+    # `_title_key` give one key for each title -- padding, a level before the method, a refused letter form, a title
+    # outside the grammar -- so a report and the close never disagree on whether a capture is the list's.
+    process_key = _load_vendored("process").title_key
+    agree = ["w-R_01 (sw)", "w-R_1 (sw)", "sw_3 86dB (sw)", "sw_3 (sw) 86dB", "w-L_D7 (sw)", "w-L_7 (sw) D",
+             "room sim", " c_055 (rta) ", "r-L_1", "Ms_59 (rta)"]
+    differ = [t for t in agree if process_key(t) != _title_key(t)]
+    assert not differ, [(t, process_key(t), _title_key(t)) for t in differ]
+    assert _title_key("w-R_01 (sw)") == _title_key("w-R_1 (sw)") \
+        and _title_key("sw_3 86dB (sw)") == _title_key("sw_3 (sw) 86dB") \
+        and _title_key("room sim") == ("raw", "room sim") and _title_key("w-L_D7 (sw)") != _title_key("w-L_7 (sw) D"), \
+        [(t, _title_key(t)) for t in agree]
     # skill #36: what this build did not establish is named, and so is a source that is gone --
     # reported, never gated. `L/R`, `1/6-oct` and a URL in prose are not paths.
     alive = tempfile.mkdtemp(prefix="autosound_source_")
