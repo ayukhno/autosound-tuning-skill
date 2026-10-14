@@ -202,6 +202,9 @@ def verdict(name, measurements=None, f_low=20, f_high=20000):
     # range, checked; "asked" -- REW listed none, read over the asked band and never called truncated. Never an issue.
     out["stats"]["band_source"] = "rew" if own else "asked"
     if own and band_lo >= band_hi:
+        # No fault of the capture: the band asked for is one it was never swept over. Not applicable, like an RTA --
+        # counted apart and never unusable; `valid` stays False because nothing was checked.
+        out["applicable"] = False
         out["issues"].append(f"its own range in REW, {own[0]:g}-{own[1]:g} Hz, lies outside the band asked for, "
                              f"{f_low:g}-{f_high:g} Hz — nothing checked")
         return out
@@ -1177,6 +1180,11 @@ def _check_own_band():
         v = verdict("sw_1 (sw)", listing, f_low=1000, f_high=20000)
         want("a band its own range lies outside of is said, not judged on nothing", not v["valid"]
              and any("outside" in i for i in v["issues"]) and not trunc(v), v["issues"])
+        # ...and it is no fault of the capture: not applicable to that band, counted apart, never unusable.
+        want("...not applicable, never invalid", v["applicable"] is False and _counted_as(v) == "not_applicable",
+             (v["applicable"], _counted_as(v)))
+        rc, out = _run_main(["verify.py", "sw_1 (sw)", "--band", "1000", "20000"])
+        want("...and the command line does not fail on it", rc == 0 and "N/A " in out, (rc, out))
         rc, out = _run_main(["verify.py", "tw-L_1 (sw)", "--band", "100", "1000", "--json"])
         doc = json.loads(out)
         want("the CLI's --band clamps", rc == 0 and doc["measurements"][0]["stats"]["band_hz"] == [100.0, 1000.0],
@@ -1193,6 +1201,32 @@ def _check_own_band():
     assert not failures, "\n  ".join(["each sweep over its own range (#154):"] + failures)
 
 
+def _check_recorded_listing_band():
+    """REW's own listing as recorded at the live pass (`testdata/rew/measurements.json`, #154): every record names
+    its range, so each is judged over it -- clamped to the default 20-20000 -- with `band_source` "rew", and a curve
+    REW serves over that range is not truncated."""
+    with open(os.path.join(_HERE, "testdata", "rew", "measurements.json"), encoding="utf-8") as f:
+        listing = json.load(f)
+
+    def fr(mid, smoothing=None):
+        lo, hi = listing[mid]["startFreq"], listing[mid]["endFreq"]
+        fs, f_ = [], float(lo)
+        while f_ <= hi:
+            fs.append(f_)
+            f_ *= 2 ** (1 / 48)
+        return fs, [70 + 10 * (k % 7) for k in range(len(fs))], None
+
+    want = {"m1": [20, 20000], "m2": [20.0, 20000], "m3": [20.141602, 20000], "m4": [20.141602, 20000],
+            "m5": [20.141602, 20000]}
+    got = {}
+    with _rew_as(get_measurements=lambda: listing, get_fr=fr, get_impulse_response=_impulse_48k):
+        for title in want:
+            v = verdict(title, listing)
+            got[title] = (v["stats"].get("band_hz"), v["stats"].get("band_source"), v["valid"], v["issues"])
+    expected = {t: (b, "rew", True, []) for t, b in want.items()}
+    assert got == expected, f"REW's recorded listing, judged over its own ranges: {got}"
+
+
 def _selftest():
     """Offline, REW never reached: REW's states through its readers stood in (`_rew_as`), REW's recorded answers
     replayed (`testdata/rew/`), the command line at a dead port, the drift record, the counts and the outlier rule."""
@@ -1200,7 +1234,8 @@ def _selftest():
     for check in (_check_unreachable_state, _check_protocol_error_state, _check_ir_failure_on_a_sweep,
                   _check_recorded_no_impulse, _check_ambiguous_title, _check_drift_says_why, _check_counts_add_up,
                   _check_command_line_bug_exits_70, _check_drift_says_what_was_not_read,
-                  _check_drift_names_every_missing_control, _check_own_band):
+                  _check_drift_names_every_missing_control, _check_own_band,
+                  _check_recorded_listing_band):
         try:
             check()
         except Exception as exc:  # noqa: BLE001 -- a check that raises is reported by name, like one that fails
