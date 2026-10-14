@@ -5,3 +5,5 @@
 *.ps1 text eol=crlf
 # ...and the shell installer must NOT, on any platform, or bash chokes on the carriage returns.
 *.sh  text eol=lf
+# The selftest manifest is read by bash, whose `read` keeps a CR: LF on every platform (CI 38544832522).
+scripts/selftests.txt text eol=lf

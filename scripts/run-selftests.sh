@@ -418,6 +418,7 @@ listed=()
 # and the reason given, or the line fails the run on every system: it must not be able to silence a module.
 winskip=(); winwhy=(); regular=()
 while read -r first rest || [ -n "$first" ]; do
+  first="${first%$'\r'}"; rest="${rest%$'\r'}"   # a CRLF checkout (Windows): the argv must not carry \r
   case "$first" in
     skip-win) path="${rest%%[[:space:]]*}"; reason="${rest#"$path"}"; reason="${reason#"${reason%%[![:space:]]*}"}"
               winskip+=("$path"); winwhy+=("$reason") ;;
@@ -442,6 +443,7 @@ while [ "$i" -lt "${#winskip[@]}" ]; do
   i=$((i + 1))
 done
 while read -r first rest || [ -n "$first" ]; do     # `||`: a last line without its newline still counts
+  first="${first%$'\r'}"; rest="${rest%$'\r'}"
   case "$first" in ''|'#'*|skip-win) continue ;; esac
   # skip <path> <reason>: the file is on disk, the reason is given, and the file has no selftest of its own -- a skip
   # line must not be able to silence a module. A valid one is printed, so what the run left out is seen.
