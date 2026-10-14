@@ -2089,7 +2089,8 @@ def main(argv=None):
             return EXIT_REW_UNAVAILABLE
         if rew_said is not None or isinstance(exc, urllib.error.HTTPError):
             said = exc.args[0] if isinstance(exc, KeyError) and len(exc.args) == 1 else exc
-            what = "REW answered with an error: " if isinstance(exc, urllib.error.HTTPError) else ""
+            what = ("REW answered with an error: " if rew_said == "error" or isinstance(exc, urllib.error.HTTPError)
+                    else "")
             print(f"error: {what}{said} -- nothing was written", file=sys.stderr)
             return 1
         import traceback
@@ -3087,7 +3088,9 @@ def _check_rew_down_is_rew_down():
         for label, exc, want_rc, said_in in (
                 ("REW down", _rew.RewUnavailable(ConnectionRefusedError(61, "Connection refused"),
                                                  "http://127.0.0.1:4735"), 69, "REW is not answering at"),
-                ("REW's answer unreadable", _rew.RewProtocolError("not JSON"), 1, "not JSON")):
+                ("REW's answer unreadable", _rew.RewProtocolError("not JSON"), 1, "not JSON"),
+                ("REW's error answer", type("RewError", (Exception,), {"rew_state": "error"})("500 Server Error"), 1,
+                 "error: REW answered with an error: 500 Server Error")):
             globals()["load_solo_rew"] = raising(exc)
             rc, out, err = _run_main(argv)
             said = err.strip().splitlines()

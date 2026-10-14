@@ -243,6 +243,36 @@ class NamingError(ValueError):
     """A title that cannot be expressed in, or parsed from, the grammar."""
 
 
+#: A glossary's sections that are objects (#165); `channels` is a list of objects.
+_GLOSSARY_OBJECTS = ("pairs", "combos", "joints", "sides")
+
+
+def _rows_problem(rows, name):
+    """`"`<name>` is no list of objects"` when `rows` -- a glossary's `channels`, or `project.json`'s -- is there and is
+    not that, else None. An empty or absent value is no rows, as it always was."""
+    if rows and not (isinstance(rows, list) and all(isinstance(r, dict) for r in rows)):
+        return f"`{name}` is no list of objects"
+    return None
+
+
+def glossary_shape_problem(glossary, prefix=""):
+    """What is wrong with a glossary's shape, in the words a refusal says (#165) -- `"`channels` is no list of
+    objects"`, `"`pairs` is no object"`, `"`glossary` is no object"` -- or None when it has a glossary's shape. A part
+    that is empty or absent is that part missing, as it always was. `prefix` names where the glossary sits
+    (`"glossary."` in `project.json`). The strict read refuses what this names; the lenient one reads past it."""
+    if not glossary:
+        return None
+    if not isinstance(glossary, dict):
+        return f"`{prefix.rstrip('.') or 'glossary'}` is no object"
+    problem = _rows_problem(glossary.get("channels"), prefix + "channels")
+    if problem:
+        return problem
+    for key in _GLOSSARY_OBJECTS:
+        if glossary.get(key) and not isinstance(glossary[key], dict):
+            return f"`{prefix}{key}` is no object"
+    return None
+
+
 def read_glossary_file(path, project_dir):
     """A standalone `glossary.json` as the method's own readers read it (`Glossary.for_project(..., strict=True)`) and as
     `contract.py check` does: its JSON object, or None when there is no such file.
@@ -277,6 +307,9 @@ def read_glossary_file(path, project_dir):
     newer = io_.newer_schema(own, SCHEMA_VERSION)
     if newer is not None:
         raise io_.Unreadable(path, f"is schema v{newer}; this method reads v{SCHEMA_VERSION}", io_.UPDATE_THE_METHOD)
+    problem = glossary_shape_problem(own)              # #165: a wrong shape is refused, never read as part of none
+    if problem:
+        raise io_.Unreadable(path, problem, io_.restore_line(path))
     return own
 
 
@@ -291,7 +324,8 @@ class Glossary:
     def __init__(self, data=None):
         # Only the shapes a glossary has (#165): `channels` a list whose rows are objects, the other sections objects.
         # Any other shape is that part missing -- `list(42)` raised `TypeError`, a row that is a number
-        # `AttributeError`, out of the lenient `for_project`, TCC's read of a screen (contract 1).
+        # `AttributeError`, out of the lenient `for_project`, TCC's read of a screen (contract 1). The strict read
+        # refuses such a glossary before it gets here (`glossary_shape_problem`).
         data = data if isinstance(data, dict) else {}
         rows = data.get("channels")
         self.channels = [c for c in rows if isinstance(c, dict)] if isinstance(rows, (list, tuple)) else []
@@ -341,7 +375,13 @@ class Glossary:
             io_ = _siblings().load("project_io.py")
             data = io_.read_json(combined, {}, repair=io_.restore_line(combined),
                                  repair_encoding=io_.reencode_line(project_dir))
+            # #165: a wrong shape refuses, naming the file and the part -- read past (the lenient read's way), a
+            # `channels: 42` was no glossary and the hidden/unused switches of `project.json`'s rows were lost.
+            problem = (_rows_problem(data.get("channels"), "channels")
+                       or glossary_shape_problem(data.get("glossary"), "glossary."))
             own = read_glossary_file(standalone, project_dir) if os.path.lexists(standalone) else None
+            if problem and (own is None or problem.startswith("`channels`")):
+                raise io_.Unreadable(combined, problem, io_.restore_line(combined))
             glossary = cls(own) if own is not None else cls(data.get("glossary") or {})
         else:
             try:
@@ -1201,9 +1241,51 @@ def _check_lenient_read_of_inner_shapes():
                 failures.append(f"project.json's channels {rows}: {got}")
         if Glossary.for_project(d).channel_codes(active_only=True) != []:
             failures.append("a hidden row beside a number did not switch its channel off")
+        # The strict read -- the method's own readers', and `contract.py check`'s (`read_glossary_file`) -- refuses a
+        # wrong shape, naming the file and the part: read past, `{"channels": 42}` was "no glossary yet" and a row that
+        # is no object was dropped without a word.
+        for path in (gpath, ppath):
+            os.remove(path)
+
+        def refusal(**files):
+            for name, text in files.items():
+                with open(os.path.join(d, name + ".json"), "w", encoding="utf-8") as fh:
+                    fh.write(text)
+            try:
+                got = Glossary.for_project(d, strict=True).channel_codes()
+                said = f"read as {got}"
+            except Exception as exc:  # noqa: BLE001 -- the refusal is under test
+                said = str(exc) if getattr(type(exc), "is_unreadable", False) else f"raised {type(exc).__name__}"
+            for name in files:
+                os.remove(os.path.join(d, name + ".json"))
+            return said
+        for files, want in (
+                ({"glossary": '{"channels": 42}'}, f"{gpath} `channels` is no list of objects -- "),
+                ({"glossary": '{"channels": [{"code": "w-L"}, "m-L"]}'}, f"{gpath} `channels` is no list of objects"),
+                ({"glossary": '{"pairs": [1]}'}, f"{gpath} `pairs` is no object -- "),
+                ({"project": '{"glossary": {"sides": "L"}}'}, f"{ppath} `glossary.sides` is no object -- "),
+                ({"project": '{"glossary": [1]}'}, f"{ppath} `glossary` is no object -- "),
+                ({"project": '{"channels": 42, "glossary": {"channels": [{"code": "w-L"}]}}'},
+                 f"{ppath} `channels` is no list of objects -- ")):
+            said = refusal(**files)
+            if not said.startswith(want) or "checkout HEAD" not in said:
+                failures.append(f"strict over {files}: {said!r}")
+        with open(gpath, "w", encoding="utf-8") as fh:
+            fh.write('{"channels": 42}')
+        try:
+            read_glossary_file(gpath, d)
+            failures.append("read_glossary_file read {channels: 42}")
+        except Exception as exc:  # noqa: BLE001 -- the refusal is under test
+            if not getattr(type(exc), "is_unreadable", False):
+                failures.append(f"read_glossary_file raised {type(exc).__name__}: {exc}")
+        for fine in ('{"channels": [], "pairs": {}}', '{"channels": null}', "{}"):
+            with open(gpath, "w", encoding="utf-8") as fh:
+                fh.write(fine)
+            if refusal() != "read as []":
+                failures.append(f"strict over a glossary of the right shape {fine}: {refusal()!r}")
     finally:
         shutil.rmtree(d, ignore_errors=True)
-    assert not failures, "\n  ".join(["the lenient read over a glossary's inner shapes:"] + failures)
+    assert not failures, "\n  ".join(["the read over a glossary's inner shapes:"] + failures)
 
 
 def _check_for_project_strict():

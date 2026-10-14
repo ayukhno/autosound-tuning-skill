@@ -2114,12 +2114,18 @@ def _check_only_rews_failure_is_said_as_rews():
     were "start REW", which mends neither. A bug is never said as REW down: its traceback, `error: unexpected
     <class>: <words>`, exit 70 (#165). REW down stays exit 1, REW's sentence. REW is a stand-in."""
     import builtins
+    import io
     import shutil
     import tempfile
     rew_line = "Переконайся що REW запущений"
 
     def said_as_rews(text):
         return rew_line in text or "REW API" in text
+
+    def last_line(err):
+        """What a bug's run SAYS on stderr, its last line: the traceback above it quotes the source, REW's words too."""
+        lines = err.strip().splitlines()
+        return lines[-1] if lines else ""
     top = tempfile.mkdtemp(prefix="autosound_rew_tool_not_rews_")
     saved = api.get_measurements, api.get_fr, os.environ.get("AUTOSOUND_PROJECT_DIR")
     real_open, real_joints = builtins.open, globals()["analyze_joints"]
@@ -2177,7 +2183,7 @@ def _check_only_rews_failure_is_said_as_rews():
         api.get_measurements = bug
         code, out, err = _run_main("analyze-batch", "_2 (rta)", "--no-targets")
         if code != 70 or "Traceback" not in err or "error: unexpected AttributeError" not in err \
-                or said_as_rews(out + err):
+                or said_as_rews(out + last_line(err)):
             failures.append(f"a bug in analyze-batch: exit {code!r}, said {out.strip()[-300:]!r} {err[-300:]!r}")
 
         def journal_gone(*args, **kwargs):
@@ -2190,12 +2196,23 @@ def _check_only_rews_failure_is_said_as_rews():
             failures.append(f"a file analyze-joints cannot open: exit {code!r}, out {out.strip()[-200:]!r}, "
                             f"err {err!r}")
 
+        # The interactive pick with stdin closed (Ctrl-D, a pipe that ends) is a quit, exit 0 -- not a bug's 70.
+        api.get_measurements = lambda: {"1": {"title": "m-L_2 (rta)"}}
+        real_stdin = sys.stdin
+        sys.stdin = io.StringIO("")
+        try:
+            code, out, err = _run_main("--curves-dir", held_dir)
+        finally:
+            sys.stdin = real_stdin
+        if code not in (0, None) or "Traceback" in err:
+            failures.append(f"the pick at a closed stdin: exit {code!r}, said {err.strip()[-300:]!r}")
+
         def joints_bug(*args, **kwargs):
             raise AttributeError("'NoneType' object has no attribute 'get'")
         globals()["analyze_joints"] = joints_bug
         code, out, err = _run_main("analyze-joints", "--joint", "w-L,m-L,400", "--ver", "2")
         if code != 70 or "Traceback" not in err or "error: unexpected AttributeError" not in err \
-                or said_as_rews(out + err):
+                or said_as_rews(out + last_line(err)):
             failures.append(f"a bug in analyze-joints: exit {code!r}, said {out.strip()[-300:]!r} {err[-300:]!r}")
     finally:
         builtins.open = real_open
@@ -2563,7 +2580,10 @@ def _main():
         print()
         list_measurements(measurements)
         print("\n  Введи номер виміру (або 'q' для виходу): ", end="")
-        choice = input().strip()
+        try:
+            choice = input().strip()
+        except EOFError:                 # Ctrl-D / Ctrl-Z, or stdin closed: a quit, never a bug's 70 (#165)
+            break
         if choice.lower() == "q":
             break
         try:
