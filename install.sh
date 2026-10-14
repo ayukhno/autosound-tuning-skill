@@ -393,10 +393,18 @@ clt_present() { if on_mac; then xcode-select -p >/dev/null 2>&1; else return 0; 
 # usage error, before anything ran · 3 installed, NOT ready, the missing parts named. A stop and the end each write the receipt; a usage error writes none; from the consent on, the
 # receipt says `stopped` until one of them does (`going_ahead`).
 
-# <text> as a JSON string: `\` and `"` escaped, control characters dropped. sed, byte by byte, and not ${var//}: bash
-# 5.2's patsub_replacement gives `&` and `\` in a replacement meanings of their own.
+# <text> as a JSON string: `\` and `"` escaped, control characters dropped, and the text UTF-8 (#172): iconv drops a
+# byte that is not, and with no iconv every byte outside printable ASCII is a `?` -- a `--skill-ref $'v\xff'` made a
+# receipt that was not JSON. sed, byte by byte, and not ${var//}: bash 5.2's patsub_replacement gives `&` and `\` in a
+# replacement meanings of their own. iconv's own exit is not read: glibc's ends 1 after dropping a byte, its text whole.
 json_str() {  # json_str <text>
-  printf '"%s"' "$(printf '%s' "$1" | LC_ALL=C tr -d '\001-\037' | LC_ALL=C sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')"
+  _js_text="$(printf '%s' "$1" | LC_ALL=C tr -d '\001-\037')"
+  if have iconv; then
+    _js_text="$(printf '%s' "$_js_text" | iconv -c -f UTF-8 -t UTF-8 2>/dev/null)" || true
+  else
+    _js_text="$(printf '%s' "$_js_text" | LC_ALL=C sed 's/[^ -~]/?/g')"
+  fi
+  printf '"%s"' "$(printf '%s' "$_js_text" | LC_ALL=C sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')"
 }
 
 # The installer's RECEIPT (S-049, #142): which install.sh ran -- its version, and its sha256 when it ran as a file --
@@ -521,7 +529,7 @@ finish() {
         warn "$_fi_tcc: $_fi_why; the method is installed and works without it" ;;
       "Claude Code")
         warn "Claude Code is not installed; nothing can run a session without it -- when the network is back:" \
-             " curl -fsSL https://claude.ai/install.sh | sh" ;;
+             " curl -fsSL https://claude.ai/install.sh | bash" ;;
       *) warn "$_fi_one" ;;
     esac
   done
@@ -1025,11 +1033,11 @@ if [ -n "$CLAUDE_BIN" ]; then
   say "  ✓ $("$CLAUDE_BIN" --version 2>/dev/null || echo present)"
 else
   say "  the official installer, claude.ai/install.sh:"
-  if run sh -c 'curl -fsSL https://claude.ai/install.sh | sh'; then
+  if run bash -c 'set -o pipefail; curl -fsSL https://claude.ai/install.sh | bash'; then
     in_local_bin claude && manifest_add claude
   else
     warn "Claude Code did not install. Nothing can run a session without it; when the network is"
-    warn "back:  curl -fsSL https://claude.ai/install.sh | sh"
+    warn "back:  curl -fsSL https://claude.ai/install.sh | bash"
   fi
   CLAUDE_BIN="$(find_bin claude || true)"
 fi

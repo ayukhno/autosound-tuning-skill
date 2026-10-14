@@ -592,6 +592,51 @@ def tag_rule_problems(sh, ps1):
     return out
 
 
+#: json_str's input and what its output reads as (#172): with iconv a byte that is not UTF-8 is dropped and a UTF-8
+#: letter kept; without iconv every byte outside printable ASCII is a `?`. Either way the text is JSON.
+JSON_STR_CASES = ((b'a\xff"b', 'a"b', 'a?"b'), ("é".encode("utf-8"), "é", "??"), (b"v\xff", "v", "v?"))
+
+
+def shell_text_problems(sh):
+    """#157 and #172: Claude Code's installer piped to bash, and json_str's text JSON whatever bytes reach it.
+
+    Claude's installer is a bash script: piped to `sh`, Ubuntu's dash stops it with `Syntax error: "(" unexpected`, and a
+    fresh Ubuntu install ended NOT ready. READ: no `claude.ai/install.sh | sh` left in install.sh, and the command it
+    runs and the one it hands the person are both `| bash`. RUN: json_str, cut out, over a byte that is not UTF-8 and
+    over a UTF-8 letter -- with iconv and with iconv missing -- gives text `json.loads` reads (the shell's own receipt
+    builder, when no python3 runs: a `--skill-ref $'v\\xff'` made a receipt that was not JSON)."""
+    import json
+    out = []
+    if re.search(r"claude\.ai/install\.sh \| sh\b", sh):
+        out.append("install.sh still pipes Claude Code's installer to `sh` -- dash cannot run it (#157)")
+    if sh.count("curl -fsSL https://claude.ai/install.sh | bash") < 3:
+        out.append("install.sh does not run and name Claude Code's installer as `curl -fsSL https://claude.ai/install.sh "
+                   "| bash` (the step, its hint, the end's line) (#157)")
+    functions, missing = cut_functions(sh, ("have", "json_str"))
+    if missing:
+        return out + [f"install.sh: no `{name}() {{ ... }}` -- json_str cannot be run (#172)" for name in missing]
+    bash, why = find_bash()
+    if not bash:
+        return out + [f"{why} -- install.sh's json_str cannot be run, and unrun is not agreed (#172)"]
+    for iconv in (True, False):
+        if iconv and not shutil.which("iconv"):
+            continue
+        deny = "" if iconv else 'have() { [ "$1" != iconv ] && command -v "$1" >/dev/null 2>&1; }\n'
+        for raw, with_iconv, without in JSON_STR_CASES:
+            word = "$'" + "".join(f"\\x{b:02x}" for b in raw) + "'"
+            script = ("set -euo pipefail\n" + functions + deny + f"json_str {word}\n").encode("utf-8")
+            r = subprocess.run([bash, "-s"], input=script, capture_output=True)
+            try:
+                got = json.loads(r.stdout.decode("utf-8"))
+            except ValueError as exc:
+                got = f"not JSON ({exc}): {r.stdout!r}"
+            want = with_iconv if iconv else without
+            if r.returncode != 0 or got != want:
+                out.append(f"install.sh json_str {word}{'' if iconv else ' with no iconv'}: exit {r.returncode}, "
+                           f"{got!r}, want 0 and {want!r} -- stderr {r.stderr.decode('utf-8', 'replace')[-160:]!r} (#172)")
+    return out
+
+
 def selection_problems(sh, ps1):
     """T-37 (#142): install.sh's `pick_method_ref` RUN with a `git` that has no network; [] when it answers right.
 
@@ -1731,6 +1776,10 @@ def exit_contract_problems(sh, ps1):
               "python3", "0", False, 0, ("Installed.",), (), "ready", [], 0),
              ("left-as-it-was-no-python3", go + f'METHOD_LEFT="{LEFT_AS_IT_WAS}a link to /x"\nmissing numpy\nfinish\n',
               "shell", "0", False, 3, ("Installed, NOT ready: numpy",), (), "not ready", ["numpy"], 0),
+             # #172: a ref with a byte that is not UTF-8, and no python3 to build the receipt -- the shell's builder
+             # writes JSON all the same: the byte dropped (iconv) or a `?` (no iconv).
+             ("a-bad-byte-ref-no-python3", go + "SKILL_REF=$'v\\xff'\nfinish\n", "shell", "0", False, 0,
+              ("Installed.",), (), "ready", [], 0),
              # #142 (SFH 8): a receipt that cannot be written stops nothing, and is said once per write: the file, and
              # why. A file where its folder goes, and a folder where the file goes.
              ("an-unwritable-receipt-folder", go + "finish\n", "python3", "0", False, 0,
@@ -1777,14 +1826,14 @@ def exit_contract_problems(sh, ps1):
                 wrong.append("no receipt was written")
             elif status is not None:
                 left = re.search(r'METHOD_LEFT="([^"]*)"', body)
-                want = {"installer": "install.sh", "installer_sha256": sha,
-                        "method_ref": left.group(1) if left else "v3.1.2", "mode": "terminal",
+                ref = left.group(1) if left else ("v", "v?") if "SKILL_REF=$'v\\xff'" in body else "v3.1.2"
+                want = {"installer": "install.sh", "installer_sha256": sha, "method_ref": ref, "mode": "terminal",
                         "engine": HOSTILE_ENGINE if builder == "python3" else flat, "installer_version": version,
                         "status": status, "missing": missing_want}
                 if tuple(receipt) != RECEIPT_FIELDS:
                     wrong.append(f"the receipt's fields are {list(receipt)}, not {list(RECEIPT_FIELDS)}")
                 wrong += [f"the receipt's {k} is {receipt.get(k)!r}, want {v!r}" for k, v in want.items()
-                          if receipt.get(k) != v]
+                          if (receipt.get(k) not in v if isinstance(v, tuple) else receipt.get(k) != v)]
                 if not receipt.get("python") or not isinstance(receipt.get("python"), str):
                     wrong.append(f"the receipt's python is {receipt.get('python')!r}, want '<path> <version>'")
             if wrong:
@@ -1911,6 +1960,13 @@ def main():
                        f"{', also under LC_ALL=' + locales[0] if locales else ', no en_US UTF-8 locale here'}), "
                        f"upkeep.py's (imported) and install.ps1's Test-ReleaseTag (read, as .NET reads it) answer "
                        f"{len(TAG_RULE_CASES)} names alike (T-45)")
+    shell_text = shell_text_problems(sh)
+    if shell_text:
+        problems.extend(shell_text)
+    else:
+        checked.append("install.sh pipes Claude Code's installer to bash, in the step and in both hints (read); its "
+                       "json_str gives JSON over a byte that is not UTF-8 and over a UTF-8 letter, with iconv and "
+                       "without (run) (#157, #172)")
     picked = selection_problems(sh, ps1)
     if picked:
         problems.extend(picked)
