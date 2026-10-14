@@ -64,7 +64,7 @@ held.
   folder, removed after the run. A folder inside a git repository or under a `CLAUDE.md` or a `.claude/` (the home
   folder's own `.claude/` aside: it loads everywhere), or whose path has a folder named `hub` or `skill` or holding
   `autosound`, is refused in one line, naming the part (exit 2; `github` or `skills` pass). A system temp folder like
-  that is refused the same way: point `TMPDIR` elsewhere or pass `--cwd`. the model reads the path, and from a folder named for the hub it took the TCC bug
+  that is refused the same way: point `TMPDIR` elsewhere or pass `--cwd`. The model reads the path, and from a folder named for the hub it took the TCC bug
   reports for a GitHub task there (#170). The folders are printed on stderr and in the JSON (`cwd`, `project_cwd`).
 - `--project-fixture`: the queries whose `"context"` is `"project"` run in a fresh `trigger_eval_project_*` folder
   seeded as a tuning project: the `CLAUDE.md` that `rew_tool/project_seed.py` `write_claude_md` writes (its first line
@@ -220,13 +220,20 @@ The 68-query set, each neutral query in a fresh folder under the system temp fol
 project:
 
 ```
-python3 evals/run_trigger_eval.py --eval-set evals/trigger-eval-set.json --model claude-sonnet-4-6 --workers 4 \
+python3 evals/run_trigger_eval.py --eval-set evals/trigger-eval-set.json --model claude-sonnet-4-6 --workers 3 \
   --settings '{"skillOverrides":{"rew-car-audio-tuning":"off"},"disableAllHooks":true}' \
   --absent rew-car-audio-tuning --no-session-persistence --project-fixture
 ```
 
 | run (UTC) | score | should fire, fired | should not, fired | neutral | project | the TCC bug reports (4) |
 |---|---|---|---|---|---|---|
-| 1 · | | | | | | |
-| 2 · | | | | | | |
-| 3 · | | | | | | |
+| 1 · 09:15 | 52/68 | 21/37 | 0/31 | 41/57 | 11/11 | 1/4 |
+| 2 · 09:37 | void | | | | | |
+| 3 · 09:38 | 52/68 | 21/37 | 0/31 | 41/57 | 11/11 | 2/4 |
+
+Three more starts were void (a single query gave no result within 120 s while the Mac carried the wave's agents —
+`claude -p` under load, not the description); the two whole runs agree. Fourteen of the sixteen misses are the same
+in both: every miss is a car-audio query the description should fire on, in a folder that names nothing — 10 of the
+26 neutral should-fire queries fired, against 14–18 of 25 on 2026-10-13, when the run folder's path named
+`autosound-hub` — which also made 2–4 of 26 fire that should not; here none did. The project fixture's line fires on all 11 project queries. The
+description's recall is the next collection's question (`docs/TODO.md` S-104).

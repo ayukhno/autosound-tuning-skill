@@ -183,8 +183,9 @@ superpowers engine (hub H-022); the ledger is `docs/W-10-LEDGER.md`.
   `— judged over 20–200 Hz`, or `— truncation not checked: REW lists no range`. A sweep whose own range lies wholly
   outside the asked band is not applicable, not invalid. `verdict`'s signature is unchanged (contract 1).
 - **A level before the method reads as the same capture** (#155, hub #261; the Arbiter's ruling of 2026-10-06).
-  `sw_3 86dB (sw)` is `sw_3 (sw) 86dB` — the same key, the unit read in any case and kept as typed, a position
-  allowed too (`sw_3 86dB x0 (sw)`); the note offers the written form, after the method, and a rename offer always
+  `sw_3 86dB (sw)` is `sw_3 (sw) 86dB` — the same key, a position allowed too (`sw_3 86dB x0 (sw)`); the unit is
+  read in any case and kept as typed, so the level is spelled as on the list — `86dB`, `86 dB` and `86DB` stay three
+  captures, as after the method; the note offers the written form, after the method, and a rename offer always
   names that form. `references/core/naming-and-structure.md` §3 says the level's place.
 - **A letter in front of the series number is refused, naming where it goes** (#156, hub #259). `_N` is the series
   number only: `w-L_D7`, `sw_E3`, `ALL+C+FX_A3` and the old prefix `D_L_7` are refused with the form the grammar
@@ -211,15 +212,17 @@ superpowers engine (hub H-022); the ledger is `docs/W-10-LEDGER.md`.
   an existing project (it never overwrites, and says when it cannot write or when something that is no file stands
   there). The installers make the user-level link `~/.agents/skills/autosound-tuning` → the installed method when
   `codex` is on PATH, or with `--codex` / `-Codex` (a junction on Windows): ours only by the installer's manifest,
-  repointed after a plugin update, never over someone else's link or a folder, removed by uninstall; the receipt
+  repointed by the next installer run after a plugin update (`/setup`), never over someone else's link or a folder,
+  removed by uninstall; the receipt
   says it (`codex_link`) and `doctor` shows where it points. TCC's MCP server for Codex is a documented step in
   `references/tooling/installation.md` (§ Codex). The feedback rule in both seeded files now says what the gate does
   (the repo hardcoded, the URL verified) and what the session does (de-identify, show the text, ask).
 - **The trigger eval measures in a folder that names nothing** (#170). Each query runs in a fresh temp folder, or in a
   seeded project (`--project-fixture`, with the real `CLAUDE.md`); a folder named `hub`/`skill`, one holding
   `autosound`, or one under a `CLAUDE.md`, `.claude/` or `.git` is refused in one line. The set is 68 queries, each
-  with its context. The first neutral run: 52/68 — every miss a car-audio query the description should fire on
-  (10 of 26 fired), no false fire; the earlier runs' numbers were lifted by a run folder named `autosound-hub`.
+  with its context. Two whole runs: 52/68 each — every miss a car-audio query the description should fire on
+  (10 of 26 fired), no false fire; the earlier runs' numbers (14–18 of 25 fired, 2–4 of 26 fired wrongly) were
+  lifted by a run folder named `autosound-hub`.
 - **The installers** (#157, #160, #161, #162, #163, #164, #171, #172). Claude Code's installer runs under bash, not
   `sh` (dash on Ubuntu ended «NOT ready: Claude Code»), and installers-ubuntu fails on any shell error in that step.
   A stop before anything changed keeps the last real receipt — the receipt is armed at the first real change on disk,
@@ -253,6 +256,13 @@ superpowers engine (hub H-022); the ledger is `docs/W-10-LEDGER.md`.
 - **Codex users:** run `project.py <project> agents-setup` once per existing project; the installers make the
   `~/.agents/skills` link when `codex` is on PATH (`--codex` / `-Codex` otherwise).
 - **The receipt has a 12th field, `codex_link`**, added last; readers that take fields by name are unaffected.
+- **New exits and outputs a caller may meet:** `predict.py` exits 69 when REW is down and 70 on a bug (it raised
+  before); `rew_tool.py` exits 70 on a bug (was 1; REW down stays 1); `project_repo.status()["gh"]` has a new value,
+  `no-answer` (`gh auth status` said nothing in 30 s); `process.py reviewer` prints `reviewer already recorded (<file>):
+  nothing added` or `… (completes <package>)`; `capture-check` prints an `AMBIGUOUS` line when REW holds two
+  spellings of one capture.
+- **The reviewer CLIs start with stdin closed** (`rew_tool/bounded_run.py`): a CLI that asks for a login on its first
+  run fails instead of waiting — sign it in once from a terminal (`references/tooling/setup-critic-channel.md`).
 
 ## [v3.1.3] — 2026-10-13 · W-9, the October audit's second wave: one project lock, honest installs, what a session reads
 
