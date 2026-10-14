@@ -195,8 +195,9 @@ Autosound tuning — installer for macOS (and Linux)
                                  installed them, and every --user pip package. Asks first.
 
 Through the one-liner, options go after `bash -s --`:
-  curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.46/install.sh | bash -s -- --terminal
 USAGE
+  # The one-liner's version comes from INSTALLER_VERSION, so it is echoed, not heredoc'd: <<'USAGE' does not expand ${…}.
+  echo "  curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v${INSTALLER_VERSION}/install.sh | bash -s -- --terminal"
 }
 
 # The newest tag on the beta channel (hub RELEASE-CHANNEL.md §11.2), from tag names on stdin. A

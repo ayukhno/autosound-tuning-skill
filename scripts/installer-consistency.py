@@ -2561,6 +2561,47 @@ def main():
         else:
             checked.append(f"install.cmd fetches install.ps1 at the released tag ({released})")
 
+    # 6b. the one-liner in the installers' --help (#163): it names the release the installer belongs to, built from the
+    # installer's OWN version variable, so there is no second literal to move. install.sh's help is printed by an echo
+    # that expands ${INSTALLER_VERSION} (the rest of the usage text stays a quoted heredoc); install.ps1's help is a
+    # double-quoted here-string, which expands $InstallerVersion. Both spellings are checked here, and install.sh's
+    # help is RUN so the expanded line is what gets compared. install.ps1's header comment is not checked (it cannot
+    # take a variable), so it stays as it is.
+    help_problems = []
+    usage_sh = re.search(r"^usage\(\) \{\n(.*?)^\}", sh, re.M | re.S)
+    help_ps = re.search(r'if \(\$Help\) \{\s*@"\n(.*?)^"@', ps1, re.M | re.S)
+    sh_ref = re.findall(r"autosound-tuning-skill/(\S+?)/install\.sh \| bash -s -- --terminal", sh)
+    ps_ref = re.findall(r"autosound-tuning-skill/(\S+?)/install\.ps1\)\)\) -Terminal", ps1)
+    if sh_ref != ["v${INSTALLER_VERSION}"]:
+        help_problems.append(f"install.sh's --help one-liner names {sh_ref}, want v${{INSTALLER_VERSION}}")
+    if ps_ref != ["v$InstallerVersion"]:
+        help_problems.append(f"install.ps1's --help one-liner names {ps_ref}, want v$InstallerVersion")
+    if not usage_sh:
+        help_problems.append("install.sh: no usage() function to read the --help text from")
+    elif re.search(r"/main/install\.ps1|/v3\.0\.46/", usage_sh.group(1)):
+        help_problems.append("install.sh's --help still names a pinned tag or main")
+    if not help_ps:
+        help_problems.append("install.ps1: the -Help text is no longer a double-quoted here-string, so $InstallerVersion "
+                             "would not expand in it")
+    elif re.search(r"/main/install\.ps1|/v3\.0\.46/", help_ps.group(1)):
+        help_problems.append("install.ps1's -Help still names a pinned tag or main")
+    sh_version, err_version = one(r'^INSTALLER_VERSION="([^"]+)"', sh, "INSTALLER_VERSION", "install.sh")
+    if err_version:
+        help_problems.append(err_version)
+    bash, why = find_bash()
+    if not bash:
+        help_problems.append(f"{why} -- install.sh --help cannot be run, so the expanded line is not checked")
+    elif sh_version:
+        r = subprocess.run([bash, str(SH), "--help"], capture_output=True, text=True, timeout=60)
+        expanded = f"autosound-tuning-skill/v{sh_version}/install.sh | bash -s -- --terminal"
+        if r.returncode != 0 or expanded not in r.stdout:
+            help_problems.append(f"install.sh --help does not print {expanded!r} (exit {r.returncode})")
+    if help_problems:
+        problems.extend(help_problems)
+    else:
+        checked.append(f"both --help one-liners name the installer's own version (v{sh_version}, $InstallerVersion), "
+                       "and neither names a pinned tag or main")
+
     # The plugin route (W-6 #120): both installers take the flag, check the copy with `upkeep.py verify-copy` before
     # anything is installed, and write it down with `plugin-ready` at the end -- the hook reads what they write.
     plugin = {"install.sh": (sh, "--plugin)"), "install.ps1": (ps1, "[switch]$Plugin")}

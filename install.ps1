@@ -286,7 +286,7 @@ Autosound tuning -- installer for Windows
                                   script installed them, and every --user pip package. Asks first.
 
 Through the one-liner, options go on the scriptblock:
-  & ([scriptblock]::Create((irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/main/install.ps1))) -Terminal
+  & ([scriptblock]::Create((irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v$InstallerVersion/install.ps1))) -Terminal
 "@ | Write-Host
     Stop-Installer 0; return
 }
