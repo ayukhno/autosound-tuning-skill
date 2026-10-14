@@ -382,8 +382,12 @@ jobs:
           if ($uac -and ($uac.EnableLUA -eq 0 -or $uac.ConsentPromptBehaviorAdmin -eq 0)) {
             try {
               Start-Process -FilePath $probe -Verb RunAs -Wait -WindowStyle Hidden -ErrorAction Stop
+              # An elevated start goes through ShellExecute, and -Wait may return before the child has written
+              # (CI 38543860362): wait for its answer up to 10 s; none at all is the runner's elevation, said, not failed.
+              for ($i = 0; $i -lt 50 -and -not (Test-Path $out); $i++) { Start-Sleep -Milliseconds 200 }
               $got = Read-Decision; Write-Host "Start-Process -Verb RunAs: $got"
-              if ($got -ne "[1]") { $bad += "Start-Process -Verb RunAs read $got, want [1]" }
+              if ($got -eq "(nothing written)") { Write-Host "::warning::Start-Process -Verb RunAs wrote nothing in 10 s on this runner -- the administrator's form is not checked here" }
+              elseif ($got -ne "[1]") { $bad += "Start-Process -Verb RunAs read $got, want [1]" }
             } catch { Write-Host "::warning::Start-Process -Verb RunAs did not run on this runner ($($_.Exception.Message)) -- the administrator's form is not checked here" }
           } else {
             Write-Host "::warning::UAC would ask on this runner (EnableLUA $($uac.EnableLUA), ConsentPromptBehaviorAdmin $($uac.ConsentPromptBehaviorAdmin)) -- Run as administrator's form is not checked here"

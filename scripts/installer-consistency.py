@@ -1802,7 +1802,9 @@ def ps1_codex_link_problems(ps1):
     `locked` case is POSIX's alone."""
     import tempfile
     shell = find_powershell()
-    if not shell:
+    # Windows alone (CI 38543860362): GitHub's Ubuntu image ships pwsh, and a junction is Windows' -- these cases are
+    # the installer's Windows half, not PowerShell's on any system.
+    if not shell or os.name != "nt":
         return [], False
     cut, lacking = [], []
     for name in ("Say", "Warn", "Have", "Pretty", "Add-Missing", "Test-CodexOurs", "Set-CodexRecord", "Set-CodexLink",
