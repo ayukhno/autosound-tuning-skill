@@ -1089,7 +1089,8 @@ def _check_the_runner_with_and_without_bounded_run():
                  "m.GH_TIMEOUT_S = 1\n"
                  "print(m._bounded_run() is None, m._subprocess_runner([sys.executable, '-c', 'print(7)']),\n"
                  "      m._subprocess_runner([sys.executable, '-c', 'import time; time.sleep(8)']))\n")
-        done = subprocess.run([sys.executable, "-c", probe, alone], capture_output=True, text=True, timeout=60)
+        done = subprocess.run([sys.executable, "-c", probe, alone], capture_output=True, text=True,
+                              encoding="utf-8", errors="replace", timeout=60)
         want = "True (0, '7\\n', '') (124, '', 'no answer in 1 s')"
         assert done.stdout.strip() == want, (done.stdout, done.stderr[-300:])
     finally:

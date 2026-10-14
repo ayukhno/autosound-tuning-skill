@@ -130,7 +130,7 @@ def _alive(pid):
         return True
     try:  # a zombie answers kill(0); `ps` says it is one
         state = subprocess.run(["ps", "-o", "stat=", "-p", str(pid)], capture_output=True, text=True,
-                               timeout=10).stdout.strip()
+                               encoding="utf-8", errors="replace", timeout=10).stdout.strip()
     except (OSError, subprocess.TimeoutExpired):
         return True
     return bool(state) and not state.startswith("Z")
@@ -207,7 +207,29 @@ def _selftest():
     return 0
 
 
+def _siblings():
+    """`rew_tool/siblings.py`, by its path: how this module reaches a sibling (skill #137).
+
+    The same text in every module that loads a sibling -- only the `here` line differs with the file's folder;
+    scripts/contract-guard.py holds the copies identical.
+    """
+    import hashlib
+    import importlib.util
+    here = os.path.dirname(os.path.realpath(__file__))
+    name = "_autosound_" + hashlib.sha1(here.encode("utf-8")).hexdigest()[:8] + "_siblings"
+    module = sys.modules.get(name)
+    if module is None:
+        spec = importlib.util.spec_from_file_location(name, os.path.join(here, "siblings.py"))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        # Published only once it has run: a thread racing this first call never gets a half-run siblings.py.
+        module = sys.modules.setdefault(name, module)
+    return module
+
+
 if __name__ == "__main__":
+    console = _siblings().load("console.py")         # issue #21: a code page must not destroy a result
+    console.install()
     if sys.argv[1:] != ["--selftest"]:
         print("usage: bounded_run.py --selftest  (a library: the method's callers of gh and the reviewer CLIs use it)",
               file=sys.stderr)
