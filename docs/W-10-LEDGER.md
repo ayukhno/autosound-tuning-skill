@@ -83,8 +83,10 @@ end.
 | 50 | group seat: tests | opus · high | Installers | 08:49 | 08:58 | 5 Important (the #161 check; #157 fooled by sh -c; #164 dry-run checkout never run; #161 child path never run; #171 ps1 case passes on old code), many Minor |
 | 51 | group seat: silent failures (also the fixes' re-review) | opus · high | Silent failures 3 + Windows | 08:54 | 09:00 | 1 Important — a REGRESSION from T15's fix round (the `-answer` strip joins two reviews; one critique dropped), 4 Minor |
 | 52 | group seat: tests | opus · high | Silent failures 3 + Windows | 08:54 | 08:59 | 3 Important (#166 tested with a record TCC does not send — the real one still gives two; #158's readlink stand-in doubles the prefix on Windows; #167's CLI check passes on the old code), 11 Minor |
-| 53 | implementer T17b #149 (the installers' Codex link) | opus · high | Agent start | 08:54 | | |
+| 53 | implementer T17b #149 (the installers' Codex link) | opus · high | Agent start | 08:54 | 09:06 | `67789c5`; 11 sh cases + a mutation test; ps1 cases wait for Windows CI |
 | 54 | group fix round Silent failures 3 + Windows text (resumed) | opus · high | Silent failures 3 + Windows | 09:00 | | |
+| 55 | group fix round Installers (resumed) | opus · high | Installers | 09:06 | | |
+| 56 | task review T17b #149 | opus · high | Agent start | 09:06 | | |
 
 ## Quality notes
 
