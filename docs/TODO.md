@@ -1673,8 +1673,13 @@ For W-11 (the Arbiter, 2026-10-14: «У W-11»): the skill's halves of tcc #198 
 skill, so v3.1.4 went out without them. #198 (hub #268, PAS-015): REW reset its SPL calibration between two rounds
 (`splOffsetdB` 103.35 → 120.0, every level +16.65 dB) and the round check said nothing — the method brings rounds to
 one base, its math in `verify.py`; the bench does it today with `scripts/levelbase.py`. #199 (hub #260, PAS-013):
-`under` and `level` set through TCC's `start_capture`, a verdict for unplanned takes. TCC sends what the method must
-compute as a ticket (its plan: «the skill's halves of #198/#199 ticketed first»); TCC's own halves stay in its W-10.
+`under` and `level` set through TCC's `start_capture`, a verdict for unplanned takes. The math is the method's own
+(the Arbiter: «це наша математика — вирівнювання по гучності для порівняння») and is there already in two places: the
+rule in `references/core/analysis-playbook.md` («Level-normalize before comparing SHAPE») and the bench's
+`car/passat-b8-2026-aya/scripts/levelbase.py` (08.10: the shift by `splOffsetdB` to a base round, then a control
+capture anchored outside the changed band). W-11 brings the bench's two steps into the method's code — mirrored, not
+invented. TCC asked for it as hub #285 (TCC-060: the shift, the control, `capture-check` naming the change in a
+field); TCC's own halves stay in its W-10. #199's method part is the method's call as well.
 
 The Windows selftests step of `installers-windows` is required since CI run 38548157486 (all 67 passed): hub #278's
 receipt names `installers-windows`.
