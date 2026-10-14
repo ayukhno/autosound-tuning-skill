@@ -193,6 +193,18 @@ def _selftest():
             assert ok2 and "a repository already" in line2, line2          # a second run changes nothing
             st2 = status(proj)
             assert st2["repo"] and st2["gh"] == "absent" and st2["offer"] is None and status_lines(proj) == [], st2
+            # #149: a repository made before AGENTS.md -- CLAUDE.md committed, no AGENTS.md -- gets it from init, and
+            # it is committed; the project's CLAUDE.md stays byte for byte.
+            _git(proj, "rm", "-q", "AGENTS.md")
+            _git(proj, "commit", "-q", "-m", "a project from before #149")
+            claude_was = open(os.path.join(proj, "CLAUDE.md"), "rb").read()
+            head_was = _git(proj, "rev-parse", "HEAD").stdout.strip()
+            ok4, line4 = init(proj)
+            assert ok4 and "first commit made" in line4, line4
+            assert _git(proj, "rev-parse", "HEAD~1").stdout.strip() == head_was, "init made more than one commit"
+            assert "AGENTS.md" in _git(proj, "ls-files").stdout.split(), "init did not commit AGENTS.md"
+            assert _git(proj, "status", "--porcelain").stdout == "", _git(proj, "status", "--porcelain").stdout
+            assert open(os.path.join(proj, "CLAUDE.md"), "rb").read() == claude_was, "init rewrote CLAUDE.md"
             # #167: a gh that does not answer in its 30 s is its own state, said in one line -- not "absent", which
             # stopped offering the backup as if gh were not installed.
             globals()["_gh"] = lambda *a: NO_ANSWER

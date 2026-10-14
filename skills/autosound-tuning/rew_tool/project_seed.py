@@ -296,9 +296,11 @@ one too: it names no car, and only this line gets the skill loaded for it."""
 
 FEEDBACK_RULE = """**Reporting a bug or filing feedback — on the skill or on the Autosound TCC app — goes through the skill's gate,
 never through a hand-written `gh issue create`:** `rew_tool/gates/side_effect.py` →
-`post_feedback(body_file, car, dsp, channel="skill"|"tcc")`. The gate hardcodes the repository, de-identifies
-the text, asks for the person's consent, and verifies the URL it gets back. The full ritual is the skill's
-`references/core/feedback-loop.md`. A local markdown file is a draft, not a delivery."""
+`post_feedback(body_file, car, dsp, channel="skill"|"tcc")`. The gate hardcodes the repository, skips a copy
+of an issue posted in the last 24 hours, and verifies the URL it gets back. It neither cleans the text nor asks
+anyone: the session does both first -- no personal data in the body, the final text shown to the person, their yes
+before it goes (the skill's `references/core/feedback-loop.md`, step 2 and the package's safety rules). A local
+markdown file is a draft, not a delivery."""
 
 _DOCS_LINE = """Documents for the person during tuning live in `docs/`: `docs/sheets/` (what to enter in the DSP software),
 `docs/plans/` (what to measure), `docs/reports/` (what to read)."""
@@ -886,6 +888,11 @@ def _check_agents_md_loads_the_skill_for_codex():
             assert shared in text, f"{name} does not carry {shared[:40]!r}..."
         assert text.index(SKILL_LOAD_LINE) < text.index("gh issue create"), f"{name}: the load line comes first"
     assert "SKILL.md" in AGENTS_MD and ".claude/skills/autosound-tuning" in AGENTS_MD, "AGENTS.md says no SKILL.md"
+    # The gate's GitHub path posts the body as it is and asks nobody (`side_effect.post_feedback`; `consented` gates
+    # only the form): the rule must not promise that it does (#149, the group's seat).
+    for false in ("de-identifies", "asks for the person's consent"):
+        assert false not in FEEDBACK_RULE, f"FEEDBACK_RULE says the gate {false!r}"
+    assert "the final text shown to the person" in FEEDBACK_RULE, "FEEDBACK_RULE: the session's own step is unsaid"
     assert "In none of them" in AGENTS_MD and "installation.md" in AGENTS_MD, "AGENTS.md: no step for a missing skill"
     with tempfile.TemporaryDirectory() as tmp:
         assert write_agents_md(tmp) is True

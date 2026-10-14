@@ -2829,6 +2829,19 @@ def _check_agents_setup_writes_once():
             json.dump({"schema_version": SCHEMA_VERSION, "project_rev": 1, "channels": []}, fh)
         with open(os.path.join(folder, "CLAUDE.md"), "w", encoding="utf-8") as fh:
             fh.write("# the project's own\n")
+        # The Passat is a git repository: agents-setup writes the file and commits nothing (#149) -- HEAD and the
+        # index as they were, AGENTS.md left untracked for the person's next commit.
+        import subprocess
+        git = shutil.which("git")
+
+        def _git(*argv):
+            return subprocess.run([git, "-C", folder, "-c", "user.name=t", "-c", "user.email=t@t", *argv],
+                                  capture_output=True, text=True, encoding="utf-8").stdout
+        if git:
+            _git("init", "-q")
+            _git("add", "project.json", "CLAUDE.md")
+            _git("commit", "-q", "-m", "a project from before #149")
+            head_was, index_was = _git("rev-parse", "HEAD"), _git("ls-files", "-s")
         before = _files_in(folder)
         agents = os.path.join(folder, "AGENTS.md")
         rc, out, err = _run_cli(_main, ["project.py", folder, "agents-setup"])
@@ -2841,6 +2854,10 @@ def _check_agents_setup_writes_once():
             failures.append("first run: AGENTS.md is not the seed's AGENTS_MD")
         if after != before:
             failures.append(f"first run changed more than AGENTS.md: {sorted(set(after) ^ set(before))}")
+        if git and (_git("rev-parse", "HEAD") != head_was or _git("ls-files", "-s") != index_was
+                    or _git("status", "--porcelain") != "?? AGENTS.md\n"):
+            failures.append(f"in a git repository: HEAD or the index moved, or AGENTS.md is not untracked: "
+                            f"{_git('status', '--porcelain')!r}")
         once = _files_in(folder)
         rc, out, err = _run_cli(_main, ["project.py", folder, "agents-setup"])
         lines = out.strip().splitlines()
