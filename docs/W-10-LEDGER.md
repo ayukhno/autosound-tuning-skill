@@ -79,10 +79,11 @@ end.
 | 46 | task review T14 #165 | opus · high | Silent failures 3 | 08:37 | 08:42 | 1 CRITICAL (rew_tool selftest red at the commit — the implementer reported green; the controller reproduced exit 70), 1 Important (strict glossary silently accepts a malformed one), 2 Minor |
 | 47 | fix round Silent failures 3: T13 T14 T15 + project_io (resumed) | opus · high | Silent failures 3 | 08:42 | 08:54 | `8f1a332` `f991c10` `5cfe825` `c65c8fd`; exit codes checked per module this time |
 | 48 | re-review of the Captures group fix | opus · high | Captures | 08:47 | 08:53 | group fix accepted; 2 Minor (the AMBIGUOUS fix not in the stored issue — TCC's card shows issues; a window between two REW reads) |
-| 49 | group seat: silent failures (also the fixes' re-review) | opus · high | Installers | 08:49 | | |
-| 50 | group seat: tests | opus · high | Installers | 08:49 | | |
+| 49 | group seat: silent failures (also the fixes' re-review) | opus · high | Installers | 08:49 | 08:55 | 3 Important (keep-local's reset before the arm; the #161 guard matches SQL Server's path — CI red there; continue-on-error hides Windows selftests), 4 Minor |
+| 50 | group seat: tests | opus · high | Installers | 08:49 | 08:58 | 5 Important (the #161 check; #157 fooled by sh -c; #164 dry-run checkout never run; #161 child path never run; #171 ps1 case passes on old code), many Minor |
 | 51 | group seat: silent failures (also the fixes' re-review) | opus · high | Silent failures 3 + Windows | 08:54 | | |
 | 52 | group seat: tests | opus · high | Silent failures 3 + Windows | 08:54 | | |
+| 53 | implementer T17b #149 (the installers' Codex link) | opus · high | Agent start | 08:54 | | |
 
 ## Quality notes
 
@@ -91,6 +92,8 @@ end.
   task review, before any group seat or CI.
 - **A regression made by a fix (T2, #155).** The fix round of d23d73e recased the level's unit and gave one capture two
   keys; the re-review caught it; fixed in 306bd4c, verified live.
+- **Repo-wide checks not run locally.** The implementers ran their modules' selftests, not `encoding-check` or ruff,
+  which only the full runner runs; CI found three such defects. From then on every fixer runs both on its files.
 - **Fixes that did not reach the end (T1, #153).** The first build stored the typed title correctly but the check
   still asked REW the list's spelling; the task review caught it; the group seats found three more behaviour gaps at
   the joins of #153/#154/#155.
@@ -99,7 +102,7 @@ end.
 
 | run | when | head | why | result |
 |---|---|---|---|---|
-| 38537781090 | 08:49 | `f991c10` | `workflow_dispatch` — the wave touches Windows (checks.yml's own rule) | |
+| 38537781090 | 08:49 | `f991c10` | `workflow_dispatch` — the wave touches Windows (checks.yml's own rule) | red: installers-windows at the #161 probe (SQL Server's path; later steps skipped); selftests — encoding-check (side_effect, bounded_run: fixed `33b84cf`) and ruff (installer-consistency `import json`); installers-ubuntu, engine, gate green |
 
 ## Per group
 
