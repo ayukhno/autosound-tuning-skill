@@ -71,13 +71,14 @@ end.
 | 38 | review of the Haiku T8 (trial count) | opus · high | Installers | 08:24 | 08:28 | no Important, no functional defect; 2 Minor in the checker (~10 min), 1 pool-worthy (the header comment's `main`); the trailer names Opus — the brief's fault, not Haiku's |
 | 39 | Haiku T8 rework (resumed) | haiku · high | Installers | 08:28 | 08:31 | `518b55b`; all three, each red on a scratch copy first |
 | 40 | fix round Installers T5 T7 T9 (resumed) | opus · high | Installers | 08:31 | | |
-| 41 | Captures group fix: process.py part (T1's implementer) | opus · high | Captures | 08:37 | | |
+| 41 | Captures group fix: process.py part (T1's implementer) | opus · high | Captures | 08:37 | 08:47 | 557 s; `1efad5c`; TCC unaffected by the OK line's band suffix (it re-reads state, not stdout — checked by the controller) |
 | 42 | Captures group fix: naming.py part (T2/T3's implementer) | opus · high | Captures | 08:37 | 08:39 | `291dea7`; 461 old titles unchanged; verified live by the controller |
 | 43 | Captures group fix: verify part (T4's implementer) | opus · high | Captures | 08:37 | 08:39 | `43a3d6a` `a6ed7cc` `df65abc` |
 | 44 | task review T13 #159 | opus · high | Silent failures 3 | 08:37 | 08:40 | 1 Important (cwd's .critic-env still read and applied), 3 Minor |
 | 45 | task review T15 #166 | opus · high | Silent failures 3 | 08:37 | 08:42 | 1 Important (a duplicate keeps the weaker record), 4 Minor; TCC's clipboard record confirmed (no review path) |
 | 46 | task review T14 #165 | opus · high | Silent failures 3 | 08:37 | 08:42 | 1 CRITICAL (rew_tool selftest red at the commit — the implementer reported green; the controller reproduced exit 70), 1 Important (strict glossary silently accepts a malformed one), 2 Minor |
 | 47 | fix round Silent failures 3: T13 T14 T15 + project_io (resumed) | opus · high | Silent failures 3 | 08:42 | | |
+| 48 | re-review of the Captures group fix | opus · high | Captures | 08:47 | | |
 
 ## Quality notes
 
