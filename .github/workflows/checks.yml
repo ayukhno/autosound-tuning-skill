@@ -489,7 +489,7 @@ jobs:
 
       # #167: rew_tool/bounded_run.py ends a shell=True call at its deadline on Windows -- the whole tree through cmd.exe,
       # a grandchild that sleeps 30 s included -- and hands back what it had printed. `shell: bash` on a Windows runner
-      # is Git for Windows' bash; from the repo root. Before the continue-on-error step below, so a failure is red.
+      # is Git for Windows' bash; from the repo root.
       - name: a timeout ends a shell=True call (#167)
         shell: bash
         run: |
@@ -508,14 +508,12 @@ jobs:
       # (SELFTEST_ONLY_TOOL=1), with the ubuntu `selftests` job's libraries. Under Git for Windows' bash, found BY PATH
       # beside git: a plain `bash` here may be WSL's launcher (the comment over this job). PYTHON is setup-python's, in
       # forward slashes for that bash. A module that cannot run on Windows by its nature gets a `skip-win <path>
-      # <reason>` line in scripts/selftests.txt, printed as a skip. continue-on-error for its first runs: their failures
-      # are read and the ones that are ours fixed, then the step is made required.
+      # <reason>` line in scripts/selftests.txt, printed as a skip. Required since CI run 38548157486 (all 67 passed, #158):
+      # a failing Windows selftest makes the job red, and hub #278's gate asks for this job by name.
       - name: install the rew_tool selftests' libraries (Windows)
         run: python -m pip install --upgrade pip numpy scipy matplotlib ruff==0.12.0
       - name: rew_tool selftests on Windows, under Git for Windows' bash (#158)
         id: rew-tool-selftests-windows
-        # Until its first runs are read and ours fixed (#158): remove this line then, and the hub gates on the job.
-        continue-on-error: true
         shell: pwsh
         env:
           SELFTEST_ONLY_TOOL: "1"
@@ -529,11 +527,10 @@ jobs:
           $log = Join-Path $env:RUNNER_TEMP "rew-tool-selftests-windows.log"
           & $bash scripts/run-selftests.sh 2>&1 | Tee-Object -FilePath $log
           $rc = $LASTEXITCODE
-          # continue-on-error leaves the job green (the group round): the failures are named on the run's page, so
-          # nobody reads a green job as a passing Windows run. The flag goes when this step is green (#158).
+          # A failure is named on the run's page as well as in the log: which modules, in one line.
           if ($rc -ne 0) {
             $failed = @(Select-String -Path $log -Pattern '^FAILED: ' | ForEach-Object { $_.Line })
             $names = @(Select-String -Path $log -Pattern '^  FAIL ' | ForEach-Object { ($_.Line -split '\s+')[2] })
-            Write-Host "::warning::rew_tool selftests on Windows FAILED (exit $rc; continue-on-error until #158 makes this step required): $($failed -join ' ') -- $($names -join ', ')"
+            Write-Host "::error::rew_tool selftests on Windows FAILED (exit $rc): $($failed -join ' ') -- $($names -join ', ')"
           }
           exit $rc

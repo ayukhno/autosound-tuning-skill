@@ -1657,8 +1657,8 @@ A finding for the next collection (#170's first neutral run, 2026-10-14): in a f
 description fires on 10 of 26 car-audio queries (resume, de/pl, EMMA, TCC bug reports) — the old runs' numbers were
 lifted by a run folder named `autosound-hub`. The description's recall is the next wave's question, not this one's.
 
-The Windows selftests step of `installers-windows` runs with `continue-on-error` until it is green on this wave's PR;
-then the flag goes (a `::warning::` names failures meanwhile, `404b6d4`), and hub #278's receipt names `installers-windows`.
+The Windows selftests step of `installers-windows` is required since CI run 38548157486 (all 67 passed): hub #278's
+receipt names `installers-windows`.
 
 Not on the milestone: S-017, S-021, S-055, S-059 wait for a run, S-001 for the first `frozen` run, #26 is a 3.2.x
 candidate. The audit is minimised, not closed: its minimum is the wave after this one (`docs/AUDIT-2026-10-CLOSE.md`, S-105).

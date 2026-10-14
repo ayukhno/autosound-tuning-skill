@@ -96,7 +96,7 @@ end.
 | 63 | T17b fix round (b) (resumed) | opus · high | Agent start | 09:25 | 09:38 | 796 s; `f2af045` — (b) all eight, and CI run 2's: 8.3 short paths, Invoke-Upstream returned output+True as success (a real bug), the consistency script's FAIL recap |
 | 64 | FINAL branch review, origin/main..0078659 | fable · high | the wave | 09:47 | 10:00 | 689 s, 262k tokens; NOT ready: 1 Critical (the Windows selftests claim unproven — continue-on-error hid 62 of 67 failing), 5 Important (Upgrading short; the Codex manifest's encoding 5.1↔7; the link's repoint wording; the level's spelling; the eval README), 4 Minor; the four groups hold end to end; a TCC must-know list |
 | 65 | final fix: installers I2, M3, M1 (resumed) | opus · high | Installers | 10:00 | 10:06 | `7fe8a15` (the manifest read and written as UTF-8 one way) `d4250f3` (armed after a real change) `f7fbf1f` |
-| 66 | Windows selftests to green, then the step required (resumed; may push and dispatch CI) | opus · high | Windows | 10:05 | | |
+| 66 | Windows selftests to green, then the step required (resumed; may push and dispatch CI) | opus · high | Windows | 10:05 | ~10:20 | `4796d49`: bounded_run (a test's CRLF; the interrupt raised twice), contract (a test's CRLF), project_io.remove_tree for git's read-only files; handed back before its run ended — the controller read it and made the step required |
 
 ## Quality notes
 
@@ -127,6 +127,7 @@ end.
 | 38544832522 | 09:46 | `0078659` | the two harness fixes | GREEN on all five jobs — but the Windows selftests step (continue-on-error) failed almost every module: the manifest checked out CRLF, `--selftest\r`; fixed `d3b3ec2` |
 | 38545884702 | 09:55 | `d3b3ec2` | the CR fix | green on all five jobs; the Windows selftests step really ran: 61 of 67 pass — bounded_run (CRLF, the interrupt's tree kill), contract (a copy counted twice), and four temp-folder leaks (git's read-only files) fail |
 | 38547555900 | ~10:15 | `4796d49` | the six Windows fixes (dispatched by their implementer) | red: installers-windows at its consistency step — the #160 Claude-step case's empty stand-in is not executable under MSYS; every later step skipped; fixed by the controller `580ba0d` |
+| 38548157486 | ~10:15 | `80ac1c3` | the six Windows fixes + the MSYS stand-in | **GREEN on all five jobs; the Windows rew_tool selftests: all 67 checks passed** — continue-on-error removed next |
 
 ## Per group
 
