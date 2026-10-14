@@ -1,10 +1,12 @@
 # Trigger eval set
 
-`trigger-eval-set.json` — 62 queries (since 2026-10-14; 51 from 2026-10-13, 34 before), each with a `"context"`:
+`trigger-eval-set.json` — 68 queries (since 2026-10-14; 51 from 2026-10-13, 34 before), each with a `"context"`:
 `"neutral"` (an empty folder) or `"project"` (a seeded tuning project, below). The 2026-10-14 eleven: a TCC feature
 request, feedback to the maintainers, bare "continue" / «продовжуємо» / "where were we" and a bare "file an issue" in a
 project, which should fire; a feature request for another app, a GitHub task in a repo named `hub`, an issue for the
-autosound-hub governance docs, and bare "continue" and "file an issue" in an empty folder, which should not. The 51: 25 that should trigger — a tune from scratch,
+autosound-hub governance docs, and bare "continue" and "file an issue" in an empty folder, which should not. The six
+resume queries and TCC openers of the 51 stand twice, neutral as before (that run measures the description) and in the
+project (that one measures the project `CLAUDE.md`). The 51: 25 that should trigger — a tune from scratch,
 casual English, imaging, an EMMA round, an MMM sweep, a house curve, uk/de/pl asks, resuming a tune (by name, inside a
 project folder, and TCC's two openers), a bug report or feedback on the skill or TCC in en/uk/de/pl — and 26
 near-misses that should not: home audio and studio monitors, a speaker, box, impedance or crossover question with no
@@ -40,7 +42,7 @@ disabled session model made every `claude -p` fail).
 
 ```
 python3.12 evals/run_trigger_eval.py --eval-set evals/trigger-eval-set.json \
-  --skill-name autosound-tuning --model claude-sonnet-4-6 --workers 5
+  --skill-name autosound-tuning --model claude-sonnet-4-6 --workers 5 --project-fixture
 ```
 
 **What every run checks (#145, 2026-10-09).** Each `claude -p` prints an init event listing the skills it sees. The
@@ -59,14 +61,16 @@ held.
 - `--absent <skill>` (repeatable): a skill that must not be in a run's list (a plugin's or a synced copy's
   `<prefix>:<skill>` counts).
 - `--cwd DIR`: the folder the neutral queries run in. By default a fresh `trigger_eval_*` folder under the system temp
-  folder, removed after the run. A folder inside a git repository, or whose path names `autosound`, `hub` or `skill`,
-  is refused in one line (exit 2): the model reads the path, and from a folder named for the hub it took the TCC bug
+  folder, removed after the run. A folder inside a git repository or under a `CLAUDE.md` or a `.claude/` (the home
+  folder's own `.claude/` aside: it loads everywhere), or whose path has a folder named `hub` or `skill` or holding
+  `autosound`, is refused in one line, naming the part (exit 2; `github` or `skills` pass). A system temp folder like
+  that is refused the same way: point `TMPDIR` elsewhere or pass `--cwd`. the model reads the path, and from a folder named for the hub it took the TCC bug
   reports for a GitHub task there (#170). The folders are printed on stderr and in the JSON (`cwd`, `project_cwd`).
 - `--project-fixture`: the queries whose `"context"` is `"project"` run in a fresh `trigger_eval_project_*` folder
   seeded as a tuning project: the `CLAUDE.md` that `rew_tool/project_seed.py` `write_claude_md` writes (its first line
   loads the skill), stubs of `autosound_context.md`, `process/process-state.json` and `state/dsp-state.md`. Without
-  the flag those queries are not run; stderr says how many, the JSON has `skipped_project`, and the score is over the
-  queries that ran.
+  the flag those queries are not run; the score line says how many were skipped (`N/M passed …, K project
+  quer(ies) skipped`), the JSON has `skipped_project`, and the score is over the queries that ran.
 - `--keep-folders`: keep the folders the runner made, to look into them after.
 - `--selftest`: the runner's own mechanics against a stand-in `claude` on PATH, offline (it is in
   `scripts/run-selftests.sh`).
@@ -212,7 +216,7 @@ two openers fire 3/3 on both.
 
 ## Runs of 2026-10-14 (#170)
 
-The 62-query set, each neutral query in a fresh folder under the system temp folder, each project query in the seeded
+The 68-query set, each neutral query in a fresh folder under the system temp folder, each project query in the seeded
 project:
 
 ```

@@ -122,6 +122,11 @@
   {
     "query": "resume my car-audio tune — remind me the current crossover and delay settings on my helix",
     "should_trigger": true,
+    "context": "neutral"
+  },
+  {
+    "query": "resume my car-audio tune — remind me the current crossover and delay settings on my helix",
+    "should_trigger": true,
     "context": "project"
   },
   {
@@ -232,7 +237,17 @@
   {
     "query": "continue my car-audio tune from last time -- what's the crossover, time-alignment and gain state on each channel?",
     "should_trigger": true,
+    "context": "neutral"
+  },
+  {
+    "query": "continue my car-audio tune from last time -- what's the crossover, time-alignment and gain state on each channel?",
+    "should_trigger": true,
     "context": "project"
+  },
+  {
+    "query": "I'm in my car's tuning project folder (autosound_context.md, process/ and state/ are here). let's continue where we left off",
+    "should_trigger": true,
+    "context": "neutral"
   },
   {
     "query": "I'm in my car's tuning project folder (autosound_context.md, process/ and state/ are here). let's continue where we left off",
@@ -242,12 +257,27 @@
   {
     "query": "я в теці проєкту своєї машини (тут autosound_context.md, process/ і state/) — продовжимо з того місця, де зупинились",
     "should_trigger": true,
+    "context": "neutral"
+  },
+  {
+    "query": "я в теці проєкту своєї машини (тут autosound_context.md, process/ і state/) — продовжимо з того місця, де зупинились",
+    "should_trigger": true,
     "context": "project"
   },
   {
     "query": "Resume this tuning project. Read state from disk first, call get_tcc_state and get_pending_signals, then tell me where we are and what the next step is. Instructions from TCC are always in English; answer me in the project's language — `language` in get_tcc_state is the one the Arbiter chose.",
     "should_trigger": true,
+    "context": "neutral"
+  },
+  {
+    "query": "Resume this tuning project. Read state from disk first, call get_tcc_state and get_pending_signals, then tell me where we are and what the next step is. Instructions from TCC are always in English; answer me in the project's language — `language` in get_tcc_state is the one the Arbiter chose.",
+    "should_trigger": true,
     "context": "project"
+  },
+  {
+    "query": "Start a tuning session for this project. Read state from disk, call get_tcc_state, then tell me where we are and what the next step is. Instructions from TCC are always in English; answer me in the project's language — `language` in get_tcc_state is the one the Arbiter chose.",
+    "should_trigger": true,
+    "context": "neutral"
   },
   {
     "query": "Start a tuning session for this project. Read state from disk, call get_tcc_state, then tell me where we are and what the next step is. Instructions from TCC are always in English; answer me in the project's language — `language` in get_tcc_state is the one the Arbiter chose.",
