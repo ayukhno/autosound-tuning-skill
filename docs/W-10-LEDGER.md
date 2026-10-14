@@ -51,11 +51,14 @@ end.
 | 22 | task review T17a #149 | opus · high | Agent start | 08:08 | 08:12 | 2 Important (OSError traceback; no next step when the skill is missing), 3 Minor |
 | 23 | implementer T13, T16, T15, T14, T12 text (#159 #167 #166 #165 #158) | opus · high | Silent failures 3 + Windows | 08:09 | | |
 | 24 | re-review T2+T3 fix | opus · high | Captures | 08:09 | 08:11 | four fixes accepted; 1 Important — a REGRESSION the fix made (the unit recased → two keys for one capture); 305 old titles unchanged |
-| 25 | fix round T1 #153 (the implementer resumed) | opus · high | Captures | 08:10 | | |
+| 25 | fix round T1 #153 (the implementer resumed) | opus · high | Captures | 08:10 | 08:16 | `bf54719`; all six (glossary: the fallback — contract._title_key reads none) |
 | 26 | fix round T22 #168 (resumed) | opus · medium | Method text | 08:11 | 08:12 | `8895f6a`; all items; docs — no re-review |
 | 27 | fix round T21 #173 (resumed) | opus · medium | Method text | 08:11 | 08:12 | `3046d55`; all items; docs — no re-review |
 | 28 | fix of the regression T2 #155 (resumed) | opus · high | Captures | 08:11 | 08:12 | `306bd4c`; verified by the controller with a live probe (5 pairs share one key with their canonical form; old titles parse as before) — no re-review agent |
-| 29 | fix round T17a #149 (resumed) | opus · high | Agent start | 08:12 | | |
+| 29 | fix round T17a #149 (resumed) | opus · high | Agent start | 08:12 | 08:14 | `f0616a2`; all five; verified by the controller live (6 folder cases: write, again, read-only, a folder, a dangling link, no project) — no re-review agent |
+| 30 | re-review T1 fix | opus · high | Captures | 08:16 | 08:20 | fix accepted; 3 Minor → the group's fix round |
+| 31 | group seat: silent failures | opus · high | Captures | 08:20 | | |
+| 32 | group seat: tests | opus · high | Captures | 08:20 | | |
 
 ## Per group
 
