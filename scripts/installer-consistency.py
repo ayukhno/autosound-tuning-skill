@@ -1047,6 +1047,29 @@ def checkout_problems(sh, ps1):
                        + (f", saying {' + '.join(map(repr, words))}" if words else "")
                        + f", the receipt {'armed' if want_rc in (0, 3) else 'not armed'} (it was "
                        f"{'armed' if armed else 'not'}, #160) -- said {said.strip()[-220:]!r} (T-45)")
+    # #164 (the test seat): a dry run's two returns, which reach no signature step -- a branch is said not a release
+    # once, and not "checked"; a release is "checked", and nothing is said UNSIGNED. A new folder, and a copy that is
+    # there with no git yet. Nothing is made.
+    for what, where, ref, nogit, words, never, unsigned in (
+            ("main into a new folder", os.path.join(tmp, "dry-new"), "main", False,
+             ("would fetch main into", "and check it out"), ("check it,",), 1),
+            ("main over a copy, no git yet", copy, "main", True, ("would fetch main into", "and check it out (no git yet)"),
+             ("check it,",), 1),
+            ("v3.1.2 into a new folder", os.path.join(tmp, "dry-release"), "v3.1.2", False,
+             ("would fetch v3.1.2 into", ", check it, and check it out"), ("UNSIGNED",), 0)):
+        script = ('export PATH="/usr/bin:$PATH"\n' + functions
+                  + f'DRY_RUN=1\nAUTOSOUND_SKIP_TAG_VERIFY=""\nSKILL_SIGNED_FROM=v3.0.64\nSKILL_REPO="{url}"\n'
+                  + "changing() { :; }\n" + ("usable() { return 1; }\n" if nogit else "")
+                  + f'checkout_method "{Path(where).as_posix()}" "{ref}" "the method"\n')
+        r = subprocess.run([bash, "-s"], input=script.encode("utf-8"), capture_output=True, env=env)
+        said = (r.stdout + r.stderr).decode("utf-8", "replace")
+        made = not nogit and os.path.exists(where)
+        if (r.returncode != 0 or any(w not in said for w in words) or any(w in said for w in never)
+                or said.count("is not a release") != unsigned or made):
+            out.append(f"install.sh checkout_method in a dry run, {what}: exit {r.returncode}, want 0, "
+                       f"{' + '.join(map(repr, words))}, never {' + '.join(map(repr, never))}, 'is not a release' "
+                       f"{unsigned} time(s) (said {said.count('is not a release')}){', and it made the folder' if made else ''}"
+                       f" -- said {said.strip()[-220:]!r} (#164)")
     shutil.rmtree(tmp, ignore_errors=True)
     # install.ps1's mirror, READ: a new copy made the same way, HEAD held to the tag, and every failed copy a stop.
     sync = re.search(r"^function Sync-MethodCheckout \{.*?^\}", ps1, re.M | re.S)
@@ -1899,7 +1922,8 @@ def powershell_env(environ=None):
 
 
 #: The functions of install.ps1 that its end and its probes need, cut out as they stand.
-PS1_RUN_FUNCTIONS = ("Stop-Installer", "Write-Receipt", "Enter-Change", "Invoke-Upstream", "Add-Missing", "Say", "Warn", "Pretty", "Run", "Test-Quiet",
+PS1_RUN_FUNCTIONS = ("Stop-Installer", "Write-Receipt", "Enter-Change", "Invoke-Upstream", "Sync-MethodCheckout",
+                     "Add-Missing", "Say", "Warn", "Pretty", "Run", "Test-Quiet",
                      "Test-ReleaseTag", "Test-SettledByName", "Select-MethodRef", "Select-NewestOnChannel")
 #: #164, #171: install.ps1's tag pick over a stand-in tag list -- Read-ReleaseTags answers $script:StubTags, or nothing
 #: with $script:StubWhy -- then the signature step every ref passes. (case, body, the words, how many times "is not a
@@ -2000,6 +2024,25 @@ def ps1_run_problems(ps1):
                 out.append(f"install.ps1's tag pick under {Path(shell).name}, {case}: exit {rc}, want 0, "
                            f"{' + '.join(map(repr, words))} and 'is not a release' {unsigned} time(s) (said "
                            f"{said.count('is not a release')}) -- said {said.strip()[-300:]!r} (#164, #171)")
+        # #164 (the test seat): Sync-MethodCheckout's two dry-run returns, which reach no signature step -- a branch
+        # said not a release once and not "checked", a release "checked" and nothing UNSIGNED; a new folder, and a
+        # copy that is there with no git yet (Have answers no).
+        for case, ref, gitless, words, never, unsigned in (
+                ("dry-new", "main", False, ("would fetch main into", "and check it out"), ("check it,",), 1),
+                ("dry-no-git", "main", True, ("would fetch main into", "and check it out (no git yet)"), ("check it,",), 1),
+                ("dry-release", "v3.1.2", False, ("would fetch v3.1.2 into", ", check it, and check it out"),
+                 ("UNSIGNED",), 0)):
+            where = Path(tmp, f"{case}-copy")
+            if gitless:
+                (where / ".git").mkdir(parents=True)
+            body = (PS1_PICK_HEAD + "$DryRun = $true\n" + ("function Have { param($n) $false }\n" if gitless else "")
+                    + f"$null = Sync-MethodCheckout '{where}' '{ref}' 'the method'\n")
+            rc, said, _ = run_case(case, body)
+            if rc != 0 or any(w not in said for w in words) or any(w in said for w in never) \
+                    or said.count("is not a release") != unsigned:
+                out.append(f"install.ps1 Sync-MethodCheckout under {Path(shell).name}, {case}: exit {rc}, want 0, "
+                           f"{' + '.join(map(repr, words))}, never {' + '.join(map(repr, never))}, 'is not a release' "
+                           f"{unsigned} time(s) -- said {said.strip()[-300:]!r} (#164)")
         # #161 (the group round): install.ps1's two module-path lines, cut out as they stand. SQL Server's
         # Tools\PowerShell\Modules\ is an ordinary 5.1 entry and leaves the path as it was; pwsh's own folders are reset,
         # the Documents folder first, no empty entry; and Invoke-Upstream's child -- the lines as -Command text, started
