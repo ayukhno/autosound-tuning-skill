@@ -1142,8 +1142,12 @@ function Save-LocalChanges {
     New-Item -ItemType Directory -Force -Path $tmp | Out-Null
     $zip = Join-Path $tmp "upkeep.zip"
     $prev = $ErrorActionPreference; $ErrorActionPreference = "SilentlyContinue"
-    & git -C $Dir archive --format=zip -o $zip FETCH_HEAD skills/autosound-tuning/scripts/upkeep.py `
-        skills/autosound-tuning/rew_tool/gates/side_effect.py skills/autosound-tuning/rew_tool/console.py 2>&1 | Out-Null
+    # What the new upkeep.py imports beside it, each with a fallback when missing (bounded_run.py since #167) -- only
+    # those the tag has: `git archive` gives nothing at all over one path it does not know.
+    $keep = @("skills/autosound-tuning/scripts/upkeep.py", "skills/autosound-tuning/rew_tool/gates/side_effect.py",
+              "skills/autosound-tuning/rew_tool/console.py", "skills/autosound-tuning/rew_tool/bounded_run.py")
+    $have = @(& git -C $Dir ls-tree --name-only FETCH_HEAD -- @keep 2>$null)
+    if ($have.Count -gt 0) { & git -C $Dir archive --format=zip -o $zip FETCH_HEAD @have 2>&1 | Out-Null }
     $ErrorActionPreference = $prev
     if (Test-Path $zip) { Expand-Archive -Path $zip -DestinationPath $tmp -Force }
     $tool = Join-Path $tmp "skills\autosound-tuning\scripts\upkeep.py"

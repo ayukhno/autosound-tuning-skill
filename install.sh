@@ -1148,7 +1148,8 @@ keep_local() {  # keep_local <dir> <what>; 0 = kept and reset, 1 = left as it wa
   if [ "$DRY_RUN" = 1 ]; then say "  would keep them as a patch in $(pretty "$LOCAL_CHANGES"), then reset"; return 0; fi
   _kl_py="$(command -v python3 || true)"
   _kl_tmp="$(mktemp -d)"
-  for _kl_f in scripts/upkeep.py rew_tool/gates/side_effect.py rew_tool/console.py; do
+  # What the new upkeep.py imports beside it, each with a fallback when missing (bounded_run.py since #167).
+  for _kl_f in scripts/upkeep.py rew_tool/gates/side_effect.py rew_tool/console.py rew_tool/bounded_run.py; do
     mkdir -p "$_kl_tmp/skills/autosound-tuning/$(dirname "$_kl_f")"
     git -C "$_kl_dir" show "FETCH_HEAD:skills/autosound-tuning/$_kl_f" \
       > "$_kl_tmp/skills/autosound-tuning/$_kl_f" 2>/dev/null || true

@@ -1503,6 +1503,33 @@ PS1_CMDLET = re.compile(r"(?<![\w$.-])(?:Add|Clear|Compress|ConvertFrom|ConvertT
                         r"Where|Write)-[A-Z]\w*")
 
 
+#: What the NEW tag's upkeep.py needs beside it to keep local changes (skill #91): the modules it imports, each falling
+#: back when missing -- rew_tool/bounded_run.py since #167. Relative to skills/autosound-tuning.
+KEEP_LOCAL_FILES = ("scripts/upkeep.py", "rew_tool/gates/side_effect.py", "rew_tool/console.py", "rew_tool/bounded_run.py")
+
+
+def keep_local_problems(sh, ps1):
+    """#167, READ: install.sh's keep_local and install.ps1's Save-LocalChanges copy the same files out of the new tag
+    for its upkeep.py -- KEEP_LOCAL_FILES, rew_tool/bounded_run.py among them -- and install.ps1 archives only those
+    the tag has: `git archive` refuses the whole list over one path an older tag lacks."""
+    out = []
+    fn_sh = re.search(r"^keep_local\(\) \{.*?^\}", sh, re.M | re.S)
+    m_sh = re.search(r"for _kl_f in ([^;]*); do", fn_sh.group(0) if fn_sh else "")
+    got_sh = tuple(m_sh.group(1).split()) if m_sh else ()
+    fn_ps = re.search(r"^function Save-LocalChanges \{.*?^\}", ps1, re.M | re.S)
+    m_ps = re.search(r"\$keep = @\(([^)]*)\)", fn_ps.group(0) if fn_ps else "")
+    got_ps = tuple(p.removeprefix("skills/autosound-tuning/") for p in re.findall(r'"([^"]+)"', m_ps.group(1))) \
+        if m_ps else ()
+    for where, got in (("install.sh keep_local", got_sh), ("install.ps1 Save-LocalChanges", got_ps)):
+        if set(got) != set(KEEP_LOCAL_FILES):
+            out.append(f"{where} copies {list(got)} for the new upkeep.py, not {list(KEEP_LOCAL_FILES)} (#167)")
+    body = fn_ps.group(0) if fn_ps else ""
+    if "ls-tree --name-only FETCH_HEAD -- @keep" not in body or "FETCH_HEAD @have" not in body:
+        out.append("install.ps1 Save-LocalChanges archives files the new tag may not have -- `git archive` then gives "
+                   "nothing at all; want `ls-tree --name-only FETCH_HEAD -- @keep` and `FETCH_HEAD @have` (#167)")
+    return out
+
+
 def windows_start_problems(ps1, cmd):
     """#161 and #162, READ (the Windows job RUNS both): install.ps1 under Windows PowerShell 5.1 resets PSModulePath to
     5.1's own -- the machine's and the user's values and $PSHOME\Modules -- before its first cmdlet, and hands the same
@@ -2453,6 +2480,13 @@ def main():
             problems.extend(found)
         else:
             checked.append(ok_line)
+    kept = keep_local_problems(sh, ps1)
+    if kept:
+        problems.extend(kept)
+    else:
+        checked.append(f"both installers copy the new tag's {len(KEEP_LOCAL_FILES)} files its upkeep.py needs to keep "
+                       f"local changes, rew_tool/bounded_run.py among them; install.ps1 archives those the tag has "
+                       f"(read) (#167)")
     windows = windows_start_problems(ps1, cmd)
     if windows:
         problems.extend(windows)
