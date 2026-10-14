@@ -126,6 +126,7 @@ end.
 | 38543860362 | 09:38 | `f2af045` | after T17b's fix round | red, narrower: Windows passed its consistency step (the Codex-link and module-path cases green there) and failed the #162 RunAs probe (an elevated child's answer not yet written); Ubuntu — the ps1 Codex cases ran under the image's pwsh, where no junction exists (the hidden Linux-only failure); fixed by the controller `0078659` |
 | 38544832522 | 09:46 | `0078659` | the two harness fixes | GREEN on all five jobs — but the Windows selftests step (continue-on-error) failed almost every module: the manifest checked out CRLF, `--selftest\r`; fixed `d3b3ec2` |
 | 38545884702 | 09:55 | `d3b3ec2` | the CR fix | green on all five jobs; the Windows selftests step really ran: 61 of 67 pass — bounded_run (CRLF, the interrupt's tree kill), contract (a copy counted twice), and four temp-folder leaks (git's read-only files) fail |
+| 38547555900 | ~10:15 | `4796d49` | the six Windows fixes (dispatched by their implementer) | red: installers-windows at its consistency step — the #160 Claude-step case's empty stand-in is not executable under MSYS; every later step skipped; fixed by the controller `580ba0d` |
 
 ## Per group
 
