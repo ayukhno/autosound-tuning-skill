@@ -33,15 +33,17 @@ end.
 | 4 | code map | sonnet · medium | Agent start | 07:25 | 07:26 | 76 s, 28 tool calls, 67k tokens |
 | 5 | code map | sonnet · medium | Method text | 07:25 | 07:27 | 84 s, 26 tool calls, 63k tokens |
 | 6 | implementer T1 #153 | opus · high | Captures | 07:57 | | |
-| 7 | implementer T2+T3 #155 #156 | opus · high | Captures | 07:57 | | |
+| 7 | implementer T2+T3 #155 #156 | opus · high | Captures | 07:57 | 08:04 | 340 s, 37 tool calls, 119k tokens; `bebab42` `b2eb99f` `74bbdfb` |
 | 8 | implementer T4 #154 | opus · high | Captures | 07:57 | 08:01 | 198 s, 21 tool calls, 104k tokens; `3a6eeb3` |
 | 9 | implementer T5–T7, T9 (#157 #172 #164 #171 #160 #161 #162) | opus · high | Installers | 07:57 | | |
-| 10 | researcher T21 #173 | opus · medium | Method text | 07:57 | | |
-| 11 | implementer T18 #150 | opus · medium | Agent start | 08:01 | 08:03 | 121 s, 17 tool calls, 91k tokens; `117cc47` |
-| 12 | implementer T20 #170 | opus · medium | Agent start | 08:01 | | |
-| 13 | implementer T22 #168 | opus · medium | Method text | 08:05 | | |
-| 14 | implementer T17a #149 | opus · high | Agent start | 08:05 | | |
-| 15 | task review T4 #154 | opus · high | Captures | 08:06 | | |
+| 10 | researcher T21 #173 | opus · medium | Method text | 07:57 | 08:06 | `f4ad845`; ~2700 words, proposal B (opt-in fill ≤ +3 dB) |
+| 11 | implementer T18 #150 | opus · medium | Agent start | 08:00 | 08:02 | 121 s, 17 tool calls, 91k tokens; `117cc47` |
+| 12 | implementer T20 #170 | opus · medium | Agent start | 08:00 | 08:05 | `655151a`; 62 queries, 11 new |
+| 13 | implementer T22 #168 | opus · medium | Method text | 08:02 | 08:04 | 90 s, 15 tool calls, 88k tokens; `4e03328` |
+| 14 | implementer T17a #149 | opus · high | Agent start | 08:02 | | |
+| 15 | task review T4 #154 | opus · high | Captures | 08:03 | | |
+| 16 | task review T2+T3 #155 #156 | opus · high | Captures | 08:05 | | |
+| 17 | docs review #168 #173 | opus · high | Method text | 08:06 | | |
 
 ## Per group
 
