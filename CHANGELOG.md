@@ -199,11 +199,60 @@ superpowers engine (hub H-022); the ledger is `docs/W-10-LEDGER.md`.
   sources, a proposal for the Arbiter (an opt-in fill for one class of minimum-phase dip below 200 Hz, at most +3 dB
   with a headroom check, cuts only by default until the car check has run). No code changes.
 
+- **A session finds the tool before improvising it, and the feedback route by its name** (#150). SKILL.md names the
+  capability finder (`python3 rew_tool/capabilities.py find "<what you want>"`) and the feedback route — a bug report,
+  a feature request, feedback on the skill or TCC go through `post_feedback(channel="skill"|"tcc")`, never raw `gh` —
+  near its top, held by `docs-check`'s rule phrases; `capabilities.md`'s feedback row answers «report a bug»,
+  «request a feature», «повідомити про баг», «оформи ішью», «поскаржитись на TCC» and names the real call. Two
+  Output Style bullets went to their homes to make room (`process-control.md` § The reply after a desk computation,
+  pointed to from SKILL.md).
+- **Codex finds the skill** (#149). A new project gets `AGENTS.md` beside `CLAUDE.md` — the same load line and the
+  same feedback rule, written for Codex, with where the skill lives; `project.py <project> agents-setup` writes it into
+  an existing project (it never overwrites, and says when it cannot write or when something that is no file stands
+  there). The installers make the user-level link `~/.agents/skills/autosound-tuning` → the installed method when
+  `codex` is on PATH, or with `--codex` / `-Codex` (a junction on Windows): ours only by the installer's manifest,
+  repointed after a plugin update, never over someone else's link or a folder, removed by uninstall; the receipt
+  says it (`codex_link`) and `doctor` shows where it points. TCC's MCP server for Codex is a documented step in
+  `references/tooling/installation.md` (§ Codex). The feedback rule in both seeded files now says what the gate does
+  (the repo hardcoded, the URL verified) and what the session does (de-identify, show the text, ask).
+- **The trigger eval measures in a folder that names nothing** (#170). Each query runs in a fresh temp folder, or in a
+  seeded project (`--project-fixture`, with the real `CLAUDE.md`); a folder named `hub`/`skill`, one holding
+  `autosound`, or one under a `CLAUDE.md`, `.claude/` or `.git` is refused in one line. The set is 68 queries, each
+  with its context. The first neutral run: 52/68 — every miss a car-audio query the description should fire on
+  (10 of 26 fired), no false fire; the earlier runs' numbers were lifted by a run folder named `autosound-hub`.
+- **The installers** (#157, #160, #161, #162, #163, #164, #171, #172). Claude Code's installer runs under bash, not
+  `sh` (dash on Ubuntu ended «NOT ready: Claude Code»), and installers-ubuntu fails on any shell error in that step.
+  A stop before anything changed keeps the last real receipt — the receipt is armed at the first real change on disk,
+  keep-local's reset included. Windows PowerShell 5.1 started under pwsh 7 takes its own module path back — only when
+  the path holds pwsh's own folders, so a SQL Server module path is left alone, the person's Documents modules first.
+  `install.cmd` pauses only for a double click (Explorer's command line, or Run as administrator), and a `!` in its
+  path is kept. The help's one-liner names the installer's own version. A branch is said UNSIGNED once, and a dry run
+  never says a placeholder is installed unsigned. Stable picks keep `v…` names only. The receipt is valid JSON
+  whatever bytes `--skill-ref` holds. `Invoke-Upstream` no longer counts an upstream installer's printed output as
+  success. `rew_tool/bounded_run.py` is kept local beside upkeep, and no empty module is left when a tag lacks one.
+- **Silent failures, round 3** (#159, #165, #166, #167). The reviewer door's mirror and `.critic-env` follow the stated
+  project (`AUTOSOUND_PROJECT_DIR`), never the current folder's car, and say what they set aside. `predict` with REW
+  down is one line and exit 69, a bug a traceback and 70; `rew_tool.py`'s bug is 70 too; the strict glossary refuses a
+  wrong inner shape, the lenient one drops it and says so (`Glossary.shape_problem`). One review round, one record:
+  a package — or TCC's record with no review — is completed by at most one answer; two answer files are two records;
+  an answer recorded first is never "completed" by its package after; the CLI says which. `rew_tool/bounded_run.py`:
+  a timeout ends the call on Windows too — the process tree is killed, no pipe a grandchild holds can hang it — for
+  every `gh` call and the reviewer CLIs; a `gh auth status` with no answer is its own state.
+- **Windows paths said as written** (#158, hub #274). A link's target without the `\\?\` prefix, a missing file's
+  path as typed (`project_io.plain_path`, `oserror_words`); the three selftests that failed on Windows pass there.
+  The Windows CI job runs the rew_tool selftests under Git for Windows' bash (`installers-windows`).
+
 ### Upgrading
 
 - **Titles in the old letter-before-the-series form** (`w-L_D7 (sw)`) are refused now with the form to use; rename
   them once in REW (`w-L_7 (sw) D`) — the measurement's uuid survives a rename.
 - **`capture-check`'s OK line** now ends with the band judged; a front end that matched the bare line reads a prefix.
+- **An existing project's `CLAUDE.md`** (and an `AGENTS.md` written by an earlier W-10 build) still says the feedback
+  gate de-identifies and asks for consent — it does not; the session does (`feedback-loop.md` step 2). Seeded files
+  are never rewritten: new projects get the true sentence.
+- **Codex users:** run `project.py <project> agents-setup` once per existing project; the installers make the
+  `~/.agents/skills` link when `codex` is on PATH (`--codex` / `-Codex` otherwise).
+- **The receipt has a 12th field, `codex_link`**, added last; readers that take fields by name are unaffected.
 
 ## [v3.1.3] — 2026-10-13 · W-9, the October audit's second wave: one project lock, honest installs, what a session reads
 
