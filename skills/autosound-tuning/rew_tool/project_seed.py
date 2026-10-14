@@ -289,23 +289,72 @@ GITIGNORE_LINES = [
 #: name and reached for a raw `gh issue create` -- the exact shape the side-effect gate exists to refuse (#23). And a
 #: bare "continue" typed here names no car, so the skill's description cannot fire on it: the first line loads the
 #: skill for every request in the folder (#145, audit I-24).
-CLAUDE_MD = """# This is an autosound tuning project
+#: The two rules a project file says to ANY agent, word for word: `CLAUDE.md` (Claude Code) and `AGENTS.md` (Codex,
+#: #149) are built from these, so the files cannot drift apart.
+SKILL_LOAD_LINE = """Load the `autosound-tuning` skill for every request in this folder. A "continue" or "where were we" typed here is
+one too: it names no car, and only this line gets the skill loaded for it."""
 
-Load the `autosound-tuning` skill for every request in this folder. A "continue" or "where were we" typed here is
-one too: it names no car, and only this line gets the skill loaded for it.
+FEEDBACK_RULE = """**Reporting a bug or filing feedback — on the skill or on the Autosound TCC app — goes through the skill's gate,
+never through a hand-written `gh issue create`:** `rew_tool/gates/side_effect.py` →
+`post_feedback(body_file, car, dsp, channel="skill"|"tcc")`. The gate hardcodes the repository, de-identifies
+the text, asks for the person's consent, and verifies the URL it gets back. The full ritual is the skill's
+`references/core/feedback-loop.md`. A local markdown file is a draft, not a delivery."""
+
+_DOCS_LINE = """Documents for the person during tuning live in `docs/`: `docs/sheets/` (what to enter in the DSP software),
+`docs/plans/` (what to measure), `docs/reports/` (what to read)."""
+
+CLAUDE_MD = f"""# This is an autosound tuning project
+
+{SKILL_LOAD_LINE}
 
 The method is the `autosound-tuning` skill (Claude Code). Its rules, tools and phases are the skill's, not
 this folder's; `python3 rew_tool/contract.py check <project>` reads this project's state.
 
-**Reporting a bug or filing feedback — on the skill or on the Autosound TCC app — goes through the skill's gate,
-never through a hand-written `gh issue create`:** `rew_tool/gates/side_effect.py` →
-`post_feedback(body_file, car, dsp, channel="skill"|"tcc")`. The gate hardcodes the repository, de-identifies
-the text, asks for the person's consent, and verifies the URL it gets back. The full ritual is the skill's
-`references/core/feedback-loop.md`. A local markdown file is a draft, not a delivery.
+{FEEDBACK_RULE}
 
-Documents for the person during tuning live in `docs/`: `docs/sheets/` (what to enter in the DSP software),
-`docs/plans/` (what to measure), `docs/reports/` (what to read).
+{_DOCS_LINE}
 """
+
+#: What Codex reads instead (#149): it reads `AGENTS.md` per directory and never `CLAUDE.md`, sees a skill only by its
+#: name and description until it decides to use it, and takes MCP servers from its own `config.toml`, not `.mcp.json`
+#: (OpenAI's Codex docs: build-skills, agents-md, mcp; read 2026-10-14). So loading the skill here means reading its
+#: `SKILL.md`, and the file says where that is.
+AGENTS_MD = f"""# This is an autosound tuning project
+
+{SKILL_LOAD_LINE}
+
+In Codex, loading it means reading the skill's `SKILL.md` in full before the first reply: Codex otherwise sees only
+its description. The skill is the folder `autosound-tuning` in the first of these that exists: this project's
+`.claude/skills/autosound-tuning/`, `.agents/skills/autosound-tuning/`, `~/.agents/skills/autosound-tuning/`,
+`~/.claude/skills/autosound-tuning/`. Its `rew_tool/`, `scripts/` and `references/` paths are relative to that
+folder; `python3 rew_tool/deployment.py <project>` says whether the copies agree, and
+`python3 rew_tool/contract.py check <project>` reads this project's state. Its rules, tools and phases are the
+skill's, not this folder's.
+
+{FEEDBACK_RULE}
+
+{_DOCS_LINE}
+
+TCC's tools reach Codex only through `~/.codex/config.toml`; Codex does not read `.mcp.json`. The step is the
+skill's `references/tooling/installation.md` (Codex). The TCC window picking up a changed file says nothing about
+that connection: TCC is connected when one of its tools answers.
+"""
+
+
+def write_agents_md(target):
+    """Write `AGENTS.md` -- what Codex reads -- into a project (#149). Returns True if it wrote one. An existing file is
+    left byte for byte, as `write_claude_md` leaves its own: a project may carry guidance somebody meant. Created
+    exclusively, so a file that appears between the look and the write is not written over either."""
+    path = os.path.join(target, "AGENTS.md")
+    if os.path.lexists(path):
+        return False
+    os.makedirs(target, exist_ok=True)
+    try:
+        with open(path, "x", encoding="utf-8") as f:
+            f.write(AGENTS_MD)
+    except FileExistsError:
+        return False
+    return True
 
 
 def write_claude_md(target):
@@ -823,6 +872,31 @@ def _check_claude_md_loads_the_skill():
             assert fh.read() == "# their own\n", "a CLAUDE.md already there was rewritten"
 
 
+def _check_agents_md_loads_the_skill_for_codex():
+    """#149: Codex reads `AGENTS.md` per directory and never `CLAUDE.md`, so a project opened in Codex got no line
+    telling it to load the skill. `AGENTS.md` carries CLAUDE.md's load line and its feedback rule word for word -- one
+    constant each, so the two files cannot drift -- and says where the skill's `SKILL.md` is, Codex having no tool
+    that loads a skill by name. Written into a fresh project; one already there is left byte for byte."""
+    import tempfile
+    for name, text in (("CLAUDE_MD", CLAUDE_MD), ("AGENTS_MD", AGENTS_MD)):
+        for shared in (SKILL_LOAD_LINE, FEEDBACK_RULE):
+            assert shared in text, f"{name} does not carry {shared[:40]!r}..."
+        assert text.index(SKILL_LOAD_LINE) < text.index("gh issue create"), f"{name}: the load line comes first"
+    assert "SKILL.md" in AGENTS_MD and ".claude/skills/autosound-tuning" in AGENTS_MD, "AGENTS.md says no SKILL.md"
+    with tempfile.TemporaryDirectory() as tmp:
+        assert write_agents_md(tmp) is True
+        with open(os.path.join(tmp, "AGENTS.md"), encoding="utf-8") as fh:
+            assert fh.read() == AGENTS_MD, "the written AGENTS.md is not AGENTS_MD"
+        theirs = b"# their own\r\n\xef\xbb\xbfnot ours\n"
+        with open(os.path.join(tmp, "AGENTS.md"), "wb") as fh:
+            fh.write(theirs)
+        assert write_agents_md(tmp) is False
+        with open(os.path.join(tmp, "AGENTS.md"), "rb") as fh:
+            assert fh.read() == theirs, "an AGENTS.md already there was rewritten"
+        made = os.path.join(tmp, "new-car")
+        assert write_agents_md(made) is True and os.path.isfile(os.path.join(made, "AGENTS.md")), "no folder made"
+
+
 def _check_read_project_reads_a_bom():
     """`_read_project` -- a source project's facts, for the picker and the seed -- gives the same answer with and
     without a UTF-8 BOM (#147, item 6): an editor's marker, read as `project_io.read_json` reads it. It opened
@@ -849,7 +923,8 @@ def _selftest():
     failures = []
     for check in (_check_a_held_lock_said_in_the_result, _check_a_seed_makes_its_new_folder,
                   _check_a_bad_wait_is_a_usage_error, _check_a_context_in_rew_analitic_travels,
-                  _check_claude_md_loads_the_skill, _check_read_project_reads_a_bom):
+                  _check_claude_md_loads_the_skill, _check_agents_md_loads_the_skill_for_codex,
+                  _check_read_project_reads_a_bom):
         try:
             check()
         except AssertionError as exc:

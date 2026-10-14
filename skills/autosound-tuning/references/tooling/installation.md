@@ -125,6 +125,30 @@ Still the front-end's to get right:
 - **Python packages** come from the terminal copy's `requirements.txt`. A candidate that adds one
   needs `python3 -m pip install -r <copy>/skills/autosound-tuning/requirements.txt`.
 
+## Codex
+
+Codex reads `AGENTS.md`, not `CLAUDE.md`. A new project gets both; one made before them gets its `AGENTS.md` with
+`python3 rew_tool/project.py <project> agents-setup` (an existing file is left as it is).
+
+**TCC's MCP server (one step).** Codex takes MCP servers from `~/.codex/config.toml`, never from the project's
+`.mcp.json` that TCC writes when it starts. Copy TCC's entry across: in `.mcp.json`, `mcpServers.tcc` holds a `url`
+and a header `X-TCC-Token`.
+
+```toml
+# ~/.codex/config.toml
+[mcp_servers.tcc]
+url = "<url from .mcp.json>"          # http://127.0.0.1:<port>/mcp
+http_headers = { "X-TCC-Token" = "<token from .mcp.json>" }
+```
+
+- TCC makes a new token each time it starts, and its port can move: after TCC restarts, copy both again and start a
+  new Codex session.
+- The home file, not the project's `.codex/config.toml`: the token is a secret, and the project's `.gitignore` keeps
+  out `.mcp.json` and `.tcc/`, not `.codex/`.
+- `codex mcp add tcc --url <url>` sends no token, and TCC refuses a request without it: use the lines above.
+- `codex mcp list` showing `tcc` means configured, not connected. TCC is connected when one of its read-only tools
+  answers in the session; the TCC window picking up a changed file is a different mechanism.
+
 ## Troubleshooting
 
 - **Antigravity / agy sandbox — state snapshots vanish.** Some agent environments restrict certain file writes to the session's own directory (observed on Antigravity: an artifact-write outside `…/brain/<session>/` was refused). If versioned snapshots don't land where you expect, point `AUTOSOUND_STATE_ROOT` inside the project and verify it's writable **from within the session**: `python3 rew_tool/state/state.py selftest` (must print `selftest OK`); confirm the root actually fills after the first `apply.py propose`.

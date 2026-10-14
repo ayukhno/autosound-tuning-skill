@@ -1631,6 +1631,10 @@ _USAGE = """usage: project.py <project-dir> <command> [args]
                                                Arbiter's ruling, 2026-09-08). Run it when a
                                                project is opened — a field lands in the model at
                                                once and in the cars on disk never (CAR-007)
+  agents-setup                                 write the AGENTS.md Codex reads (it never reads
+                                               CLAUDE.md) into a project made before it: the
+                                               seed's own text. A file already there is left
+                                               as it is, and said; nothing else is touched (#149)
   migrate-fields [--dry-run]                   rename legacy field names in project.json
                                                (`dsp.sample_rate_hz` -> `dsp.dsp_processing_rate_hz`;
                                                `measurement`/`mic` rates are the CAPTURE rate and
@@ -1807,6 +1811,17 @@ def _main(argv):
                       f"sounds like, not what THIS car sounds like. A person's line, if the owner "
                       f"ever gives one after hearing the finished tune, replaces it; the phase-0 "
                       f"gate stands on evidence and asks for neither (#22).")
+        elif cmd == "agents-setup":
+            # A project file, not a fact of `project.json`: no lock, as the seed writes CLAUDE.md without one. The
+            # folder must already be a project, so a mistyped path makes nothing (#141, R23).
+            if not os.path.isfile(proj.path):
+                raise ProjectError(f"{root} is not a project folder (no project.json there); nothing was written")
+            import project_seed
+            path = os.path.join(root, "AGENTS.md")
+            if project_seed.write_agents_md(root):
+                print(f"wrote {path}: the skill's load line and feedback rule, where Codex reads them")
+            else:
+                print(f"{path} is already there; left as it is")
         elif cmd == "migrate-fields":
             renames = proj.migrate_fields(write="--dry-run" not in args)
             if not renames:
@@ -2788,6 +2803,56 @@ def _raised_by(call):
     return None
 
 
+def _check_agents_setup_writes_once():
+    """`agents-setup` gives a project made before #149 the `AGENTS.md` Codex reads (the Passat): the first run writes
+    the seed's own text and says so, a second run is a no-op that says the file was there, and nothing else in the
+    folder changes either time -- no `CLAUDE.md` rewritten, no `project.json` touched. A folder that is no project --
+    gone, or with no `project.json` -- is refused with one line, exit 1, nothing made."""
+    import shutil
+    import tempfile
+    import project_seed
+    top = tempfile.mkdtemp(prefix="autosound_project_agents_")
+    failures = []
+    try:
+        folder = os.path.join(top, "passat")
+        os.makedirs(folder)
+        with open(os.path.join(folder, "project.json"), "w", encoding="utf-8") as fh:
+            json.dump({"schema_version": SCHEMA_VERSION, "project_rev": 1, "channels": []}, fh)
+        with open(os.path.join(folder, "CLAUDE.md"), "w", encoding="utf-8") as fh:
+            fh.write("# the project's own\n")
+        before = _files_in(folder)
+        agents = os.path.join(folder, "AGENTS.md")
+        rc, out, err = _run_cli(_main, ["project.py", folder, "agents-setup"])
+        lines = out.strip().splitlines()
+        if rc != 0 or len(lines) != 1 or not lines[0].startswith("wrote ") or agents not in lines[0] or err:
+            failures.append(f"first run: rc {rc}, said {(out + err).strip()[-300:]!r}")
+        after = _files_in(folder)
+        if after.pop("AGENTS.md", None) != project_seed.AGENTS_MD.encode("utf-8").replace(b"\n", os.linesep.encode()):
+            failures.append("first run: AGENTS.md is not the seed's AGENTS_MD")
+        if after != before:
+            failures.append(f"first run changed more than AGENTS.md: {sorted(set(after) ^ set(before))}")
+        once = _files_in(folder)
+        rc, out, err = _run_cli(_main, ["project.py", folder, "agents-setup"])
+        lines = out.strip().splitlines()
+        if rc != 0 or len(lines) != 1 or "already" not in lines[0] or agents not in lines[0] or err:
+            failures.append(f"second run: rc {rc}, said {(out + err).strip()[-300:]!r}")
+        if _files_in(folder) != once:
+            failures.append("second run wrote")
+        for n, make in enumerate((False, True)):
+            gone = os.path.join(top, f"not-a-project-{n}")
+            if make:
+                os.makedirs(gone)               # a folder, but no project.json: a mistyped parent, not a project
+            rc, out, err = _run_cli(_main, ["project.py", gone, "agents-setup"])
+            said = (out + err).strip().splitlines()
+            if rc != 1 or len(said) != 1 or not said[0].startswith("error: "):
+                failures.append(f"{os.path.basename(gone)}: rc {rc}, said {said}")
+            if os.path.lexists(os.path.join(gone, "AGENTS.md")) or (not make and os.path.lexists(gone)):
+                failures.append(f"{os.path.basename(gone)}: made something")
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["agents-setup:"] + failures)
+
+
 def _check_a_bad_timeout_is_a_usage_error():
     """An AUTOSOUND_LOCK_TIMEOUT_S that is no number of seconds is a usage error (#141): exit 2, one line naming it, no
     traceback, and nothing written or made -- not the lock's `.autosound/` either: the wait is read before anything is
@@ -2933,7 +2998,8 @@ def _selftest():
                   _check_a_held_lock_answers_75, _check_catch_up_holds_once, _check_a_missing_project_makes_nothing,
                   _check_held_elsewhere_needs_its_folder, _check_rename_channel_takes_no_facts_of_its_own,
                   _check_a_bad_timeout_is_a_usage_error, _check_record_change_into_a_mistyped_folder,
-                  _check_record_change_asks_git_with_the_lock_free, _check_no_load_and_save_outside_update):
+                  _check_record_change_asks_git_with_the_lock_free, _check_no_load_and_save_outside_update,
+                  _check_agents_setup_writes_once):
         try:
             check()
         except AssertionError as exc:

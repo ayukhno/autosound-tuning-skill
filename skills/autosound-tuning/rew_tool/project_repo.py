@@ -93,6 +93,7 @@ def init(project_dir):
     import project_seed
     project_seed.write_gitignore(project_dir)
     project_seed.write_claude_md(project_dir)     # skill #65: the gate named where a session greps first
+    project_seed.write_agents_md(project_dir)     # #149: the same two rules where Codex reads, which is not CLAUDE.md
     fresh = not is_repo(project_dir)
     if fresh:
         r = _git(project_dir, "init", "-q")
@@ -171,6 +172,8 @@ def _selftest():
             assert "project.json" in tracked and ".gitignore" in tracked and ".critic-env" not in tracked, tracked
             # skill #65: the project says where issues go, in the file a session reads first.
             assert "CLAUDE.md" in tracked and "post_feedback" in open(os.path.join(proj, "CLAUDE.md"), encoding="utf-8").read()
+            # #149: and in the file Codex reads, which is not CLAUDE.md.
+            assert "AGENTS.md" in tracked and "post_feedback" in open(os.path.join(proj, "AGENTS.md"), encoding="utf-8").read()
             ok2, line2 = init(proj)
             assert ok2 and "a repository already" in line2, line2          # a second run changes nothing
             st2 = status(proj)
