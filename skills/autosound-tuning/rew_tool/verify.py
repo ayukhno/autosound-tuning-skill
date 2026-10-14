@@ -60,8 +60,21 @@ _FLAT_RANGE_DB = 1.0
 # muted channel or a disconnected mic produces.
 _SILENT_MEAN_DB = -80.0
 # A capture that stops short of the band it was asked for is a truncated one -- an RTA that never
-# got above 200 Hz reads as "captured" by title alone.
+# got above 200 Hz reads as "captured" by title alone. The band is the capture's OWN (#154): REW's
+# `startFreq`/`endFreq` for it, so a sub swept 20-200 Hz is judged over 20-200, never over 20-20000.
 _MIN_SPAN_FRACTION = 0.5
+
+
+def _own_band(entry):
+    """REW's own range for a measurement, `(startFreq, endFreq)` off its listing record, or None when REW names no
+    usable range -- either value missing, not a number, not finite, or not rising (#154). None is no range, never
+    20-20000: the caller then checks no truncation, because there is no range to fall short of (TCC #148)."""
+    import math
+    lo, hi = (entry or {}).get("startFreq"), (entry or {}).get("endFreq")
+    for x in (lo, hi):
+        if isinstance(x, bool) or not isinstance(x, (int, float)) or not math.isfinite(x):
+            return None
+    return (lo, hi) if 0 <= lo < hi else None
 
 # What `verify.py` exits with when REW did not answer: sysexits' EX_UNAVAILABLE, the code `process.py` gives the
 # same state (#134). 0 and 1 keep their meaning, so a gate that only knew those still stops on it.
@@ -127,6 +140,11 @@ def verdict(name, measurements=None, f_low=20, f_high=20000):
 
     A title REW holds more than once is its own verdict (H I-8): `exists` True, `valid` False, `ambiguous` the
     number of measurements holding it -- not missing, and not usable until it is renamed.
+
+    A sweep is judged over its OWN range (#154, hub #247): REW's `startFreq`/`endFreq` on its listing record,
+    clamped from outside by `f_low`/`f_high` -- the band its stats are read over, reported as `stats["band_hz"]`,
+    and the band a curve that stops short of is called truncated. A record REW names no range for is read over
+    `f_low`-`f_high` and never called truncated: there is no range of its own to fall short of.
     """
     # THREE states, not two. `exists` and `valid` were split because "nobody measured it" and "it
     # was measured and cannot be used" are different conversations; `applicable` is the same split
@@ -175,6 +193,15 @@ def verdict(name, measurements=None, f_low=20, f_high=20000):
                              f"{out['kind']} — nothing here was checked")
         return out
 
+    # The band this capture is judged over: its own, clamped by the one asked for (#154). A sub swept 20-200 Hz read
+    # over 20-20000 was "truncated" in every round and its mean diluted by bins it never played (hub #247).
+    own = _own_band(entry)
+    band_lo, band_hi = (max(own[0], f_low), min(own[1], f_high)) if own else (f_low, f_high)
+    if own and band_lo >= band_hi:
+        out["issues"].append(f"its own range in REW, {own[0]:g}-{own[1]:g} Hz, lies outside the band asked for, "
+                             f"{f_low:g}-{f_high:g} Hz — nothing checked")
+        return out
+
     try:
         freqs, mag, phase = _api.get_fr(mid, smoothing=READ_SMOOTHING)
     except Exception as exc:  # noqa: BLE001
@@ -189,16 +216,17 @@ def verdict(name, measurements=None, f_low=20, f_high=20000):
         out["issues"].append("frequency response is empty")
         return out
 
-    stats = _analysis.analyze_fr(freqs, mag, phase, f_low=f_low, f_high=f_high)
+    out["stats"]["band_hz"] = [band_lo, band_hi]
+    stats = _analysis.analyze_fr(freqs, mag, phase, f_low=band_lo, f_high=band_hi)
     if not stats:
-        out["issues"].append(f"nothing in band {f_low}-{f_high} Hz")
+        out["issues"].append(f"nothing in band {band_lo:g}-{band_hi:g} Hz")
         return out
     out["stats"].update(stats)
     # The channel's level where it PLAYS: the mean over the bins within 20 dB of its own maximum.
     # `mean_dB` averages the whole asked band, so a sub read over 20-20000 Hz comes out 20 dB
     # "quieter" than a woofer of the same level -- the session probe compared channels on that
     # once (2026-08-26) and called the sub the quietest. Live-band mean is what a level compare needs.
-    inband = [(f_, m_) for f_, m_ in zip(freqs, mag) if f_low <= f_ <= f_high]
+    inband = [(f_, m_) for f_, m_ in zip(freqs, mag) if band_lo <= f_ <= band_hi]
     if inband:
         top = max(m_ for _, m_ in inband)
         live = [m_ for _, m_ in inband if m_ >= top - 20.0]
@@ -211,10 +239,13 @@ def verdict(name, measurements=None, f_low=20, f_high=20000):
     if stats["mean_dB"] < _SILENT_MEAN_DB:
         out["issues"].append(f"in-band mean {stats['mean_dB']} dB — silence, not a sweep")
 
+    # Against the capture's own range only: with none from REW there is nothing to fall short of (#154, TCC #148).
     low, high = min(freqs), max(freqs)
-    if high < f_high * _MIN_SPAN_FRACTION or low > f_low / _MIN_SPAN_FRACTION:
+    if own and (high < band_hi * _MIN_SPAN_FRACTION or low > band_lo / _MIN_SPAN_FRACTION):
+        clamped = (band_lo, band_hi) != own
         out["issues"].append(
-            f"covers {low:.0f}-{high:.0f} Hz, asked for {f_low:.0f}-{f_high:.0f} — truncated"
+            f"covers {low:.0f}-{high:.0f} Hz of {band_lo:.0f}-{band_hi:.0f}, its own range in REW"
+            + (" clamped to the band asked for" if clamped else "") + " — truncated"
         )
 
     # The impulse is what time alignment is read off, and it only exists for a sweep. Reported,
@@ -599,6 +630,8 @@ _USAGE = """usage: verify.py <title> [title ...] [--json] [--band LOW HIGH] [--s
   REW_API_URL that is no address is 1, never 69: REW was not asked -- one line on stderr,
   `error: REW_API_URL ... is not an address: ...`, and no verdict. 70 is a bug: Python's
   traceback on stderr, then `error: unexpected <type>: <message>`.
+  Each sweep is judged over its own range, REW's startFreq-endFreq for it; --band LOW HIGH
+  clamps that range from outside (default 20 20000), never widens it.
   --session adds the whole-session table (Phase 0.6): level and impulse of every title side by
   side, loudest/quietest, and the ctl1->ctl3 drift record.
 """
@@ -1056,6 +1089,94 @@ def _check_drift_names_every_missing_control():
     assert not failures, "\n  ".join(["a drift line that names one missing control:"] + failures)
 
 
+def _check_own_band():
+    """Each sweep is judged over its own range, REW's `startFreq`/`endFreq` off the listing (#154, hub #247): a sub
+    swept 20-200 Hz is not "truncated" against 20-20000, and its level is not diluted by bins it never played; a
+    full-range record whose curve stops at 300 Hz still is truncated; a record REW names no range for is never
+    called truncated; `f_low`/`f_high` (the CLI's `--band`) clamp the own band from outside."""
+    notes = _SWEPT_RECORD["notes"]
+
+    def rec(title, uid, lo, hi):
+        r = {"title": title, "uuid": uid, "notes": notes}
+        if lo is not None:
+            r["startFreq"] = lo
+        if hi is not None:
+            r["endFreq"] = hi
+        return r
+
+    def curve(lo, hi, quiet_above=None):
+        """Log-spaced, 48 points an octave, from `lo` to `hi`; not flat, not silent. Above `quiet_above` the bins sit
+        40 dB down: what a sub sweep's curve holds where the sub never played."""
+        fs, f = [], float(lo)
+        while f <= hi * 1.0001:
+            fs.append(f)
+            f *= 2 ** (1 / 48)
+        mag = [(30.0 if quiet_above is not None and f_ > quiet_above else 70.0) + 10 * (k % 7)
+               for k, f_ in enumerate(fs)]
+        return fs, mag, None
+
+    listing = {"1": rec("sw_1 (sw)", "a1", 20.0, 200.0),            # the issue's case: a sub swept 20-200
+               "2": rec("sw_2 (sw)", "a2", 20.0, 200.0),            # the same, REW's curve running on above it
+               "3": rec("w-L_1 (sw)", "a3", 20.0, 20000.0),         # full range, the curve stops at 300 Hz
+               "4": rec("w-R_1 (sw)", "a4", 20.0, None),            # no endFreq
+               "5": rec("m-L_1 (sw)", "a5", "20", "x"),             # REW's range not numbers
+               "6": rec("tw-L_1 (sw)", "a6", 12.0, 22052.54),       # full range as REW lists it, full curve
+               "7": dict(_RTA_RECORD, startFreq=20.0, endFreq=20000.0)}
+    curves = {"1": curve(20.0, 200.0), "2": curve(20.0, 20000.0, quiet_above=200.0), "3": curve(20.0, 300.0),
+              "4": curve(20.0, 300.0), "5": curve(20.0, 300.0), "6": curve(12.0, 22052.54)}
+    failures = []
+
+    def want(label, cond, got):
+        if not cond:
+            failures.append(f"{label}: {got}")
+
+    with _rew_as(get_measurements=lambda: listing, get_fr=lambda mid, smoothing=None: curves[mid],
+                 get_impulse_response=_impulse_48k):
+        def trunc(v):
+            return [i for i in v["issues"] if "truncated" in i]
+
+        v = verdict("sw_1 (sw)", listing)
+        want("a sub over its own 20-200 is valid", v["valid"] and not trunc(v), v["issues"])
+        want("its band is its own", v["stats"].get("band_hz") == [20.0, 200.0], v["stats"].get("band_hz"))
+        v = verdict("sw_2 (sw)", listing)
+        want("a sub's curve above its range does not dilute it", v["valid"]
+             and v["stats"].get("min_dB", 0) >= 70.0 and v["stats"].get("mean_dB", 0) >= 70.0, v["stats"])
+        v = verdict("w-L_1 (sw)", listing)
+        want("a full-range record stopping at 300 Hz is truncated", not v["valid"] and trunc(v), v["issues"])
+        want("...its band is 20-20000", v["stats"].get("band_hz") == [20.0, 20000.0], v["stats"].get("band_hz"))
+        for title in ("w-R_1 (sw)", "m-L_1 (sw)"):
+            v = verdict(title, listing)
+            want(f"{title}: no range from REW, no truncation", v["valid"] and not trunc(v), v["issues"])
+            want(f"{title}: the band falls back to the asked one", v["stats"].get("band_hz") == [20.0, 20000.0],
+                 v["stats"].get("band_hz"))
+        v = verdict("tw-L_1 (sw)", listing)
+        want("REW's 12-22052.54 is clamped to the asked 20-20000", v["valid"]
+             and v["stats"].get("band_hz") == [20.0, 20000.0], (v["issues"], v["stats"].get("band_hz")))
+        v = verdict("ALL_60 (rta)", listing)
+        want("an RTA is untouched", v["applicable"] is False and "band_hz" not in v["stats"]
+             and not trunc(v), v)
+        # An explicit band clamps from outside: the own range narrowed, never widened.
+        v = verdict("tw-L_1 (sw)", listing, f_low=100, f_high=1000)
+        want("an explicit band clamps a full-range record", v["valid"] and v["stats"].get("band_hz") == [100, 1000],
+             (v["issues"], v["stats"].get("band_hz")))
+        v = verdict("sw_1 (sw)", listing, f_low=20, f_high=100)
+        want("...and a sub", v["valid"] and v["stats"].get("band_hz") == [20.0, 100], v["stats"].get("band_hz"))
+        v = verdict("sw_1 (sw)", listing, f_low=1000, f_high=20000)
+        want("a band its own range lies outside of is said, not judged on nothing", not v["valid"]
+             and any("outside" in i for i in v["issues"]) and not trunc(v), v["issues"])
+        rc, out = _run_main(["verify.py", "tw-L_1 (sw)", "--band", "100", "1000", "--json"])
+        doc = json.loads(out)
+        want("the CLI's --band clamps", rc == 0 and doc["measurements"][0]["stats"]["band_hz"] == [100.0, 1000.0],
+             (rc, doc["measurements"][0]["stats"].get("band_hz")))
+        # What `process.py capture-check` does: `verify(names)` at the default band, over one listing.
+        vs = verify(["sw_1 (sw)", "sw_2 (sw)", "w-L_1 (sw)", "w-R_1 (sw)", "tw-L_1 (sw)", "ALL_60 (rta)"])
+        s = summary(vs)
+        want("capture-check's counts", (s["ok"], s["invalid"], s["not_applicable"]) == (4, 1, 1), (s, vs))
+        want("capture-check's one invalid is the truncated record",
+             [v["name"] for v in vs if _counted_as(v) == "invalid"] == ["w-L_1 (sw)"], vs)
+    assert not failures, "\n  ".join(["each sweep over its own range (#154):"] + failures)
+
+
 def _selftest():
     """Offline, REW never reached: REW's states through its readers stood in (`_rew_as`), REW's recorded answers
     replayed (`testdata/rew/`), the command line at a dead port, the drift record, the counts and the outlier rule."""
@@ -1063,7 +1184,7 @@ def _selftest():
     for check in (_check_unreachable_state, _check_protocol_error_state, _check_ir_failure_on_a_sweep,
                   _check_recorded_no_impulse, _check_ambiguous_title, _check_drift_says_why, _check_counts_add_up,
                   _check_command_line_bug_exits_70, _check_drift_says_what_was_not_read,
-                  _check_drift_names_every_missing_control):
+                  _check_drift_names_every_missing_control, _check_own_band):
         try:
             check()
         except Exception as exc:  # noqa: BLE001 -- a check that raises is reported by name, like one that fails
