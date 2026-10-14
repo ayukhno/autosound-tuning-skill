@@ -18,8 +18,9 @@ red CI runs, per group. Times are UTC.
 ## The Haiku trial
 
 The Arbiter, 2026-10-14: «для механічних задач спробувати Хайку 5.5». `hub:seam` names a Sonnet trial for mechanical
-work; this wave runs Haiku 5.5 · medium on #163 and on the release bookkeeping's version bumps instead, each reviewed on
-opus. Counted per task: defects the review finds, rework rounds, time. The result goes to the hub (H-019) at the wave's
+work; this wave runs Haiku 5.5 instead — #163 at high, the release bookkeeping's version bumps at xhigh (the Arbiter: «як
+медіум для Хайку маловато — можна спробувати хай чи екстрахай — треба зрозуміти можливість нової моделі»), each
+reviewed on opus. Counted per task: defects the review finds, rework rounds, time. The result goes to the hub (H-019) at the wave's
 end.
 
 ## Agent runs
@@ -33,11 +34,14 @@ end.
 | 5 | code map | sonnet · medium | Method text | 07:25 | 07:27 | 84 s, 26 tool calls, 63k tokens |
 | 6 | implementer T1 #153 | opus · high | Captures | 07:57 | | |
 | 7 | implementer T2+T3 #155 #156 | opus · high | Captures | 07:57 | | |
-| 8 | implementer T4 #154 | opus · high | Captures | 07:57 | | |
+| 8 | implementer T4 #154 | opus · high | Captures | 07:57 | 08:01 | 198 s, 21 tool calls, 104k tokens; `3a6eeb3` |
 | 9 | implementer T5–T7, T9 (#157 #172 #164 #171 #160 #161 #162) | opus · high | Installers | 07:57 | | |
 | 10 | researcher T21 #173 | opus · medium | Method text | 07:57 | | |
-| 11 | implementer T18 #150 | opus · medium | Agent start | 08:01 | | |
+| 11 | implementer T18 #150 | opus · medium | Agent start | 08:01 | 08:03 | 121 s, 17 tool calls, 91k tokens; `117cc47` |
 | 12 | implementer T20 #170 | opus · medium | Agent start | 08:01 | | |
+| 13 | implementer T22 #168 | opus · medium | Method text | 08:05 | | |
+| 14 | implementer T17a #149 | opus · high | Agent start | 08:05 | | |
+| 15 | task review T4 #154 | opus · high | Captures | 08:06 | | |
 
 ## Per group
 

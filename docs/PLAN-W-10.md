@@ -15,8 +15,9 @@ Paths: `SK` = `skills/autosound-tuning`, `RT` = `SK/rew_tool`, `N` = `RT/naming.
   `pr-review-toolkit:silent-failure-hunter` and `pr-review-toolkit:pr-test-analyzer` (opus · high) — and one fix round.
   The wave ends with ONE final branch review on Fable (the wave holds `Risk: high` code).
 - **Models** (`hub:seam` «Models by role»): implementer `Risk: high` opus · high; ordinary opus · medium; mechanical tasks —
-  #163 and the release bookkeeping's version bumps — are the Haiku trial (haiku · medium, the brief holds the exact text;
-  the Arbiter, 2026-10-14), each reviewed on opus. XS items the session builds itself.
+  #163 and the release bookkeeping's version bumps — are the Haiku trial — #163 on haiku · high, the version bumps on
+  haiku · xhigh, to see what the new model does at each (the brief holds the exact text; the Arbiter, 2026-10-14), each
+  reviewed on opus. XS items the session builds itself.
 - **Tests**: the changed modules' selftests (`python3 <module> <argv from scripts/selftests.txt>`), the installer
   consistency script for installer work, `scripts/docs-check.py` for text. No local full suite: it runs once, on the
   PR's CI, on every system (`WAVES.md` §1 step 3).
@@ -111,7 +112,7 @@ set by `going_ahead` (`install.sh:551–554`) and by the write at `install.ps1:8
 return early while it is unset. A stop after going ahead still writes `stopped`. Consistency case: a seeded `ready`
 receipt stays byte-identical after a declined consent and after "no git", in both installers.
 
-**T8 · #163 — the help names the installer's release.** XS · **the Haiku trial** (haiku · medium; the Arbiter, 2026-10-14: «для механічних задач спробувати Хайку 5.5»). `install.sh:196` and
+**T8 · #163 — the help names the installer's release.** XS · **the Haiku trial** (haiku · high; the Arbiter, 2026-10-14: «для механічних задач спробувати Хайку 5.5» and «як медіум для Хайку маловато — можна спробувати хай чи екстрахай»). `install.sh:196` and
 `install.ps1:277` (and the header comment at `:32–33`) build the one-liner from `v$INSTALLER_VERSION` /
 `v$InstallerVersion`, so there is no second literal to move. A consistency case next to the README block
 (`:2249–2291`): both help lines name `v<INSTALLER_VERSION>`, none says `main`.
