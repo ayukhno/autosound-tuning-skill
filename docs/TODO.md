@@ -1649,6 +1649,13 @@ The ranking and the assessment: `docs/W-10-CANDIDATES.md`. The groups (`hub:seam
 - **Silent failures 3**: #159, #165, #166, #167;
 - **Method text**: #168 hub #258, #173 (S-101's boost path, research first). Off the wave: #169 hub #113, deferred.
 
+For the next collection, Minor items the reviews left (recorded, not diagnosed): an AMBIGUOUS capture's stored issue
+names both spellings but not the fix («keep one: rename or delete the other in REW») — TCC's card shows the stored
+issue, never stdout; verify's summary calls every not-applicable sweep «not checked (not a sweep)», wrong for a sweep
+outside the band; a window between the check's two REW reads can judge an old take (a stale check, not a wrong
+record); bounded_run starts the reviewer CLIs with stdin closed (said in the CHANGELOG's Upgrading); uninstall leaves
+the empty `~/.agents/skills` folders it made.
+
 For the next collection (the final review's M3, half done in `d4250f3`): install.ps1 still arms the receipt right
 before the winget Git install, Claude's `Invoke-Upstream` and uv's — a failed download there writes `stopped` over a
 good receipt with nothing changed, as v3.1.3 did. install.sh's equivalents arm after the change.
