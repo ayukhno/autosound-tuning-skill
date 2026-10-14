@@ -1571,7 +1571,7 @@ def codex_read_problems(sh, ps1):
             gone = re.search(r'^if \(\$Uninstall\) \{\n.*?^\}\n', ps1, re.M | re.S)
             unlinks = gone and re.search(r"^\s*Remove-CodexLink\s*$", gone.group(0), re.M)
             ours = re.search(r"^function Test-CodexOurs \{\n.*?^\}", ps1, re.M | re.S)
-            by_manifest = ours and "Get-Content -LiteralPath $Manifest" in ours.group(0) \
+            by_manifest = ours and "@(Read-ManifestLines)" in ours.group(0) \
                 and '"codex-link "' in ours.group(0)
             asked = re.search(r'^\s*if \(\$Codex\) \{ Add-Missing "Codex link" \}\s*$', ps1, re.M)
         wrong = []
@@ -1795,6 +1795,28 @@ def codex_link_problems(sh):
     return out, True
 
 
+def manifest_encoding_problems(ps1):
+    """The final review's I2, READ (RUN on the Windows job, ps1_codex_link_problems): install.ps1 reads and writes its
+    installer-manifest one way -- Read-ManifestLines / Write-ManifestLines, UTF-8 named on both sides through .NET.
+    Set-Content -Encoding UTF8 writes no BOM under PowerShell 7, and 5.1's Get-Content with no -Encoding reads a
+    BOM-less file in the ANSI code page: a `codex-link C:\\Users\\<Cyrillic>\\...` line written by one and read by the
+    other made the installer's own junction "not this installer's"."""
+    out = []
+    enc = "(New-Object System.Text.UTF8Encoding $false)"
+    read_fn = re.search(r"^function Read-ManifestLines \{.*?^\}", ps1, re.M | re.S)
+    write_fn = re.search(r"^function Write-ManifestLines \{.*?^\}", ps1, re.M | re.S)
+    if not read_fn or f"[System.IO.File]::ReadAllLines($Manifest, {enc})" not in read_fn.group(0) \
+            or not write_fn or f"[System.IO.File]::WriteAllLines($Manifest, [string[]]$Lines, {enc})" \
+            not in write_fn.group(0):
+        out.append(f"install.ps1 has no Read-ManifestLines / Write-ManifestLines naming UTF-8 on both sides -- "
+                   f"[System.IO.File]::ReadAllLines / WriteAllLines with {enc} (#149, I2)")
+    code = [(n, ln) for n, ln in enumerate(ps1.splitlines(), 1) if not ln.lstrip().startswith("#")]
+    out.extend(f"install.ps1:{n}: the manifest read or written by a cmdlet ({ln.strip()[:70]!r}) -- its encoding then "
+               f"differs between PowerShell 5.1 and 7; Read-ManifestLines / Write-ManifestLines (#149, I2)"
+               for n, ln in code if re.search(r"\b(?:Get|Set|Add)-Content\b[^|;]*\$Manifest\b", ln))
+    return out
+
+
 def ps1_codex_link_problems(ps1):
     """#149: install.ps1's Set-CodexLink and Remove-CodexLink, cut out and RUN under PowerShell over CODEX_CASES and
     CODEX_UNLINK_CASES -- where there is one: the Windows job's runner; `(problems, ran)`. The links are junctions made
@@ -1807,7 +1829,8 @@ def ps1_codex_link_problems(ps1):
     if not shell or os.name != "nt":
         return [], False
     cut, lacking = [], []
-    for name in ("Say", "Warn", "Have", "Pretty", "Add-Missing", "Test-CodexOurs", "Set-CodexRecord", "Set-CodexLink",
+    for name in ("Say", "Warn", "Have", "Pretty", "Add-Missing", "Read-ManifestLines", "Write-ManifestLines",
+                 "Add-ManifestEntry", "Test-ManifestEntry", "Test-CodexOurs", "Set-CodexRecord", "Set-CodexLink",
                  "Remove-CodexLink"):
         m = (re.search(rf"^function {re.escape(name)}\s+\{{[^\n]*\}}[ \t]*$", ps1, re.M)
              or re.search(rf"^function {re.escape(name)} \{{\n.*?^\}}", ps1, re.M | re.S))
@@ -1888,6 +1911,27 @@ def ps1_codex_link_problems(ps1):
             if wrong:
                 out.append(f"install.ps1's uninstall of the Codex link under {Path(shell).name}, {case}: "
                            + "; ".join(wrong) + f" -- said {said.strip()[-300:]!r} (#149)")
+        # The final review's I2: a user folder in Cyrillic. A codex-link line written without a BOM, as PowerShell 7
+        # wrote it, is this installer's own under 5.1; Set-CodexRecord and Add-ManifestEntry write UTF-8 that both
+        # read back. The name is built from code points: this case's script has no BOM, and 5.1 reads it as ANSI.
+        home, spelled, places, link, manifest, head = fixture("cyrillic-home", False, "none", None)
+        body = (head + "$DryRun = $false\n$name = -join ([char]0x41E, [char]0x43B, [char]0x435, [char]0x433)\n"
+                f"$t = '{home}\\' + $name + '\\clone'\n"
+                "[System.IO.File]::WriteAllText($Manifest, \"uv`ncodex-link $t`n\", (New-Object System.Text.UTF8Encoding $false))\n"
+                'Write-Host "OURS-AFTER-PWSH7=$(Test-CodexOurs $t)"\n'
+                'Write-Host "RECORDED=$(Set-CodexRecord $t)"\nAdd-ManifestEntry "agy"\n'
+                'Write-Host "OURS-AFTER-51=$(Test-CodexOurs $t) AGY=$(Test-ManifestEntry \'agy\') UV=$(Test-ManifestEntry \'uv\')"\n')
+        rc, said = run(home, body)
+        try:
+            text = manifest.read_bytes().decode("utf-8-sig")
+        except (OSError, UnicodeDecodeError) as exc:
+            text = f"unreadable as UTF-8 ({exc})"
+        want_line = "codex-link " + str(home) + "\\\u041e\u043b\u0435\u0433\\clone"
+        if rc or "OURS-AFTER-PWSH7=True" not in said or "RECORDED=True" not in said \
+                or "OURS-AFTER-51=True AGY=True UV=True" not in said or want_line not in text.splitlines():
+            out.append(f"install.ps1's manifest under {Path(shell).name}, a Cyrillic user folder: exit {rc} -- want the "
+                       f"BOM-less line read as ours, and the line written back as UTF-8 beside uv and agy; the file "
+                       f"holds {text[:200]!r} -- said {said.strip()[-300:]!r} (#149, I2)")
     except (OSError, subprocess.SubprocessError) as exc:
         out.append(f"install.ps1's Codex link could not be run under {shell} ({exc}) -- unrun is not agreed (#149)")
     finally:
@@ -3145,6 +3189,12 @@ def main():
             problems.extend(found)
         else:
             checked.append(ok_line)
+    manifest_enc = manifest_encoding_problems(ps1)
+    if manifest_enc:
+        problems.extend(manifest_enc)
+    else:
+        checked.append("install.ps1 reads and writes its installer-manifest one way, UTF-8 named on both sides "
+                       "(read; run on the Windows job over a Cyrillic user folder) (#149)")
     kept = keep_local_problems(sh, ps1)
     if kept:
         problems.extend(kept)

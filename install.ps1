@@ -510,15 +510,27 @@ function Find-Bin {
     }
     return $null
 }
+# The installer-manifest, read and written one way (the final review's I2): UTF-8, named on both sides, through .NET.
+# Set-Content -Encoding UTF8 wrote no BOM under PowerShell 7, and 5.1's Get-Content with no -Encoding read that file in
+# the ANSI code page -- a codex-link line under C:\Users\<a Cyrillic name> written by one and read by the other made
+# this installer's own junction "not this installer's". ReadAllLines also takes a BOM 5.1 wrote, and drops it.
+function Read-ManifestLines {
+    if (-not (Test-Path -LiteralPath $Manifest)) { return @() }
+    return @([System.IO.File]::ReadAllLines($Manifest, (New-Object System.Text.UTF8Encoding $false)))
+}
+function Write-ManifestLines {
+    param([string[]]$Lines)
+    New-Item -ItemType Directory -Force -Path (Split-Path $Manifest) -ErrorAction Stop | Out-Null
+    [System.IO.File]::WriteAllLines($Manifest, [string[]]$Lines, (New-Object System.Text.UTF8Encoding $false))
+}
 function Add-ManifestEntry {
     param($name)
     if ($DryRun) { return }
-    New-Item -ItemType Directory -Force -Path (Split-Path $Manifest) | Out-Null
-    if (-not (Test-ManifestEntry $name)) { Add-Content -Path $Manifest -Value $name }
+    if (-not (Test-ManifestEntry $name)) { Write-ManifestLines (@(Read-ManifestLines) + @($name)) }
 }
 function Test-ManifestEntry {
     param($name)
-    (Test-Path $Manifest) -and ((Get-Content $Manifest) -contains $name)
+    (@(Read-ManifestLines) -contains $name)
 }
 # One question, one answer. `Default` is what Enter means, and what -Yes / -DryRun take.
 function Ask {
@@ -688,8 +700,9 @@ function Test-CodexOurs {
     param([string]$Target)
     $t = ($Target -replace '/', '\').TrimEnd("\")
     if (-not $t -or $t -match '(^|\\)\.\.(\\|$)') { return $false }
-    if (-not (Test-Path -LiteralPath $Manifest)) { return $false }
-    foreach ($line in @(Get-Content -LiteralPath $Manifest -ErrorAction SilentlyContinue)) {
+    $lines = @()
+    try { $lines = @(Read-ManifestLines) } catch { return $false }
+    foreach ($line in $lines) {
         if ($line.StartsWith("codex-link ") -and (($line.Substring(11) -replace '/', '\').TrimEnd("\") -ieq $t)) { return $true }
     }
     return $false
@@ -700,15 +713,9 @@ function Set-CodexRecord {
     param([string]$Target = "")
     if ($DryRun) { return $true }
     try {
-        $rest = @()
-        if (Test-Path -LiteralPath $Manifest) {
-            $rest = @(Get-Content -LiteralPath $Manifest -ErrorAction Stop | Where-Object { -not $_.StartsWith("codex-link ") })
-        }
+        $rest = @(@(Read-ManifestLines) | Where-Object { -not $_.StartsWith("codex-link ") })
         if ($Target) { $rest += "codex-link $Target" }
-        New-Item -ItemType Directory -Force -Path (Split-Path $Manifest) -ErrorAction Stop | Out-Null
-        # An empty list is one empty line: -Value takes no empty array.
-        if ($rest.Count -eq 0) { $rest = @("") }
-        Set-Content -LiteralPath $Manifest -Value $rest -Encoding UTF8 -ErrorAction Stop
+        Write-ManifestLines $rest
         return $true
     } catch { return $false }
 }
