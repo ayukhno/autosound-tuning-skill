@@ -102,6 +102,11 @@ One JSON object per line, oldest first: `{"at": …, "type": …, …}`. Types:
 `capture_taken` carries `as_in_rew` and `capture_skipped` carries `as_typed` when the title typed was another
 spelling of a listed one (#153): `title` is then the list's, the round's own, and the field is the spelling typed.
 
+`critic_called` is one per review round (#166): `record_reviewer` adds none when one of the same round
+(`review_round`: the `review` file's base, `-package` and `.md` stripped) and vendor (equal but for case, or one of
+`unknown`, `?`, none) is in the journal -- it returns that one with `already_recorded: True`, and the state's
+`reviewer` stays as it was. A record without `review` is no round, and is always added.
+
 `user_decision` is the Arbiter's half of the conversation, recorded as the answer rather than as
 prose about it. `invalidates` carries the same shape as `config_change.impact`, so a ruling that
 supersedes a measurement is legible to the same reader — but a ruling is not a config change, and

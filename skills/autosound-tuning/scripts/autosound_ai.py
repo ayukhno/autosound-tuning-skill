@@ -2382,10 +2382,10 @@ def _check_the_door_records_the_review():
             if len(calls(project, rel)) != 1:
                 failures.append(f"the same file recorded twice: {len(calls(project, rel))} critic_called name it")
             # TCC recorded the call before the door, and another call after it: any `critic_called` naming the file
-            # holds it, not only the last.
+            # holds it, not only the last. Under the vendor the door names (#166: a round is its file and its vendor).
             third = os.path.join("process", "reviews", f"{stamp}-critic-3.md")
             journal = process_mod.Process(os.path.join(project, "process"))
-            journal.record_reviewer("google", "m", review=third, mode="api")
+            journal.record_reviewer("gemini", "m", review=third, mode="api")
             journal.record_reviewer("google", "m", review=os.path.join("process", "reviews", "elsewhere.md"),
                                     mode="api")
             before = len(calls(project))
@@ -5187,19 +5187,14 @@ def _record_review_step(project, vendor, model, rel, mode):
     the state's `reviewer`, through `Process(<project>/process).record_reviewer` -- `state/process.py` loaded by its
     path -- which takes the project's writer lock. The review call is over by then: no reviewer runs under the lock.
 
-    True when recorded; False when a `critic_called` in the journal names this file already -- a review file's name is
-    never given twice, so any event naming it is this review's. The look is not under the lock: the one other writer
-    that could record this file (a hand run of the printed line) learns its name from this run's own output, after it.
-    A refusal raises as `record_reviewer` raises it -- `is_busy`, `is_unreadable`, the lock's wait a usage error
-    (`exit_code` 2), a `ProcessError`."""
+    True when recorded; False when the journal holds this review's round already (#166): `record_reviewer` looks, under
+    the writer lock, for a `critic_called` of the same round (`process.review_round`: the file's base, a package and
+    its answer alike) and vendor, and returns it, adding nothing. The look was here, outside the lock, and matched the
+    file's name alone. A refusal raises as `record_reviewer` raises it -- `is_busy`, `is_unreadable`, the lock's wait
+    a usage error (`exit_code` 2), a `ProcessError`."""
     process_mod = _siblings().load("state/process.py")
     proc = process_mod.Process(os.path.join(project, "process"))
-    mine = rel.replace("\\", "/")
-    if any(str(e.get("review") or "").replace("\\", "/") == mine
-           for e in proc.events(kinds=(process_mod.EV_CRITIC_CALLED,))):
-        return False
-    proc.record_reviewer(vendor, model, review=rel, mode=mode)
-    return True
+    return not proc.record_reviewer(vendor, model, review=rel, mode=mode).get("already_recorded")
 
 
 class _RecordFault(Exception):

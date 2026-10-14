@@ -195,6 +195,31 @@ def _named_by_id(step_id, name):
     return head + _LEADING_LABEL_RE.sub("", name, count=1)
 
 
+
+#: A reviewer's vendor that says no vendor (#166): what TCC records for a clipboard call, whose model the door does not
+#: report (`_vendor_of` answers "unknown", the model "?"). Such a record is any vendor's round.
+_NO_VENDOR = ("", "?", "unknown")
+
+
+def review_round(review):
+    """The review round a review file belongs to (#166): its base, `<ts>-<role>` (with a `-N` when that second held
+    one), `-package` and `.md` stripped and `\\` read as `/` -- so a package, `<ts>-critic-package.md`, and the answer
+    saved for it, `<ts>-critic.md`, are one round. None for no review: a record without one is no round to match."""
+    if not review:
+        return None
+    name = str(review).replace("\\", "/").rsplit("/", 1)[-1]
+    if name.endswith(".md"):
+        name = name[:-len(".md")]
+    if name.endswith("-package"):
+        name = name[:-len("-package")]
+    return name or None
+
+
+def _same_vendor(a, b):
+    """True when two records' vendors can be one reviewer's: equal but for case, or either says none (`_NO_VENDOR`)."""
+    a, b = (str(v or "").strip().lower() for v in (a, b))
+    return a in _NO_VENDOR or b in _NO_VENDOR or a == b
+
 class ProcessError(ValueError):
     """A transition the process model refuses — e.g. a done step with no evidence."""
 
@@ -1656,8 +1681,22 @@ class Process:
         `mode` distinguishes a channel that ran from one worked by hand: `"clipboard"` means the
         package was compiled and answered by a human paste, which must not look like no review at
         all.
+
+        One review round, one record (#166): a `critic_called` already in the journal for this review's round
+        (`review_round`) with this vendor (`_same_vendor`) is the record -- nothing is written or appended, and it is
+        returned with `already_recorded: True`. A round arrived twice under TCC's clipboard route: the package
+        recorded by `call_critic`, the answer by the printed line. Looked up here, under the writer lock, so two
+        writers of one round add one. A record without a review is no round, and is added as before.
         """
         state = self.load(strict=True)
+        key = review_round(review)
+        if key is not None:
+            for event in self._events(kinds=(EV_CRITIC_CALLED,)):
+                if review_round(event.get("review")) == key and _same_vendor(event.get("vendor"), vendor):
+                    found = {k: event.get(k) for k in ("vendor", "model", "at", "phase", "step", "outcome", "review",
+                                                       "mode")}
+                    found["already_recorded"] = True
+                    return found
         state["reviewer"] = {
             "vendor": vendor,
             "model": model,
@@ -6233,6 +6272,52 @@ _TCC_FLAGS = (
 )
 
 
+def _check_one_review_round_one_record():
+    """#166: one review round is one `critic_called`, whichever way it arrives. The round is the review file's base --
+    `<ts>-<role>`, `-package` and `.md` stripped, `\\` read as `/` -- with its vendor; a vendor not known (`unknown`,
+    `?`, none: what TCC records for a clipboard call, its model unreported) is any vendor's. A second record of a round
+    adds nothing and returns the first; the command line says so, exit 0. The package recorded, then its answer: one;
+    the same review twice: one; two rounds: two; two vendors' answers to one package: two."""
+    import shutil
+    import tempfile
+    assert (review_round("process/reviews/2026-10-14T01-02-03-critic-package.md"),
+            review_round("process\\reviews\\2026-10-14T01-02-03-critic.md"),
+            review_round("2026-10-14T01-02-03-critic-2-package.md"), review_round(None), review_round("")) == \
+        ("2026-10-14T01-02-03-critic", "2026-10-14T01-02-03-critic", "2026-10-14T01-02-03-critic-2", None, None)
+    top = tempfile.mkdtemp(prefix="autosound_process_one_round_")
+    try:
+        d = os.path.join(top, "process")
+        p = Process(d)
+        p.enter_phase("-1")
+
+        def called():
+            return p.events(kinds=(EV_CRITIC_CALLED,))
+        a = "process/reviews/2026-10-14T01-02-03-critic"
+        first = p.record_reviewer("unknown", "?", step="-1.1", review=a + "-package.md", mode="clipboard")
+        again = p.record_reviewer("google", "g-3", review="process\\reviews\\2026-10-14T01-02-03-critic.md",
+                                  mode="clipboard")
+        assert len(called()) == 1 and again.get("already_recorded") and again["review"] == first["review"] \
+            and not first.get("already_recorded"), (called(), first, again)
+        assert p.load()["reviewer"]["review"] == a + "-package.md", p.load()["reviewer"]
+        b = "process/reviews/2026-10-14T02-00-00-critic.md"
+        p.record_reviewer("google", "g-3", review=b, mode="api")
+        assert p.record_reviewer("google", "g-3", review=b, mode="api").get("already_recorded")
+        assert len(called()) == 2, called()
+        p.record_reviewer("openai", "gpt", review=b, mode="clipboard")
+        assert len(called()) == 3, called()
+        p.record_reviewer("google", "g-3")                      # no review: no round to match, always recorded
+        p.record_reviewer("google", "g-3")
+        assert len(called()) == 5, called()
+        c = "process/reviews/2026-10-14T03-00-00-critic.md"
+        rc, out, err = _run_main(["process.py", d, "reviewer", "google", "g-3", "--review", c, "--mode", "api"])
+        assert rc == 0 and out.startswith("reviewer recorded: google / g-3"), (rc, out, err)
+        rc, out, err = _run_main(["process.py", d, "reviewer", "google", "g-3", f"--review={c}", "--mode=api"])
+        assert rc == 0 and out.strip() == f"reviewer already recorded ({c}): nothing added", (rc, out, err)
+        assert len(called()) == 6, called()
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
 def _check_flags_tcc_sends():
     """Every flag TCC sends is one its verb takes (#134, N19), and the two TCC sends as `--flag=value` (`reviewer`'s
     `--review=` and `--mode=`, `decision`'s `--invalidates=`) are read as the flag and its value."""
@@ -8490,7 +8575,7 @@ def _selftest():
                   _check_exit_table, _check_typed_values_refused, _check_refused_capture_writes_nothing,
                   _check_plan_over_final_says_its_label,
                   _check_import_of_a_whole_series, _check_catch_all_reads_the_type, _check_unknown_flags,
-                  _check_flags_tcc_sends,
+                  _check_flags_tcc_sends, _check_one_review_round_one_record,
                   _check_flag_values_as_they_stand, _check_autocorrected_dashes, _check_too_few_arguments,
                   _check_value_flag_last, _check_help_writes_nothing, _check_usage_before_the_read,
                   _check_handoff_says_an_unreadable_changelog, _check_handoff_reads_the_changelog_at_the_root,
@@ -9479,10 +9564,13 @@ def _main(argv):
                 else:
                     rest.append(token)
                 i += 1
-            p.record_reviewer(rest[0], rest[1], step=rest[2] if len(rest) > 2 else None,
-                              review=flags.get("review"), mode=flags.get("mode"))
-            print(f"reviewer recorded: {rest[0]} / {rest[1]}"
-                  + (f" -> {flags['review']}" if flags.get("review") else " (no text recorded)"))
+            got = p.record_reviewer(rest[0], rest[1], step=rest[2] if len(rest) > 2 else None,
+                                    review=flags.get("review"), mode=flags.get("mode"))
+            if got.get("already_recorded"):              # #166: one round, one record -- not a refusal
+                print(f"reviewer already recorded ({got.get('review')}): nothing added")
+            else:
+                print(f"reviewer recorded: {rest[0]} / {rest[1]}"
+                      + (f" -> {flags['review']}" if flags.get("review") else " (no text recorded)"))
         elif cmd == "target":
             p.set_target(args[0], args[1])
             print(f"target for {args[0]}: {args[1]}")
