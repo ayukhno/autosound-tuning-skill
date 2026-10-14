@@ -35,7 +35,7 @@ end.
 | 6 | implementer T1 #153 | opus · high | Captures | 07:57 | 08:07 | `5f4a22c`; open points: capture-check by exact title, reconcile on old rounds, schema doc |
 | 7 | implementer T2+T3 #155 #156 | opus · high | Captures | 07:57 | 08:04 | 340 s, 37 tool calls, 119k tokens; `bebab42` `b2eb99f` `74bbdfb` |
 | 8 | implementer T4 #154 | opus · high | Captures | 07:57 | 08:01 | 198 s, 21 tool calls, 104k tokens; `3a6eeb3` |
-| 9 | implementer T5–T7, T9 (#157 #172 #164 #171 #160 #161 #162) | opus · high | Installers | 07:57 | | |
+| 9 | implementer T5–T7, T9 (#157 #172 #164 #171 #160 #161 #162) | opus · high | Installers | 07:57 | 08:22 | 1328 s, 100 tool calls, 266k tokens; `c02fd32` `cb20b50` `2007ca7` `c4f6fda`; ps1 cases unrun (no pwsh here) |
 | 10 | researcher T21 #173 | opus · medium | Method text | 07:57 | 08:06 | `f4ad845`; ~2700 words, proposal B (opt-in fill ≤ +3 dB) |
 | 11 | implementer T18 #150 | opus · medium | Agent start | 08:00 | 08:02 | 121 s, 17 tool calls, 91k tokens; `117cc47` |
 | 12 | implementer T20 #170 | opus · medium | Agent start | 08:00 | 08:05 | `655151a`; 62 queries, 11 new |
@@ -59,6 +59,12 @@ end.
 | 30 | re-review T1 fix | opus · high | Captures | 08:16 | 08:20 | fix accepted; 3 Minor → the group's fix round |
 | 31 | group seat: silent failures | opus · high | Captures | 08:20 | | |
 | 32 | group seat: tests | opus · high | Captures | 08:20 | | |
+| 33 | task review T5 #157 #172 | opus · high | Installers | 08:22 | | |
+| 34 | task review T6 #164 #171 | opus · high | Installers | 08:22 | | |
+| 35 | task review T7 #160 | opus · high | Installers | 08:22 | | |
+| 36 | task review T9 #161 #162 | opus · high | Installers | 08:22 | | |
+| 37 | implementer T8 #163 — the Haiku trial | haiku · high | Installers | 08:22 | 08:24 | 147 s, 17 tool calls, 89k tokens; `089d3b3`; red first (5), then green; CRLF kept |
+| 38 | review of the Haiku T8 (trial count) | opus · high | Installers | 08:24 | | |
 
 ## Per group
 
