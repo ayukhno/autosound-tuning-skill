@@ -127,6 +127,10 @@ state is on disk: `python3 rew_tool/state/process.py <project>/process handoff` 
 A session can neither restart itself nor `/clear`, so the offer is the Arbiter's to take; what the check removes is the
 improvising (S-044).
 
+## The reply after a desk computation
+
+**A reply after a desk computation ends with one of two things**: «введи це» (the sheet), or «виміряй ці N кривих» (N from `state.py … verification-set`, never "re-measure the series"). A defect of the method found mid-session gets one line in the pool, and the tuning goes on.
+
 ## The record and the hardware drift apart — verify, don't compute from memory
 
 Three independent occurrences on one build, each caught only by someone reading a screen:

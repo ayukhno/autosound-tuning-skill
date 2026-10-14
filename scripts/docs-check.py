@@ -158,6 +158,9 @@ SKILL_BEFORE_MAP_MAX = 17500           # bytes from the file's start to the Map'
 #: session that was summarised still has it. A rule moved out of SKILL.md leaves this list in the same commit, and the
 #: commit names where it went; a rule reworded rewrites its phrase here. Read as a reader reads (`_phrase`).
 SKILL_RULE_PHRASES = (
+    # 🏛️ Three Roles: the capability block -- the finder and the feedback gate (#150)
+    "capabilities.py find",
+    "post_feedback",
     # 🔄 Pre-Session & Resume: the language paragraph, then items 0-4
     "You write in the interface language, always",
     "Which method is this",
@@ -205,8 +208,6 @@ SKILL_RULE_PHRASES = (
     "Copy-paste-ready specifics",
     "Every number in a proposal names where it came from",
     "What the Arbiter types, they get as a table",
-    "A reply after a desk computation ends with one of two things",
-    "Where a session's transcript lives, and where a request goes",
     "headings are for an ANALYSIS that was asked for",
 )
 
