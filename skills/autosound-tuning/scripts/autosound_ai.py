@@ -111,6 +111,10 @@ def _default_mirror(environ, cwd):
 
 
 PROJECT_MIRROR = _default_mirror(os.environ, CWD)
+#: The mirror came from `AUTOSOUND_PROJECT_DIR`, no `PROJECT_MIRROR` stated (#159) -- from the same environment
+#: `_default_mirror` read, before any critic-env file loads: a `PROJECT_MIRROR` or `AUTOSOUND_PROJECT_DIR` set in one
+#: does not move the mirror (it is chosen first: the project's critic-env lives in it).
+_MIRROR_FROM_PROJECT = not os.environ.get("PROJECT_MIRROR") and bool(os.environ.get("AUTOSOUND_PROJECT_DIR"))
 # AUTOSOUND_DIR (optional cross-project canon) is resolved from env below, after .critic-env loads.
 
 def machine_config_path():
@@ -239,11 +243,18 @@ def load_env_file():
 
     Returns the list of files actually used, so the caller can say which one it read instead of
     leaving the user to guess which of four it was."""
+    # The working folder's files only while it is the project (#159): with `AUTOSOUND_PROJECT_DIR` naming another
+    # folder, a `.critic-env` in the working folder is another car's -- its model pin, its GEMINI_BIN -- and the
+    # project's own is read in its place.
+    stated = os.environ.get("AUTOSOUND_PROJECT_DIR")
+    here = CWD
+    if stated and os.path.normcase(os.path.realpath(stated)) != os.path.normcase(os.path.realpath(CWD)):
+        here = stated
     env_paths = [
         machine_config_path(),
         os.path.join(PROJECT_MIRROR, ".critic-env"),
-        os.path.join(CWD, ".critic-env"),
-        os.path.join(CWD, "scripts", ".critic-env"),
+        os.path.join(here, ".critic-env"),
+        os.path.join(here, "scripts", ".critic-env"),
     ]
     used = []
     for path in env_paths:
@@ -398,9 +409,10 @@ def context_lines():
 
 def cwd_mirror_line():
     """The line a review's run and `doctor` say when the working folder holds a `rew_analitic/` the door does not read
-    (#159): `AUTOSOUND_PROJECT_DIR` is set, `PROJECT_MIRROR` is not, and the mirror is the project's. None otherwise --
-    with `PROJECT_MIRROR` set (TCC always sets it) the choice is stated, and the working folder's is nobody's guess."""
-    if os.environ.get("PROJECT_MIRROR") or not os.environ.get("AUTOSOUND_PROJECT_DIR"):
+    (#159): the mirror came from `AUTOSOUND_PROJECT_DIR`, no `PROJECT_MIRROR` stated (`_MIRROR_FROM_PROJECT`, as the
+    door started). None otherwise -- with `PROJECT_MIRROR` set (TCC always sets it) the choice is stated, and the
+    working folder's is nobody's guess."""
+    if not _MIRROR_FROM_PROJECT:
         return None
     here = os.path.join(CWD, "rew_analitic")
     if not os.path.isdir(here) or os.path.normcase(os.path.abspath(here)) == os.path.normcase(
@@ -2886,6 +2898,9 @@ def _check_the_mirror_follows_the_project():
         write(os.path.join(theirs, ".critic-env"), "AUTOSOUND_CRITIC_MODEL=another-cars-model\n")
         write(os.path.join(theirs, "depth-advisor-memory.md"), "# ANOTHER CAR's memory\n")
         write(os.path.join(theirs, "data-contract-template.md"), "# another car's mirrored contract copy\n")
+        write(os.path.join(other, ".critic-env"), "AUTOSOUND_CRITIC_MODEL=another-cars-model\nGEMINI_BIN=their-gemini\n")
+        write(os.path.join(other, "scripts", ".critic-env"), "AUTOSOUND_CRITIC_MODEL=another-cars-model\n")
+        write(os.path.join(project, ".critic-env"), "AUTOSOUND_CRITIC_EFFORT=the-cars-own\n")
         probe = ("import importlib.util, json, sys\n"
                  "spec = importlib.util.spec_from_file_location('door', sys.argv[1])\n"
                  "m = importlib.util.module_from_spec(spec)\n"
@@ -2893,9 +2908,12 @@ def _check_the_mirror_follows_the_project():
                  "print(json.dumps({'mirror': m.PROJECT_MIRROR, 'env': m.ENV_FILES_USED, 'context': m.CONTEXT,\n"
                  "                  'memory': m.ADVISOR_MEMORY, 'copies': m.contract_copies_that_differ(),\n"
                  "                  'model': m.os.environ.get('AUTOSOUND_CRITIC_MODEL'),\n"
+                 "                  'bin': m.os.environ.get('GEMINI_BIN'),\n"
+                 "                  'effort': m.os.environ.get('AUTOSOUND_CRITIC_EFFORT'),\n"
                  "                  'line': m.cwd_mirror_line()}))\n")
         env = {k: v for k, v in os.environ.items()
-               if k not in ("PROJECT_MIRROR", "ADVISOR_MEMORY", "AUTOSOUND_DIR", "AUTOSOUND_CRITIC_MODEL")}
+               if k not in ("PROJECT_MIRROR", "ADVISOR_MEMORY", "AUTOSOUND_DIR", "AUTOSOUND_CRITIC_MODEL", "GEMINI_BIN",
+                            "AUTOSOUND_CRITIC_EFFORT")}
         env.update(AUTOSOUND_PROJECT_DIR=project, XDG_CONFIG_HOME=os.path.join(top, "config"),
                    APPDATA=os.path.join(top, "config"), AUTOSOUND_KEYSTORE="off")
         done = subprocess.run([sys.executable, "-c", probe, os.path.abspath(__file__)], cwd=other, env=env,
@@ -2913,8 +2931,11 @@ def _check_the_mirror_follows_the_project():
             for what in ("mirror", "context", "memory"):
                 if seen[what] and os.path.realpath(seen[what]).startswith(real + os.sep):
                     leaked.append(f"{what} {seen[what]}")
-            if leaked or seen["model"] == "another-cars-model":
-                failures.append(f"another car's folder was read: {leaked}, the model {seen['model']!r}")
+            if leaked or seen["model"] == "another-cars-model" or seen["bin"] == "their-gemini":
+                failures.append(f"another car's folder was read: {leaked}, the model {seen['model']!r}, "
+                                f"GEMINI_BIN {seen['bin']!r}")
+            if seen["effort"] != "the-cars-own":
+                failures.append(f"the project's own .critic-env was not read: {seen['env']}")
             if os.path.realpath(seen["mirror"]) != os.path.realpath(os.path.join(project, "rew_analitic")):
                 failures.append(f"the mirror is {seen['mirror']}, not the project's")
             line = seen["line"] or ""
@@ -2927,17 +2948,17 @@ def _check_the_mirror_follows_the_project():
         write(pkg, "Check the proposal.")
         stated = os.environ.pop("PROJECT_MIRROR", None)
         try:
-            with _DoorScene(CWD=other, PROJECT_MIRROR=os.path.join(project, "rew_analitic"),
+            with _DoorScene(CWD=other, PROJECT_MIRROR=os.path.join(project, "rew_analitic"), _MIRROR_FROM_PROJECT=True,
                             CONTEXT=os.path.join(project, "autosound_context.md")) as scene:
                 os.environ["AUTOSOUND_PROJECT_DIR"] = project
                 _code, _out, err = scene.run("ask", pkg, "--via", "clipboard")
                 said = [ln for ln in err.splitlines() if "is not read: AUTOSOUND_PROJECT_DIR is set" in ln]
                 if len(said) != 1:
                     failures.append(f"a review's run said the unused mirror {len(said)} times: {err.strip()[-300:]!r}")
-                os.environ["PROJECT_MIRROR"] = os.path.join(project, "rew_analitic")
+                # A mirror stated at start (TCC always states it): no line -- whatever the environment says since.
+                globals()["_MIRROR_FROM_PROJECT"] = False
                 if cwd_mirror_line() is not None:
                     failures.append(f"with PROJECT_MIRROR set the line is said: {cwd_mirror_line()!r}")
-                os.environ.pop("PROJECT_MIRROR", None)
         finally:
             if stated is not None:
                 os.environ["PROJECT_MIRROR"] = stated

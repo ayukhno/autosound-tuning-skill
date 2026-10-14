@@ -603,12 +603,14 @@ today, every one the code reads:
   `AUTOSOUND_KEYSTORE`, `AUTOSOUND_CRITIC_MODEL`, `AUTOSOUND_CRITIC_PROVIDER`, `AUTOSOUND_CRITIC_VIA`,
   `AUTOSOUND_CRITIC_BIN`, `AUTOSOUND_CRITIC_CLI_ARGS`, `AUTOSOUND_CRITIC_EFFORT`, `AUTOSOUND_ADVISOR_MODEL`,
   `AUTOSOUND_API_TIMEOUT`, `AUTOSOUND_CLI_TIMEOUT`, `AUTOSOUND_REVIEW_RAW_DIR`, `AUTOSOUND_ALLOW_NESTED_CLI`, and two
-  without the prefix: `PROJECT_MIRROR` (`<AUTOSOUND_PROJECT_DIR>/rew_analitic` by default, `rew_analitic/` in the
-  current folder when that is unset too -- the current folder's is never read while the project is stated, and one
-  there is said in one line (#159): the folder of the project's `.critic-env`; with `AUTOSOUND_PROJECT_DIR` unset it
-  also chooses the project, the folder above it when it is `<dir>/rew_analitic`; the context is read from the
-  project root, then from it, then from the root's own `rew_analitic/`, the current folder only as the root) and `ADVISOR_MEMORY` (the reviewer's memory file;
-  `depth-advisor-memory.md` in that folder by default). It also reads the vendors' own: `GEMINI_*`, the
+  without the prefix: `PROJECT_MIRROR` (`<AUTOSOUND_PROJECT_DIR>/rew_analitic` by default, else `rew_analitic/` in
+  the current folder (#159), chosen from the environment the script starts with -- a critic-env file that sets it or
+  the project does not move it: the folder of the project's `.critic-env`; with `AUTOSOUND_PROJECT_DIR` naming
+  another folder, the current folder's `.critic-env`, `scripts/.critic-env` and `rew_analitic/` are not read (the
+  project's `.critic-env` is), and an unused `rew_analitic/` there is said in one line; with `AUTOSOUND_PROJECT_DIR`
+  unset it also chooses the project, the folder above it when it is `<dir>/rew_analitic`; the context is read from
+  the project root, then from it, then from the root's own `rew_analitic/`, the current folder only as the root)
+  and `ADVISOR_MEMORY` (the reviewer's memory file; `depth-advisor-memory.md` in that folder by default). It also reads the vendors' own: `GEMINI_*`, the
   providers' API keys, agy's `AGY_ADC_AUTH` with Google's `GOOGLE_APPLICATION_CREDENTIALS`, `GOOGLE_CLOUD_PROJECT`
   and `GOOGLE_CLOUD_QUOTA_PROJECT`, and the markers of an agent session it runs in (`CLAUDECODE`,
   `CLAUDE_CODE_ENTRYPOINT`, `ANTIGRAVITY`, `AGY_*`, `GEMINI_SESSION`);
