@@ -3,6 +3,7 @@
 skills/autosound-tuning/rew_tool/analysis.py --selftest
 skills/autosound-tuning/rew_tool/atf_eq.py --selftest
 skills/autosound-tuning/rew_tool/bind.py --selftest
+skills/autosound-tuning/rew_tool/bounded_run.py --selftest
 skills/autosound-tuning/rew_tool/capabilities.py --selftest
 skills/autosound-tuning/rew_tool/car_profile.py selftest
 skills/autosound-tuning/rew_tool/compare.py --selftest

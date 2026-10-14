@@ -1231,11 +1231,19 @@ def omp_vendor(selector):
     return provider or "unknown"
 
 
+def _run_child(cmd, timeout, input=None, **kw):
+    """A reviewer CLI's run in `subprocess.run`'s call and answer -- a `CompletedProcess`, or `TimeoutExpired` past the
+    deadline -- through `rew_tool/bounded_run.py` (#167): on Windows `subprocess.run` killed the CLI at its deadline and
+    then waited without a bound on the pipes a grandchild of it (node, `cmd.exe /c`'s program) held. The one seam the
+    checks stand a CLI in at."""
+    return _siblings().load("bounded_run.py").run(cmd, timeout, input=input, **kw)
+
+
 def list_omp_models(binary="omp"):
     """omp's own selectors (`provider/model`) for a text reviewer, from `omp models --json`; [] when it cannot list."""
     try:
-        proc = subprocess.run([binary, "models", "--json"], capture_output=True, text=True, encoding="utf-8",
-                              timeout=30, shell=(sys.platform == "win32"), env=child_env(binary))
+        proc = _run_child([binary, "models", "--json"], capture_output=True, text=True, encoding="utf-8",
+                          timeout=30, shell=(sys.platform == "win32"), env=child_env(binary))
         listed = json.loads(proc.stdout or "{}").get("models", [])
     except Exception:  # noqa: BLE001 -- no list is an answer: the choice then names `omp models`
         return []
@@ -1325,7 +1333,7 @@ def list_cli_models():
     # part of its output lands on stderr when stdout is a pipe.
     for _ in range(2):
         try:
-            proc = subprocess.run(["agy", "models"], capture_output=True, text=True, timeout=20)
+            proc = _run_child(["agy", "models"], capture_output=True, text=True, timeout=20)
         except Exception:  # noqa: BLE001
             return []
         if proc.returncode == 0 and (proc.stdout or proc.stderr or "").strip():
@@ -1649,10 +1657,10 @@ def call_cli(provider, cli_bin, model, prompt, timeout=None):
             try:
                 # На Windows потрібен shell=True, щоб запускати .cmd обгортки типу agy.cmd від npm/scoop
                 stdin = cli_stdin(provider, cli_bin, prompt)
-                proc = subprocess.run(cli_command(provider, cli_bin, model, prompt_path, prompt),
-                                      input=stdin, capture_output=True,
-                                      text=True, encoding="utf-8", timeout=timeout, cwd=workspace,
-                                      shell=(sys.platform == "win32"), env=child_env(cli_bin))
+                proc = _run_child(cli_command(provider, cli_bin, model, prompt_path, prompt),
+                                  input=stdin, capture_output=True,
+                                  text=True, encoding="utf-8", timeout=timeout, cwd=workspace,
+                                  shell=(sys.platform == "win32"), env=child_env(cli_bin))
             except subprocess.TimeoutExpired:
                 keep_raw("cli", stdin or prompt, f"(no answer in {timeout} s)")
                 return None, "timeout", f"no answer in {timeout} s"
@@ -2622,7 +2630,7 @@ def _check_an_omp_review_names_its_vendor():
     the journal's header asks, runs."""
     top = tempfile.mkdtemp(prefix="autosound_ai_omp_vendor_")
     process_mod = _siblings().load("state/process.py")
-    real_run = subprocess.run
+    real_run, real_child = subprocess.run, _run_child
     failures = []
 
     def fake_run(cmd, *args, **kwargs):
@@ -2642,7 +2650,7 @@ def _check_an_omp_review_names_its_vendor():
             fh.write("Check the proposal.")
         with _DoorScene(CONTEXT=context, AUDIT_TRAIL=os.path.join(top, "audit-trail.md")) as scene:
             os.environ["AUTOSOUND_PROJECT_DIR"] = project
-            subprocess.run = fake_run
+            subprocess.run = globals()["_run_child"] = fake_run
             for selector, vendor in (("openrouter/deepseek-r1", "openrouter"),
                                      ("google-antigravity/claude-opus-4", "anthropic"),
                                      ("google-antigravity/gemini-3.1-pro", "google")):
@@ -2668,7 +2676,7 @@ def _check_an_omp_review_names_its_vendor():
                     or sorted(os.listdir(os.path.join(project, "process", "reviews"))) != filed:
                 failures.append(f"ask --record: exit {code}, {err.strip()[-200:]!r}")
     finally:
-        subprocess.run = real_run
+        subprocess.run, globals()["_run_child"] = real_run, real_child
         shutil.rmtree(top, ignore_errors=True)
     assert not failures, "\n  ".join(["the vendor of a review through omp:"] + failures)
 
@@ -2936,6 +2944,25 @@ def _check_the_mirror_follows_the_project():
     finally:
         shutil.rmtree(top, ignore_errors=True)
     assert not failures, "\n  ".join(["the mirror follows the project:"] + failures)
+
+
+def _check_a_cli_runs_bounded():
+    """#167: a reviewer CLI runs through `bounded_run` -- a stand-in that leaves a grandchild holding its stdout past a
+    2 s deadline is `TimeoutExpired` within the deadline plus `REAP_S`, what it said kept. On Windows `subprocess.run`
+    waited there for the grandchild (the proof there is CI's)."""
+    import time
+    stand_in = ("import subprocess, sys, time\n"
+                "subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)'])\n"
+                "print('started', flush=True)\n"
+                "time.sleep(30)\n")
+    reap = _siblings().load("bounded_run.py").REAP_S
+    t0 = time.monotonic()
+    try:
+        _run_child([sys.executable, "-c", stand_in], capture_output=True, text=True, encoding="utf-8", timeout=2)
+        raise AssertionError("a CLI past its deadline answered")
+    except subprocess.TimeoutExpired as exc:
+        took = time.monotonic() - t0
+        assert took < 2 + reap + 3 and "started" in (exc.output or ""), (took, exc.output)
 
 
 def _check_the_audit_trail_is_the_projects():
@@ -3556,7 +3583,7 @@ def _selftest():
                   _check_a_fault_in_the_record_is_not_a_refusal,
                   _check_an_omp_review_names_its_vendor, _check_the_contract_is_the_skills_own,
                   _check_the_context_is_the_roots, _check_another_folders_context_is_never_read,
-                  _check_the_mirror_follows_the_project,
+                  _check_the_mirror_follows_the_project, _check_a_cli_runs_bounded,
                   _check_the_audit_trail_is_the_projects, _check_the_hand_line_stays_last_beside_an_old_trail,
                   _check_the_key_guard_says_when_git_cannot,
                   _check_the_key_guard_refuses_what_git_would_take, _check_the_key_guard_keeps_gits_repair,
@@ -3745,13 +3772,13 @@ def _selftest():
                     fh.write("codex review")
                 return subprocess.CompletedProcess(cmd, 0, "OpenAI Codex v0\ncodex\nnot this\ntokens used\n", "")
             return subprocess.CompletedProcess(cmd, 0, "claude review", "")
-        real_run_60 = subprocess.run
-        subprocess.run = fake_run
+        real_run_60, real_child = subprocess.run, _run_child
+        subprocess.run = globals()["_run_child"] = fake_run
         try:
             assert call_cli("openai", "codex", "m", big)[0] == "codex review"
             assert call_cli("anthropic", "claude", "m", big)[0] == "claude review"
         finally:
-            subprocess.run = real_run_60
+            subprocess.run, globals()["_run_child"] = real_run_60, real_child
         assert len(seen) == 2 and all(inp == big and len(subprocess.list2cmdline(cmd)) < 8191 for cmd, inp in seen), seen
         assert not os.path.exists(seen[0][0][seen[0][0].index("-o") + 1]), "the answer file stayed behind"
         os.environ["AUTOSOUND_CRITIC_CLI_ARGS"] = '--sandbox --log-file "C:/logs/agy run.log"'
@@ -3834,6 +3861,7 @@ def _selftest():
                                                          "AUTOSOUND_CRITIC_BIN", "GEMINI_BIN", "AUTOSOUND_PROJECT_DIR",
                                                          "AUTOSOUND_ALLOW_NESTED_CLI")}
     real_run, real_copy, real_argv = subprocess.run, globals()["copy_to_clipboard"], sys.argv
+    real_child = _run_child
     runs = []
     with tempfile.TemporaryDirectory() as project:
         open(os.path.join(project, "project.json"), "w").close()
@@ -3856,7 +3884,7 @@ def _selftest():
 
         try:
             globals()["copy_to_clipboard"] = lambda text: False
-            subprocess.run = lambda cmd, **kw: (runs.append((cmd, kw.get("input"), kw.get("env") or {})),
+            subprocess.run = globals()["_run_child"] = lambda cmd, **kw: (runs.append((cmd, kw.get("input"), kw.get("env") or {})),
                                                 subprocess.CompletedProcess(cmd, 1, bad_out, ""))[1]
             code, out, err = run_main("ask", pkg)
             filed = sorted(os.listdir(reviews))
@@ -3891,7 +3919,7 @@ def _selftest():
                 assert code == 1 and "AUTOSOUND_CRITIC_VIA" in err and len(runs) == before + 1, (code, err)
             finally:
                 os.environ.pop("AUTOSOUND_CRITIC_VIA", None)
-            subprocess.run = lambda cmd, **kw: subprocess.CompletedProcess(cmd, 0, ok_out, "")
+            subprocess.run = globals()["_run_child"] = lambda cmd, **kw: subprocess.CompletedProcess(cmd, 0, ok_out, "")
             raw = os.path.join(project, "raw")
             os.environ["AUTOSOUND_REVIEW_RAW_DIR"] = raw
             code, out, err = run_main("ask", pkg)
@@ -3903,7 +3931,7 @@ def _selftest():
             # second cut fails as before, saying so. A refusal is never retried (read_file above: one run each time).
             cut_out = json.dumps({"event": "result", "result": {"status": "ERROR", "response": "", "error": cut}})
             replies = [cut_out, ok_out]
-            subprocess.run = lambda cmd, **kw: (runs.append((cmd, kw.get("input"), kw.get("env") or {})),
+            subprocess.run = globals()["_run_child"] = lambda cmd, **kw: (runs.append((cmd, kw.get("input"), kw.get("env") or {})),
                                                 subprocess.CompletedProcess(cmd, 0, replies.pop(0), ""))[1]
             before = len(runs)
             code, out, err = run_main("ask", pkg)
@@ -3912,7 +3940,7 @@ def _selftest():
             before = len(runs)
             code, out, err = run_main("ask", pkg)
             assert code == 4 and len(runs) == before + 2 and "двічі" in err, (code, len(runs) - before, err)
-            subprocess.run = lambda cmd, **kw: subprocess.CompletedProcess(cmd, 0, ok_out, "")
+            subprocess.run = globals()["_run_child"] = lambda cmd, **kw: subprocess.CompletedProcess(cmd, 0, ok_out, "")
             # The transport follows the model (hub #187): an agy slug with a key present goes to
             # the CLI, not to the API that 404s on it.
             os.environ["GEMINI_API_KEY"] = "AQ." + "x" * 50
@@ -3944,14 +3972,14 @@ def _selftest():
             globals()["list_cli_models"] = lambda: ["gemini-3.1-pro-high", "gemini-3.1-pro-low", "gemini-3.8-flash-high"]
             globals()["call_gemini_api"] = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("The read operation timed out"))
             calls = []
-            subprocess.run = lambda cmd, **kw: (calls.append(cmd), subprocess.CompletedProcess(cmd, 0, ok_out, ""))[1]
+            subprocess.run = globals()["_run_child"] = lambda cmd, **kw: (calls.append(cmd), subprocess.CompletedProcess(cmd, 0, ok_out, ""))[1]
             code, out, err = run_main("ask", pkg)
             assert code == 4 and not calls and "gemini-3.1-pro-high, gemini-3.1-pro-low" in err, (code, calls, err)
             assert "gemini-3.8-flash-high" not in err and "чекаю до" in err.split("Підключення до API")[1], err
             globals()["list_cli_models"] = lambda: []      # agy cannot list: nothing to check against, it runs
             code, out, err = run_main("ask", pkg)
             assert code == 0 and calls, (code, err)
-            subprocess.run = lambda cmd, **kw: subprocess.CompletedProcess(cmd, 0, ok_out, "")
+            subprocess.run = globals()["_run_child"] = lambda cmd, **kw: subprocess.CompletedProcess(cmd, 0, ok_out, "")
             globals()["list_cli_models"] = real_list
             os.environ["AUTOSOUND_CRITIC_MODEL"] = "gemini-3.8-flash-low"
             # hub #216: an OMP pick goes through omp with its full selector and the prompt on stdin, and through
@@ -3967,7 +3995,7 @@ def _selftest():
                         {"selector": "anthropic/claude-opus-5"}, {"selector": "google-antigravity/gemini-3.1-flash-image"}]}), "")
                 omp_runs.append((cmd, kw.get("input")))
                 return subprocess.CompletedProcess(cmd, *omp_reply[0])
-            subprocess.run = fake_omp
+            subprocess.run = globals()["_run_child"] = fake_omp
             code, out, err = run_main("ask", pkg)
             assert code == 0 and "omp-pong" in out and "Working" not in out and "REVIEW_ROUTE: omp" in err, (code, err)
             assert "— [ask: google-antigravity/gemini-3.1-pro]" in out, out
@@ -4011,14 +4039,14 @@ def _selftest():
             code, out, err = run_main("ask", pkg, "--via", "omp")
             assert code == 0 and "REVIEW_ROUTE: omp" in err, (code, err)
             assert os.path.basename(omp_runs[-1][0][0]).startswith("omp") and omp_runs[-1][0][1] == "-p", omp_runs[-1]
-            subprocess.run = lambda cmd, **kw: subprocess.CompletedProcess(cmd, 0, ok_out, "")
+            subprocess.run = globals()["_run_child"] = lambda cmd, **kw: subprocess.CompletedProcess(cmd, 0, ok_out, "")
             os.environ["AUTOSOUND_CRITIC_MODEL"] = "gemini-3.8-flash-low"
             globals()["call_gemini_api"] = real_api
             del os.environ["GEMINI_API_KEY"]
             # A review filed in a second that already holds a package of this role is `-ask-<N>.md` (#135).
             assert [n for n in os.listdir(reviews) if re.search(r"-ask(-\d+)?\.md$", n)], os.listdir(reviews)
         finally:
-            subprocess.run, sys.argv = real_run, real_argv
+            subprocess.run, sys.argv, globals()["_run_child"] = real_run, real_argv, real_child
             globals()["copy_to_clipboard"] = real_copy
             for k in ("AUTOSOUND_PROJECT_DIR", "AUTOSOUND_CRITIC_MODEL", "AUTOSOUND_CRITIC_BIN", "CLAUDECODE",
                       "GEMINI_API_KEY", "AUTOSOUND_REVIEW_RAW_DIR"):
@@ -4037,7 +4065,7 @@ def _selftest():
     kept_maps = [dict(d) for d in (ENV_ORIGIN, ENV_LINE, ENV_PINS)]
     kept_globals = {n: globals()[n] for n in ("PROJECT_MIRROR", "CWD", "call_gemini_api", "call_openai_api",
                                               "call_anthropic_api", "list_gemini_models", "copy_to_clipboard")}
-    run_was, which_was, argv_was = subprocess.run, shutil.which, sys.argv
+    run_was, which_was, argv_was, child_was = subprocess.run, shutil.which, sys.argv, _run_child
     try:
         with tempfile.TemporaryDirectory() as project:
             os.environ["XDG_CONFIG_HOME"] = os.path.join(project, "cfg")
@@ -4102,7 +4130,7 @@ def _selftest():
             assert "`gemini-3.1-pro-preview` — у списку ключа" in out and "gpt-5.6-terra" in err, (out, err)
             # The omp route reads the same model.
             omp_cmds = []
-            subprocess.run = lambda cmd, **kw: (omp_cmds.append(cmd), subprocess.CompletedProcess(cmd, 0, "omp-pong\n", ""))[1]
+            subprocess.run = globals()["_run_child"] = lambda cmd, **kw: (omp_cmds.append(cmd), subprocess.CompletedProcess(cmd, 0, "omp-pong\n", ""))[1]
             code, out, err = run_main("ask", pkg, "--via", "omp", "--model", "google-antigravity/gemini-3.1-pro")
             assert code == 0 and "omp-pong" in out and omp_cmds, (code, err)
             assert omp_cmds[-1][omp_cmds[-1].index("--model") + 1] == "google-antigravity/gemini-3.1-pro", omp_cmds[-1]
@@ -4111,6 +4139,7 @@ def _selftest():
             assert ">>   --model <модель>   (цей запуск" in ModelChoiceNeeded("404", ["gemini-pro-latest"], "--model").render()
     finally:
         subprocess.run, shutil.which, sys.argv = run_was, which_was, argv_was
+        globals()["_run_child"] = child_was
         globals().update(kept_globals)
         RUN_PICK.update(model=None, provider=None)
         for d, saved in zip((ENV_ORIGIN, ENV_LINE, ENV_PINS), kept_maps):

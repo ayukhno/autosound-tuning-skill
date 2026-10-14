@@ -105,11 +105,37 @@ def _gh_timeout(argv):
     return GH_UPLOAD_TIMEOUT_S if upload else GH_TIMEOUT_S
 
 
+_BOUNDED = []
+
+
+def _bounded_run():
+    """`rew_tool/bounded_run.py` (#167), loaded by its path once -- or None where this copy has none beside it: the
+    installers' keep-local step (install.sh `keep_local`, install.ps1 `Save-LocalChanges`) copies upkeep.py, this file
+    and console.py alone, and there gh runs under `subprocess.run` as it did before #167."""
+    if not _BOUNDED:
+        import importlib.util
+        import os
+        path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "bounded_run.py")
+        module = None
+        if os.path.isfile(path):
+            spec = importlib.util.spec_from_file_location("_autosound_side_effect_bounded_run", path)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+        _BOUNDED.append(module)
+    return _BOUNDED[0]
+
+
 def _subprocess_runner(argv):
     """`(returncode, stdout, stderr)` of `argv`. A child past its deadline is `(124, "", "no answer in N s")`, as
     `upkeep.run` answers it: a return code the verifier refuses, never an exception (#146). The name and the shape
-    `runner(argv)` are contract 1's -- the default of `upload_issue_asset(..., runner=_subprocess_runner)`."""
+    `runner(argv)` are contract 1's -- the default of `upload_issue_asset(..., runner=_subprocess_runner)`. Run through
+    `bounded_run` (#167): on Windows `subprocess.run` killed gh at the deadline and then waited without a bound on the
+    pipes gh's own child held."""
     timeout = _gh_timeout(argv)
+    bounded = _bounded_run()
+    if bounded is not None:
+        rc, out, err, timed_out = bounded.run_bounded(argv, timeout)
+        return (124, "", f"no answer in {timeout} s") if timed_out else (rc, out, err)
     try:
         proc = subprocess.run(argv, capture_output=True, text=True, encoding="utf-8", errors="replace",
                               timeout=timeout)
@@ -1016,7 +1042,8 @@ def _selftest():
     assert upload_issue_asset(shot, "shot.png", consented=True, dry_run=True)["dry_run"]
 
     failures = []
-    for check in (_check_gh_answers_within_its_deadline, _check_method_version_reads_its_own_repository):
+    for check in (_check_gh_answers_within_its_deadline, _check_method_version_reads_its_own_repository,
+                  _check_the_runner_with_and_without_bounded_run):
         try:
             check()
         except AssertionError as exc:
@@ -1040,6 +1067,33 @@ def _selftest():
           "60 s, an upload in 300 s, or the runner says it did not, as a return code (#146); the method's version "
           "is its own repository's, never one around a copy (T-42).")
     return 0
+
+
+def _check_the_runner_with_and_without_bounded_run():
+    """#167: the default runner goes through `rew_tool/bounded_run.py` -- and a copy with none beside it (the
+    installers' keep-local step copies upkeep.py, this file and console.py alone) still runs a child and answers its
+    deadline as #146 says, through `subprocess.run`. This file, copied alone and run by a fresh interpreter."""
+    import os
+    import shutil
+    import sys
+    import tempfile
+    assert _bounded_run() is not None, "the runner does not find rew_tool/bounded_run.py beside it"
+    top = tempfile.mkdtemp(prefix="side_effect_alone_")
+    try:
+        alone = os.path.join(top, "rew_tool", "gates", "side_effect.py")
+        os.makedirs(os.path.dirname(alone))
+        shutil.copyfile(os.path.abspath(__file__), alone)
+        probe = ("import importlib.util, sys\n"
+                 "spec = importlib.util.spec_from_file_location('se', sys.argv[1])\n"
+                 "m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)\n"
+                 "m.GH_TIMEOUT_S = 1\n"
+                 "print(m._bounded_run() is None, m._subprocess_runner([sys.executable, '-c', 'print(7)']),\n"
+                 "      m._subprocess_runner([sys.executable, '-c', 'import time; time.sleep(8)']))\n")
+        done = subprocess.run([sys.executable, "-c", probe, alone], capture_output=True, text=True, timeout=60)
+        want = "True (0, '7\\n', '') (124, '', 'no answer in 1 s')"
+        assert done.stdout.strip() == want, (done.stdout, done.stderr[-300:])
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
 
 
 def _check_gh_answers_within_its_deadline():

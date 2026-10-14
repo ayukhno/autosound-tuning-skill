@@ -73,9 +73,34 @@ class CannotCheck(Refused):
     exit_code = 4
 
 
+_BOUNDED = []
+
+
+def _bounded_run():
+    """`rew_tool/bounded_run.py` (#167), loaded by its path once -- or None where this copy has none: the installers'
+    keep-local step (install.sh `keep_local`, install.ps1 `Save-LocalChanges`) copies this file, gates/side_effect.py
+    and console.py alone, and there a child runs under `subprocess.run` as it did before #167."""
+    if not _BOUNDED:
+        import importlib.util
+        path = os.path.join(SKILL_DIR, "rew_tool", "bounded_run.py")
+        module = None
+        if os.path.isfile(path):
+            spec = importlib.util.spec_from_file_location("_autosound_upkeep_bounded_run", path)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+        _BOUNDED.append(module)
+    return _BOUNDED[0]
+
+
 def run(cmd, cwd=None, env=None, timeout=120, stdin=subprocess.DEVNULL):
-    """`(returncode, stdout, stderr)`; a missing program or a timeout is a returncode, never an exception."""
+    """`(returncode, stdout, stderr)`; a missing program or a timeout is a returncode, never an exception. Through
+    `bounded_run` (#167): on Windows `subprocess.run` killed a child at its deadline and then waited without a bound on
+    the pipes a grandchild of it held -- gh's, git's helpers."""
+    bounded = _bounded_run()
     try:
+        if bounded is not None:
+            rc, out, err, timed_out = bounded.run_bounded(cmd, timeout, cwd=cwd, env=env, stdin=stdin)
+            return (124, "", f"no answer in {timeout} s") if timed_out else (rc, out, err)
         p = subprocess.run(cmd, cwd=cwd, env=env, timeout=timeout, capture_output=True, text=True,
                            encoding="utf-8", errors="replace", stdin=stdin)
         return p.returncode, p.stdout, p.stderr

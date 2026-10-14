@@ -47,9 +47,9 @@ def _gh(*args):
     # AUTOSOUND_NO_GH=1: a self-test (or a machine that wants none of it) never reaches GitHub from here.
     if not gh or os.environ.get("AUTOSOUND_NO_GH") == "1":
         return None
+    import bounded_run                       # #167: a deadline that ends the call on Windows too
     try:
-        return subprocess.run([gh, *args], capture_output=True, text=True, encoding="utf-8", errors="replace",
-                              timeout=30)
+        return bounded_run.run([gh, *args], 30, encoding="utf-8", errors="replace")
     except (OSError, subprocess.TimeoutExpired):
         return None
 

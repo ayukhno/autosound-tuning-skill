@@ -39,8 +39,9 @@ def _gh(*args):
     """`(returncode, stdout, what gh said on stderr)` of `gh <args>`. A gh that does not answer in GH_TIMEOUT_S, or
     cannot be started, is `(None, "", why)` (#146)."""
     try:
-        res = subprocess.run(["gh", *args], capture_output=True, text=True, encoding="utf-8", errors="replace",
-                             timeout=GH_TIMEOUT_S)
+        # #167: through bounded_run -- on Windows `subprocess.run` waited without a bound on gh's child's pipes.
+        res = autosound_ai._siblings().load("bounded_run.py").run(["gh", *args], GH_TIMEOUT_S, encoding="utf-8",
+                                                                  errors="replace")
     except subprocess.TimeoutExpired:
         return None, "", f"gh {' '.join(args[:2])}: no answer in {GH_TIMEOUT_S} s"
     except OSError as exc:
