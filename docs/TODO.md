@@ -1644,7 +1644,7 @@ The pool at the start, recorded, not diagnosed:
   `naming-and-structure.md` §1a collides with the intake's Phase 5 word (an Advisor round); the FAQ's sentence about
   correcting dips (a method question for the Arbiter);
 - S-104's leftover: `_check_two_writers_lose_nothing` starved once on Windows CI;
-- S-105: before anything is built, check the sync with TCC still holds after W-10.
+- S-105: the sync with TCC on the audit's minimum after W-10 — asked as SKL-076 (hub #288); its answer before anything is built.
 
 Not taken unless the Arbiter says so: hub #113 (PAS-005) and skill #169 deferred on his word; skill #26 with no target
 version; S-017, S-021, S-055, S-059 wait for a run, S-001 for the first `frozen` run.
@@ -1655,7 +1655,7 @@ before his `ok` on that task. Resume: `hub/bin/role skill --resume ee680a15-27d7
 
 ## S-105 · Before the audit's minimum wave: check the sync with TCC still holds
 
-**Status**: чекає 2026-10-14 · not now — at the start of the wave after W-10, before anything is built (the Arbiter, 2026-10-14: «ми це вже робили, коли мінімізували аудит — запиши перевірити перед тим як робити (робити не зараз)»)
+**Status**: waiting 2026-10-15 · asked as SKL-076 (hub #288): the skill's cut, the minimum, what W-10 changed at the seam, ideas for TCC · was: чекає 2026-10-14 · not now — at the start of the wave after W-10, before anything is built (the Arbiter, 2026-10-14: «ми це вже робили, коли мінімізували аудит — запиши перевірити перед тим як робити (робити не зараз)»)
 
 The audit was minimised on 2026-10-13 and moved one wave later (`docs/AUDIT-2026-10-CLOSE.md`): G8 phase 1 and G7,
 both TCC's. The sync with TCC was done then — TCC's answer on hub #273 (SKL-071) went to the hub as TCC-056 (hub #276),
