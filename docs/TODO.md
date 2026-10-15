@@ -1627,6 +1627,32 @@ S-062, S-064 (with TCC's half, hub #217 SKL-056), S-065, S-066. When he says to 
 four assessment lines, and nothing is built before his `ok` on that task. Resume: `hub/bin/role skill --resume
 6b9c70d1-4094-4337-a1fd-23976307dfc2`.
 
+## S-106 · W-11 is collecting: findings go to this pool
+
+**Status**: open 2026-10-15 · collecting, on the Arbiter's «збираємо W-11» (2026-10-15, after v3.1.4); the milestone `W-11 · v3.1.5` opens on his «збір закінчено»; nothing built
+
+The number is read: no milestone is open in skill (W-10 closed with v3.1.4), none in TCC (`W-10 · v1.1.4` closed), so
+`max(W-N) + 1` = 11. The version is a patch, `v3.1.5`: the catalog stays on v3.1.1 until the audit's waves are done.
+
+The pool at the start, recorded, not diagnosed:
+- **hub #285 (TCC-060)**: rounds on one level base — the skill's halves of tcc #198 and #199, W-11's by the Arbiter's
+  word (S-104): the shift by `splOffsetdB`, the control capture, `capture-check` naming the change;
+- **hub #280 (TCC-058)**: the installers hold a fresh TCC install to the tag's `constraints.txt`;
+- **hub #281 (TCC-059)**: `failure_reason` misses Codex's `ERROR:` line, so a Codex reviewer's refusal reaches TCC as
+  its start banner;
+- S-103's W-11 line: README/FAQ "two visits make the tune" with no condition; the de/pl word for row 2 of
+  `naming-and-structure.md` §1a collides with the intake's Phase 5 word (an Advisor round); the FAQ's sentence about
+  correcting dips (a method question for the Arbiter);
+- S-104's leftover: `_check_two_writers_lose_nothing` starved once on Windows CI;
+- S-105: before anything is built, check the sync with TCC still holds after W-10.
+
+Not taken unless the Arbiter says so: hub #113 (PAS-005) and skill #169 deferred on his word; skill #26 with no target
+version; S-017, S-021, S-055, S-059 wait for a run, S-001 for the first `frozen` run.
+
+Each finding that arrives becomes a pool item here (S-107 onward), recorded, not diagnosed. On the Arbiter's «збір
+закінчено» the milestone opens and each item becomes an issue on it with the four assessment lines; nothing is built
+before his `ok` on that task. Resume: `hub/bin/role skill --resume ee680a15-27d7-42d6-8272-06aa06631483`.
+
 ## S-105 · Before the audit's minimum wave: check the sync with TCC still holds
 
 **Status**: чекає 2026-10-14 · not now — at the start of the wave after W-10, before anything is built (the Arbiter, 2026-10-14: «ми це вже робили, коли мінімізували аудит — запиши перевірити перед тим як робити (робити не зараз)»)
