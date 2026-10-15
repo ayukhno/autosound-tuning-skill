@@ -1,6 +1,6 @@
 # W-11 candidates — the collection's pool, ranked
 
-**Status:** reviewed 2026-10-15 · the Arbiter: «1-11 ок. 12 розберемо до виконання W-11» — `ok` on 1–11 (it goes on
+**Status:** reviewed 2026-10-15 · `ok` on 13 («289 - ок»), 14 and 15 taken on his word (below) · was: the Arbiter: «1-11 ок. 12 розберемо до виконання W-11» — `ok` on 1–11 (it goes on
 their issues when the milestone opens), item 12 is discussed before W-11 is built, item 13 arrived after and has no
 `ok` yet; the boost: ruled, sent to research (below) · was: a ranking for the Arbiter's review, 2026-10-15, on his word «сформуй список кандидатів на W-11». Collection
 is still open (S-106): a finding that arrives joins this list; the milestone `W-11 · v3.1.5` opens on his «збір
@@ -32,10 +32,13 @@ S ~1–2 h · M ~half a day · L a day or more.
 | 10 | `project.py`'s selftest `_check_two_writers_lose_nothing` starved once on Windows CI (a writer waited 60 s, got `Busy`); a red CI by chance, not a user's case | S-104 (CI run 38558929626) | infra | ordinary (test only) | S | opus · medium | CI |
 | 11 | `bounded_run` starts the reviewer CLIs with stdin closed (said in v3.1.4's Upgrading) — check that no reviewer needs it | S-104 | check | ordinary | XS | sonnet · medium (trial) | Reviewer |
 | 13 | A slow git writes a false `written_by` header: each method process asks git for its sha within 3 s, a miss gives `""`, and `real → "" → real` writes two headers that say the writer changed (`Process._stamp`, `provenance`); seen on TCC's Windows CI, can happen on a slow Windows machine | hub #289 TCC-061 | defect | high (the journal's provenance) | S | opus · high | Journal |
+| 14 | «Two visits make the tune» (README, FAQ; uk/de/pl through the Advisor) is said with no condition. The Arbiter, 2026-10-15: «беремо, з корекцією, що це більш маркетингова фраза і має на увазі отримання першого результату, а далі іде циклічне покращення до перемоги на чемпіонаті» — two visits give the first result; after it, improvement goes round by round, as far as you want to take it | S-103 (the audit's J7 P1/P10), taken back on his word | docs | ordinary | S | opus · medium; the Advisor for uk/de/pl | Method text |
+| 15 | What a change does to the sound: the method describes a diff of two versions — the net change of the whole chain, not band by band; voice, instruments, overall; the tracks to listen on; time, polarity and crossover changes too. Static from the target-curves tool's data (`FREQ_ENTRIES`, `BAND_INSTRUMENTS`, `INSTR_INFO`, moved to one data file both read), then AI on top: the session's AI in the main mode, the Advisor in the control mode. One engine for PAS-014's «Описати зміни»/«Обговорити з ШІ» in TCC (an interface TCC uses; SKL-078, hub #292) and for the method's own cycles (S-021: what a variant buys and spends). The Arbiter, 2026-10-15: «тут нам не треба чекати … варто це проектувати і робити, а для ТСС дати інтерфейси» | hub #264 PAS-014 (to:tcc); S-021; DESIGN-2026-09-17-phase1-variants item 11 | feature | high (a new seam interface) | L | `feature-dev:feature-dev` (explorer, architects) → opus · high | Describe changes |
 | 12 | In a folder that names nothing, the description fires on 10 of 26 car-audio queries (resume, de/pl, EMMA, TCC bug reports): the description's recall | S-104 (#170's neutral run, 2026-10-14) | docs (description) + eval | ordinary | M | opus · high | Agent start |
 
 **Groups** (one theme, one review per group, `hub:seam`): **Rounds and levels** 1–2 — `Risk: high`, the full loop and a
-Fable seat; **Installers** 4–6 — `Risk: high`; **Captures** 7–9; **Reviewer** 3, 11; **CI** 10; **Agent start** 12; **Journal** 13.
+Fable seat; **Installers** 4–6 — `Risk: high`; **Captures** 7–9; **Reviewer** 3, 11; **CI** 10; **Agent start** 12; **Journal** 13; **Method text** 14; **Describe changes** 15 — a new feature: questions, a code map and 2–3
+architects first (`hub:seam`), its interface agreed with TCC (hub #292) before the plan.
 
 **Advice for the cut:** take 1–11. Item 1 is what the car hits now (a calibration reset read as a +16.65 dB change)
 and what TCC's #198 half waits on; 3–6 are small and found in real use; 7–11 are W-10's own leftovers at the seam.
@@ -52,8 +55,7 @@ on a neutral folder), the description change after; it can wait a wave.
 
 ## Closed as audit — back only on his word
 
-The audit's J7 P1 line (S-103, W-10's «Left out as audit»): README and FAQ say «two visits make the tune» with no
-condition, while the method owes a further trip in some cases; the de/pl word for row 2 of
+The audit's J7 P1 line (S-103, W-10's «Left out as audit»), less «two visits», taken as item 14: the de/pl word for row 2 of
 `naming-and-structure.md` §1a («Variante»/«wariant») collides with the intake's Phase 5 word (an Advisor round); the
 FAQ's dips sentence (`FAQ.md:133`) — a method question, the same as the boost ruling. All text, XS–S each.
 
