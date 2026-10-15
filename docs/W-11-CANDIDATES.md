@@ -40,6 +40,18 @@ S ~1–2 h · M ~half a day · L a day or more.
 Fable seat; **Installers** 4–6 — `Risk: high`; **Captures** 7–9; **Reviewer** 3, 11; **CI** 10; **Agent start** 12; **Journal** 13; **Method text** 14; **Describe changes** 15 — a new feature: questions, a code map and 2–3
 architects first (`hub:seam`), its interface agreed with TCC (hub #292) before the plan.
 
+**Item 15's interface, TCC's answer on hub #292** (2026-10-15, tcc `8eedeed`; the channel is the Arbiter's call):
+- in: two versions as `<preset>/v_NNN` (a file allowed in place of «now»), `--first <channel>`, `--lang uk|en|de|pl`;
+- scope: the whole diff, every channel, the open one first; the chain's **net** change, not each band alone;
+- out, per change: the channel, old → new, the band and its direction, voice, instruments, overall, the tracks to
+  listen on, the risks; what the static table cannot say (time, polarity, crossover, a band with no entry) in a
+  `not_covered` list, a plain line each; one `overall` paragraph for the whole diff;
+- the static result on its own: offline, no AI, well under a second — what «Описати зміни» shows at once;
+- «Обговорити з ШІ»: the method runs the Advisor with the diff, the static description and the project's context
+  (preset, target curve, the last ear verdicts); the JSON carries the prompt, the context and the answer, which TCC
+  hands on to a chat; an Advisor that cannot answer is a named refusal in the exit table, the static result beside it;
+- TCC builds no mapping of its own; its half (buttons, panel, the handoff to the chat) is on its W-11 with hub #264.
+
 **Advice for the cut:** take 1–11. Item 1 is what the car hits now (a calibration reset read as a +16.65 dB change)
 and what TCC's #198 half waits on; 3–6 are small and found in real use; 7–11 are W-10's own leftovers at the seam.
 Rough machine time: Rounds and levels ~1 day, the rest ~half a day together. Item 12 is a measurement first (the eval
