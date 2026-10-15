@@ -1861,9 +1861,11 @@ class Process:
             record = _completed(event, record, explicit_phase=phase is not None)
         state["reviewer"] = record
         self._write(state)
+        # The record's own time, not a second `_now()` (Windows CI 38715673889): a second boundary between the two
+        # left the state's `reviewer.at` and the journal's `at` apart, and `completes` named a time no caller saw.
         self._append(EV_CRITIC_CALLED, vendor=record["vendor"], model=record["model"], step=record["step"],
                      outcome=record["outcome"], review=record["review"], mode=record["mode"], phase=record["phase"],
-                     completes=completes)
+                     completes=completes, at=record["at"])
         return dict(record, completes=completes) if completes else state["reviewer"]
 
     # -- capture rounds (SCR-034) --
@@ -2919,7 +2921,7 @@ class Process:
             entry["as_typed"] = typed
         round_["skipped"][title] = entry
         self._write(state)
-        self._append(EV_CAPTURE_SKIPPED, capture=round_["id"], title=title, reason=reason,
+        self._append(EV_CAPTURE_SKIPPED, capture=round_["id"], title=title, reason=reason, at=entry["at"],
                      planned=planned, **({"as_typed": typed} if typed != title else {}))
         return round_
 
@@ -6583,6 +6585,41 @@ def _check_one_review_round_one_record():
     assert not failures, "\n  ".join(["one review, one record:"] + failures)
 
 
+def _check_a_reviewer_record_has_one_time():
+    """The state's `reviewer.at` and its `critic_called` line's `at` are one time (Windows CI 38715673889): with a clock
+    that ticks on every read, the journal line carries the record's own `at`, and `completes` of a review-less request
+    is the `at` its caller was given."""
+    import shutil
+    import tempfile
+    import itertools
+    from datetime import timedelta
+    real, ticks = _now, itertools.count()
+    base = datetime(2026, 10, 15, 9, 0, 0, tzinfo=timezone.utc)
+    top = tempfile.mkdtemp(prefix="autosound_process_reviewer_time_")
+    failures = []
+    try:
+        globals()["_now"] = lambda: (base + timedelta(seconds=next(ticks))).isoformat(timespec="seconds")
+        d = os.path.join(top, "process")
+        p = Process(d)
+        p.enter_phase("-1")
+        tcc = p.record_reviewer("unknown", "?", step="-1.1", mode="clipboard")
+        first = p.events(kinds=(EV_CRITIC_CALLED,))[-1]
+        if first.get("at") != tcc["at"] or p.load()["reviewer"]["at"] != tcc["at"]:
+            failures.append(f"the request: returned {tcc['at']}, journal {first.get('at')}, "
+                            f"state {p.load()['reviewer']['at']}")
+        done = p.record_reviewer("google", "g-3", review="process/reviews/2026-10-15T09-00-00-critic.md",
+                                 mode="clipboard")
+        last = p.events(kinds=(EV_CRITIC_CALLED,))[-1]
+        if done.get("completes") != tcc["at"]:
+            failures.append(f"completes {done.get('completes')!r}, the request's at {tcc['at']!r}")
+        if last.get("at") != p.load()["reviewer"]["at"]:
+            failures.append(f"the answer: journal {last.get('at')}, state {p.load()['reviewer']['at']}")
+    finally:
+        globals()["_now"] = real
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["a reviewer record, one time:"] + failures)
+
+
 def _check_flags_tcc_sends():
     """Every flag TCC sends is one its verb takes (#134, N19), and the two TCC sends as `--flag=value` (`reviewer`'s
     `--review=` and `--mode=`, `decision`'s `--invalidates=`) are read as the flag and its value."""
@@ -9001,6 +9038,7 @@ def _selftest():
                   _check_plan_over_final_says_its_label,
                   _check_import_of_a_whole_series, _check_catch_all_reads_the_type, _check_unknown_flags,
                   _check_flags_tcc_sends, _check_one_review_round_one_record,
+                  _check_a_reviewer_record_has_one_time,
                   _check_flag_values_as_they_stand, _check_autocorrected_dashes, _check_too_few_arguments,
                   _check_value_flag_last, _check_help_writes_nothing, _check_usage_before_the_read,
                   _check_handoff_says_an_unreadable_changelog, _check_handoff_reads_the_changelog_at_the_root,
