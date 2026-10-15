@@ -1,6 +1,8 @@
 # Closing the October audit — the minimum (skill → TCC → hub → the Arbiter)
 
-**Status:** proposal, 2026-10-13, on the Arbiter's word: «так, мінімум» — and «чи можна це відкласти на хвилю (зробити
+**Status:** decided 2026-10-14 · TCC agreed (hub #276, TCC-056 §6) and the Arbiter took the minimum as agreed (#276's
+receipt); the minimum is TCC's, in its wave after W-10; the skill has no audit item left, only S-105's check before
+W-11 builds · was: proposal, 2026-10-13, on the Arbiter's word: «так, мінімум» — and «чи можна це відкласти на хвилю (зробити
 через одну), а наступною закрити ті проблеми, що вже зібрались з використання в машині». TCC agrees or corrects it and
 sends its answer to the hub (hub #273, SKL-071); the Arbiter decides once for both products. Nothing here is built
 before that.
