@@ -1629,7 +1629,7 @@ four assessment lines, and nothing is built before his `ok` on that task. Resume
 
 ## S-106 · W-11 is collecting: findings go to this pool
 
-**Status**: open 2026-10-15 · collecting, on the Arbiter's «збираємо W-11» (2026-10-15, after v3.1.4); the milestone `W-11 · v3.1.5` opens on his «збір закінчено»; nothing built
+**Status**: open 2026-10-15 · collecting; the ranked list for the review is `docs/W-11-CANDIDATES.md` (the Arbiter: «сформуй список кандидатів на W-11») · was: open 2026-10-15 · collecting, on the Arbiter's «збираємо W-11» (2026-10-15, after v3.1.4); the milestone `W-11 · v3.1.5` opens on his «збір закінчено»; nothing built
 
 The number is read: no milestone is open in skill (W-10 closed with v3.1.4), none in TCC (`W-10 · v1.1.4` closed), so
 `max(W-N) + 1` = 11. The version is a patch, `v3.1.5`: the catalog stays on v3.1.1 until the audit's waves are done.
@@ -1640,9 +1640,8 @@ The pool at the start, recorded, not diagnosed:
 - **hub #280 (TCC-058)**: the installers hold a fresh TCC install to the tag's `constraints.txt`;
 - **hub #281 (TCC-059)**: `failure_reason` misses Codex's `ERROR:` line, so a Codex reviewer's refusal reaches TCC as
   its start banner;
-- S-103's W-11 line: README/FAQ "two visits make the tune" with no condition; the de/pl word for row 2 of
-  `naming-and-structure.md` §1a collides with the intake's Phase 5 word (an Advisor round); the FAQ's sentence about
-  correcting dips (a method question for the Arbiter);
+- S-103's W-11 line (README/FAQ "two visits", the de/pl word, the FAQ's dips sentence) is the audit's J7 P1, closed
+  as audit: back only on the Arbiter's word;
 - S-104's leftover: `_check_two_writers_lose_nothing` starved once on Windows CI;
 - S-105 done: TCC answered SKL-076 (hub #288) — the audit's minimum is TCC's alone (G8 phase 1, G7's remainder), nothing for the skill's W-11.
 
@@ -1715,7 +1714,7 @@ with no target version (the Arbiter, 2026-10-14: back on his word). The audit is
 
 ## S-103 · W-9's reviews: the pool for the next collection
 
-**Status**: open 2026-10-14 · on W-10's milestone (S-104): each item below is the issue `docs/W-10-CANDIDATES.md` names for it; it closes with v3.1.4 · was: open 2026-10-13 · recorded, not diagnosed; each waits for its wave (a finding ships earlier only on the Arbiter's «терміново»)
+**Status**: done 2026-10-15 · closed with v3.1.4 (S-104); its W-11 line is closed as audit (S-106) · was: open 2026-10-14 · on W-10's milestone (S-104): each item below is the issue `docs/W-10-CANDIDATES.md` names for it; it closes with v3.1.4 · was: open 2026-10-13 · recorded, not diagnosed; each waits for its wave (a finding ships earlier only on the Arbiter's «терміново»)
 
 From W-9's task, group and final reviews (the ledger `.superpowers/sdd/PLAN-W-9/progress.md` holds the evidence until the wave closes):
 - **hub #274 (TCC-055): three selftests fail on Windows at v3.1.3** (the Arbiter, 2026-10-13: the next wave; the cross-product gate is hub #275, SKL-072) — `naming.py` `_check_dangling_glossary_link` and `contract.py` `_check_dangling_glossary_link_refused` (`os.readlink` gives the target with `\\?\` in front), `dsp_profile.py` `_check_no_profile_makes_nothing` (the refusal quotes `FileNotFoundError`'s repr, backslashes doubled). The behaviour is right; what a person on Windows reads is not. The `installers-windows` CI job runs only some selftests — TCC's asks: the person's text on Windows, all of `run-selftests.sh` in the Windows job, the tag that carries it (TCC marks the three `xfail` strict meanwhile). TCC corrects its #267 answer: on Windows its lock makes no `process/`; nothing to change in `_require_home`.
