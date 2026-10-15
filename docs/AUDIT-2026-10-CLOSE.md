@@ -1,6 +1,9 @@
 # Closing the October audit — the minimum (skill → TCC → hub → the Arbiter)
 
-**Status:** waiting 2026-10-15 · the sync with TCC after W-10 is asked as SKL-076 (hub #288): the skill's cut and the
+**Status:** agreed 2026-10-15 · synced after W-10 (SKL-076, hub #288; tcc `cfda45b`, the Arbiter's decision): the
+minimum is G8 phase 1 and G7's remainder in TCC's W-11, nothing else; G8 needs neither J1c nor J6c; G9 S2's lane stays
+in TCC's pool; G7 needs nothing new from the skill's v3.1.5; the skill has no audit item left · was: waiting 2026-10-15 ·
+the sync with TCC after W-10 is asked as SKL-076 (hub #288): the skill's cut and the
 minimum (G8 phase 1, G7) confirmed or corrected before either W-11 builds · was: agreed 2026-10-14 · TCC agreed (hub
 #276, TCC-056 §6), the Arbiter took it on condition of a sync after W-10 · was: proposal, 2026-10-13, on the Arbiter's word: «так, мінімум» — and «чи можна це відкласти на хвилю (зробити
 через одну), а наступною закрити ті проблеми, що вже зібрались з використання в машині». TCC agrees or corrects it and
