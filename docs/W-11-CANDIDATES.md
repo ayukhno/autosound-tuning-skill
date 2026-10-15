@@ -43,6 +43,9 @@ architects first (`hub:seam`), its interface agreed with TCC (hub #292) before t
 **Item 15's interface, TCC's answer on hub #292** (2026-10-15, tcc `8eedeed`; the channel is the Arbiter's call):
 - in: two versions as `<preset>/v_NNN` (a file allowed in place of «now»), `--first <channel>`, `--lang uk|en|de|pl`;
 - scope: the whole diff, every channel, the open one first; the chain's **net** change, not each band alone;
+- scope, the Arbiter 2026-10-15 («мені може бути цікаво вплив не змін всього сета, а конкретних змін полоси EQ, чи
+  ще чогось»): also **one change** — one EQ band, a delay, a polarity, a crossover — or several picked, and a «what if»
+  change not yet made; one change is still read against what stands in the chain under it, and the text says so;
 - out, per change: the channel, old → new, the band and its direction, voice, instruments, overall, the tracks to
   listen on, the risks; what the static table cannot say (time, polarity, crossover, a band with no entry) in a
   `not_covered` list, a plain line each; one `overall` paragraph for the whole diff;
@@ -50,7 +53,8 @@ architects first (`hub:seam`), its interface agreed with TCC (hub #292) before t
 - «Обговорити з ШІ»: the method runs the Advisor with the diff, the static description and the project's context
   (preset, target curve, the last ear verdicts); the JSON carries the prompt, the context and the answer, which TCC
   hands on to a chat; an Advisor that cannot answer is a named refusal in the exit table, the static result beside it;
-- TCC builds no mapping of its own; its half (buttons, panel, the handoff to the chat) is on its W-11 with hub #264.
+- TCC builds no mapping of its own; its half (buttons, panel, the handoff to the chat) is on its W-11 with hub #264;
+- the one-change scope: TCC asked how the panel offers it and names a change (SKL-079, hub #293).
 
 **Advice for the cut:** take 1–11. Item 1 is what the car hits now (a calibration reset read as a +16.65 dB change)
 and what TCC's #198 half waits on; 3–6 are small and found in real use; 7–11 are W-10's own leftovers at the seam.
