@@ -1629,7 +1629,7 @@ four assessment lines, and nothing is built before his `ok` on that task. Resume
 
 ## S-106 · W-11 is collecting: findings go to this pool
 
-**Status**: open 2026-10-15 · collecting; `ok` on candidates 1–11 and 13, 14 and 15 taken on his word, 12 discussed before the build (the Arbiter, 2026-10-15); the ranked list for the review is `docs/W-11-CANDIDATES.md` (the Arbiter: «сформуй список кандидатів на W-11») · was: open 2026-10-15 · collecting, on the Arbiter's «збираємо W-11» (2026-10-15, after v3.1.4); the milestone `W-11 · v3.1.5` opens on his «збір закінчено»; nothing built
+**Status**: open 2026-10-15 · collecting; the scope set by the Arbiter's «так»: 1–11, 13–16, 12 discussed before the build, 12 discussed before the build (the Arbiter, 2026-10-15); the ranked list for the review is `docs/W-11-CANDIDATES.md` (the Arbiter: «сформуй список кандидатів на W-11») · was: open 2026-10-15 · collecting, on the Arbiter's «збираємо W-11» (2026-10-15, after v3.1.4); the milestone `W-11 · v3.1.5` opens on his «збір закінчено»; nothing built
 
 The number is read: no milestone is open in skill (W-10 closed with v3.1.4), none in TCC (`W-10 · v1.1.4` closed), so
 `max(W-N) + 1` = 11. The version is a patch, `v3.1.5`: the catalog stays on v3.1.1 until the audit's waves are done.
@@ -1646,7 +1646,8 @@ The pool at the start, recorded, not diagnosed:
 - **hub #289 (TCC-061)**: a slow git writes a false `written_by` header (each process asks git again; `""` counts as a
   change);
 - the boost path: ruled 2026-10-15 (cuts by default; a boost on the user's request, or on Resonalyze's advice with his
-  confirmation), research asked as SKL-077 (hub #291); not built in W-11;
+  confirmation), research asked as SKL-077 (hub #291); the rule goes into the method text in W-11 (item 16), the class
+  and the cap wait for research;
 - «two visits», taken back from the audit on the Arbiter's word with his correction (a first result, then rounds);
 - **what a change does to the sound** (PAS-014 hub #264, S-021): the method's engine, static then AI, and an interface
   for TCC — TCC asked as SKL-078 (hub #292);
