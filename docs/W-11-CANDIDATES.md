@@ -1,6 +1,8 @@
 # W-11 candidates — the collection's pool, ranked
 
-**Status:** a ranking for the Arbiter's review, 2026-10-15, on his word «сформуй список кандидатів на W-11». Collection
+**Status:** reviewed 2026-10-15 · the Arbiter: «1-11 ок. 12 розберемо до виконання W-11» — `ok` on 1–11 (it goes on
+their issues when the milestone opens), item 12 is discussed before W-11 is built, item 13 arrived after and has no
+`ok` yet; the boost: ruled, sent to research (below) · was: a ranking for the Arbiter's review, 2026-10-15, on his word «сформуй список кандидатів на W-11». Collection
 is still open (S-106): a finding that arrives joins this list; the milestone `W-11 · v3.1.5` opens on his «збір
 закінчено», each item then becomes an issue with the four lines, and nothing is built before his `ok` on it. Items are
 taken from the records named in «source»; each is checked unfixed when its issue is opened.
@@ -29,22 +31,24 @@ S ~1–2 h · M ~half a day · L a day or more.
 | 9 | `verify`'s summary calls every not-applicable sweep «not checked (not a sweep)» — wrong for a sweep outside the band | S-104 | defect | ordinary (TCC reads it) | S | opus · medium | Captures |
 | 10 | `project.py`'s selftest `_check_two_writers_lose_nothing` starved once on Windows CI (a writer waited 60 s, got `Busy`); a red CI by chance, not a user's case | S-104 (CI run 38558929626) | infra | ordinary (test only) | S | opus · medium | CI |
 | 11 | `bounded_run` starts the reviewer CLIs with stdin closed (said in v3.1.4's Upgrading) — check that no reviewer needs it | S-104 | check | ordinary | XS | sonnet · medium (trial) | Reviewer |
+| 13 | A slow git writes a false `written_by` header: each method process asks git for its sha within 3 s, a miss gives `""`, and `real → "" → real` writes two headers that say the writer changed (`Process._stamp`, `provenance`); seen on TCC's Windows CI, can happen on a slow Windows machine | hub #289 TCC-061 | defect | high (the journal's provenance) | S | opus · high | Journal |
 | 12 | In a folder that names nothing, the description fires on 10 of 26 car-audio queries (resume, de/pl, EMMA, TCC bug reports): the description's recall | S-104 (#170's neutral run, 2026-10-14) | docs (description) + eval | ordinary | M | opus · high | Agent start |
 
 **Groups** (one theme, one review per group, `hub:seam`): **Rounds and levels** 1–2 — `Risk: high`, the full loop and a
-Fable seat; **Installers** 4–6 — `Risk: high`; **Captures** 7–9; **Reviewer** 3, 11; **CI** 10; **Agent start** 12.
+Fable seat; **Installers** 4–6 — `Risk: high`; **Captures** 7–9; **Reviewer** 3, 11; **CI** 10; **Agent start** 12; **Journal** 13.
 
 **Advice for the cut:** take 1–11. Item 1 is what the car hits now (a calibration reset read as a +16.65 dB change)
 and what TCC's #198 half waits on; 3–6 are small and found in real use; 7–11 are W-10's own leftovers at the seam.
 Rough machine time: Rounds and levels ~1 day, the rest ~half a day together. Item 12 is a measurement first (the eval
 on a neutral folder), the description change after; it can wait a wave.
 
-## For the Arbiter's ruling, not to build now
+## Ruled, not to build in W-11
 
-- **The boost path** (#173, research done 2026-10-14): advice option B — a narrow, opt-in `fill` for one dip class
-  (minimum phase, narrow, below Schroeder, the gate's PASS, stable across the ellipsoid), capped, with a headroom check;
-  the default stays cuts-only until the Passat check has run. Code only after his ruling and that check; until then
-  `FAQ.md:133` («the method's EQ only cuts») stays true.
+- **The boost path** (#173, research done 2026-10-14). The Arbiter, 2026-10-15: «залишаємо як є, але за запитом
+  користувача, або з поради рушія Resonalyze і підтвердження користувача можемо робити»; «дослідження — відправ тікет
+  research ролі». The default stays cuts-only; a boost only on the user's request, or on Resonalyze's advice with his
+  confirmation. Research: SKL-077 (hub #291) — the class, the cap, what Resonalyze's «advice» is, what is said before a
+  requested boost, the car check; its answer is an RFC, built only on his permission (`ROLES.md` §0).
 
 ## Closed as audit — back only on his word
 
