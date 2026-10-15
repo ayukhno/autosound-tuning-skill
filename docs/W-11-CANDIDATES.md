@@ -1,7 +1,7 @@
 # W-11 candidates — the collection's pool, ranked
 
-**Status:** the scope is set 2026-10-15 · the Arbiter: «так» on W-11 = 1–11, 13, 14, 15 (the «what if» form by
-TCC's answer on hub #293) and 16, the boost rule («ми хотіли по підйом EQ взяти правило»); 12 is discussed before the
+**Status:** the scope is set 2026-10-15 · the Arbiter: «так» on W-11 = 1–11, 13, 14, 15 (one change and a picked
+set in; «what if» later, TCC's answer on hub #293) and 16, the boost rule («ми хотіли по підйом EQ взяти правило»); 12 is discussed before the
 build; the boost's class and cap wait for research (hub #291); S-021's use of item 15 waits with S-021 · was: `ok` on 13 («289 - ок»), 14 and 15 taken on his word (below) · was: the Arbiter: «1-11 ок. 12 розберемо до виконання W-11» — `ok` on 1–11 (it goes on
 their issues when the milestone opens), item 12 is discussed before W-11 is built, item 13 arrived after and has no
 `ok` yet; the boost: ruled, sent to research (below) · was: a ranking for the Arbiter's review, 2026-10-15, on his word «сформуй список кандидатів на W-11». Collection
@@ -57,7 +57,12 @@ architects first (`hub:seam`), its interface agreed with TCC (hub #292) before t
   (preset, target curve, the last ear verdicts); the JSON carries the prompt, the context and the answer, which TCC
   hands on to a chat; an Advisor that cannot answer is a named refusal in the exit table, the static result beside it;
 - TCC builds no mapping of its own; its half (buttons, panel, the handoff to the chat) is on its W-11 with hub #264;
-- the one-change scope: TCC asked how the panel offers it and names a change (SKL-079, hub #293).
+- the one-change scope, TCC's answer on hub #293 (tcc `bfbe125`; the Arbiter: «пробуємо і беремо в W-11»): the panel
+  describes one change or a picked set (one button whose scope follows the pick); a change is named by its channel,
+  its slot in the version and old → new, the versions as `<preset>/v_NNN`; values that do not match the version are
+  refused; a picked set is a list of such changes, across channels; the output carries the net line («PK 345 +3 over
+  PK 302 −5.1 → at 345: −1.2 dB») for the panel's head;
+- «what if» (a change not yet made): later, on both sides — out of W-11.
 
 **Advice for the cut:** take 1–11. Item 1 is what the car hits now (a calibration reset read as a +16.65 dB change)
 and what TCC's #198 half waits on; 3–6 are small and found in real use; 7–11 are W-10's own leftovers at the seam.
