@@ -2383,8 +2383,13 @@ while not os.path.exists(os.path.join(signals, "go")):
     if time.monotonic() > deadline:
         sys.exit("the parent never said go")
     time.sleep(0.001)
+went = time.monotonic()
 for i in range(count):
-    project.Project(folder).set_channel(prefix + str(i), order=i)
+    try:
+        project.Project(folder).set_channel(prefix + str(i), order=i)
+    except Exception as exc:                 # the last line, which the check's tail of stderr keeps: when and which
+        sys.exit(f"writer {prefix}: write {i} failed {time.monotonic() - went:.1f} s after go: "
+                 f"{type(exc).__name__}: {exc}")
 """
 
 

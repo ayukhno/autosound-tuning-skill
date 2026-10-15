@@ -286,10 +286,35 @@ _ENTRIES = {}
 _ENTRIES_GUARD = threading.Lock()
 
 
+_EXTENDED = "\\\\?\\"                    # Windows' extended-length prefix, `\\?\`; `\\?\UNC\` before a share
+
+
+def _key(real, windows=_WINDOWS):
+    """The key of a lock file's `_Entry`, from its real path: case folded where the OS folds it, and on Windows the
+    extended-length prefix taken off -- `\\\\?\\C:\\...` is `C:\\...`, `\\\\?\\UNC\\srv\\share` is `\\\\srv\\share`.
+
+    Why (#158, CI runs 38701883627 and 38744574946): `ntpath.realpath` of a path that is not all there yet strips that
+    prefix only when a second look fails the way the first did. A writer's first hold on a new project asks before
+    the lock's folder is there (ERROR_PATH_NOT_FOUND); another process makes the folder in between, the second look
+    answers ERROR_FILE_NOT_FOUND, and the prefix stays. The nested hold -- `Project.save` inside `Project.update` --
+    asked with the file there and got the path without it: another key, another `_Entry`, so not re-entrant. It
+    opened a second handle and polled `LockFileEx` against the outer hold's own byte for its whole wait, while the
+    other writer waited on that same outer hold: both Busy after 60 s, in a check that takes 6. POSIX's realpath has
+    no prefix. `windows` is a parameter so that both systems' table runs on each."""
+    if not windows:
+        return os.path.normcase(real)
+    import ntpath
+    if real.startswith(_EXTENDED + "UNC\\"):
+        real = "\\\\" + real[len(_EXTENDED) + 4:]
+    elif real.startswith(_EXTENDED):
+        real = real[len(_EXTENDED):]
+    return ntpath.normcase(real)
+
+
 def _entry(path, make=True):
-    """The `_Entry` of a lock file, by its real path (case folded where the OS folds it); None if never held and
-    `make` is False."""
-    key = os.path.normcase(os.path.realpath(path))
+    """The `_Entry` of a lock file, by its real path (`_key`: case folded where the OS folds it, no `\\\\?\\` on
+    Windows); None if never held and `make` is False."""
+    key = _key(os.path.realpath(path))
     with _ENTRIES_GUARD:
         entry = _ENTRIES.get(key)
         if entry is None and make:
@@ -890,6 +915,25 @@ def _check_which_refusals_are_held():
     assert not wrong, f"read wrong: {wrong}"
 
 
+def _check_one_key_with_or_without_the_prefix():
+    """A lock file is one `_Entry` however `realpath` spelt it (#158): on Windows `\\\\?\\C:\\...` and `C:\\...`, and
+    `\\\\?\\UNC\\srv\\share\\...` and `\\\\srv\\share\\...`, are one key, case folded -- realpath gave the prefix to a
+    writer's first hold on a new project when another process made the lock's folder in between, and the nested hold,
+    keyed without it, polled against its own outer hold until Busy. A pure function, so both systems' table runs on
+    each; on POSIX the key is the path as before."""
+    tail = "\\car\\.autosound\\write.lock"
+    windows = ((_EXTENDED + "C:\\Users\\runneradmin" + tail, "C:\\Users\\RunnerAdmin" + tail),
+               (_EXTENDED + "UNC\\srv\\share" + tail, "\\\\srv\\share" + tail))
+    wrong = [f"Windows {a!r} and {b!r}: {_key(a, True)!r} != {_key(b, True)!r}" for a, b in windows
+             if _key(a, windows=True) != _key(b, windows=True)]
+    if _key("C:\\a" + tail, windows=True) == _key("C:\\b" + tail, windows=True):
+        wrong.append("Windows: two folders' lock files read as one")
+    posix = "/home/u/car/.autosound/write.lock"
+    if _key(posix, windows=False) != os.path.normcase(posix):
+        wrong.append(f"POSIX {posix!r} keyed {_key(posix, windows=False)!r}")
+    assert not wrong, f"keyed wrong: {wrong}"
+
+
 def _check_a_share_refusing_the_lock_is_noted():
     """Windows only: `LockFileEx` refused with ERROR_ACCESS_DENIED -- a share that refuses locks, faked at the call --
     is a folder that cannot lock (#141, R21): the note, and the hold goes ahead at once, not Busy after its wait. The
@@ -1369,7 +1413,7 @@ def _selftest():
         _check_another_process_is_busy, _check_timeout_from_the_environment, _check_a_wait_given_in_code_is_checked_too,
         _check_a_free_lock_with_zero_wait, _check_a_folder_that_cannot_lock, _check_a_project_that_cannot_be_written,
         _check_busy_exit_says_one_line, _check_a_missing_project_is_not_made, _check_which_refusals_are_held,
-        _check_a_share_refusing_the_lock_is_noted, _check_the_note_once_per_folder, _check_an_error_inside_lets_go,
+        _check_one_key_with_or_without_the_prefix, _check_a_share_refusing_the_lock_is_noted, _check_the_note_once_per_folder, _check_an_error_inside_lets_go,
         _check_one_deadline, _check_a_file_where_the_lock_folder_belongs, _check_a_project_folder_not_to_be_looked_at,
         _check_a_folder_that_cannot_be_made, _check_refusals_are_no_oserror_or_valueerror,
         _check_the_access_repair_fits_the_system, _check_a_broken_check_shows_its_traceback,
@@ -1407,7 +1451,8 @@ def _selftest():
                 if links else "")
     print(f"write_lock selftest OK -- PROTOCOL = 1 on a line of its own, as TCC's probe reads it; a hold makes "
           f".autosound/write.lock and a .gitignore of '*'{' (git add -A stages nothing from it)' if git else ''}; "
-          f"re-entrant in a thread, the OS lock kept until the outer hold ends; another thread and another "
+          f"re-entrant in a thread (one key for a lock file with or without Windows' \\\\?\\ prefix, the table on "
+          f"every system), the OS lock kept until the outer hold ends; another thread and another "
           f"(spawned) process holding it make a hold wait its deadline and answer Busy -- exit 75, the lock file "
           f"named, nothing taken -- and get in once it is let go; {ENV_TIMEOUT} read at every call (unset 10 s), "
           f"a value that is no number of seconds exit 2 naming it, before anything is made, and a wait given in "
