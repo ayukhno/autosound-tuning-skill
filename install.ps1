@@ -1272,19 +1272,33 @@ function Test-TagSignature {
 # install.sh and of TCC's own updater: the one tag is fetched into a temporary BARE repository and verified there.
 # $true -- install it, and $script:TccSha is the commit the verified tag names ("" when nothing was verified); $false
 # -- it is not installed. Under $Scratch, not %TEMP%: see the note beside $Scratch.
-#   #179: the verified tag's constraints.txt is copied out of that repository before it goes, into a folder of its own
+#   #179: the fetched tag's constraints.txt is copied out of that repository before it goes, into a folder of its own
 # under $Scratch: $script:TccPins is the copy, for uv's --constraints, removed by the app's block after the install; no
-# copy, $script:TccPinsWhy says why -- the mirror of check_tcc_tag in install.sh. Through `git archive`, as
+# copy, $script:TccPinsWhy says why; $script:TccFetched, whether the tag was fetched -- the mirror of check_tcc_tag in
+# install.sh. Through `git archive`, as
 # Save-LocalChanges takes its files: PowerShell 5 decodes a native program's output with the console's code page, so
 # `git show` into a file would hand uv other bytes than the signed commit's. With core.autocrlf and core.eol held, so
 # the person's git configuration converts no line end on the way out.
 $script:TccSha = ""
 $script:TccPins = ""
 $script:TccPinsWhy = ""
+$script:TccFetched = $false
 function Test-TccTag {
     param([string]$Ref)
-    $script:TccSha = ""; $script:TccPins = ""; $script:TccPinsWhy = ""
-    if (Test-SettledByName $Ref $TccSignedFrom) { return $true }
+    $script:TccSha = ""; $script:TccPins = ""; $script:TccPinsWhy = ""; $script:TccFetched = $false
+    # A copy an earlier run left -- a Ctrl-C during uv's install, before the app's block could remove it -- goes first;
+    # not on a dry run, which changes nothing.
+    if (-not $DryRun) {
+        Get-ChildItem -LiteralPath $Scratch -Directory -Filter "tcc-pins-*" -ErrorAction SilentlyContinue |
+            ForEach-Object { Remove-Item -LiteralPath $_.FullName -Recurse -Force -ErrorAction SilentlyContinue }
+    }
+    # The developer's switch skips the SIGNATURE, not the tag's pins (as TCC since tcc #227) -- see check_tcc_tag in
+    # install.sh: a release from signing on is fetched under it too, its constraints.txt read, nothing verified. Not
+    # `$switch`: PowerShell sets that one itself inside the `switch` below.
+    $underSwitch = ($env:AUTOSOUND_SKIP_TAG_VERIFY -eq "1") -and -not $DryRun -and (Test-ReleaseTag $Ref) -and
+              ([version](($Ref -replace '^beta-', '') -replace '-rc[0-9]+\z', '' -replace '^v', '') -ge
+               [version]($TccSignedFrom -replace '^v', ''))
+    if ((Test-SettledByName $Ref $TccSignedFrom) -and -not $underSwitch) { return $true }
     $repo = Join-Path $Scratch ("tcc-tag-" + [guid]::NewGuid().ToString("N"))
     New-Item -ItemType Directory -Force -Path $repo | Out-Null
     # Under "Continue", as in Test-TagSignature: git says every reason on stderr.
@@ -1296,15 +1310,26 @@ function Test-TccTag {
     }
     $rc = $LASTEXITCODE
     $ErrorActionPreference = $prev
+    if ($rc -ne 0 -and $underSwitch) {
+        # Under the switch the fetch only ever brought the pins: one that failed installs as the switch always did.
+        $script:TccPinsWhy = "could not fetch ${Ref}: $(@($said | ForEach-Object { "$_" }) | Select-Object -Last 1)"
+        $script:TccFetched = $true
+        Remove-Item $repo -Recurse -Force -ErrorAction SilentlyContinue
+        return $true
+    }
     if ($rc -ne 0) {
         Warn "could not fetch $Ref to check its signature -- it is not installed:"
         $said | Select-Object -Last 2 | ForEach-Object { Write-Host "      $_" }
         Remove-Item $repo -Recurse -Force -ErrorAction SilentlyContinue
         return $false
     }
-    $verified = Test-TagSignature $repo $Ref $TccSignedFrom "TCC"
-    if ($verified) { $script:TccSha = "$(& git -C $repo rev-parse --verify --quiet "refs/tags/${Ref}^{commit}" 2>$null)".Trim() }
-    if ($script:TccSha) {
+    $script:TccFetched = $true
+    $verified = $false
+    if (-not $underSwitch) {
+        $verified = Test-TagSignature $repo $Ref $TccSignedFrom "TCC"
+        if ($verified) { $script:TccSha = "$(& git -C $repo rev-parse --verify --quiet "refs/tags/${Ref}^{commit}" 2>$null)".Trim() }
+    }
+    if ($underSwitch -or $script:TccSha) {
         $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
         $global:LASTEXITCODE = $null
         $listed = @(& git -C $repo ls-tree --full-tree "refs/tags/$Ref" -- constraints.txt 2>&1 | ForEach-Object { "$_" })
@@ -1329,7 +1354,9 @@ function Test-TccTag {
             $arRc = $LASTEXITCODE
             $why = @($archived | Where-Object { $_.Trim() }) | Select-Object -Last 1
             if ($arRc -eq 0 -and (Test-Path -LiteralPath $zip)) {
-                try { Expand-Archive -Path $zip -DestinationPath $pins -Force -ErrorAction Stop }
+                # -LiteralPath: Windows PowerShell 5.1 reads -Path as a wildcard, and a profile folder with `[` in its
+                # name threw.
+                try { Expand-Archive -LiteralPath $zip -DestinationPath $pins -Force -ErrorAction Stop }
                 catch { $why = $_.Exception.Message }
             }
             Remove-Item -LiteralPath $zip -Force -ErrorAction SilentlyContinue
@@ -1343,6 +1370,7 @@ function Test-TccTag {
         $ErrorActionPreference = $prev
     }
     Remove-Item $repo -Recurse -Force -ErrorAction SilentlyContinue
+    if ($underSwitch) { return $true }
     if (-not $verified) { return $false }
     # Fail closed, as TCC does: a verified tag whose commit git cannot name is not installed unpinned.
     if (-not $script:TccSha) { Warn "git names no commit for $Ref, verified a moment ago -- it is not installed"; return $false }
@@ -1945,10 +1973,18 @@ if ($Mode -eq "tcc") {
         # pinned install that failed. A warning each, never a refusal: $TccRefused is the signature's and uv's alone.
         $tccHeld = @()
         if (-not $TccRefused) {
-            if (-not $script:TccSha) {
-                # Settled by its name -- a dry run, a name that is not a release, the developer's switch, a tag before
-                # signing: nothing was fetched, so nothing was read.
-                if ($DryRun) { Say "a dry run fetches no tag: the versions $TccRef was tested with (its constraints.txt) are not read here" }
+            # Only a release tag reads as a [version]; a candidate counts as its release, as TCC's channel_key[:3] does.
+            $tccFrom = $false
+            if (Test-ReleaseTag $TccRef) {
+                $tccVer = (($TccRef -replace '^beta-', '') -replace '-rc[0-9]+\z', '') -replace '^v', ''
+                $tccFrom = ([version]$tccVer -ge [version]($TccConstraintsFrom -replace '^v', ''))
+            }
+            if (-not $script:TccFetched) {
+                # Settled by its name -- a dry run, a name that is not a release, a tag before signing: nothing was
+                # fetched, so nothing was read. Said, except for a release from before $TccConstraintsFrom: none of
+                # those had the file.
+                if ((Test-ReleaseTag $TccRef) -and -not $tccFrom) { }
+                elseif ($DryRun) { Say "a dry run fetches no tag: the versions $TccRef was tested with (its constraints.txt) are not read here" }
                 else { Warn "$TccRef was not fetched, so the versions it was tested with are not read -- uv chooses them" }
             } elseif ($script:TccPins) {
                 $help = ""
@@ -1956,36 +1992,39 @@ if ($Mode -eq "tcc") {
                 if ($help.Contains(" --constraints ")) {
                     $tccHeld = @("--constraints", $script:TccPins)
                     Say "held to the versions $TccRef was tested with (its constraints.txt)"
-                } else {
+                } elseif ($help.Trim()) {
                     $uvSaid = ""
                     try { $uvSaid = (& $Uv --version 2>$null | Out-String).Trim() } catch { $uvSaid = "" }
                     Warn "this uv cannot hold the app to the versions it was tested with (that needs uv 0.5.6 or newer) -- installing without them, so uv chooses the versions. This uv: $uvSaid"
+                } else {
+                    # No answer at all is not an old uv: a uv that cannot start, or that says its help elsewhere.
+                    Warn "uv gave no answer to ``uv tool install --help``, so it is not known to take the versions the app was tested with -- installing without them, so uv chooses the versions"
                 }
-            } else {
-                # Only a release tag gets this far (one settled by its name has no $script:TccSha), so [version] reads it.
-                $tccVer = (($TccRef -replace '^beta-', '') -replace '-rc[0-9]+\z', '') -replace '^v', ''
-                if ([version]$tccVer -ge [version]($TccConstraintsFrom -replace '^v', '')) {
-                    Warn "the versions $TccRef was tested with could not be read, so uv chooses the versions: $($script:TccPinsWhy)"
-                }
+            } elseif ($tccFrom) {
+                Warn "the versions $TccRef was tested with could not be read, so uv chooses the versions: $($script:TccPinsWhy)"
             }
         }
-        if ($TccRefused) {
-            Warn "the app is not installed: $TccRefused."
-            Warn "The method is installed and works without it; the end of this run says so again."
-        } elseif (Run { & $Uv tool install --quiet --python 3.12 --upgrade @tccForce @tccHeld $TccSpec } "uv tool install autosound-tcc[gui,claude]") {
-            Sync-ProcessPath
-            # The windowed launcher when the package has one (no console window behind the app),
-            # the console one otherwise.
-            foreach ($n in @("autosound-tcc-gui.exe", "autosound-tcc.exe")) {
-                $p = Join-Path $LocalBin $n
-                if (Test-Path $p) { $TccExe = $p; break }
+        # The copy goes whichever way the install went -- and on a Ctrl-C during it, which runs this `finally` (#179).
+        try {
+            if ($TccRefused) {
+                Warn "the app is not installed: $TccRefused."
+                Warn "The method is installed and works without it; the end of this run says so again."
+            } elseif (Run { & $Uv tool install --quiet --python 3.12 --upgrade @tccForce @tccHeld $TccSpec } "uv tool install autosound-tcc[gui,claude]") {
+                Sync-ProcessPath
+                # The windowed launcher when the package has one (no console window behind the app),
+                # the console one otherwise.
+                foreach ($n in @("autosound-tcc-gui.exe", "autosound-tcc.exe")) {
+                    $p = Join-Path $LocalBin $n
+                    if (Test-Path $p) { $TccExe = $p; break }
+                }
+                if ($TccExe) { Say "OK   installed" } elseif (-not $DryRun) { Warn "autosound-tcc.exe did not appear in $(Pretty $LocalBin)" }
+            } elseif (-not $DryRun) {
+                Warn "the app did not install -- see above. The method alone still works; re-run this later."
             }
-            if ($TccExe) { Say "OK   installed" } elseif (-not $DryRun) { Warn "autosound-tcc.exe did not appear in $(Pretty $LocalBin)" }
-        } elseif (-not $DryRun) {
-            Warn "the app did not install -- see above. The method alone still works; re-run this later."
+        } finally {
+            if ($script:TccPins) { Remove-Item -LiteralPath (Split-Path -Parent $script:TccPins) -Recurse -Force -ErrorAction SilentlyContinue }
+            $script:TccPins = ""
         }
-        # The copy of the tag's constraints.txt has done its work, whichever way the install went (#179).
-        if ($script:TccPins) { Remove-Item -LiteralPath (Split-Path -Parent $script:TccPins) -Recurse -Force -ErrorAction SilentlyContinue }
     }
 }
 if ($Mode -eq "tcc" -and ($TccExe -or $DryRun)) {

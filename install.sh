@@ -614,6 +614,9 @@ changing() {
 # either way. The line names a code only when there is one.
 unplanned_end() {
   _ue_rc=$?
+  # The copy of the app's constraints.txt (#179), when the run ends while it is live -- a Ctrl-C during uv's long
+  # install: the app's block removes it otherwise, and empties TCC_PINS.
+  [ -z "${TCC_PINS:-}" ] || rm -rf "${TCC_PINS%/*}" 2>/dev/null || true
   [ -n "${ENDED:-}" ] && return 0
   if [ "$_ue_rc" = 0 ]; then _ue_rc=""; else _ue_rc=" (exit $_ue_rc)"; fi
   stop 1 "stopped$_ue_rc -- the lines above say where; run this again"
@@ -1246,6 +1249,13 @@ settled_by_name() {  # settled_by_name <ref> <first signed tag>
   return 1
 }
 
+# Is the release tag <tag> <first> or later (#179)? A candidate counts as its release, as TCC's channel_key[:3] does:
+# beta-v1.1.4-rc1 is v1.1.4. `sort -V` reads v1.1.10 above v1.1.4.
+release_at_least() {  # release_at_least <release tag> <first>
+  _ra_ver="${1#beta-}"; _ra_ver="${_ra_ver%%-rc*}"
+  [ "$(printf '%s\n%s\n' "$2" "$_ra_ver" | sort -V | head -1)" = "$2" ]
+}
+
 # Is <ref>, fetched into <dir>, a signed release (skill #99)? 0 = yes -- or it is settled by its name, above. 1 = it
 # is not, and nothing may be installed from it. <first signed tag> and <whose> are the method's unless given: the
 # app's own tags pass TCC_SIGNED_FROM and "TCC" (skill #101).
@@ -1766,32 +1776,52 @@ fi
 # signature. The mirror of TCC's own updater (core/updates.py `check_tcc_tag`): there is no clone of TCC on disk, so
 # the one tag is fetched into a temporary BARE repository and verified there. 0 = install it, and TCC_SHA is the
 # commit the verified tag names -- "" when nothing was verified (settled by its name); 1 = it is not installed.
-#   #179: the verified tag's constraints.txt is copied out of that repository before it goes -- the signed commit's
+#   #179: the fetched tag's constraints.txt is copied out of that repository before it goes -- the signed commit's
 # bytes, and no second download -- into a folder of its own: TCC_PINS is the copy, for uv's --constraints, and the app's
 # block removes it after the install. No copy, TCC_PINS_WHY says why: the tag carries none, git could not list or read
 # it, or the entry is not a file (TCC's `_tag_constraints`: a symbolic link would hand uv its target's NAME as the
 # text, a folder or a gitlink no text at all). Never a refusal -- the signature decides whether the app is installed;
-# this only decides how closely uv is held. A tag settled by its name is not fetched and hands on neither.
+# this only decides how closely uv is held. TCC_FETCHED is 1 when the tag was fetched; a tag settled by its name is
+# not, and hands on neither.
 check_tcc_tag() {  # check_tcc_tag <ref>
-  _ct_ref="$1"; TCC_SHA=""; TCC_PINS=""; TCC_PINS_WHY=""
-  settled_by_name "$_ct_ref" "$TCC_SIGNED_FROM" && return 0
+  _ct_ref="$1"; TCC_SHA=""; TCC_PINS=""; TCC_PINS_WHY=""; TCC_FETCHED=""
+  # The developer's switch skips the SIGNATURE, not the tag's pins (#179, as TCC since tcc #227): a release from signing
+  # on is fetched under it too, its constraints.txt read the same way, and nothing verified -- TCC_SHA stays "", so
+  # nothing is said or guarded as checked. Fetched or not is the one difference; a dry run, a name that is not a
+  # release and a tag before signing still settle by their name, unfetched.
+  _ct_switch=0
+  if [ "${AUTOSOUND_SKIP_TAG_VERIFY:-}" = 1 ] && [ "$DRY_RUN" != 1 ] && is_release_tag "$_ct_ref" \
+     && release_at_least "$_ct_ref" "$TCC_SIGNED_FROM"; then
+    _ct_switch=1
+  fi
+  if settled_by_name "$_ct_ref" "$TCC_SIGNED_FROM"; then [ "$_ct_switch" = 1 ] || return 0; fi
   _ct_git="$(mktemp -d)"
   _ct_rc=0
   _ct_said="$(git init --quiet --bare "$_ct_git" 2>&1 &&
               git -C "$_ct_git" fetch --quiet --no-tags --depth 1 "$TCC_REPO" "+refs/tags/$_ct_ref:refs/tags/$_ct_ref" 2>&1)" \
     || _ct_rc=$?
+  if [ "$_ct_rc" != 0 ] && [ "$_ct_switch" = 1 ]; then
+    # Under the switch the fetch only ever brought the pins: one that failed installs as the switch always did, and
+    # the app's block says why the versions were not read.
+    TCC_PINS_WHY="could not fetch $_ct_ref: $(printf '%s\n' "$_ct_said" | tail -1)"
+    rm -rf "$_ct_git"; TCC_FETCHED=1; return 0
+  fi
   if [ "$_ct_rc" != 0 ]; then
     warn "could not fetch $_ct_ref to check its signature -- it is not installed:"
     printf '%s\n' "$_ct_said" | tail -2 | sed 's/^/      /' >&2
     rm -rf "$_ct_git"; return 1
   fi
-  if ! verify_tag "$_ct_git" "$_ct_ref" "$TCC_SIGNED_FROM" "TCC"; then rm -rf "$_ct_git"; return 1; fi
-  TCC_SHA="$(git -C "$_ct_git" rev-parse --verify --quiet "refs/tags/$_ct_ref^{commit}" 2>/dev/null)" || TCC_SHA=""
-  if [ -n "$TCC_SHA" ]; then
+  TCC_FETCHED=1
+  if [ "$_ct_switch" = 0 ]; then
+    if ! verify_tag "$_ct_git" "$_ct_ref" "$TCC_SIGNED_FROM" "TCC"; then rm -rf "$_ct_git"; return 1; fi
+    TCC_SHA="$(git -C "$_ct_git" rev-parse --verify --quiet "refs/tags/$_ct_ref^{commit}" 2>/dev/null)" || TCC_SHA=""
+  fi
+  if [ "$_ct_switch" = 1 ] || [ -n "$TCC_SHA" ]; then
     _ct_rc=0
     _ct_entry="$(git -C "$_ct_git" ls-tree --full-tree "refs/tags/$_ct_ref" -- constraints.txt 2>&1)" || _ct_rc=$?
     # Only the line that names the file: `100644 blob <sha><TAB>constraints.txt`.
     _ct_mode="$(printf '%s\n' "$_ct_entry" | awk -F '\t' '$2 == "constraints.txt" { split($1, f, " "); print f[1]; exit }')"
+    _ct_pins=""
     if [ "$_ct_rc" != 0 ]; then
       TCC_PINS_WHY="constraints.txt not read: $(printf '%s\n' "$_ct_entry" | tail -1)"
     elif [ -z "$_ct_mode" ]; then
@@ -1804,19 +1834,21 @@ check_tcc_tag() {  # check_tcc_tag <ref>
         *) _ct_kind="an entry" ;;
       esac
       TCC_PINS_WHY="constraints.txt is $_ct_kind in the tag, not a file (git mode $_ct_mode) -- not used"
+    # Named, and under TMPDIR when there is one: a copy a stopped run leaves says what it is. A folder that was not
+    # made is no place to write to: "" would have put the copy at /constraints.txt.
+    elif ! { _ct_pins="$(mktemp -d "${TMPDIR:-/tmp}/autosound-tcc-pins.XXXXXX")" && [ -n "$_ct_pins" ] \
+             && [ -d "$_ct_pins" ]; }; then
+      TCC_PINS_WHY="no temporary folder for the copy"; _ct_pins=""
+    # `git show` of a blob is its bytes as they are: no text conversion between the tag and uv.
+    elif _ct_said="$(git -C "$_ct_git" show "refs/tags/$_ct_ref:constraints.txt" 2>&1 > "$_ct_pins/constraints.txt")"; then
+      TCC_PINS="$_ct_pins/constraints.txt"
     else
-      # Named, and under TMPDIR when there is one: a copy a stopped run leaves says what it is.
-      _ct_pins="$(mktemp -d "${TMPDIR:-/tmp}/autosound-tcc-pins.XXXXXX")"
-      # `git show` of a blob is its bytes as they are: no text conversion between the tag and uv.
-      if _ct_said="$(git -C "$_ct_git" show "refs/tags/$_ct_ref:constraints.txt" 2>&1 > "$_ct_pins/constraints.txt")"; then
-        TCC_PINS="$_ct_pins/constraints.txt"
-      else
-        TCC_PINS_WHY="constraints.txt not read: $(printf '%s\n' "$_ct_said" | tail -1)"
-        rm -rf "$_ct_pins"
-      fi
+      TCC_PINS_WHY="constraints.txt not read: $(printf '%s\n' "$_ct_said" | tail -1)"
+      rm -rf "$_ct_pins"
     fi
   fi
   rm -rf "$_ct_git"
+  [ "$_ct_switch" = 0 ] || return 0
   # Fail closed, as TCC does: a verified tag whose commit git cannot name is not installed unpinned.
   [ -n "$TCC_SHA" ] || { warn "git names no commit for $_ct_ref, verified a moment ago -- it is not installed"; return 1; }
 }
@@ -1832,9 +1864,10 @@ UV=""
 # Why the app's tag was not installed, when it was not (skill #101); said in its block, in the checks, and last.
 TCC_REFUSED=""
 TCC_SHA=""
-# The tag's constraints.txt, copied out by check_tcc_tag, or why there is none (#179).
+# The tag's constraints.txt, copied out by check_tcc_tag, or why there is none, and whether the tag was fetched (#179).
 TCC_PINS=""
 TCC_PINS_WHY=""
+TCC_FETCHED=""
 if [ "$MODE" = "tcc" ]; then
   step "Autosound TCC — the desktop app"
   UV="$(find_bin uv || true)"
@@ -1932,10 +1965,12 @@ if [ "$MODE" = "tcc" ]; then
   # refusal: TCC_REFUSED is the signature's and uv's alone.
   TCC_HELD=""
   if [ -z "$TCC_REFUSED" ]; then
-    if [ -z "$TCC_SHA" ]; then
-      # Settled by its name -- a dry run, a name that is not a release, the developer's switch, a tag before signing:
-      # nothing was fetched, so nothing was read.
-      if [ "$DRY_RUN" = 1 ]; then
+    if [ -z "$TCC_FETCHED" ]; then
+      # Settled by its name -- a dry run, a name that is not a release, a tag before signing: nothing was fetched, so
+      # nothing was read. Said, except for a release from before TCC_CONSTRAINTS_FROM: none of those had the file.
+      if is_release_tag "$TCC_REF" && ! release_at_least "$TCC_REF" "$TCC_CONSTRAINTS_FROM"; then
+        :
+      elif [ "$DRY_RUN" = 1 ]; then
         say "  a dry run fetches no tag: the versions $TCC_REF was tested with (its constraints.txt) are not read here"
       else
         warn "$TCC_REF was not fetched, so the versions it was tested with are not read -- uv chooses them"
@@ -1946,17 +1981,18 @@ if [ "$MODE" = "tcc" ]; then
         *' --constraints '*)
           TCC_HELD="$TCC_PINS"
           say "  held to the versions $TCC_REF was tested with (its constraints.txt)" ;;
-        *)
+        *[![:space:]]*)
           warn "this uv cannot hold the app to the versions it was tested with (that needs uv 0.5.6 or newer) --" \
                "installing without them, so uv chooses the versions. This uv: $("$UV" --version 2>/dev/null || true)" ;;
+        *)
+          # No answer at all is not an old uv: a uv that cannot start, or that says its help elsewhere.
+          warn "uv gave no answer to \`uv tool install --help\`, so it is not known to take the versions the app was" \
+               "tested with -- installing without them, so uv chooses the versions" ;;
       esac
-    else
+    elif is_release_tag "$TCC_REF" && release_at_least "$TCC_REF" "$TCC_CONSTRAINTS_FROM"; then
       # A release from TCC_CONSTRAINTS_FROM on carries the file (TCC's ship.py refuses one without it): one that gives
       # none is said, with why. One from before it installs as it always did, and says nothing.
-      _tcc_ver="${TCC_REF#beta-}"; _tcc_ver="${_tcc_ver%%-rc*}"
-      if [ "$(printf '%s\n%s\n' "$TCC_CONSTRAINTS_FROM" "$_tcc_ver" | sort -V | head -1)" = "$TCC_CONSTRAINTS_FROM" ]; then
-        warn "the versions $TCC_REF was tested with could not be read, so uv chooses the versions: $TCC_PINS_WHY"
-      fi
+      warn "the versions $TCC_REF was tested with could not be read, so uv chooses the versions: $TCC_PINS_WHY"
     fi
   fi
   if [ -n "$TCC_REFUSED" ]; then
@@ -1975,8 +2011,10 @@ if [ "$MODE" = "tcc" ]; then
     # Recorded (#142): the checks below read an app from an earlier run as this run's, and the run ended 0, ready.
     TCC_REFUSED="its install did not finish -- uv's lines above say why"
   fi
-  # The copy of the tag's constraints.txt has done its work, whichever way the install went (#179).
-  [ -z "$TCC_PINS" ] || rm -rf "${TCC_PINS%/*}"
+  # The copy of the tag's constraints.txt has done its work, whichever way the install went (#179). A removal that
+  # fails is no reason to end the run as stopped after the app installed: `|| true` under set -e.
+  [ -z "$TCC_PINS" ] || rm -rf "${TCC_PINS%/*}" || true
+  TCC_PINS=""
 
   if on_mac; then
     # The app builds ITSELF: `autosound-tcc --install-desktop` makes the bundle in ~/Applications,
