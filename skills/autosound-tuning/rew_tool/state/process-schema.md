@@ -166,6 +166,8 @@ where REW lists no calibration or no longer holds the title (#176) -- and `{}` w
 held none of the round's titles on its whole listing (restarted, the session not reloaded): the last offsets then
 stand; a title REW holds twice is left out, its last offset standing;
 the one record of a round's level that outlives it; `capture_rounds()` replays it, the latest check per title.
+Its `ok`, `bad` and `not_applicable` leave out an optional capture not taken (#191's final review): `bad` is taken and
+failed, never "not a gap".
 `capture_task_issued` carries `level_base` when the round named one (`--level-base <round id>`, #176), and `control`,
 the round's level control's title, when it has one -- what a later round reads the base round's control by.
 

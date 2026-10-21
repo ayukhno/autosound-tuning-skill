@@ -3332,6 +3332,11 @@ class Process:
         # What REW held under every title looked up, as the look-up and the pulls saw it: held against the index read
         # again after the pulls, below. Keyed by `title_key`, so a second spelling landing meanwhile is seen too.
         keys = list(dict.fromkeys(title_key(spelling) for spelling in spelled.values()))
+        # ...and the previous round's level control, which `_read_control` pulls by the same listing (the final
+        # review, #176): re-taken or deleted in REW meanwhile, it was read off a stale index.
+        against = self._control_against(round_)[0]
+        if against is not None and title_key(against["control"]) not in keys:
+            keys.append(title_key(against["control"]))
         before = None if records is None else _rew_snapshot(records, keys)
         verdicts = [dict(v, name=back.get(v.get("name"), v.get("name")))
                     for v in (verifier.verify(list(asked.values())) if records is None
@@ -3512,10 +3517,14 @@ class Process:
                 EV_CAPTURE_VERIFIED,
                 capture=live["id"],
                 step=live.get("step"),
-                ok=sorted(v["name"] for v in verdicts if v.get("valid")),
+                # An optional capture not taken is in none of the three (#176/#191's final review): TCC's history reads
+                # `bad` as taken and failed, while the line says "not a gap".
+                ok=sorted(v["name"] for v in verdicts if v.get("valid") and not _optional_not_taken(live, v["name"])),
                 bad=sorted(v["name"] for v in verdicts
-                           if not v.get("valid") and v.get("applicable", True) is not False),
-                not_applicable=sorted(v["name"] for v in verdicts if v.get("applicable", True) is False),
+                           if not v.get("valid") and v.get("applicable", True) is not False
+                           and not _optional_not_taken(live, v["name"])),
+                not_applicable=sorted(v["name"] for v in verdicts if v.get("applicable", True) is False
+                                      and not _optional_not_taken(live, v["name"])),
                 rate_note=rate_note,
                 # The band each sweep was judged over (#154, the group round's SF-1).
                 bands={t: {"band_hz": v["band_hz"], "band_source": v.get("band_source")}
@@ -3627,6 +3636,25 @@ class Process:
         offset = lb.round_offset(_recorded_offsets(base))[0]
         return None if offset is None else {"base_round": base["id"], "offset_db": offset}
 
+    def _control_against(self, round_):
+        """`(the earlier round record the round's control is read against, or None; the earlier rounds that took the
+        same title)` (#176). The last earlier round whose control was TAKEN (the re-review) -- one issued and never
+        measured is no reference -- and never one under this round's own title: a re-taken series read its control
+        against itself, a +1.2 dB change came out the same chain. From the journal; REW is not read."""
+        title = round_.get("control")
+        if not title:
+            return None, []
+        rounds = self.capture_rounds()
+        ids = [r["id"] for r in rounds]
+        earlier = rounds[:ids.index(round_["id"])] if round_["id"] in ids else [r for r in rounds
+                                                                               if r["id"] != round_["id"]]
+        key = title_key(title)
+
+        def taken_control(r):
+            return r.get("control") and _row_for(r.get("taken_at_close") or [], r["control"]) is not None
+        same = [r for r in earlier if r.get("control") and title_key(r["control"]) == key]
+        return next((r for r in reversed(earlier) if taken_control(r) and title_key(r["control"]) != key), None), same
+
     def _read_control(self, round_, verifier, records, verdicts):
         """What REW holds of the round's level control and the PREVIOUS control's (#176 ask 2), read before the hold:
         None when the round has no control; else `{title, taken, ...}` with both curves (`cur`, `ref`:
@@ -3648,19 +3676,7 @@ class Process:
         out = {"title": title, "taken": bool(taken)}
         if not taken:
             return out
-        rounds = self.capture_rounds()
-        ids = [r["id"] for r in rounds]
-        earlier = rounds[:ids.index(round_["id"])] if round_["id"] in ids else [r for r in rounds
-                                                                               if r["id"] != round_["id"]]
-        # The last earlier round whose control was TAKEN (the re-review, #176) -- one issued and never measured is no
-        # reference -- and never one under this round's own title: a re-taken series read its control against
-        # itself, a +1.2 dB change came out the same chain.
-        key = title_key(title)
-
-        def taken_control(r):
-            return r.get("control") and _row_for(r.get("taken_at_close") or [], r["control"]) is not None
-        same = [r for r in earlier if r.get("control") and title_key(r["control"]) == key]
-        against = next((r for r in reversed(earlier) if taken_control(r) and title_key(r["control"]) != key), None)
+        against, same = self._control_against(round_)
         if against is None:
             if same:
                 out["why"] = (f"the series is re-taken: {', '.join(r['id'] for r in same)} took {title} too, and no "
@@ -9104,6 +9120,28 @@ def _check_control_against_the_right_round():
             want("1 not against itself", ctl.get("against_round") == "cap_001" and ctl.get("verdict") == "chain_change"
                  and abs((ctl.get("common_db") or 0) - 1.2) < 0.02, ctl)
             want("1 said", len(levels(out)) == 1 and "chain change +1.20 dB" in levels(out)[0], out)
+            # #183's snapshot covers the previous control too (the final review): it re-taken in REW between the
+            # first read and the read after the pulls is REW changed -- 69, nothing written -- never a stale index.
+            # (Round 4's previous control is cap_003's, ALL+C_2, re-taken here.)
+            p.start_capture("3", expected=["w-L_3 (sw)"], under="v_001")
+            rew.hold({"w-L_3 (sw)": reset, "ALL+C_3 (rta)": reset, "ALL+C_2 (rta)": reset})
+            for rec in rew.listing.values():
+                if rec["title"].endswith("(rta)"):
+                    rec["notes"] = notes
+            curves["ALL+C_3 (rta)"] = rta(reset)
+            first, reads = {k: dict(v) for k, v in rew.listing.items()}, []
+            later = {k: (dict(v, uuid="u-retaken") if v["title"] == "ALL+C_2 (rta)" else dict(v))
+                     for k, v in first.items()}
+            real_list = rew.api.get_measurements
+            rew.api.get_measurements = lambda: (reads.append(1), {k: dict(v) for k, v in
+                                                                  (first if len(reads) == 1 else later).items()})[1]
+            try:
+                rc, out, err = _run_main(["process.py", d, "capture-check"])
+            finally:
+                rew.api.get_measurements = real_list
+            want("2 the previous control is in the snapshot", rc == EXIT_REW_UNAVAILABLE and "changed" in err
+                 and "level_base" not in (p.load()["capture"] or {}), (rc, err[-300:]))
+            _run_main(["process.py", d, "capture-close", "--no-rew"])
             p, d = project("retake-alone")
             take(p, d, "1", "v_001", {"w-L_1 (sw)": base_off, "ALL+C_1 (rta)": base_off}, {"ALL+C_1 (rta)": base_off})
             rc, out, ctl = take(p, d, "1", "v_001", {"w-L_1 (sw)": base_off, "ALL+C_1 (rta)": base_off},
@@ -9181,6 +9219,43 @@ def _check_control_against_the_right_round():
     finally:
         shutil.rmtree(top, ignore_errors=True)
     assert not failures, "\n  ".join(["#176's control rounds:"] + failures)
+
+
+def _check_control_marked_and_optional_out_of_bad():
+    """#176/#191's final review: (3) the method's control TAKEN and now unusable -- REW restarted, the title gone --
+    prints `UNUSABLE <title> — control; ...`, marked as `unplanned` is, since it counts nowhere; (5) an optional
+    capture not taken is out of the journal's `capture_verified` `ok`/`bad`/`not_applicable` -- TCC's history reads
+    `bad` as taken and failed."""
+    import shutil
+    import tempfile
+    failures = []
+
+    def want(label, ok, detail=None):
+        if not ok:
+            failures.append(f"{label}: {detail!r}")
+    top = tempfile.mkdtemp(prefix="autosound_process_final_lines_")
+    try:
+        with _LevelRew() as rew:
+            proj = os.path.join(top, "proj")
+            os.makedirs(proj)
+            with open(os.path.join(proj, "glossary.json"), "w", encoding="utf-8") as fh:
+                json.dump({"channels": [{"code": c} for c in ("w-L", "c")], "combos": {"ALL+C": ["w-L", "c"]}}, fh)
+            d = os.path.join(proj, "process")
+            p = Process(d)
+            p.enter_phase("-1")
+            p.start_capture("1", expected=["w-L_1 (sw)"], optional=["c_1 (sw)"])
+            rew.hold({"w-L_1 (sw)": 103.35, "ALL+C_1 (rta)": 103.35})
+            p.check_captures()
+            ev = [e for e in p.events() if e.get("type") == EV_CAPTURE_VERIFIED][-1]
+            want("5 an optional not taken is not bad", "c_1 (sw)" not in ev["bad"] + ev["ok"] + ev["not_applicable"],
+                 ev)
+            rew.hold({})
+            rc, out, err = _run_main(["process.py", d, "capture-check"])
+            line = [x for x in out.splitlines() if x.startswith("UNUSABLE ALL+C_1 (rta)")]
+            want("3 the control marked", line and line[0].startswith("UNUSABLE ALL+C_1 (rta) — control; "), out)
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["#176/#191's final review:"] + failures)
 
 
 class _SnapshotRew:
@@ -11196,7 +11271,7 @@ def _selftest():
                   _check_a_check_asks_rew_by_key, _check_a_check_judges_one_snapshot_of_rew, _check_rounds_on_one_level_base,
                   _check_the_round_control_names_a_chain_change, _check_level_base_review_fixes,
                   _check_level_base_second_fixes, _check_level_lines_and_the_bench_chain,
-                  _check_control_against_the_right_round,
+                  _check_control_against_the_right_round, _check_control_marked_and_optional_out_of_bad,
                   _check_an_optional_not_taken_is_no_gap,
                   _check_close_stops_on_a_moved_snapshot, _check_a_check_holds_its_snapshot_whole,
                   _check_a_session_drift_reads_the_one_listing,
@@ -12411,6 +12486,10 @@ def _main(argv):
                 if unplanned:
                     # After the title's ` — `, never in it: what precedes it is the title a reader of the line takes.
                     said = "unplanned" + (f"; {said}" if said else "")
+                elif head.startswith("UNUSABLE") and _control_exempt(round_, title):
+                    # The method's control, taken and unusable, counts nowhere: marked so, as `unplanned` is (#176's
+                    # final review) -- five UNUSABLE lines over "0/3" read as five gaps.
+                    said = "control" + (f"; {said}" if said else "")
                 print(f"{head} — {said}" if said else head)
             # The round on the level base (#176, hub #285): one line when REW's calibration moved against the previous
             # round, in a form that is none of the verdict lines; the exit code stays the verdicts'.
