@@ -4569,37 +4569,35 @@ def main():
     else:
         checked.append("both installers take the plugin flag, verify the copy first and write it down last")
 
-    # And the app: `install-tcc.md` is the OTHER way into TCC, so it must pin too (SCR-054) -- the lines agree with each
-    # other, and each asks uv for Python 3.12 as the installers do (T-45): without it uv takes whatever Python it finds,
-    # and a 3.9 reads as a broken package. Which tag is newest is not checked here: that needs the network, and the
-    # installers resolve it when they run.
+    # And the app: `install-tcc.md` is the OTHER way into TCC (SCR-054). It names no TCC version (W-11: TCC pins the
+    # skill, never the reverse -- a pin here named a tag the release train had not cut yet): each line installs `<tag>`,
+    # TCC's newest release, which the page has Claude read with `git ls-remote` as the installers do -- never the
+    # default branch. Each asks uv for Python 3.12 as the installers do (T-45), and holds TCC's dependencies to that
+    # tag's constraints.txt (#179).
     tcc_doc = read(ROOT / "commands" / "install-tcc.md")
-    tcc_refs = set(re.findall(r"autosound-tcc(@v[0-9.]+)?'", tcc_doc))
     tcc_installs = re.findall(r"`(uv tool install [^`]*)`", tcc_doc)
-    if not tcc_refs:
+    named = sorted(set(re.findall(r"autosound-tcc[@/](v[0-9]+\.[0-9]+\.[0-9]+)", tcc_doc)))
+    if not tcc_installs:
         problems.append("commands/install-tcc.md: no `uv tool install … autosound-tcc` line found")
-    elif "" in tcc_refs:
-        problems.append("commands/install-tcc.md: an install line has no @tag, so uv takes the "
-                        "default branch — the two ways into TCC stop giving the same app")
-    elif len(tcc_refs) > 1:
-        problems.append(f"commands/install-tcc.md: the lines pin different app versions — "
-                        f"{sorted(tcc_refs)}")
-    elif not tcc_installs or any("--python 3.12" not in line for line in tcc_installs):
+    elif named:
+        problems.append(f"commands/install-tcc.md: names TCC {', '.join(named)} -- the skill names no TCC version "
+                        f"(TCC pins the skill); a line installs `<tag>`, the newest release read when it runs")
+    elif any("autosound-tcc@<tag>'" not in line for line in tcc_installs):
+        problems.append("commands/install-tcc.md: an install line does not install `@<tag>` -- without a tag uv takes "
+                        "the default branch, and the two ways into TCC stop giving the same app")
+    elif any("--python 3.12" not in line for line in tcc_installs):
         problems.append("commands/install-tcc.md: an install line has no `--python 3.12` -- uv takes whatever "
                         "Python it finds, which the installers never let it do (T-45)")
-    elif any(not re.search(r"--constraints \S*/autosound-tcc/v[0-9.]+/constraints\.txt", line) for line in tcc_installs):
-        # #179: the installers hold TCC's dependencies to the tag's own constraints.txt; the page does it by URL.
-        problems.append("commands/install-tcc.md: an install line has no `--constraints …/autosound-tcc/<tag>/"
-                        "constraints.txt` -- uv resolves TCC's dependencies afresh, which the installers no longer let "
-                        "it do (#179)")
-    elif {f"@{t}" for line in tcc_installs
-          for t in re.findall(r"/autosound-tcc/(v[0-9.]+)/constraints\.txt", line)} != tcc_refs:
-        # A bump that moves the app's tag and not the constraints' (or back) installs one tag under another's pins.
-        problems.append(f"commands/install-tcc.md: the constraints file is not the pinned tag's -- the app at "
-                        f"{sorted(tcc_refs)}, the constraints at {sorted(set(re.findall(r'/autosound-tcc/(v[0-9.]+)/', tcc_doc)))}")
+    elif any("--constraints https://raw.githubusercontent.com/ayukhno/autosound-tcc/<tag>/constraints.txt" not in line
+             for line in tcc_installs):
+        problems.append("commands/install-tcc.md: an install line is not held to `<tag>`'s constraints.txt -- uv "
+                        "resolves TCC's dependencies afresh, which the installers no longer let it do (#179)")
+    elif "git ls-remote --tags --refs https://github.com/ayukhno/autosound-tcc" not in tcc_doc:
+        problems.append("commands/install-tcc.md: the page does not say how `<tag>` is read -- "
+                        "`git ls-remote --tags --refs https://github.com/ayukhno/autosound-tcc`, the highest vX.Y.Z")
     else:
-        checked.append(f"commands/install-tcc.md pins the app at {next(iter(tcc_refs)).lstrip('@')}, with --python 3.12 "
-                       f"and that tag's constraints on all {len(tcc_installs)} lines")
+        checked.append(f"commands/install-tcc.md names no TCC version: each of its {len(tcc_installs)} lines installs "
+                       f"<tag>, the newest release read with git ls-remote, with --python 3.12 and its constraints")
 
     for line in checked:
         print(f"  ok   {line}")

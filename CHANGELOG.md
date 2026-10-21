@@ -176,8 +176,9 @@ v1.1.4 held to the versions TCC was tested with (`PySide6 6.11.2`, not 6.12), th
 **Upgrading:** what changes for whom.
 
 - **Installer users: run the install line again, as always.** Nothing to do in a project. A fresh TCC install is now
-  held to the versions its tag was tested with (`--constraints`, #179); `/autosound-tuning:install-tcc` installs TCC
-  v1.2.0 the same way.
+  held to the versions its tag was tested with (`--constraints`, #179). `/autosound-tuning:install-tcc` now installs
+  TCC's newest release, read when it runs as the installers do, held the same way: the skill names no TCC version,
+  since TCC pins the skill and not the reverse.
 - **TCC users: update TCC to v1.2.0 alongside this release** (the installer and `/autosound-tuning:install-tcc` do).
   An older TCC beside v3.2.0 shows the round's untaken control or optional capture as waiting, and an unusable control
   as an unusable capture.
