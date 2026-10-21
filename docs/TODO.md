@@ -1627,6 +1627,14 @@ S-062, S-064 (with TCC's half, hub #217 SKL-056), S-065, S-066. When he says to 
 four assessment lines, and nothing is built before his `ok` on that task. Resume: `hub/bin/role skill --resume
 6b9c70d1-4094-4337-a1fd-23976307dfc2`.
 
+## S-108 · The Windows uninstall leaves the installer's scratch and its receipt
+
+**Status**: open 2026-10-21 · found by W-11's Installers group seat; older than this wave; recorded, not diagnosed; joins a wave only on the Arbiter's word
+
+`install.ps1 -Uninstall` (~919–1040 at `7cfd020`) removes neither `$Scratch` (`~\.cache\autosound-installer`, which
+holds `tcc-tag-*` and, since #179, `tcc-pins-*`) nor `install-receipt.json`, so after an uninstall `doctor` still reads
+`ready` / `codex_link: made`. The manifest stays consistent (Remove-CodexLink clears its line).
+
 ## S-107 · An optional capture not taken makes `capture-check` exit 1
 
 **Status**: open 2026-10-21 · found by T1's implementer (#176) while it kept the round's control out of the gaps; recorded, not diagnosed; not on W-11's milestone — it joins the wave only on the Arbiter's word
