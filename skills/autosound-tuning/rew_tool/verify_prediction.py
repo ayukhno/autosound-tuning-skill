@@ -839,7 +839,7 @@ def main(argv=None):
         if args.project:
             sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "state"))
             try:
-                from process import Process, ProcessError
+                from process import Process
                 based = Process(os.path.join(args.project, "process")).level_base_offset()
             except Exception as exc:  # noqa: BLE001 -- the project's own refusals degrade, said; a bug is raised (#176)
                 # Its refusals (ProcessError), an OS error, and a file it cannot read -- `project_io.Unreadable`, a

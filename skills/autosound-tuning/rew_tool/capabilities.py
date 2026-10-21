@@ -61,6 +61,9 @@ NOT_ON_BOARD = {
                      "ledger version created exclusively, a journal line appended after a torn one (skill #135): a "
                      "library its writers call; its command line is its selftest, not a step a tuner takes",
     "bounded_run.py": "a child whose deadline ends the call on Windows too (skill #167): a library, not a step",
+    "levelbase.py": "the level-base maths (skill #176): REW's calibration shift and the round control's bands, a "
+                    "library capture-check, compare and verify_prediction call; its command line is its selftest, "
+                    "not a step a tuner takes",
     "write_lock.py": "one writer at a time in a project (skill #141): the lock every writer of the method takes "
                      "around its load, change and write -- a library its writers call; its command line is its "
                      "selftest, not a step a tuner takes",
