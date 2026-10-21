@@ -3490,10 +3490,19 @@ class Process:
             # records no offsets: recorded null, the replay dropped them all, and a named base read `missing` from then
             # on (the re-review, #176). The last numbers stand, and it is said. A title gone while others are there is
             # recorded gone, as before.
+            # "None held" is judged on REW's whole listing for every title of the round's list, not on the titles this
+            # check was asked (the group seats, #176): a check of one deleted title read as REW restarted and kept its
+            # stale offset. With no listing (a stand-in verifier), on the titles checked, as before.
             on_list = [(t, v) for t, v in checked if _row_for(live.get("expected") or [], t) is not None]
+            if listing is not None:
+                in_rew = {title_key(t) for t in listing}
+                none_held = bool(live.get("expected")) and not any(title_key(t) in in_rew
+                                                                    for t in live.get("expected") or [])
+            else:
+                none_held = bool(on_list) and not any(v.get("exists") is True for _t, v in on_list)
             offsets_unread = None
-            if on_list and not any(v.get("exists") is True for _t, v in on_list):
-                offsets_unread = ("REW holds none of the round's titles checked -- REW restarted, or its session not "
+            if none_held:
+                offsets_unread = ("REW holds none of the round's titles -- REW restarted, or its session not "
                                   "reloaded? -- so no offsets were recorded; the last ones stand")
             self._append(
                 EV_CAPTURE_VERIFIED,
@@ -3511,8 +3520,11 @@ class Process:
                 # the round's level that outlives it -- `capture_rounds` replays it, the latest check per title.
                 # Every title checked: one REW no longer holds is null, so the replay drops the offset an earlier check
                 # recorded for it (the task review, #176) -- it kept a stale one.
+                # A title REW holds twice is left out: which one's calibration it is cannot be known, and its last offset
+                # stands (the group seats, #176) -- written null, it dropped it.
                 spl_offsets_db={} if offsets_unread else
-                {t: (v.get("spl_offset_db") if v.get("exists") is True else None) for t, v in checked},
+                {t: (v.get("spl_offset_db") if v.get("exists") is True else None) for t, v in checked
+                 if not v.get("ambiguous")},
                 **({"spl_offsets_unread": offsets_unread} if offsets_unread else {}),
             )
         # Told AFTER the record is on disk, never before -- issue #21. This print used to sit
@@ -3543,8 +3555,11 @@ class Process:
         lb = _levelbase()            # stdlib only: one that will not load is a bug, raised (the task review, #176)
         checks = live.get("checks") or {}
         # The list's captures (#177's task review): an unplanned take's calibration set `mixed` on a plain check.
-        held = [t for t, c in checks.items() if isinstance(c, dict) and c.get("exists") is True
-                and _row_for(live.get("expected") or [], t) is not None]
+        on_list = [t for t, c in checks.items() if isinstance(c, dict) and c.get("exists") is True
+                   and _row_for(live.get("expected") or [], t) is not None]
+        # A title REW holds twice is neither held nor uncalibrated (the group seats, #176): said as ambiguous.
+        ambiguous = [t for t in on_list if checks[t].get("ambiguous")]
+        held = [t for t in on_list if t not in ambiguous]
         mine = {t: checks[t]["spl_offset_db"] for t in held if lb._number(checks[t].get("spl_offset_db")) is not None}
         # Every capture REW holds is listed, `offset_db` null where REW lists no calibration (the task review, #176):
         # dropped, a round with one uncalibrated capture read `ok`.
@@ -3564,6 +3579,8 @@ class Process:
             status = "ok"
         out = {"status": status, "base_round": base_id, "previous_round": prev["id"] if prev else None,
                "base_offset_db": base_off, "previous_offset_db": prev_off, "titles": {}}
+        if ambiguous:
+            out["ambiguous"] = ambiguous
         if mine and agree and not uncalibrated:
             out["offset_db"] = own     # the round's own, whenever its captures agree -- the base may lack one (SKL-080)
         for title in held:
@@ -3687,6 +3704,10 @@ class Process:
         if "align_db" in verdict:
             out["align_db"] = verdict["align_db"]
         was, now = (_level_key(x) for x in (read.get("levels") or (None, None)))
+        if (was is None) != (now is None):
+            # Recorded on one round only (the group seats, #176): the verdict stands, and it is said.
+            out["why"] = (f"{out['why']}; volume not recorded on "
+                          f"{read.get('base_round') or 'the base round' if was is None else live.get('id')}")
         if was is not None and now is not None and was != now:
             # The volume moved between the rounds (`--level`): a remainder is the knob he turned, not the chain.
             out.pop("align_db", None)
@@ -4509,53 +4530,74 @@ _VERB_ARGS = {
 }
 
 
-def _level_line(level_base):
-    """The one `capture-check` line for `capture.level_base` (#176, hub #285 TCC-060), or None: said when any capture's
-    `to_previous_db` is not 0 -- REW's SPL calibration moved against the previous round, as on 08.10 (103.35 ->
-    120.00) -- in English, as the verdict lines around it, and with a prefix that is none of OK/SKIP/N/A/UNUSABLE, so
-    no reader of those lines takes it for a verdict."""
+def _level_line(level_base, round_id=None):
+    """The one `capture-check` line for `capture.level_base` (#176, hub #285 TCC-060), or None, in English as the
+    verdict lines around it and with a prefix -- `LEVEL   ` -- that is none of OK/SKIP/N/A/UNUSABLE, so no reader of
+    those lines takes it for a verdict. Said whenever there is something to say (the group seats): REW's calibration
+    moved against the previous round (08.10, 103.35 -> 120.00); a shift to the base applied with no jump (the base
+    103.35, the previous round and this one at 120); a capture or the base with no calibration (`missing`), captures
+    that disagree (`mixed`); a control that names a chain change or cannot attribute one. A title REW holds twice, a
+    control on the same chain, its base round's reference, or not taken, rides along and is never the reason. A base
+    with no calibration is said when it is another round (`round_id` is this one's)."""
     lb = level_base if isinstance(level_base, dict) else {}
-    titles = lb.get("titles") or {}
-    moved = {t: r for t, r in titles.items() if isinstance(r, dict) and r.get("to_previous_db") not in (None, 0, 0.0)}
-    control = lb.get("control") if isinstance(lb.get("control"), dict) else None
-    changed = control is not None and control.get("verdict") == "chain_change"
-    # A capture REW lists no calibration for, with a base to bring it to (the task review, #176): said.
-    bare = [t for t, r in titles.items() if isinstance(r, dict) and r.get("offset_db") is None]
-    unbrought = bool(bare) and lb.get("base_offset_db") is not None
-    if not moved and not changed and not unbrought:
-        return None
+    titles = {t: r for t, r in (lb.get("titles") or {}).items() if isinstance(r, dict)}
     prev, base = lb.get("previous_round"), lb.get("base_round")
-    parts = []
-    if unbrought:
-        parts.append(f"REW lists no SPL calibration (splOffsetdB) for {', '.join(bare)}: not brought to the base "
-                     f"{base} -- its level is not comparable with other rounds'")
-    if moved and lb.get("status") == "mixed":
-        jumps = ", ".join(f"{t} {r['to_previous_db']:+.2f} dB" for t, r in moved.items())
-        parts.append(f"REW's SPL calibration differs inside this round (mixed): {jumps} against {prev}; each capture "
-                     f"is brought to the base {base} by its own shift (capture.level_base)")
+    moved = {t: r for t, r in titles.items() if r.get("to_previous_db") not in (None, 0, 0.0)}
+    shifted = {t: r for t, r in titles.items() if r.get("to_base_db") not in (None, 0, 0.0)}
+    bare = [t for t, r in titles.items() if r.get("offset_db") is None]
+    loud = []
+    if bare and lb.get("base_offset_db") is not None:
+        loud.append(f"REW lists no SPL calibration (splOffsetdB) for {', '.join(bare)}: not brought to the base "
+                    f"{base} -- its level is not comparable with other rounds'")
+    if lb.get("status") == "missing" and lb.get("base_offset_db") is None and base and base != round_id:
+        # Another round is the base and lists none; a project where no round carries a calibration says nothing,
+        # as compare.py and verify_prediction do.
+        loud.append(f"the base round {base} carries no SPL calibration (splOffsetdB) on record: this round's levels "
+                    "are not brought to a base")
+    if lb.get("status") == "mixed":
+        jumps = ", ".join(f"{t} {r['to_base_db']:+.2f} dB" for t, r in titles.items()
+                          if r.get("to_base_db") is not None)
+        loud.append(f"REW's SPL calibration differs inside this round (mixed): {jumps} against the base {base}; each "
+                    "capture is brought to it by its own shift (capture.level_base)")
     elif moved:
         jump = next(iter(moved.values()))
         was, now, shift = lb.get("previous_offset_db"), lb.get("offset_db"), jump.get("to_base_db")
-        parts.append(f"REW's SPL calibration moved {jump['to_previous_db']:+.2f} dB against {prev}"
-                     + (f" (splOffsetdB {was:.2f} -> {now:.2f})" if isinstance(was, (int, float)) and
-                        isinstance(now, (int, float)) else "")
-                     + (f": this round's levels are brought to the base {base} by {-shift:+.2f} dB"
-                        if isinstance(shift, (int, float)) else ""))
+        loud.append(f"REW's SPL calibration moved {jump['to_previous_db']:+.2f} dB against {prev}"
+                    + (f" (splOffsetdB {was:.2f} -> {now:.2f})" if isinstance(was, (int, float)) and
+                       isinstance(now, (int, float)) else "")
+                    + (f": this round's levels are brought to the base {base} by {-shift:+.2f} dB"
+                       if isinstance(shift, (int, float)) else ""))
+    elif shifted:
+        # No jump, a shift all the same: said once (the group seats, #176) -- it was applied and never said.
+        shift = next(iter(shifted.values()))["to_base_db"]
+        now, was = lb.get("offset_db"), lb.get("base_offset_db")
+        loud.append(f"this round's levels are brought to the base {base} by {-shift:+.2f} dB"
+                    + (f" (splOffsetdB {now:.2f} against {was:.2f})" if isinstance(was, (int, float)) and
+                       isinstance(now, (int, float)) else ""))
+    quiet = []
+    if lb.get("ambiguous"):
+        # Where the level is said (the group seats, #176); the UNUSABLE line says it on its own otherwise.
+        quiet.append(f"REW holds {', '.join(lb['ambiguous'])} twice: its level is not read, the last offset stands")
+    control = lb.get("control") if isinstance(lb.get("control"), dict) else None
     if control is not None and control.get("title"):
         # The control's word beside it (#176 ask 2): the chain, on the bands the round did not change.
         used = [b for b, r in (control.get("bands") or {}).items() if isinstance(r, dict) and r.get("used")]
         verdict = control.get("verdict")
         if verdict == "chain_change":
-            parts.append(f"control {control.get('title')}: chain change {control['common_db']:+.2f} dB on the bands "
-                         f"the round did not change ({', '.join(used)}) -- the gain knob or the mic; align by "
-                         f"{control.get('align_db', 0):+.2f} dB on those bands")
+            loud.append(f"control {control.get('title')}: chain change {control['common_db']:+.2f} dB on the bands "
+                        f"the round did not change ({', '.join(used)}) -- the gain knob or the mic; align by "
+                        f"{control.get('align_db', 0):+.2f} dB on those bands")
+        elif verdict == "unattributed":
+            loud.append(f"control {control.get('title')}: unattributed -- {control.get('why')}")
+        elif control.get("reference"):
+            quiet.append(f"control {control.get('title')}: the reference (this round is the level base)")
         elif verdict == "same_chain":
-            parts.append(f"control {control.get('title')}: the same chain")
+            quiet.append(f"control {control.get('title')}: the same chain")
         elif verdict == "not_taken":
-            parts.append(f"control {control.get('title')} not taken: chain change not checked")
-        else:
-            parts.append(f"control {control.get('title')}: unattributed -- {control.get('why')}")
-    return "LEVEL   " + "; ".join(parts)
+            quiet.append(f"control {control.get('title')} not taken: chain change not checked")
+    if not loud:
+        return None
+    return "LEVEL   " + "; ".join(loud + quiet)
 
 
 def _flag_shaped(token, known=()):
@@ -8327,6 +8369,16 @@ def _check_rounds_on_one_level_base():
             assert (lb["status"], lb["base_round"], lb["previous_round"]) == ("ok", "cap_002", "cap_002"), lb
             assert lb["titles"]["w-L_3 (sw)"]["to_base_db"] == 0.0 and not \
                 [x for x in out.splitlines() if x.startswith("LEVEL")], (lb, out)
+            # The keys TCC reads, as TCC reads them -- a plain `json.load` of the state file (process_view.load_state),
+            # each with its type, null told from absent (the group test seat, #176).
+            with open(p2.state_path, encoding="utf-8") as fh:
+                raw = json.load(fh)["capture"]
+            assert raw["level_base_named"] == "cap_002" and isinstance(raw["level_base"]["previous_offset_db"], float) \
+                and isinstance(raw["level_base"]["base_offset_db"], float) and raw["level_base"]["offset_db"] == reset, raw
+            assert set(raw["level_base"]["titles"]["w-L_3 (sw)"]) == {"offset_db", "to_base_db", "to_previous_db"}, raw
+            issued_all = [e for e in p2.events() if e.get("type") == EV_CAPTURE_ISSUED]
+            assert "level_base" not in issued_all[0] and "level_base" not in issued_all[1] \
+                and issued_all[2]["level_base"] == "cap_002", issued_all
             assert _run_main(["process.py", d, "capture-close", "--no-rew"])[0] == 0
             assert {r["id"]: r for r in Process(d).capture_rounds()}["cap_003"]["level_base"] == "cap_002"
             # What a reader outside the check brings REW's FR to (`verify_prediction --project`): the base as it stands.
@@ -8346,6 +8398,8 @@ def _check_rounds_on_one_level_base():
             # A round REW lists no calibration for: `missing`, and nothing is said.
             rew.hold({"w-L_4 (sw)": None})
             p3.check_captures()
+            ev4 = [e for e in p3.events() if e.get("type") == EV_CAPTURE_VERIFIED][-1]
+            assert "w-L_4 (sw)" in ev4["spl_offsets_db"] and ev4["spl_offsets_db"]["w-L_4 (sw)"] is None, ev4
             lb = p3.load()["capture"]["level_base"]
             assert lb["status"] == "missing" and lb["titles"] == {"w-L_4 (sw)": {
                 "offset_db": None, "to_base_db": None, "to_previous_db": None}}, lb
@@ -8416,6 +8470,10 @@ def _check_the_round_control_names_a_chain_change():
             rc, out, err = _run_main(["process.py", d, "capture-check"])
             ctl = p.load()["capture"]["level_base"]["control"]
             assert rc == 0 and ctl["taken"] is True and ctl["verdict"] == "same_chain" and "base" in ctl["why"], ctl
+            assert ctl["reference"] is True, ctl
+            # The line a TAKEN control prints is the N/A form of any RTA (the group test seat, #176).
+            assert "N/A     ALL+C_1 (rta) — this check is for swept captures; REW says this one is rta — nothing here " \
+                "was checked" in out.splitlines(), out
             assert _run_main(["process.py", d, "capture-close", "--no-rew"])[0] == 0
 
             def round_two(series, lift, under="v_002", base_held=True):
@@ -8429,7 +8487,8 @@ def _check_the_round_control_names_a_chain_change():
                         rec["notes"] = rta_notes
                 curves[f"ALL+C_{series} (rta)"] = rta_curve(reset + lift)
                 rc_, out_, err_ = _run_main(["process.py", d, "capture-check"])
-                lb_ = Process(d).load()["capture"]["level_base"]
+                with open(Process(d).state_path, encoding="utf-8") as fh_:   # as TCC reads it: a plain json.load
+                    lb_ = json.load(fh_)["capture"]["level_base"]
                 _run_main(["process.py", d, "capture-close", "--no-rew"])
                 return rc_, out_, err_, lb_
             # REW's reset (+16.65) and the chain +1.2 dB on top, uniform: brought to the base, a chain change on the
@@ -8440,15 +8499,19 @@ def _check_the_round_control_names_a_chain_change():
                 and abs(ctl["align_db"] + 1.2) < 0.02, ctl
             assert ctl["bands"]["mid"]["used"] is False and ctl["changed_bands"] == ["mid"] \
                 and all(ctl["bands"][b]["used"] for b in ("low", "presence", "top")), ctl
-            said = [x for x in out.splitlines() if x.startswith("LEVEL")]
+            said = [x for x in out.splitlines() if x.startswith("LEVEL   ")]
             assert rc == 0 and len(said) == 1 and "+16.65 dB" in said[0] and "chain change +1.20 dB" in said[0] \
                 and "-1.20 dB" in said[0], (rc, out, err)
+            assert "reference" not in ctl and all(isinstance(b["mean_db"], float) and isinstance(b["spread_db"], float)
+                                                  for b in ctl["bands"].values()), ctl
             # +0.1: the same chain.
             rc, out, err, lb = round_two("3", 0.1)
             assert lb["control"]["verdict"] == "same_chain" and abs(lb["control"]["common_db"] - 0.1) < 0.02, lb
             # A round with no ledger version on record: which bands it changed cannot be read -- unattributed.
             rc, out, err, lb = round_two("4", 1.2, under=None)
             assert lb["control"]["verdict"] == "unattributed" and "ledger" in lb["control"]["why"], lb["control"]
+            said = [x for x in out.splitlines() if x.startswith("LEVEL   ")]
+            assert len(said) == 1 and "unattributed" in said[0], ("an unattributed control is said", out)
             # The base round's control no longer in REW: unattributed, said.
             rc, out, err, lb = round_two("5", 1.2, base_held=False)
             assert lb["control"]["verdict"] == "unattributed" and "ALL+C_1 (rta)" in lb["control"]["why"], lb
@@ -8629,7 +8692,8 @@ def _check_level_base_second_fixes():
             ev = [e for e in p.events() if e.get("type") == EV_CAPTURE_VERIFIED][-1]
             want("4 the event records none and says why", ev.get("spl_offsets_db") == {}
                  and "none of the round's titles" in (ev.get("spl_offsets_unread") or ""), ev)
-            want("4 said", "REW holds none of this round's titles" in out, out)
+            want("4 said", "  note: REW holds none of this round's titles -- no level offsets recorded; the last ones "
+                           "stand (reload the session in REW and check again)" in out.splitlines(), out)
             # (5) the round agrees, the base has no offset: `missing`, and the round's own offset kept.
             live = {"id": "cap_002", "expected": ["w-L_2 (sw)", "w-R_2 (sw)"],
                     "checks": {t: {"exists": True, "spl_offset_db": 120.0} for t in ("w-L_2 (sw)", "w-R_2 (sw)")}}
@@ -8709,6 +8773,164 @@ def _check_an_optional_not_taken_is_no_gap():
         Process._load_verifier = real
         shutil.rmtree(top, ignore_errors=True)
     assert not failures, "\n  ".join(["#191, an optional capture not taken:"] + failures)
+
+
+def _check_level_lines_and_the_bench_chain():
+    """The Rounds-and-levels group seats (#176): (1) the LEVEL line also says a constant shift to the base (the previous
+    round on the same calibration), a `missing` base, and an unattributed control; (3) the REW-restart guard reads REW's
+    whole listing for the round's titles, not the titles checked; (4) a title REW holds twice is neither held nor
+    uncalibrated -- its last offset stands, and it is said as ambiguous; (8) the base round's own control is said as
+    the reference; (9) a volume recorded on one round only is said; T4: --level-base on a round with no calibration
+    is refused; T5: `missing` keeps the round's own offset through capture-check; T1: the bench's full chain --
+    its own ledger v_008 and v_012 under the two rounds, its own two controls -- through capture-check."""
+    import shutil
+    import tempfile
+    failures = []
+
+    def want(label, ok, detail=None):
+        if not ok:
+            failures.append(f"{label}: {detail!r}")
+    base_off, reset = 103.34649658203125, 120.0
+    top = tempfile.mkdtemp(prefix="autosound_process_level_lines_")
+    try:
+        with _LevelRew() as rew:
+            def project(name, glossary=None):
+                proj = os.path.join(top, name)
+                os.makedirs(proj)
+                if glossary:
+                    with open(os.path.join(proj, "glossary.json"), "w", encoding="utf-8") as fh:
+                        json.dump(glossary, fh)
+                p = Process(os.path.join(proj, "process"))
+                p.enter_phase("-1")
+                return p, os.path.join(proj, "process")
+
+            def level_lines(out):
+                return [x for x in out.splitlines() if x.startswith("LEVEL   ")]
+            # (1) base 103.35; the previous round and this one at 120: no jump, and the shift still said, once.
+            p, d = project("shift")
+            for n, off in (("1", base_off), ("2", reset), ("3", reset)):
+                p.start_capture(n, expected=[f"w-L_{n} (sw)"])
+                rew.hold({f"w-L_{n} (sw)": off})
+                rc, out, err = _run_main(["process.py", d, "capture-check"])
+                if n != "3":
+                    _run_main(["process.py", d, "capture-close", "--no-rew"])
+            said = level_lines(out)
+            want("1 a constant shift said", len(said) == 1 and "brought to the base cap_001 by -16.65 dB" in said[0],
+                 out)
+            # (4) a title held twice: no null for it, its last offset stands, said as ambiguous.
+            p.start_capture("4", expected=["w-L_4 (sw)", "w-R_4 (sw)"])
+            rew.hold({"w-L_4 (sw)": reset, "w-R_4 (sw)": reset})
+            p.check_captures()
+            rew.hold({"w-L_4 (sw)": reset, "w-R_4 (sw)": reset})
+            rew.listing["9"] = dict(rew.listing["2"], uuid="u9")          # REW now holds w-R_4 twice
+            rc, out, err = _run_main(["process.py", d, "capture-check"])
+            lb = p.load()["capture"]["level_base"]
+            ev = [e for e in p.events() if e.get("type") == EV_CAPTURE_VERIFIED][-1]
+            want("4 not in the journal's offsets", "w-R_4 (sw)" not in ev["spl_offsets_db"], ev["spl_offsets_db"])
+            r4 = {x["id"]: x for x in Process(d).capture_rounds()}["cap_004"]
+            want("4 its last offset stands", _recorded_offsets(r4).get("w-R_4 (sw)") == reset, r4["spl_offsets_db"])
+            want("4 not uncalibrated", lb["status"] == "ok" and "w-R_4 (sw)" not in lb["titles"]
+                 and lb.get("ambiguous") == ["w-R_4 (sw)"], lb)
+            said = level_lines(out)
+            want("4 said as ambiguous", len(said) == 1 and "w-R_4 (sw)" in said[0] and "twice" in said[0]
+                 and "no SPL calibration" not in said[0], out)
+            # (3) one title of two deleted, a check of that title alone: recorded gone, not "none of the round's".
+            rew.hold({"w-R_4 (sw)": reset})
+            rc, out, err = _run_main(["process.py", d, "capture-check", "w-L_4 (sw)"])
+            ev = [e for e in p.events() if e.get("type") == EV_CAPTURE_VERIFIED][-1]
+            want("3 judged on REW's listing", ev["spl_offsets_db"] == {"w-L_4 (sw)": None}
+                 and "spl_offsets_unread" not in ev and "none of this round's titles" not in out, (ev, out))
+            _run_main(["process.py", d, "capture-close", "--no-rew"])
+            # T4: --level-base on a round whose checks recorded no calibration.
+            p, d = project("t4")
+            p.start_capture("1", expected=["w-L_1 (sw)"])
+            rew.hold({"w-L_1 (sw)": None})
+            p.check_captures()
+            _run_main(["process.py", d, "capture-close", "--no-rew"])
+            rc, out, err = _run_main(["process.py", d, "capture-start", "2", "w-L_2 (sw)", "--level-base", "cap_001"])
+            want("T4 refused", rc == EXIT_NO and "no level to bring" in err, (rc, err))
+            # T5: the base's record lost its calibration (a later check of it found none) -- `missing`, the round's own
+            # offset kept, and said.
+            p, d = project("t5")
+            p.start_capture("1", expected=["w-L_1 (sw)"])
+            rew.hold({"w-L_1 (sw)": base_off})
+            p.check_captures()
+            _run_main(["process.py", d, "capture-close", "--no-rew"])
+            p.start_capture("2", expected=["w-L_2 (sw)", "w-R_2 (sw)"], level_base="cap_001")
+            p._append(EV_CAPTURE_VERIFIED, capture="cap_001", ok=[], bad=[], not_applicable=[], rate_note=None,
+                      bands={}, spl_offsets_db={"w-L_1 (sw)": None})
+            rew.hold({"w-L_2 (sw)": reset, "w-R_2 (sw)": reset})
+            rc, out, err = _run_main(["process.py", d, "capture-check"])
+            lb = p.load()["capture"]["level_base"]
+            want("T5 missing keeps the round's offset", lb["status"] == "missing" and lb.get("offset_db") == reset
+                 and lb["base_offset_db"] is None, lb)
+            said = level_lines(out)
+            want("1 a base with no calibration said", len(said) == 1 and "cap_001" in said[0]
+                 and "no SPL calibration" in said[0], out)
+            # (8), (9): the control's words.
+            ref = _level_line({"status": "no_base", "base_round": "cap_001", "titles": {},
+                               "control": {"title": "ALL_1 (rta)", "taken": True, "verdict": "same_chain",
+                                           "reference": True, "bands": {}}})
+            want("8 quiet alone", ref is None, ref)
+            ref = _level_line({"status": "missing", "base_round": "cap_001", "base_offset_db": base_off,
+                               "titles": {"w-R_1 (sw)": {"offset_db": None, "to_base_db": None,
+                                                         "to_previous_db": None}},
+                               "control": {"title": "ALL_1 (rta)", "taken": True, "verdict": "same_chain",
+                                           "reference": True, "bands": {}}})
+            want("8 the reference", ref and "control ALL_1 (rta): the reference" in ref and "same chain" not in ref, ref)
+            f = [20.0 * 2 ** (k / 48) for k in range(480)]
+            m = [80.0 + 3.0 * math.sin(k / 9.0) for k in range(480)]
+            read = {"title": "ALL_2 (rta)", "taken": True, "base_round": "cap_001", "base_title": "ALL_1 (rta)",
+                    "versions": ("v_001", "v_001"), "levels": (None, {"value": "-25 dB rel. max", "read_as": None}),
+                    "cur": {"freqs": f, "mag": [x + 16.65 for x in m], "spl_offset_db": reset},
+                    "ref": {"freqs": f, "mag": m, "spl_offset_db": base_off}}
+            c = p._control_of({"id": "cap_002"}, read)
+            want("9 one volume unrecorded", c["verdict"] == "same_chain" and "volume not recorded on cap_001" in c["why"],
+                 c)
+            # T1: the bench's full chain. Its ledger (v_008 under cap_003, v_012 under cap_004), its two judge controls as
+            # REW listed and read them -- served here under the round's control titles -- through capture-check.
+            here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            with open(os.path.join(here, "testdata", "rew", "bench-ledger-v008-v012.json"), encoding="utf-8") as fh:
+                ledger = json.load(fh)
+            with open(os.path.join(here, "testdata", "rew", "spl-reset-controls.json"), encoding="utf-8") as fh:
+                controls = json.load(fh)
+            codes = sorted(ledger["v_012"]["channels"])
+            p, d = project("bench", {"channels": [{"code": c} for c in codes], "combos": {"ALL+C": codes}})
+            preset = os.path.join(os.path.dirname(d), "state", "7.E-epy")
+            os.makedirs(preset)
+            for v in ("v_008", "v_012"):
+                with open(os.path.join(preset, v + ".json"), "w", encoding="utf-8") as fh:
+                    json.dump(ledger[v], fh)
+            curves = {"ALL+C_3 (rta)": (controls["107"]["fr"][0], controls["107"]["fr"][1], None),
+                      "ALL+C_4 (rta)": (controls["121"]["fr"][0], controls["121"]["fr"][1], None)}
+            rew.api.get_fr = lambda mid, smoothing=None: curves.get(rew.listing[mid]["title"]) or rew.curve(mid)
+
+            def bench_round(n, under, held):
+                p.start_capture(n, expected=[f"c_{n} (sw)"], under=under)
+                rew.hold(held)
+                for rec in rew.listing.values():
+                    if rec["title"].endswith("(rta)"):
+                        rec["notes"] = controls["107"]["notes"]
+                return _run_main(["process.py", d, "capture-check"])
+            bench_round("3", "v_008", {"c_3 (sw)": controls["107"]["splOffsetdB"],
+                                       "ALL+C_3 (rta)": controls["107"]["splOffsetdB"]})
+            _run_main(["process.py", d, "capture-close", "--no-rew"])
+            rc, out, err = bench_round("4", "v_012", {"c_4 (sw)": controls["121"]["splOffsetdB"],
+                                                      "ALL+C_4 (rta)": controls["121"]["splOffsetdB"],
+                                                      "ALL+C_3 (rta)": controls["107"]["splOffsetdB"]})
+            lb = p.load()["capture"]["level_base"]
+            ctl = lb.get("control") or {}
+            want("T1 the jump", lb["titles"].get("c_4 (sw)", {}).get("to_previous_db") == 16.65, lb)
+            want("T1 the changed bands", ctl.get("changed_bands") == ["low", "mid", "presence"], ctl)
+            want("T1 the verdict the rule gives", ctl.get("verdict") == "unattributed" and "1 band(s)" in
+                 (ctl.get("why") or ""), ctl)
+            want("T1 the top band", abs(((ctl.get("bands") or {}).get("top") or {}).get("mean_db", 99) + 0.32) < 0.01,
+                 ctl)
+            said = level_lines(out)
+            want("T1 one LEVEL line", len(said) == 1 and "+16.65 dB" in said[0] and "unattributed" in said[0], out)
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["#176's group fixes:"] + failures)
 
 
 class _SnapshotRew:
@@ -10719,7 +10941,7 @@ def _selftest():
                   _check_a_round_matches_titles_by_name_key,
                   _check_a_check_asks_rew_by_key, _check_a_check_judges_one_snapshot_of_rew, _check_rounds_on_one_level_base,
                   _check_the_round_control_names_a_chain_change, _check_level_base_review_fixes,
-                  _check_level_base_second_fixes,
+                  _check_level_base_second_fixes, _check_level_lines_and_the_bench_chain,
                   _check_an_optional_not_taken_is_no_gap,
                   _check_close_stops_on_a_moved_snapshot, _check_a_check_holds_its_snapshot_whole,
                   _check_a_session_drift_reads_the_one_listing,
@@ -11937,7 +12159,7 @@ def _main(argv):
                 print(f"{head} — {said}" if said else head)
             # The round on the level base (#176, hub #285): one line when REW's calibration moved against the previous
             # round, in a form that is none of the verdict lines; the exit code stays the verdicts'.
-            level_said = _level_line(round_.get("level_base"))
+            level_said = _level_line(round_.get("level_base"), round_.get("id"))
             if level_said:
                 print(level_said)
             left = p.unusable_captures(p.load(strict=True))   # the exit code is a verdict (#136)

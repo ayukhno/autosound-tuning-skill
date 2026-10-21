@@ -118,6 +118,8 @@ panel had nothing real to render and every resume re-derived the phase by re-rea
       "base_round": "cap_003", "previous_round": "cap_003",   // the base: named, else the one last named,
                                                     //   else the project's first round with offsets
       "base_offset_db": 103.35, "previous_offset_db": 103.35,
+      "ambiguous": ["w-R_4 (sw)"],                  // titles REW holds twice: not in `titles`, their last
+                                                    //   offset stands (absent when none)
       "offset_db": 120.0,                           // when every capture of the round agrees -- kept when the
                                                     //   base lacks one (status `missing`)
       "titles": {"w-L_4 (sw)": {"offset_db": 120.0,  // every capture REW holds; null where REW lists no
@@ -153,7 +155,8 @@ spelling of a listed one (#153): `title` is then the list's, the round's own, an
 `capture_verified` carries `bands` -- `{title: {"band_hz": [lo, hi], "band_source": "rew"|"asked"}}` -- the band each
 sweep was judged over (#154), and `spl_offsets_db` -- `{title: splOffsetdB or null}` for every title checked, null
 where REW lists no calibration or no longer holds the title (#176) -- and `{}` with `spl_offsets_unread` (why) when REW
-held none of the round's titles (restarted, the session not reloaded): the last offsets then stand;
+held none of the round's titles on its whole listing (restarted, the session not reloaded): the last offsets then
+stand; a title REW holds twice is left out, its last offset standing;
 the one record of a round's level that outlives it; `capture_rounds()` replays it, the latest check per title.
 `capture_task_issued` carries `level_base` when the round named one (`--level-base <round id>`, #176), and `control`,
 the round's level control's title, when it has one -- what a later round reads the base round's control by.
