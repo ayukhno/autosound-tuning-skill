@@ -33,6 +33,7 @@ alone (`process.py capture-check`'s `level_base`) needs nothing more than the me
 from __future__ import annotations
 
 import math
+import os
 import sys
 
 #: The bands the control is read in, Hz -- the bench's `CONTROL_BANDS`. A round names the one it changed and the
@@ -194,9 +195,11 @@ _APF_OCT = 1.0
 #: wrong -- and `eq_ptr`, the pointer to an EQ file whose bands the ledger does not carry.
 _WHOLE_ROW = ("mute", "off", "gain_db", "eq_ptr")
 #: The fields whose change moves the summation with the neighbours: the channel's time and polarity, read where it
-#: overlaps them -- an octave either side of its own corners, as a crossover moved. `tag` (which hardware control
-#: moves it) and `status` (the ledger's bookkeeping) move nothing.
+#: overlaps them -- half an octave either side of its own corners, where two drivers sum within ~6 dB of each other
+#: (the task review, #176: a full octave put the bench's centre, 560-1000 Hz, over `low`'s and `presence`'s edges and
+#: left one band of four). `tag` (which hardware control moves it) and `status` (bookkeeping) move nothing.
 _CORNER_ROW = ("ta_ms", "polarity", "phase_deg")
+_OVERLAP_OCT = 0.5
 #: Preset-level fields whose change moves every band: the rate reshapes every filter, the virtual tier's EQ file is
 #: bands nobody listed.
 _WHOLE_PRESET = ("sample_rate", "virtual_eq_ptr")
@@ -237,10 +240,13 @@ def _band_reach(band):
 
 
 def _eq_changes(old, new):
-    """The ranges the bands that differ between two `eq` lists reach: every band in one list and not the other, by
-    value. None when one of them names no frequency."""
-    old = [b for b in (old or []) if isinstance(b, dict)]
-    new = [b for b in (new or []) if isinstance(b, dict)]
+    """The ranges the bands that differ between two `eq` lists reach: every band that plays in one list and not the
+    other, by value. A bypassed band plays nowhere: bypassed on both sides, added bypassed or removed bypassed it
+    changes nothing, and switched on or off it is the band appearing or going (the task review, #176: the bench's v_012
+    added three bands bypassed on VFL/VFR, and they took `presence` out of the control). None when a band that plays
+    names no frequency."""
+    old = [b for b in (old or []) if isinstance(b, dict) and b.get("bypass") is not True]
+    new = [b for b in (new or []) if isinstance(b, dict) and b.get("bypass") is not True]
     out = []
     for b in [b for b in old if b not in new] + [b for b in new if b not in old]:
         reach = _band_reach(b)
@@ -250,14 +256,28 @@ def _eq_changes(old, new):
     return out
 
 
+def _corner_move(leg, was, now):
+    """`(lo, hi)` Hz a crossover leg moved from corner `was` to `now` reaches (None = OFF): the whole way between the
+    two, an octave past each -- every frequency between them changed level, not only the octave around each (the task
+    review, #176: LP 8000 -> 500 left `presence` untouched). An OFF side runs open: a low-pass switched on or off moves
+    everything above its corner, a high-pass everything below. None when neither side has a corner."""
+    if was is None and now is None:
+        return None
+    if was is None or now is None:
+        f = was if now is None else now
+        return (f / 2 ** _CORNER_OCT, math.inf) if leg == "lp" else (0.0, f * 2 ** _CORNER_OCT)
+    return min(was, now) / 2 ** _CORNER_OCT, max(was, now) * 2 ** _CORNER_OCT
+
+
 def changed_ranges(diff, before, after):
     """`[(lo, hi)]` Hz the change between two ledger snapshots reaches, from `state.diff_states(before, after)`; None
     when the diff cannot be read (not a diff, or a band with no frequency). What counts (#176, the plan's T1: "the
     bands under changed EQ filters and crossovers"): an EQ band added, removed or changed reaches its own span; a
-    crossover leg moved reaches an octave either side of the old corner and the new. Beside them, so that no change of
-    the DSP is read back as the chain: a channel's level (gain, mute, off) or its `eq_ptr` reaches its passband, as
-    does a channel added or removed; its delay, polarity or phase reaches an octave either side of its corners, where
-    it sums with its neighbours. A preset's rate or virtual EQ file reaches everything."""
+    crossover leg moved reaches from the lower corner to the higher, an octave past each, and switched on or off it runs
+    open on its side. A band bypassed on both sides changes nothing. Beside them, so that no change of the DSP is read
+    back as the chain: a channel's level (gain, mute, off) or its `eq_ptr` reaches its passband, as does a channel
+    added or removed; its delay, polarity or phase reaches half an octave either side of its corners, where it sums
+    with its neighbours. A preset's rate or virtual EQ file reaches everything."""
     if not isinstance(diff, dict) or not isinstance(diff.get("preset", {}), dict):
         return None
     if any(k in (diff.get("preset") or {}) for k in _WHOLE_PRESET):
@@ -285,14 +305,15 @@ def changed_ranges(diff, before, after):
                     for leg in ("hp", "lp"):
                         f = _leg_f((row or {}).get(leg)) if isinstance(row, dict) else None
                         if f is not None:
-                            out.append((f / 2 ** _CORNER_OCT, f * 2 ** _CORNER_OCT))
+                            out.append((f / 2 ** _OVERLAP_OCT, f * 2 ** _OVERLAP_OCT))
             for leg in ("hp", "lp"):
                 if leg in fields:
-                    pair = fields[leg] if isinstance(fields[leg], (list, tuple)) else (None, None)
-                    for side in pair:
-                        f = _leg_f(side)
-                        if f is not None:
-                            out.append((f / 2 ** _CORNER_OCT, f * 2 ** _CORNER_OCT))
+                    pair = fields[leg] if isinstance(fields[leg], (list, tuple)) and len(fields[leg]) == 2 else None
+                    if pair is None:
+                        return None
+                    reach = _corner_move(leg, _leg_f(pair[0]), _leg_f(pair[1]))
+                    if reach is not None:
+                        out.append(reach)
             if "eq" in fields:
                 pair = fields["eq"] if isinstance(fields["eq"], (list, tuple)) and len(fields["eq"]) == 2 else None
                 if pair is None:
@@ -321,7 +342,6 @@ def _selftest():
     spl-reset-controls.json`), the shift +16.65 dB, the band numbers `cap004_check.py` printed, and the verdict on
     them; then the rule's edges, and which bands a ledger diff changes."""
     import json
-    import os
 
     import numpy as np
     here = os.path.dirname(os.path.abspath(__file__))
@@ -392,13 +412,13 @@ def _selftest():
     narrow = json.loads(json.dumps(diff))
     narrow["channels"]["c"]["eq"] = [[], [{"type": "PK", "f": 800, "gain_db": -2.0, "q": 6.0}]]
     assert changed_bands(narrow, before, after) == {"mid"}, changed_bands(narrow, before, after)
-    #    A crossover moved: an octave either side of the old and the new corner.
+    #    A crossover moved: from the lower corner to the higher, an octave past each -- 125-600 Hz.
     xo = {"preset": {}, "channels": {"w-L": {"lp": [{"f": 300}, {"f": 250}]}}}
     assert changed_bands(xo, before, after) == {"low", "mid"}, changed_bands(xo, before, after)
     #    A channel's gain: its passband, here the woofer up to 300 Hz and an octave past it.
     gain = {"preset": {}, "channels": {"w-L": {"gain_db": [0, -1.5]}}}
     assert changed_bands(gain, before, before) == {"low", "mid"}, changed_bands(gain, before, before)
-    #    The centre's polarity flipped: an octave either side of its corners -- 100-400 Hz (low) and 2-8 kHz
+    #    The centre's polarity flipped: half an octave either side of its corners -- 141-283 Hz (low) and 2.8-5.7 kHz
     #    (presence, top); `mid`, between them, is the centre playing alone and is not where the flip sums.
     flip = {"preset": {}, "channels": {"c": {"polarity": ["NORM", "INV"]}}}
     assert changed_bands(flip, before, before) == {"low", "presence", "top"}, changed_bands(flip, before, before)
@@ -410,6 +430,32 @@ def _selftest():
         == set(CONTROL_BANDS)
     bad = {"preset": {}, "channels": {"c": {"eq": [[], [{"type": "PK", "gain_db": 1}]]}}}
     assert changed_bands(bad, before, before) is None and changed_bands("no diff", None, None) is None
+    # 6. A crossover moved reaches the whole way between its two corners, an octave past each, and an OFF side runs
+    #    open (the task review, #176): LP 8000 -> 500 reaches presence; LP OFF -> 1500 reaches top; HP 2000 -> OFF low.
+    for leg, pair, must in (("lp", [{"f": 8000}, {"f": 500}], {"low", "mid", "presence", "top"}),
+                            ("lp", ["OFF", {"f": 1500}], {"mid", "presence", "top"}),
+                            ("hp", [{"f": 2000}, "OFF"], {"low", "mid", "presence", "top"})):
+        got_x = changed_bands({"preset": {}, "channels": {"w-L": {leg: pair}}}, before, after)
+        assert got_x == must, (leg, pair, got_x)
+    # 7. A band bypassed on both sides, or added or removed bypassed, changes nothing; one switched on does.
+    byp = {"type": "PK", "f": 3000, "gain_db": -3.0, "q": 1.0, "bypass": True}
+    on = dict(byp, bypass=False)
+    for old_eq, new_eq, must in (([byp], [dict(byp, gain_db=-6.0)], set()), ([], [byp], set()), ([byp], [], set()),
+                                 ([byp], [on], {"presence", "top"})):
+        got_b = changed_bands({"preset": {}, "channels": {"c": {"eq": [old_eq, new_eq]}}}, before, after)
+        assert got_b == must, (old_eq, new_eq, got_b)
+    # 8. END TO END, the bench as built: its own ledger (v_008 under cap_003, v_012 under cap_004 --
+    #    `testdata/rew/bench-ledger-v008-v012.json`) through `state.diff_states` and `changed_bands`, then its own two
+    #    controls through `band_offsets` and `chain_change`. The bench's conclusion (08.10): the same chain.
+    sys.path.insert(0, os.path.join(here, "state"))
+    import state as _state
+    with open(os.path.join(here, "testdata", "rew", "bench-ledger-v008-v012.json"), encoding="utf-8") as fh:
+        ledger = json.load(fh)
+    v8, v12 = ledger["v_008"], ledger["v_012"]
+    bench_changed = changed_bands(_state.diff_states(v8, v12), v8, v12)
+    e2e = chain_change(got, changed=bench_changed)
+    assert bench_changed == {"low", "mid"}, bench_changed
+    assert e2e["verdict"] == SAME_CHAIN, (bench_changed, e2e)
     print("selftest[levelbase] OK -- the bench's 08.10 case: cap_004 at 120.0 against cap_003 at 103.35 is shifted "
           "16.65 dB; its judge control after the shift reads the bench's own band numbers (low +0.45, mid -0.89, "
           "presence +0.26, top -0.32) and, the centre's band left out, the same chain at +0.13 -- unshifted, a chain "
@@ -420,7 +466,6 @@ def _selftest():
 
 
 if __name__ == "__main__":
-    import os
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     import console                       # issue #21: a code page must not destroy a result
     console.install()
