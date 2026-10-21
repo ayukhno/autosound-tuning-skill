@@ -640,6 +640,12 @@ def get_fr(mid, smoothing=None):
     session stopped between "off" and "back on" leaves the Arbiter's REW changed (hub TCC-015).
     """
     data = _get(f"/measurements/{mid}/frequency-response{_smoothing_query(smoothing)}")
+    # An answer with no magnitude is REW answering what cannot be read (#176): its own state, `protocol`, which a
+    # reader turns into a reason -- a bare KeyError here was a bug to every caller, and took `capture-check` down from
+    # the read of an optional level control.
+    if not isinstance(data, dict) or "magnitude" not in data:
+        raise RewProtocolError(f"REW's frequency response for measurement {mid} carries no magnitude: "
+                               f"{type(data).__name__} with keys {sorted(data) if isinstance(data, dict) else '-'}")
     mag = decode_floats(data["magnitude"])
     # RTA measurements carry no phase (rew-api-quirks.md "Timing"); return None
     # so magnitude-only callers keep working instead of hitting a KeyError.
@@ -1966,6 +1972,17 @@ def _selftest():
         f, m, p = get_fr("stub")
         assert p is None, "RTA: phase must be None, not a KeyError"
         assert len(m) == 3 and len(f) == 3, "RTA: magnitude/freqs still returned"
+        # An answer with no magnitude is REW answering what cannot be read -- `RewProtocolError`, rew_state
+        # "protocol" -- never a KeyError a caller reads as a bug (#176: it took capture-check down from an optional
+        # control's read).
+        for broken in ({"startFreq": 20.0, "freqStep": 10.0}, []):
+            _get = lambda path, broken=broken: broken
+            try:
+                get_fr("stub")
+            except RewProtocolError as exc:
+                assert rew_state(exc) == "protocol" and "magnitude" in str(exc), exc
+            else:
+                raise AssertionError(f"a frequency response with no magnitude was read: {broken!r}")
 
         # hub TCC-015: the smoothing is ASKED on the read, never set on the measurement.
         asked = []
