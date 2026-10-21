@@ -1112,6 +1112,21 @@ def _control_exempt(round_, title):
     return bool(round_.get("control_added", title in (round_.get("optional") or [])))
 
 
+def _no_gap(round_, title):
+    """Whether `title`, on the round's list, is no gap whatever stands for it: the method's own level control
+    (`_control_exempt`, #176), or an optional capture ("if there is time", skill #80) the round did not take (#191) --
+    «listed, ordered, recorded when taken, and not a gap when not». Out of `unusable_captures`, the `N/M придатні`
+    totals, the exit code and the step's gate; it counted in all four, and `capture-check` exited 1 over a round that
+    lacked nothing it needs. An optional capture TAKEN is judged as any: unusable, it gates -- the person chose to take
+    it, and a bad take is fixed, superseded or skipped like any other. Not taken is no standing row (N17)."""
+    return _control_exempt(round_, title) or _optional_not_taken(round_, title)
+
+
+def _optional_not_taken(round_, title):
+    """Whether `title` is on the round's `optional` list and has no standing row in `taken` (N17, by `title_key`)."""
+    return title in (round_.get("optional") or []) and not _is_taken(round_, title)
+
+
 def _levelbase():
     """`levelbase.py` (#176): stdlib, with numpy where it reads curves. One that will not load is a bug -- raised as
     it is, so the command exits 70 -- never "cannot tell": `_load_sibling` would read a syntax error in it as no level
@@ -2201,7 +2216,7 @@ class Process:
                                    "with its titles instead")
         if naming is not None:
             # A title typed in another spelling of one already listed -- the plan's, or typed before it -- IS that one
-            # (#153, `title_key`): listed once, under the first spelling, and optional only if typed as optional.
+            # (#153, `title_key`): listed once, under the first spelling, and optional only if typed as optional alone.
             listed = [n for g in groups for n in (g.get("names") or [])]
             # And in the grammar's one form (#155, the group round's T-3): a level typed before the method behind it,
             # a code in the one notation -- the typed one kept beside it, `as_typed`. A front-end reads the list's
@@ -2240,7 +2255,12 @@ class Process:
                         out.append(same)
                 return out
 
+            planned = list(listed)
             expected, optional = _listed_as(expected), _listed_as(optional)
+            # A title the list asks for -- the plan's, or typed as expected -- and typed as optional too stays required
+            # (#191): the list's requirement wins. It was optional, so its absence was no gap.
+            required = set(planned) | set(expected)
+            optional = [t for t in optional if t not in required]
             groups = naming.place_in_groups(groups, expected + optional, glossary)
             first, from_title = (start_method, None) if start_method else _last_method_taken(previous)
             groups = naming.order_by_setup(groups, first)
@@ -2254,7 +2274,8 @@ class Process:
             setup = None
             control, control_added = None, False
             control_why = f"naming.py could not be loaded{_load_failure('naming.py')} -- no title to name it by"
-            expected = expected + [t for t in optional if t not in expected]
+            optional = [t for t in optional if t not in expected]   # the list's requirement wins (#191)
+            expected = expected + optional
         round_ = {
             "id": "cap_%03d" % number,
             "n": number,
@@ -3705,7 +3726,8 @@ class Process:
         """Expected captures of the open round that are missing, unchecked, or checked and bad.
 
         The list a step's own gate reads: "done" means every capture it asked for came back AND
-        passed, so an unchecked capture counts against it exactly as a failed one does.
+        passed, so an unchecked capture counts against it exactly as a failed one does. What is no
+        gap (`_no_gap`) is not on it: the method's own control, an optional capture not taken (#191).
         """
         state = state or self.load()
         round_ = state.get("capture") or {}
@@ -3714,8 +3736,8 @@ class Process:
         out = []
         taken = round_.get("taken") or {}
         for title in round_.get("expected", []):
-            if _control_exempt(round_, title):
-                continue  # the method's own level control (#176): judged in `level_base.control`, never a gap
+            if _no_gap(round_, title):
+                continue  # the method's own control (#176), judged in `level_base.control`; an optional not taken (#191)
             if _row_for(round_.get("skipped") or {}, title) is not None:   # by `title_key` (#153)
                 continue  # a decision, and decisions are recorded, not re-litigated
             # A superseded row is a typo's trace, never the capture (N17): it counted here as taken -- and as usable
@@ -8073,7 +8095,8 @@ def _check_a_round_matches_titles_by_name_key():
         r3 = p.start_capture("3", expected=["w-R_3 (sw)", "w-L_03 (sw)", "w-R_03 (sw)"],
                              optional=["w-L_3 (sw)", "m-R_3 (sw)"])
         assert r3["expected"] == ["w-R_3 (sw)", "w-L_03 (sw)", "m-R_3 (sw)"], r3["expected"]
-        assert r3["optional"] == ["w-L_03 (sw)", "m-R_3 (sw)"], r3["optional"]
+        # ...and one typed beside the list as optional too stays required (#191): the list's requirement wins.
+        assert r3["optional"] == ["m-R_3 (sw)"], r3["optional"]
         # A check of a title typed in REW's spelling, with no row yet: the row is the list's, REW's spelling beside it.
         p.check_captures(["w-R_03 (sw)"], verifier=Verifier())
         round_ = p.load()["capture"]
@@ -8616,6 +8639,76 @@ def _check_level_base_second_fixes():
     finally:
         shutil.rmtree(top, ignore_errors=True)
     assert not failures, "\n  ".join(["#176's re-review fixes:"] + failures)
+
+
+def _check_an_optional_not_taken_is_no_gap():
+    """#191 (S-107): an optional capture ("if there is time", skill #80: «listed, ordered, recorded when taken, and not
+    a gap when not») the round did not take is no gap -- not in `unusable_captures`, not in `N/M придатні`'s
+    denominator, not the exit code nor the step's gate; its line reads `OPTIONAL <title> — optional: not taken; not a
+    gap`, none of the verdict prefixes. It made `capture-check` exit 1 over a round that lacked nothing it needs. One
+    TAKEN and bad gates as any: the person chose to take it. `capture-close` agrees: no OUTSTANDING, `optional left`.
+    A title the list asks for and typed as optional too stays required: the list's requirement wins."""
+    import shutil
+    import tempfile
+    failures = []
+
+    def want(label, ok, detail=None):
+        if not ok:
+            failures.append(f"{label}: {detail!r}")
+
+    class Verifier:                               # REW holds `held`; `bad` among them fails its check
+        held, bad = set(), set()
+
+        def verify(self, titles):
+            return [{"name": t, "exists": t in self.held, "reachable": True,
+                     "valid": t in self.held and t not in self.bad,
+                     "issues": (["dips 9 dB at 2 kHz"] if t in self.bad else []) if t in self.held
+                     else [f"No measurement titled {t!r}"], "stats": {}} for t in titles]
+
+    top = tempfile.mkdtemp(prefix="autosound_process_optional_")
+    real = Process._load_verifier
+    try:
+        Process._load_verifier = lambda self: Verifier()
+        d = os.path.join(top, "process")
+        p = Process(d)
+        p.enter_phase("-1")
+        p.add_step("-1.9", "a step")
+        p.start_attempt("-1.9")
+        # (1) the planned sweep taken and good, the optional one not taken: no gap.
+        p.start_capture("1", expected=["w-L_1 (sw)"], optional=["w-R_1 (sw)"], step="-1.9")
+        Verifier.held, Verifier.bad = {"w-L_1 (sw)"}, set()
+        p.record_capture("w-L_1 (sw)")
+        rc, out, err = _run_main(["process.py", d, "capture-check"])
+        lines = out.splitlines()
+        want("1 exit 0", rc == 0, (rc, out, err))
+        want("1 the optional's line", "OPTIONAL w-R_1 (sw) — optional: not taken; not a gap" in lines, out)
+        want("1 no UNUSABLE line", not any(x.startswith("UNUSABLE") for x in lines), out)
+        want("1 out of the denominator", "1/1 придатні" in lines, out)
+        want("1 not unusable", p.unusable_captures() == [], p.unusable_captures())
+        try:
+            p.finish_step("-1.9", ["w-L_1 (sw)"])
+        except ProcessError as exc:
+            failures.append(f"1 the step's gate: {exc}")
+        rc, out, err = _run_main(["process.py", d, "capture-close", "--no-rew"])
+        want("1 the close agrees", rc == 0 and "0 outstanding, 1 optional left" in out and "OUTSTANDING" not in out,
+             (rc, out, err))
+        # (2) the optional one taken and bad: it gates, as any capture taken.
+        p.start_capture("2", expected=["w-L_2 (sw)"], optional=["w-R_2 (sw)"])
+        Verifier.held, Verifier.bad = {"w-L_2 (sw)", "w-R_2 (sw)"}, {"w-R_2 (sw)"}
+        rc, out, err = _run_main(["process.py", d, "capture-check"])
+        lines = out.splitlines()
+        want("2 exit 1", rc == 1, (rc, out, err))
+        want("2 UNUSABLE", "UNUSABLE w-R_2 (sw) — dips 9 dB at 2 kHz" in lines and "1/2 придатні" in lines, out)
+        want("2 unusable", p.unusable_captures() == ["w-R_2 (sw)"], p.unusable_captures())
+        # (3) a title the list asks for, typed as optional too: required -- the list's requirement wins.
+        r3 = p.start_capture("3", expected=["w-L_3 (sw)"], optional=["w-L_3 (sw)", "w-R_3 (sw)"])
+        want("3 not optional", r3["optional"] == ["w-R_3 (sw)"] and r3["expected"] == ["w-L_3 (sw)", "w-R_3 (sw)"], r3)
+        want("3 a gap", p.capture_outstanding() == ["w-L_3 (sw)"] and p.unusable_captures() == ["w-L_3 (sw)"],
+             (p.capture_outstanding(), p.unusable_captures()))
+    finally:
+        Process._load_verifier = real
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["#191, an optional capture not taken:"] + failures)
 
 
 class _SnapshotRew:
@@ -10627,6 +10720,7 @@ def _selftest():
                   _check_a_check_asks_rew_by_key, _check_a_check_judges_one_snapshot_of_rew, _check_rounds_on_one_level_base,
                   _check_the_round_control_names_a_chain_change, _check_level_base_review_fixes,
                   _check_level_base_second_fixes,
+                  _check_an_optional_not_taken_is_no_gap,
                   _check_close_stops_on_a_moved_snapshot, _check_a_check_holds_its_snapshot_whole,
                   _check_a_session_drift_reads_the_one_listing,
                   _check_retakes_and_superseded_rows,
@@ -11810,6 +11904,12 @@ def _main(argv):
                     # The method's level control, not taken (#176): optional, and no unusable capture -- said so.
                     print(f"CONTROL {title} — the round's level control (optional): not taken; chain change not checked")
                     continue
+                if (_optional_not_taken(round_, title) and not _control_exempt(round_, title) and not unplanned
+                        and _row_for(round_.get("skipped") or {}, title) is None):
+                    # An optional capture not taken (#191, skill #80): no gap, and no verdict line -- said as what it is,
+                    # in a form that is none of OK/SKIP/N/A/UNUSABLE. A skip of one stays SKIP: a decision, recorded.
+                    print(f"OPTIONAL {title} — optional: not taken; not a gap")
+                    continue
                 if verdict.get("ok"):
                     head, said = f"OK      {title}", _band_said(verdict)
                 elif _row_for(round_.get("skipped") or {}, title) is not None:
@@ -11841,8 +11941,8 @@ def _main(argv):
             if level_said:
                 print(level_said)
             left = p.unusable_captures(p.load(strict=True))   # the exit code is a verdict (#136)
-            asked = [t for t in round_.get("expected", [])            # the control the method added counts apart
-                     if not _control_exempt(round_, t)]
+            asked = [t for t in round_.get("expected", [])            # the control the method added counts apart,
+                     if not _no_gap(round_, t)]                       # and an optional not taken (#191)
             print(f"{len(asked) - len(left)}/{len(asked)} придатні")
             return 1 if left else 0
         elif cmd == "capture-taken":
