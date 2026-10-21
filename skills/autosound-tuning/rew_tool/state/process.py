@@ -1254,7 +1254,8 @@ def _rew_change(before, after):
     """What changed between two `_rew_snapshot`s of the same keys, in a few words, or None when nothing did (#183): a
     title gone, a title appeared, one held under a second spelling now, or one at another ordinal or uuid."""
     def said(rows):
-        return " and ".join(f"{title} (index {ordinal}, uuid {uuid}, {date})" for ordinal, uuid, date, title in rows)
+        return " and ".join(f"{title} (index {ordinal}, uuid {uuid}{'' if date is None else f', {date}'})"
+                            for ordinal, uuid, date, title in rows)
 
     def titles(rows):
         return " and ".join(row[-1] for row in rows)
@@ -3101,8 +3102,8 @@ class Process:
             hinted[title] = True
         # One listing for the look-up and the pulls (#183): REW's index read here is the one `verify` pulls the curves
         # by. It read REW's index again, inside `verify`, for the uuids and the ordinals -- a take landing between the
-        # two reads was judged by the older one. None when the verifier names no REW reader, or REW's state stopped
-        # the read: `verify` then reads it for itself, as it always has, and says that for every title.
+        # two reads was judged by the older one. None only when the verifier names no REW reader (a stand-in): REW's
+        # state at this read is the refusal, never a fall-back to `verify`'s own read.
         records = _rew_listing(verifier)
         listing = None if records is None else _rew_titles(records)
         ambiguous = {}

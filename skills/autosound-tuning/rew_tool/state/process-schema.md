@@ -436,7 +436,9 @@ usage on stdout, exit 0.
   the record alone` with REW down, then refused). Before, any of them printed `not read against REW (...)` and the
   round closed unchecked when the next read went through. REW gone between its list and the checks `capture-close`
   runs, and a bug in the checks (named with its type), are said as what happens: the checks were not run, and the
-  round closes on the record, unchecked. The state that cannot be read at the checks, and the checks' journal line
+  round closes on the record, unchecked. One bug is the exception (#183): a bug in the read of REW's list AFTER the
+  curves were pulled is raised as it is, exit 70, the round open -- that read is what tells a judged take from a moved
+  one, and a close past it would close on a check nobody can vouch for. A bug in the first read stays with the rest. The state that cannot be read at the checks, and the checks' journal line
   refused after their state write, are refusals, exit 1, the round open (batch 3's re-review O3): both read as
   "checks not run" and the round closed. So is a round moved under them (1); a lock held past the wait there is 75
   (below).
