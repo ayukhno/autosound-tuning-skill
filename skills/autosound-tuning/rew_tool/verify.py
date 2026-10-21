@@ -510,6 +510,10 @@ def session_report(verdicts, processing_rate_hz=None, ir_of=_rew_ir_of, measurem
             r["level_shift_db"] = round(shift, 2)
             if r["mean_dB"] is not None:
                 r["mean_dB"] = round(r["mean_dB"] - shift, 2)
+        # A row REW lists no calibration for stays as REW gave it -- said, not left to look brought (the task review).
+        bare = [r["name"] for r in rows if r.get("spl_offset_db") is None and r["exists"] and r["mean_dB"] is not None]
+        if bare:
+            level_base["not_brought"] = bare
     _p = {r["name"]: _naming.parse_name(r["name"]) for r in rows}
     sweeps = [r for r in rows if r["valid"] and r["mean_dB"] is not None
               and (_p[r["name"]] or {}).get("method") == "sw" and not (_p[r["name"]] or {}).get("control")]
@@ -626,7 +630,9 @@ def render_session(report):
         moved = [r for r in report["rows"] if r.get("level_shift_db")]
         lines.append(f"  levels brought to {based['title']}'s REW SPL calibration (splOffsetdB "
                      f"{based['offset_db']:.2f}): " + ", ".join(f"{r['name']} {-r['level_shift_db']:+.2f} dB"
-                                                         for r in moved))
+                                                         for r in moved)
+                     + (f"; not brought (no splOffsetdB): {', '.join(based['not_brought'])}"
+                        if based.get("not_brought") else ""))
     sp = report["spread"]
     if sp:
         lines.append(f"  loudest {sp['loudest']} {sp['loudest_dB']:.1f} dB / quietest {sp['quietest']} "
@@ -1541,6 +1547,11 @@ def _selftest():
     assert split["level_base"] == {"title": "w-L_4 (sw)", "offset_db": 103.34649658203125}, split["level_base"]
     assert "brought to w-L_4 (sw)'s REW SPL calibration (splOffsetdB 103.35): w-R_4 (sw) -16.65 dB" \
         in render_session(split), render_session(split)
+    # A row REW lists no calibration for, among shifted ones, is said as not brought (the task review, #176).
+    lone = session_report([cal("w-L_4 (sw)", 80.0, 103.34649658203125), cal("w-R_4 (sw)", 96.65, 120.0),
+                           sw("sw_4 (sw)", 84.0, 5.0)], ir_of=None)
+    assert lone["level_base"].get("not_brought") == ["sw_4 (sw)"], lone["level_base"]
+    assert "not brought (no splOffsetdB): sw_4 (sw)" in render_session(lone), render_session(lone)
     one = session_report([cal("w-L_4 (sw)", 80.0, 120.0), cal("w-R_4 (sw)", 82.0, 120.0)], ir_of=None)
     assert one["level_base"] is None and "level_shift_db" not in one["rows"][0] and one["rows"][1]["mean_dB"] == 82.0
     txt = render_session(rep)

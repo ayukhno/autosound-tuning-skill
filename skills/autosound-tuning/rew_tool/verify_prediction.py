@@ -122,14 +122,22 @@ def measured_from_rew(titles, api=None, allow_rta=False, freqs=None, window=None
         import rew_api as api  # noqa: F811
     import levelbase
     out = {}
-    try:
-        listing = api.get_measurements() if hasattr(api, "get_measurements") else {}
-    except Exception:  # noqa: BLE001 -- no listing, no calibration read: the FR reads are left as REW gives them
-        listing = {}
+    # REW's listing, ONCE, and every id resolved against it (the task review, #176): read per title, a reorder in REW
+    # between the reads could hand one title another measurement's offset. One that cannot be read is said -- it was
+    # read as "nothing to shift", and the rows compared REW's calibrations without a word.
+    listing = None
+    if hasattr(api, "get_measurements"):
+        try:
+            listing = api.get_measurements()
+        except Exception as exc:  # noqa: BLE001 -- REW's own states are said; a bug is raised as it is
+            if getattr(type(exc), "rew_state", None) is None and not isinstance(exc, OSError):
+                raise
+            raise VerifyError(f"REW's measurement listing could not be read ({exc}) -- the levels cannot be brought "
+                              "to one base") from exc
     to_level = levelbase._number(level_base_db)       # not `base`: that names a row's point-sweep base below
     fg = np.asarray(freqs, float) if freqs is not None else None
     for title in titles:
-        mid = api.find_measurement_id(title)
+        mid = api.find_measurement_id(title) if listing is None else api.find_measurement_id(title, listing)
         timing = api.get_timing(mid)
         if fg is not None and timing.get("has_ir", True):
             import predict as P
@@ -153,7 +161,8 @@ def measured_from_rew(titles, api=None, allow_rta=False, freqs=None, window=None
         shift = levelbase.spl_shift(offset, to_level)
         mag = levelbase.to_base(np.asarray(mag, float), shift)
         if shifts is not None:
-            shifts[title] = round(shift, 2)
+            # None: not brought -- REW lists no calibration for it, or there is no base to bring it to (#176).
+            shifts[title] = None if offset is None or to_level is None else round(shift, 2)
         if not timing.get("has_ir", True) or phase is None:
             if not allow_rta:
                 raise VerifyError(
@@ -700,6 +709,8 @@ def render(report):
             if c.get("rew_calibration_db"):
                 # The shift that brought this FR read to the level base (#176): REW's calibration, not the car's.
                 lines[-1] += f"   REW calibration {-c['rew_calibration_db']:+.2f} dB (brought to the base)"
+            elif "rew_calibration_db" in c and c["rew_calibration_db"] is None:
+                lines[-1] += "   not brought to the base: REW lists no splOffsetdB"
             if c.get("hint"):
                 lines.append(f"    {'':6}      worst {c['worst_db']:+.1f} dB @ {c['worst_hz']:.0f} Hz -- {c['hint']}")
         if report.get("entry"):
@@ -1017,15 +1028,16 @@ def _selftest():
         def get_measurements(self):
             return self.listing
 
-        def find_measurement_id(self, title):
-            return next(k for k, v in self.listing.items() if v["title"] == title)
+        def find_measurement_id(self, title, measurements=None):
+            assert measurements is not None, "an id resolved against a listing of its own (the task review, #176)"
+            return next(k for k, v in measurements.items() if v["title"] == title)
 
         def get_timing(self, mid):
             return {"has_ir": False}
 
         def get_fr(self, mid, smoothing=None):
             curve = _db(A) if mid == "1" else _db(B)
-            return list(f), list(curve + self.listing[mid]["splOffsetdB"]), None
+            return list(f), list(curve + (self.listing[mid].get("splOffsetdB") or 0.0)), None
     shifts = {}
     got = measured_from_rew(["w-L_2 (rta)", "m-L_2 (rta)"], api=_Rew(), allow_rta=True, shifts=shifts)
     assert shifts == {"w-L_2 (rta)": 0.0, "m-L_2 (rta)": 16.65}, shifts
@@ -1039,6 +1051,39 @@ def _selftest():
     assert row_c["m-L"]["rew_calibration_db"] == 16.65 and row_c["w-L"]["rew_calibration_db"] == 0.0, row_c
     assert abs(row_c["m-L"]["offset_db"] - row_c["w-L"]["offset_db"]) < 0.01, "one base: one offset"
     assert "REW calibration -16.65 dB" in render(rep_c), render(rep_c)
+    # The task review (#176): REW's listing is read ONCE and every id is resolved against it -- a second read per
+    # title could hand one title another measurement's offset after a reorder; a listing that cannot be read is said,
+    # never read as "nothing to shift"; and a title REW lists no calibration for, among shifted ones, is said.
+    class _Counted(_Rew):
+        reads = 0
+
+        def get_measurements(self):
+            type(self).reads += 1
+            return {k: dict(v) for k, v in self.listing.items()}
+    measured_from_rew(["w-L_2 (rta)", "m-L_2 (rta)"], api=_Counted(), allow_rta=True, shifts={})
+    assert _Counted.reads == 1, _Counted.reads
+
+    class _Down(_Rew):
+        class Unavailable(OSError):
+            rew_state = "unavailable"
+
+        def get_measurements(self):
+            raise self.Unavailable("refused: REW is not running")
+    try:
+        measured_from_rew(["w-L_2 (rta)"], api=_Down(), allow_rta=True, shifts={})
+    except VerifyError as exc:
+        assert "listing" in str(exc) and "refused" in str(exc), exc
+    else:
+        raise AssertionError("a listing REW did not give was read as nothing to shift")
+
+    class _Bare(_Rew):
+        listing = dict(_Rew.listing, **{"3": {"title": "tw-L_2 (rta)"}})
+    bare = {}
+    got_bare = measured_from_rew(["w-L_2 (rta)", "tw-L_2 (rta)"], api=_Bare(), allow_rta=True, shifts=bare)
+    assert bare == {"w-L_2 (rta)": 0.0, "tw-L_2 (rta)": None}, bare
+    rep_bare = verify(pred, dict(got_bare, **{"w-L_2 (rta)": got["w-L_2 (rta)"]}),
+                      solo_names={"w-L": "w-L_2 (rta)", "m-L": "tw-L_2 (rta)"}, rew_calibration=bare)
+    assert "not brought to the base: REW lists no splOffsetdB" in render(rep_bare), render(rep_bare)
     print("selftest[verify_prediction] OK -- exact car → TRUSTED with zero deltas; +7.3 dB → still "
           "TRUSTED and the offsets say 7.3; an extra 0.6 ms → NOT trusted at the named junction; "
           "missing pair → UNVERIFIED; an RTA base is said in the verdict; entry control: the exact "

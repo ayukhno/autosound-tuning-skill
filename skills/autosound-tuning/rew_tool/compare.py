@@ -86,32 +86,47 @@ def read_curves(titles, smoothing, api=None):
     """`(curves, shifts, base_offset)`: `{title: (freqs, mag)}` as REW's frequency response gives them -- dB SPL, on
     each measurement's own SPL calibration -- each brought to the FIRST title's calibration (#176, hub #285 TCC-060):
     REW 5.40 beta 135 reset `splOffsetdB` 103.35 -> 120.0 between two rounds, and two rounds side by side then read
-    16.65 dB apart for no reason in the car. `shifts` is `{title: dB subtracted}` (0 for a title REW lists no offset
-    for, or when the first has none); `base_offset` the first title's `splOffsetdB`, or None. Raises `MissingTitle`."""
+    16.65 dB apart for no reason in the car. `shifts` is `{title: dB subtracted}`; a title that could not be brought --
+    no `splOffsetdB` on it or on the first -- is None there, said by `render`, when any title carries one (the task
+    review, #176); with none carrying one, nothing is said and every shift is 0. `base_offset` is the first title's
+    `splOffsetdB`, or None. Raises `MissingTitle` for REW's "no such title" only -- a title REW holds twice
+    (`AmbiguousTitle`) is raised as REW said it."""
     if api is None:
         import rew_api as api  # noqa: F811
     import levelbase
     listing = api.get_measurements()
-    curves, shifts, base = {}, {}, None
+    not_found = getattr(api, "MeasurementNotFound", None)
+    curves, shifts, base, offsets = {}, {}, None, {}
     for i, title in enumerate(titles):
         try:
             mid = api.find_measurement_id(title, listing)
-        except KeyError:
+        except Exception as exc:  # noqa: BLE001 -- REW's "no such title" only; anything else is raised as it is
+            if not_found is None or not isinstance(exc, not_found):
+                raise
             mid = None
         if mid is None:
             raise MissingTitle(title)
         freqs, mag, _phase = api.get_fr(mid, smoothing=smoothing)
-        offset = (listing.get(mid) or {}).get("splOffsetdB")
+        offsets[title] = levelbase._number((listing.get(mid) or {}).get("splOffsetdB"))
         if i == 0:
-            base = levelbase._number(offset)
-        shifts[title] = levelbase.spl_shift(offset, base)
+            base = offsets[title]
+        shifts[title] = levelbase.spl_shift(offsets[title], base)
         curves[title] = (list(freqs), levelbase.to_base(list(mag), shifts[title]))
+    if any(v is not None for v in offsets.values()):
+        for title, off in offsets.items():
+            if off is None or base is None:
+                shifts[title] = None                   # not brought: said by `render`
     return curves, shifts, base
 
 
 def render(result, titles, smoothing, band=None, target_name=None, shifts=None, base_offset=None):
     lines = [f"  read at {smoothing} smoothing (computed by REW on the way out; the view is untouched)"]
-    moved = [(t, d) for t, d in (shifts or {}).items() if t in titles and round(d, 2) != 0]
+    moved = [(t, d) for t, d in (shifts or {}).items() if t in titles and d is not None and round(d, 2) != 0]
+    unbrought = [t for t in titles if t in (shifts or {}) and shifts[t] is None]
+    if unbrought:
+        lines.append("  levels not brought (no splOffsetdB): " + ", ".join(unbrought)
+                     + (f" -- the first, {titles[0]}, carries none, so none is brought" if titles[0] in unbrought
+                        else ""))
     if moved:
         # The shift applied, said (#176): the levels are on the first title's SPL calibration, not REW's.
         lines.append(f"  levels brought to {titles[0]}'s REW SPL calibration"
@@ -167,12 +182,44 @@ def _selftest():
         def get_fr(self, mid, smoothing=None):
             return f, [m + (self.listing[mid].get("splOffsetdB") or 0.0) for m in a], None
     curves, shifts, base = read_curves(["ALL_3 (rta)", "ALL_4 (rta)", "ALL_5 (rta)"], "1/6", api=_Rew())
-    assert round(shifts["ALL_4 (rta)"], 2) == 16.65 and shifts["ALL_3 (rta)"] == 0.0 and shifts["ALL_5 (rta)"] == 0.0
+    assert round(shifts["ALL_4 (rta)"], 2) == 16.65 and shifts["ALL_3 (rta)"] == 0.0 and shifts["ALL_5 (rta)"] is None
     res = compare(curves, at=(300.0,))
     assert abs(res["rows"][0]["db"]["ALL_4 (rta)"] - res["rows"][0]["db"]["ALL_3 (rta)"]) < 1e-6, res
     shown = render(res, ["ALL_3 (rta)", "ALL_4 (rta)"], "1/6", shifts=shifts, base_offset=base)
     assert "brought to ALL_3 (rta)'s REW SPL calibration (splOffsetdB 103.35): ALL_4 (rta) -16.65 dB" in shown, shown
     assert "brought to" not in render(res, ["ALL_3 (rta)"], "1/6", shifts={"ALL_3 (rta)": 0.0})
+    # A title REW lists no calibration for, among calibrated ones, is said as not brought (the task review, #176) --
+    # the first one too, when it is the one without: then nothing is brought, and that is said.
+    said = render(res, ["ALL_3 (rta)", "ALL_4 (rta)", "ALL_5 (rta)"], "1/6", shifts=shifts, base_offset=base)
+    assert "not brought (no splOffsetdB): ALL_5 (rta)" in said, said
+    _, s2, b2 = read_curves(["ALL_5 (rta)", "ALL_4 (rta)"], "1/6", api=_Rew())
+    assert b2 is None and s2 == {"ALL_5 (rta)": None, "ALL_4 (rta)": None}, s2
+    assert "not brought (no splOffsetdB): ALL_5 (rta), ALL_4 (rta)" in render(
+        res, ["ALL_5 (rta)", "ALL_4 (rta)"], "1/6", shifts=s2, base_offset=b2)
+    # Only REW's "no such title" is a missing title; a title REW holds twice is raised as REW said it.
+    class _Twice(_Rew):
+        class AmbiguousTitle(KeyError):
+            pass
+
+        class MeasurementNotFound(KeyError):
+            pass
+
+        def find_measurement_id(self, title, measurements=None, exact=True):
+            if title == "gone":
+                raise self.MeasurementNotFound(title)
+            raise self.AmbiguousTitle(f"Ambiguous: 2 measurements titled {title!r}")
+    try:
+        read_curves(["gone"], "1/6", api=_Twice())
+    except MissingTitle:
+        pass
+    else:
+        raise AssertionError("REW's 'no such title' was not a missing title")
+    try:
+        read_curves(["ALL_3 (rta)"], "1/6", api=_Twice())
+    except MissingTitle:
+        raise AssertionError("a title REW holds twice was called missing")
+    except KeyError as exc:
+        assert "Ambiguous" in str(exc), exc
     print("selftest[compare] OK -- values at named frequencies with the difference, a band's log-weighted mean, "
           "the RMS against a target or the first curve with the level removed, and the smoothing named; titles REW "
           "calibrated apart brought to the first one's splOffsetdB, the shift said (#176)")
