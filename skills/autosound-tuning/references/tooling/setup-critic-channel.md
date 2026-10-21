@@ -223,6 +223,9 @@ Check it took: `python3 scripts/autosound_ai.py doctor` names the key it found, 
   as the prompt failed on a clean Windows machine. If `agy` still reports a denied tool, the
   PACKAGE points at a file — put the data into the package. Do not set `toolPermission:
   always-proceed` for this: a reviewer reads text and needs no tools.
+- **A reviewer CLI's stdin is the prompt (as a file) or the null device, never the terminal.** So a CLI
+  that wants to ask a login question on its first run fails instead of waiting for an answer nobody
+  can give. Sign in once in a terminal first, then the channel runs unattended.
 - **`AUTOSOUND_CRITIC_CLI_ARGS`** passes per-run flags to the CLI (e.g. `--sandbox`).
 - **Inside an agent session the CLI runs without the session's markers** (`CLAUDECODE` and
   similar), with a bounded wait, and the wait is announced before it starts. The wait grows with

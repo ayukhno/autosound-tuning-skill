@@ -3897,6 +3897,16 @@ def _selftest():
         assert cli_command("anthropic", "claude", "m", "/tmp/p.txt", big)[-1] == "-p"
         codex_argv = cli_command("openai", "codex", "m", "/tmp/p.txt", big)
         assert codex_argv[-1] == "-" and codex_argv[-2] == "/tmp/p.txt.answer.txt", codex_argv
+        # #186, a characterization check: it passes on the code as it stood BY DESIGN. At the subprocess boundary
+        # (`_run_child` -> bounded_run, a stand-in child that echoes its stdin) a CLI that reads its prompt on stdin
+        # is handed it, and the gemini fallback, which takes a path argument, is handed EOF -- the null device. No
+        # reviewer CLI ever has the terminal, so none can wait on a question it cannot ask.
+        echo = [sys.executable, "-c", "import sys; sys.stdout.write(sys.stdin.read())"]
+        for prov, binary, want in (("anthropic", "claude", "PROMPT"), ("openai", "codex", "PROMPT"), ("omp", "omp", "PROMPT"),
+                                   ("google", "agy", cli_stdin("google", "agy", "PROMPT")), ("google", "gemini", "")):
+            kid = _run_child(echo, 20, input=cli_stdin(prov, binary, "PROMPT"), capture_output=True, text=True,
+                             encoding="utf-8")
+            assert kid.stdout == want, (prov, binary, kid.stdout)
         # an older codex with no answer file: the answer is cut out of its transcript
         transcript = "OpenAI Codex v0\n--------\nuser\nPROMPT\ncodex\nThe review.\nLine two.\ntokens used\n1234\n"
         assert cli_reply("openai", "codex", 0, transcript, "") == ("The review.\nLine two.", None)
