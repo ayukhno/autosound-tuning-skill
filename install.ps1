@@ -249,6 +249,9 @@ $SkillSignedFrom       = "v3.0.64"
 # The app's tags are signed with the same key, from its own first signed tag (TCC's core/signed_tags.py, skill #101),
 # and checked the same way before uv installs one. Same value as TCC_SIGNED_FROM in install.sh.
 $TccSignedFrom         = "v0.1.45"
+# From this release the app's tag carries constraints.txt, the versions it was tested with, and a fresh install is held
+# to it as TCC's own update is (skill #179, tcc #194) -- see install.sh. Same value as TCC_CONSTRAINTS_FROM there.
+$TccConstraintsFrom    = "v1.1.4"
 # Where a local change to the installed clone is kept before the update resets it (skill #91). Same as install.sh.
 $LocalChanges = Join-Path $HOME ".claude\skills\autosound-local-changes"
 # The app's supported line -- `v*`, not `v3.*`: the app versions independently of the method.
@@ -1260,10 +1263,18 @@ function Test-TagSignature {
 # install.sh and of TCC's own updater: the one tag is fetched into a temporary BARE repository and verified there.
 # $true -- install it, and $script:TccSha is the commit the verified tag names ("" when nothing was verified); $false
 # -- it is not installed. Under $Scratch, not %TEMP%: see the note beside $Scratch.
+#   #179: the verified tag's constraints.txt is copied out of that repository before it goes, into a folder of its own
+# under $Scratch: $script:TccPins is the copy, for uv's --constraints, removed by the app's block after the install; no
+# copy, $script:TccPinsWhy says why -- the mirror of check_tcc_tag in install.sh. Through `git archive`, as
+# Save-LocalChanges takes its files: PowerShell 5 decodes a native program's output with the console's code page, so
+# `git show` into a file would hand uv other bytes than the signed commit's. With core.autocrlf and core.eol held, so
+# the person's git configuration converts no line end on the way out.
 $script:TccSha = ""
+$script:TccPins = ""
+$script:TccPinsWhy = ""
 function Test-TccTag {
     param([string]$Ref)
-    $script:TccSha = ""
+    $script:TccSha = ""; $script:TccPins = ""; $script:TccPinsWhy = ""
     if (Test-SettledByName $Ref $TccSignedFrom) { return $true }
     $repo = Join-Path $Scratch ("tcc-tag-" + [guid]::NewGuid().ToString("N"))
     New-Item -ItemType Directory -Force -Path $repo | Out-Null
@@ -1284,6 +1295,44 @@ function Test-TccTag {
     }
     $verified = Test-TagSignature $repo $Ref $TccSignedFrom "TCC"
     if ($verified) { $script:TccSha = "$(& git -C $repo rev-parse --verify --quiet "refs/tags/${Ref}^{commit}" 2>$null)".Trim() }
+    if ($script:TccSha) {
+        $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+        $global:LASTEXITCODE = $null
+        $listed = @(& git -C $repo ls-tree --full-tree "refs/tags/$Ref" -- constraints.txt 2>&1 | ForEach-Object { "$_" })
+        $lsRc = $LASTEXITCODE
+        # Only the line that names the file: `100644 blob <sha><TAB>constraints.txt`.
+        $entry = @($listed | Where-Object { ($_ -split "`t", 2)[-1] -ceq "constraints.txt" }) | Select-Object -First 1
+        $mode = if ($entry) { ($entry -split " ", 2)[0] } else { "" }
+        if ($lsRc -ne 0) {
+            $script:TccPinsWhy = "constraints.txt not read: $(@($listed) | Select-Object -Last 1)"
+        } elseif (-not $mode) {
+            $script:TccPinsWhy = "$Ref carries no constraints.txt"
+        } elseif (@("100644", "100755") -notcontains $mode) {
+            $kind = switch ($mode) { "040000" { "a folder" } "120000" { "a symbolic link" }
+                                     "160000" { "a gitlink (a submodule)" } default { "an entry" } }
+            $script:TccPinsWhy = "constraints.txt is $kind in the tag, not a file (git mode $mode) -- not used"
+        } else {
+            $pins = Join-Path $Scratch ("tcc-pins-" + [guid]::NewGuid().ToString("N"))
+            New-Item -ItemType Directory -Force -Path $pins | Out-Null
+            $zip = Join-Path $pins "constraints.zip"
+            $global:LASTEXITCODE = $null
+            $archived = @(& git -c core.autocrlf=false -c core.eol=lf -C $repo archive --format=zip -o $zip "refs/tags/$Ref" constraints.txt 2>&1 | ForEach-Object { "$_" })
+            $arRc = $LASTEXITCODE
+            $why = @($archived | Where-Object { $_.Trim() }) | Select-Object -Last 1
+            if ($arRc -eq 0 -and (Test-Path -LiteralPath $zip)) {
+                try { Expand-Archive -Path $zip -DestinationPath $pins -Force -ErrorAction Stop }
+                catch { $why = $_.Exception.Message }
+            }
+            Remove-Item -LiteralPath $zip -Force -ErrorAction SilentlyContinue
+            $file = Join-Path $pins "constraints.txt"
+            if ($arRc -eq 0 -and (Test-Path -LiteralPath $file -PathType Leaf)) { $script:TccPins = $file }
+            else {
+                $script:TccPinsWhy = "constraints.txt not read: $(if ($why) { $why } else { "git ended $arRc" })"
+                Remove-Item -LiteralPath $pins -Recurse -Force -ErrorAction SilentlyContinue
+            }
+        }
+        $ErrorActionPreference = $prev
+    }
     Remove-Item $repo -Recurse -Force -ErrorAction SilentlyContinue
     if (-not $verified) { return $false }
     # Fail closed, as TCC does: a verified tag whose commit git cannot name is not installed unpinned.
@@ -1880,10 +1929,41 @@ if ($Mode -eq "tcc") {
             $tccForce = @("--force")
             Say "the app's launcher here was not put there by uv (TCC's own updater did) -- replacing it"
         }
+        # #179 (hub #280): held to the versions the tag was tested with, its constraints.txt copied out by Test-TccTag,
+        # as TCC's own update is -- see install.sh for the whole rule: uv's --help is asked first, and only an option
+        # line ` --constraints ` (not `--build-constraints`) takes the file; an old uv, a release from
+        # $TccConstraintsFrom on without the file, and a tag not fetched install plain, said; never a retry after a
+        # pinned install that failed. A warning each, never a refusal: $TccRefused is the signature's and uv's alone.
+        $tccHeld = @()
+        if (-not $TccRefused) {
+            if (-not $script:TccSha) {
+                # Settled by its name -- a dry run, a name that is not a release, the developer's switch, a tag before
+                # signing: nothing was fetched, so nothing was read.
+                if ($DryRun) { Say "a dry run fetches no tag: the versions $TccRef was tested with (its constraints.txt) are not read here" }
+                else { Warn "$TccRef was not fetched, so the versions it was tested with are not read -- uv chooses them" }
+            } elseif ($script:TccPins) {
+                $help = ""
+                try { $help = (& $Uv tool install --help 2>$null | Out-String) } catch { $help = "" }
+                if ($help.Contains(" --constraints ")) {
+                    $tccHeld = @("--constraints", $script:TccPins)
+                    Say "held to the versions $TccRef was tested with (its constraints.txt)"
+                } else {
+                    $uvSaid = ""
+                    try { $uvSaid = (& $Uv --version 2>$null | Out-String).Trim() } catch { $uvSaid = "" }
+                    Warn "this uv cannot hold the app to the versions it was tested with (that needs uv 0.5.6 or newer) -- installing without them, so uv chooses the versions. This uv: $uvSaid"
+                }
+            } else {
+                # Only a release tag gets this far (one settled by its name has no $script:TccSha), so [version] reads it.
+                $tccVer = (($TccRef -replace '^beta-', '') -replace '-rc[0-9]+\z', '') -replace '^v', ''
+                if ([version]$tccVer -ge [version]($TccConstraintsFrom -replace '^v', '')) {
+                    Warn "the versions $TccRef was tested with could not be read, so uv chooses the versions: $($script:TccPinsWhy)"
+                }
+            }
+        }
         if ($TccRefused) {
             Warn "the app is not installed: $TccRefused."
             Warn "The method is installed and works without it; the end of this run says so again."
-        } elseif (Run { & $Uv tool install --quiet --python 3.12 --upgrade @tccForce $TccSpec } "uv tool install autosound-tcc[gui,claude]") {
+        } elseif (Run { & $Uv tool install --quiet --python 3.12 --upgrade @tccForce @tccHeld $TccSpec } "uv tool install autosound-tcc[gui,claude]") {
             Sync-ProcessPath
             # The windowed launcher when the package has one (no console window behind the app),
             # the console one otherwise.
@@ -1895,6 +1975,8 @@ if ($Mode -eq "tcc") {
         } elseif (-not $DryRun) {
             Warn "the app did not install -- see above. The method alone still works; re-run this later."
         }
+        # The copy of the tag's constraints.txt has done its work, whichever way the install went (#179).
+        if ($script:TccPins) { Remove-Item -LiteralPath (Split-Path -Parent $script:TccPins) -Recurse -Force -ErrorAction SilentlyContinue }
     }
 }
 if ($Mode -eq "tcc" -and ($TccExe -or $DryRun)) {

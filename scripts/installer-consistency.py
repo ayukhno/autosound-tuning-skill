@@ -298,6 +298,12 @@ UPKEEP = ROOT / "skills" / "autosound-tuning" / "scripts" / "upkeep.py"
 #: The functions of install.sh's signature check, cut out and run together: the method's tag and the app's (#99, #101),
 #: and the release-tag rule they ask (T-45).
 SIGNING_FUNCTIONS = ("is_release_tag", "settled_by_name", "verify_tag", "check_tcc_tag", "tcc_tag_still_at")
+#: #179: what the app's tag carries from v1.1.4 (TCC's TCC_CONSTRAINTS, uv.lock's export for `[gui,claude]`), and the
+#: release that first carries it (TCC's TCC_CONSTRAINTS_FROM). The bytes hold a CRLF and a Cyrillic letter: the copy
+#: uv is handed is the signed commit's file as it is, never text a shell or PowerShell decoded and wrote again.
+TCC_PINS_NAME = "constraints.txt"
+TCC_PINS_BYTES = "# tested with these (a stand-in)\r\npyside6==6.11.2\n# ж\n".encode("utf-8")
+TCC_PINS_FROM = "v1.1.4"
 
 #: T-35 (#142): what the person's own git configuration may hold, and a `git` that is not git. Each answers "Good" one
 #: way or another; none of them is the author's signature. A fake `gpg.program` stands in for gpg: no real one runs,
@@ -418,6 +424,30 @@ def signing_problems(sh):
         cannot.write_bytes(f'[gpg]\n\tprogram = {Path(tmp, "cannot-check-gpg.sh").as_posix()}\n'.encode("utf-8"))
         ultimate = Path(tmp, "ultimate.gitconfig")
         ultimate.write_bytes(b"[gpg]\n\tminTrustLevel = ultimate\n")
+        # #179: the app's tags from v1.1.4 carry `constraints.txt` -- each signed by the author, on a commit of its own:
+        # v1.1.4 the file, v1.1.3 and v1.2.0 none, v1.2.1 a folder by that name, v1.2.2 a symbolic link (its index
+        # entry written by hand: a Windows git with core.symlinks=false would add a plain file). After `commit` above,
+        # which the older tags name.
+        author_signed = (*signed, "-c", f"user.signingkey={os.path.join(tmp, 'author')}.pub", "tag", "-s")
+        Path(repo, TCC_PINS_NAME).write_bytes(TCC_PINS_BYTES)
+        sh_run("git", "-C", repo, "add", TCC_PINS_NAME)
+        sh_run("git", "-C", repo, "commit", "-q", "-m", "pins")
+        sh_run(*author_signed, "v1.1.4", "-m", "s")
+        sh_run("git", "-C", repo, "rm", "-q", TCC_PINS_NAME)
+        sh_run("git", "-C", repo, "commit", "-q", "-m", "no pins")
+        sh_run(*author_signed, "v1.1.3", "-m", "s")
+        sh_run(*author_signed, "v1.2.0", "-m", "s")
+        Path(repo, TCC_PINS_NAME).mkdir()
+        Path(repo, TCC_PINS_NAME, "x").write_bytes(b"x\n")
+        sh_run("git", "-C", repo, "add", TCC_PINS_NAME)
+        sh_run("git", "-C", repo, "commit", "-q", "-m", "a folder")
+        sh_run(*author_signed, "v1.2.1", "-m", "s")
+        sh_run("git", "-C", repo, "rm", "-q", "-r", TCC_PINS_NAME)
+        Path(tmp, "link-target").write_bytes(b"elsewhere.txt")
+        blob = sh_run("git", "-C", repo, "hash-object", "-w", os.path.join(tmp, "link-target")).strip()
+        sh_run("git", "-C", repo, "update-index", "--add", "--cacheinfo", f"120000,{blob},{TCC_PINS_NAME}")
+        sh_run("git", "-C", repo, "commit", "-q", "-m", "a link")
+        sh_run(*author_signed, "v1.2.2", "-m", "s")
     except (OSError, RuntimeError) as exc:
         return [f"the signature check's fixtures could not be made ({exc}) -- unrun is not agreed"]
     repo_posix = Path(repo).as_posix()
@@ -495,6 +525,52 @@ def signing_problems(sh):
             out.append(f"install.sh check_tcc_tag {ref}{' (skip)' if skip else ''}{' (dry run)' if dry == '1' else ''}: "
                        f"exit {rc}, want {want_rc}, {want_text!r} and TCC_SHA={want_sha[:12]!r} -- said "
                        f"{said.strip()[-160:]!r}")
+    # #179: the tag's `constraints.txt`, copied out of the scratch repository before it goes -- only from a verified tag,
+    # only a file, byte for byte -- with TMPDIR this case's own folder: when check_tcc_tag is done the copy is the one
+    # thing left there (the scratch repository and the signers file gone), and nothing at all when there was no file.
+    # (ref, the switch, a dry run, a copy left, words in TCC_PINS_WHY.) A tag settled by its name is not fetched, so
+    # it hands on neither a copy nor a reason: the app's block says that one (app_problems).
+    for ref, skip, dry, want_copy, want_why in (("v1.1.4", "", "0", True, ""),
+                                                ("v1.1.3", "", "0", False, "v1.1.3 carries no constraints.txt"),
+                                                ("v1.2.0", "", "0", False, "v1.2.0 carries no constraints.txt"),
+                                                ("v1.2.1", "", "0", False, "a folder in the tag, not a file (git mode "
+                                                                           "040000)"),
+                                                ("v1.2.2", "", "0", False, "a symbolic link in the tag, not a file (git "
+                                                                           "mode 120000)"),
+                                                ("v1.1.4", "1", "0", False, ""), ("v1.1.4", "", "1", False, "")):
+        what = f"{ref}{' (skip)' if skip else ''}{' (dry run)' if dry == '1' else ''}"
+        own = Path(tmp, f"pins-tmp-{ref}-{skip or 0}-{dry}")
+        own.mkdir()
+        rc, said = run(f'TMPDIR="{own.as_posix()}"; export TMPDIR\nTCC_PINS=stale TCC_PINS_WHY=stale\n'
+                       f'check_tcc_tag "{ref}" 2>&1; rc=$?\n'
+                       'printf "TCC_PINS=[%s]\\nTCC_PINS_WHY=[%s]\\n" "${TCC_PINS-unset}" "${TCC_PINS_WHY-unset}"\n'
+                       'exit $rc\n', skip, dry)
+        pins = re.search(r"^TCC_PINS=\[(.*)\]$", said, re.M)
+        why = re.search(r"^TCC_PINS_WHY=\[(.*)\]$", said, re.M)
+        left = sorted(p.relative_to(own).as_posix() for p in own.rglob("*"))
+        wrong = [] if rc == 0 else [f"exit {rc}, want 0"]
+        if want_copy:
+            folder = left[0] if left else ""
+            copy = own / folder / TCC_PINS_NAME
+            if left != [folder, f"{folder}/{TCC_PINS_NAME}"] or not copy.is_file() or copy.is_symlink():
+                wrong.append(f"leaves {left} in its TMPDIR, want one folder holding one file {TCC_PINS_NAME}")
+            elif copy.read_bytes() != TCC_PINS_BYTES:
+                wrong.append(f"its copy holds {copy.read_bytes()[:60]!r}, want the tag's bytes {TCC_PINS_BYTES[:60]!r}")
+            if not pins or not pins.group(1).endswith(f"{folder}/{TCC_PINS_NAME}"):
+                wrong.append(f"TCC_PINS is {pins.group(1) if pins else 'not printed'!r}, want that copy's path")
+            if not why or why.group(1):
+                wrong.append(f"TCC_PINS_WHY is {why.group(1) if why else 'not printed'!r}, want empty")
+        else:
+            if left:
+                wrong.append(f"leaves {left} in its TMPDIR, want nothing")
+            if not pins or pins.group(1):
+                wrong.append(f"TCC_PINS is {pins.group(1) if pins else 'not printed'!r}, want empty")
+            if not why or (want_why not in why.group(1) if want_why else why.group(1)):
+                wrong.append(f"TCC_PINS_WHY is {why.group(1) if why else 'not printed'!r}, want "
+                             + (f"one naming {want_why!r}" if want_why else "empty"))
+        if wrong:
+            out.append(f"install.sh check_tcc_tag {what}, the tag's {TCC_PINS_NAME} (#179): " + "; ".join(wrong)
+                       + f" -- said {said.strip()[-200:]!r}")
     # ...and the "moved" check before uv: the verified commit passes; another commit, or a tag with no ^{} line, not.
     for ref, sha, want_rc in (("v0.1.45", commit, 0), ("v0.1.45", "0" * 40, 1), ("v0.1.48", commit, 1)):
         rc, said = run(f'tcc_tag_still_at "{ref}" "{sha}"\n')
@@ -1322,14 +1398,54 @@ APP_CASES = (("installed now", ("v1.1.2",), 0, True, True, 0, False, "", "tcc", 
              ("a dry run with no git yet", None, 0, True, True, 0, False, "", "tcc",
               ("would install the newest app release (not readable here: no git yet)",), True,
               ("run again when GitHub answers", "could not read the app's release tags", "the app is not installed")))
+#: #179 (hub #280): a fresh install is held to the tag's constraints.txt, as TCC's own updater is (tcc #194) -- (case,
+#: the tag offered, what check_tcc_tag hands on: a copy of the "file", its absence, or nothing for a tag "settled" by
+#: its name; the uv: "" new, "old" without `--constraints`; uv's install exit; the parts missing after; uv given the
+#: file; words; words never). One install in every case: a pinned install that fails is not tried again without the
+#: file -- a dropped network is not an old uv (TCC's updates.py, the re-review of #194).
+APP_PIN_CASES = (
+    ("a tag with constraints.txt", "v1.2.0", "file", "", 0, "", True,
+     ("held to the versions v1.2.0 was tested with", "✓ installed"), ("uv chooses",)),
+    ("a v1.1.3 tag, from before the file", "v1.1.3", "absent", "", 0, "", False, ("✓ installed",),
+     ("uv chooses", "could not be read", "held to")),
+    ("a v1.2.0 tag without it", "v1.2.0", "absent", "", 0, "", False,
+     ("the versions v1.2.0 was tested with could not be read, so uv chooses the versions",
+      "v1.2.0 carries no constraints.txt", "✓ installed"), ("held to",)),
+    ("an old uv", "v1.2.0", "file", "old", 0, "", False,
+     ("this uv cannot hold the app to the versions it was tested with (that needs uv 0.5.6 or newer)", "uv 0.4.30",
+      "✓ installed"), ("held to",)),
+    ("a pinned install that fails", "v1.2.0", "file", "", 1, "TCC", True,
+     ("held to the versions v1.2.0 was tested with", "Autosound TCC was not installed"), ("uv chooses",)),
+    ("a tag settled by its name", "v1.2.0", "settled", "", 0, "", False,
+     ("v1.2.0 was not fetched, so the versions it was tested with are not read -- uv chooses them", "✓ installed"),
+     ("held to",)))
 #: The stand-ins the app's block meets: a `uv` that lists the app, installs it into $LOCAL_BIN or fails as $STUB_UV_RC
 #: says; and a `curl` that never reaches the network -- what it hands `sh` ends uv's own installer with 7.
+#:   #179: its `tool install --help` names `-c, --constraints` (uv 0.5.6 and newer), or with STUB_UV_HELP=old does not
+#: -- an old uv, whose --version says so -- and both name `--build-constraints`, which is not the option. Before, the
+#: probe would have "installed". An install handed `--constraints <file>` copies the file's bytes to $STUB_LOG.pins and
+#: its path to $STUB_LOG.pins-path: what uv was given, read while the install runs.
 STUB_UV = (b"#!/bin/sh\n"
            b"[ -z \"${STUB_LOG:-}\" ] || printf 'uv %s\\n' \"$*\" >> \"$STUB_LOG\"\n"
            b"case \"$1 ${2:-}\" in\n"
-           b"  '--version '*) echo 'uv 0.12.10 (a stand-in)' ;;\n"
+           b"  '--version '*) if [ \"${STUB_UV_HELP:-}\" = old ]; then echo 'uv 0.4.30 (an old stand-in)'; "
+           b"else echo 'uv 0.12.10 (a stand-in)'; fi ;;\n"
            b"  'tool list') echo 'autosound-tcc v1.1.2' ;;\n"
            b"  'tool install')\n"
+           b"    for a in \"$@\"; do\n"
+           b"      [ \"$a\" = --help ] || continue\n"
+           b"      echo 'Usage: uv tool install [OPTIONS] <PACKAGE>'\n"
+           b"      [ \"${STUB_UV_HELP:-}\" = old ] || echo '  -c, --constraints <CONSTRAINTS>  Constrain versions using "
+           b"the given requirements files'\n"
+           b"      echo '      --build-constraints <BUILD_CONSTRAINTS>  Constrain build dependencies'\n"
+           b"      exit 0\n"
+           b"    done\n"
+           b"    held='' last=''\n"
+           b"    for a in \"$@\"; do [ \"$last\" != --constraints ] || held=\"$a\"; last=\"$a\"; done\n"
+           b"    if [ -n \"$held\" ] && [ -n \"${STUB_LOG:-}\" ]; then\n"
+           b"      printf '%s\\n' \"$held\" > \"$STUB_LOG.pins-path\"\n"
+           b"      cat \"$held\" > \"$STUB_LOG.pins\" 2>/dev/null || rm -f \"$STUB_LOG.pins\"\n"
+           b"    fi\n"
            b"    if [ \"${STUB_UV_RC:-0}\" != 0 ]; then echo 'error: the build failed (a stand-in)' >&2; "
            b"exit \"$STUB_UV_RC\"; fi\n"
            b"    mkdir -p \"$LOCAL_BIN\" && printf '#!/bin/sh\\nexit 0\\n' > \"$LOCAL_BIN/autosound-tcc\" "
@@ -1349,64 +1465,116 @@ def app_problems(sh, ps1):
     import tempfile
     out = []
     block = re.search(r'^TCC_BIN=""\n.*?(?=^# ── the reviewer)', sh, re.M | re.S)
-    check = re.search(r'^if \[ "\$MODE" = "tcc" \] && \[ "\$DRY_RUN" = 0 \]; then\n.*?^fi\n', sh, re.M | re.S)
+    check_line = re.search(r'^if \[ "\$MODE" = "tcc" \] && \[ "\$DRY_RUN" = 0 \]; then\n.*?^fi\n', sh, re.M | re.S)
     functions, missing = cut_functions(sh, ("say", "warn", "have", "runs_ok", "usable", "run", "pretty", "in_local_bin",
                                             "find_bin", "manifest_add", "is_missing", "missing", "newest_on_channel",
                                             "read_tags"))
-    if not block or not check or missing:
+    if not block or not check_line or missing:
         return [f"install.sh: the app's block, its line in the checks, or {missing} -- the app cannot be run (#142)"]
     bash, why = find_bash()
     if not bash:
         return [f"{why} -- install.sh's app block cannot be run, and unrun is not agreed"]
     tmp = tempfile.mkdtemp(prefix="autosound_app_")
+
+    def run_block(i, offered, ls_rc, check, have_uv, uv_rc, before, dry, uv_help=""):
+        """The app's block and its line in the checks, run once with `check` in check_tcc_tag's place: (said, the
+        stand-ins' calls, the case's folder, the MISSING/MODE line, what is wrong with the run itself)."""
+        home = Path(tmp, f"case-{i}")
+        stub = home / "stub"
+        stub.mkdir(parents=True)
+        for name, body, wanted in (("git", NO_NETWORK_GIT, True), ("uv", STUB_UV, have_uv), ("curl", STUB_CURL, True),
+                                   ("autosound-tcc", b"#!/bin/sh\nexit 0\n", before)):
+            if wanted:
+                (stub / name).write_bytes(body)
+                (stub / name).chmod(0o755)
+        tags = home / "tags"
+        tags.write_bytes("".join(t + "\n" for t in (offered or ())).encode("utf-8"))
+        script = ('set -euo pipefail\n' + functions
+                  + 'step() { printf "==> %s\\n" "$*"; }\non_mac() { return 1; }\n'
+                  + check.replace("@HOME@", home.as_posix())
+                  + 'tcc_tag_still_at() { return 0; }\n'
+                  + ('usable() { return 1; }\n' if dry else '')
+                  + f'export PATH="$(cd "{stub.as_posix()}" && pwd):/usr/bin:/bin"\n'
+                  + f'LOCAL_BIN="{(home / "bin").as_posix()}"; export LOCAL_BIN\n'
+                  + f'MANIFEST="{(home / "manifest").as_posix()}"\nAPP="{(home / "no.app").as_posix()}"\n'
+                  + f'DESKTOP_LINK="{(home / "no-link").as_posix()}"\n'
+                  + f'MODE=tcc\nCHANNEL=stable\nTCC_REF=""\nDRY_RUN={1 if dry else 0}\nMISSING=""\nUV_VERSION=0.12.10\n'
+                  + f'TCC_CONSTRAINTS_FROM={TCC_PINS_FROM}\n'
+                  + 'TCC_REPO="https://github.com/ayukhno/autosound-tcc"\nTCC_TAG_GLOB="v*"\nTCC_BETA_GLOB="beta-v*"\n'
+                  + block.group(0) + check_line.group(0)
+                  + 'printf "MISSING=[%s] MODE=[%s]\\n" "$MISSING" "$MODE"\n')
+        env = dict(os.environ, HOME=home.as_posix(), STUB_TAGS=tags.as_posix() if offered else "",
+                   STUB_RC=str(ls_rc), STUB_SAYS=SSL_SAYS, STUB_UV_RC=str(uv_rc), STUB_UV_HELP=uv_help,
+                   STUB_LOG=(home / "calls").as_posix())
+        env.pop("UV_TOOL_BIN_DIR", None)
+        r = subprocess.run([bash, "-s"], input=script.encode("utf-8"), capture_output=True, env=env)
+        said = (r.stdout + r.stderr).decode("utf-8", "replace")
+        got = re.search(r"MISSING=\[(.*?)\] MODE=\[(.*?)\]", said)
+        calls = (home / "calls").read_text(encoding="utf-8") if (home / "calls").exists() else ""
+        wrong = [] if r.returncode == 0 else [f"exit {r.returncode}"]
+        if "curl" in calls and "astral.sh" not in calls:
+            wrong.append(f"curl was asked for something other than uv's installer: {calls!r}")
+        return said, calls, home, got, wrong
+
     try:
         for i, (case, offered, ls_rc, signed, have_uv, uv_rc, before, want_missing, want_mode, words, *dry_never) \
                 in enumerate(APP_CASES):
             dry, never = dry_never if dry_never else (False, ())
-            home = Path(tmp, f"case-{i}")
-            stub = home / "stub"
-            stub.mkdir(parents=True)
-            for name, body, wanted in (("git", NO_NETWORK_GIT, True), ("uv", STUB_UV, have_uv), ("curl", STUB_CURL, True),
-                                       ("autosound-tcc", b"#!/bin/sh\nexit 0\n", before)):
-                if wanted:
-                    (stub / name).write_bytes(body)
-                    (stub / name).chmod(0o755)
-            tags = home / "tags"
-            tags.write_bytes("".join(t + "\n" for t in (offered or ())).encode("utf-8"))
-            script = ('set -euo pipefail\n' + functions
-                      + 'step() { printf "==> %s\\n" "$*"; }\non_mac() { return 1; }\n'
-                      + ('check_tcc_tag() { TCC_SHA=""; return 0; }\n' if signed
-                         else 'check_tcc_tag() { TCC_SHA=""; return 1; }\n')
-                      + 'tcc_tag_still_at() { return 0; }\n'
-                      + ('usable() { return 1; }\n' if dry else '')
-                      + f'export PATH="$(cd "{stub.as_posix()}" && pwd):/usr/bin:/bin"\n'
-                      + f'LOCAL_BIN="{(home / "bin").as_posix()}"; export LOCAL_BIN\n'
-                      + f'MANIFEST="{(home / "manifest").as_posix()}"\nAPP="{(home / "no.app").as_posix()}"\n'
-                      + f'DESKTOP_LINK="{(home / "no-link").as_posix()}"\n'
-                      + f'MODE=tcc\nCHANNEL=stable\nTCC_REF=""\nDRY_RUN={1 if dry else 0}\nMISSING=""\nUV_VERSION=0.12.10\n'
-                      + 'TCC_REPO="https://github.com/ayukhno/autosound-tcc"\nTCC_TAG_GLOB="v*"\nTCC_BETA_GLOB="beta-v*"\n'
-                      + block.group(0) + check.group(0)
-                      + 'printf "MISSING=[%s] MODE=[%s]\\n" "$MISSING" "$MODE"\n')
-            env = dict(os.environ, HOME=home.as_posix(), STUB_TAGS=tags.as_posix() if offered else "",
-                       STUB_RC=str(ls_rc), STUB_SAYS=SSL_SAYS, STUB_UV_RC=str(uv_rc),
-                       STUB_LOG=(home / "calls").as_posix())
-            env.pop("UV_TOOL_BIN_DIR", None)
-            r = subprocess.run([bash, "-s"], input=script.encode("utf-8"), capture_output=True, env=env)
-            said = (r.stdout + r.stderr).decode("utf-8", "replace")
-            got = re.search(r"MISSING=\[(.*?)\] MODE=\[(.*?)\]", said)
-            wrong = [] if r.returncode == 0 else [f"exit {r.returncode}"]
+            said, calls, home, got, wrong = run_block(
+                i, offered, ls_rc, 'check_tcc_tag() { TCC_SHA=""; return %d; }\n' % (0 if signed else 1), have_uv,
+                uv_rc, before, dry)
             if not got or got.group(1) != want_missing or got.group(2) != want_mode:
                 wrong.append(f"ends with {got.group(0) if got else 'no MISSING line'}, want MISSING=[{want_missing}] "
                              f"MODE=[{want_mode}]")
             wrong += [f"never says {w!r}" for w in words if w not in said]
             wrong += [f"says {w!r}" for w in never if w in said]
-            calls = (home / "calls").read_text(encoding="utf-8") if (home / "calls").exists() else ""
             if dry and "git " in calls:
                 wrong.append(f"a dry run with no git yet ran git: {calls!r}")
-            if "curl" in calls and "astral.sh" not in calls:
-                wrong.append(f"curl was asked for something other than uv's installer: {calls!r}")
             if wrong:
                 out.append(f"install.sh's app block, {case}: " + "; ".join(wrong) + f" -- said {said.strip()[-260:]!r}")
+        # #179: the tag's constraints.txt, as check_tcc_tag hands it on -- a copy (TCC_PINS), or why there is none
+        # (TCC_PINS_WHY), or neither for a tag settled by its name (TCC_SHA "") -- and what the block does with it.
+        for j, (case, ref, pins, uv_help, uv_rc, want_missing, want_held, words, never) in enumerate(APP_PIN_CASES):
+            sha = '""' if pins == "settled" else "0123456789abcdef0123456789abcdef01234567"
+            if pins == "file":
+                check = ('check_tcc_tag() { TCC_SHA=%s; mkdir -p "@HOME@/pins"; '
+                         'cp "@HOME@/pins.src" "@HOME@/pins/%s"; TCC_PINS="@HOME@/pins/%s"; TCC_PINS_WHY=""; }\n'
+                         % (sha, TCC_PINS_NAME, TCC_PINS_NAME))
+            else:
+                why = f"{ref} carries no {TCC_PINS_NAME}" if pins == "absent" else ""
+                check = 'check_tcc_tag() { TCC_SHA=%s; TCC_PINS=""; TCC_PINS_WHY="%s"; }\n' % (sha, why)
+            Path(tmp, f"case-pins-{j}").mkdir(parents=True)
+            Path(tmp, f"case-pins-{j}", "pins.src").write_bytes(TCC_PINS_BYTES)
+            said, calls, home, got, wrong = run_block(f"pins-{j}", (ref,), 0, check, True, uv_rc, False, False, uv_help)
+            if not got or got.group(1) != want_missing or got.group(2) != "tcc":
+                wrong.append(f"ends with {got.group(0) if got else 'no MISSING line'}, want MISSING=[{want_missing}] "
+                             f"MODE=[tcc]")
+            wrong += [f"never says {w!r}" for w in words if w not in said]
+            wrong += [f"says {w!r}" for w in never if w in said]
+            installs = [ln for ln in calls.splitlines() if ln.startswith("uv tool install ") and "--help" not in ln]
+            probes = [ln for ln in calls.splitlines() if ln.startswith("uv tool install ") and "--help" in ln]
+            if len(installs) != 1:
+                wrong.append(f"{len(installs)} install(s), want exactly one -- never a retry: {installs!r}")
+            held = [ln for ln in installs if " --constraints " in ln]
+            if want_held and not held:
+                wrong.append(f"uv was not given --constraints: {installs!r}")
+            if not want_held and held:
+                wrong.append(f"uv was given --constraints: {held!r}")
+            if want_held:
+                given = home / "calls.pins"
+                if not given.is_file() or given.read_bytes() != TCC_PINS_BYTES:
+                    wrong.append(f"uv read {given.read_bytes()[:60] if given.is_file() else 'no file'!r} from "
+                                 f"--constraints, want the tag's bytes")
+            if pins == "file" and len(probes) != 1:
+                wrong.append(f"uv's --help was asked {len(probes)} time(s) before the install, want once")
+            if pins != "file" and probes:
+                wrong.append(f"uv's --help was asked with no file to hold it to: {probes!r}")
+            if (home / "pins").exists():
+                wrong.append(f"the copy of {TCC_PINS_NAME} is left after the install: "
+                             f"{sorted(p.name for p in (home / 'pins').iterdir())}")
+            if wrong:
+                out.append(f"install.sh's app block, {case} (#179): " + "; ".join(wrong)
+                           + f" -- said {said.strip()[-300:]!r}")
     except OSError as exc:
         out.append(f"the app block's fixtures could not be made ({exc}) -- unrun is not agreed")
     finally:
@@ -1429,7 +1597,20 @@ def app_problems(sh, ps1):
              ('Warn "would install the newest app release (not readable here: $($script:TagsWhy))"' in ps1,
               "install.ps1's app block says what a dry run would install when the app's tags cannot be read"),
              ('if [ "$DRY_RUN" = 0 ] && { [ -d "$APP" ] || find_bin autosound-tcc >/dev/null; }; then TCC_KEPT=1; fi'
-              in sh, "install.sh notes an app from before (TCC_KEPT) for the end's line"))
+              in sh, "install.sh notes an app from before (TCC_KEPT) for the end's line"),
+             # #179: install.ps1's half of the tag's constraints.txt, READ (Test-TccTag's copy is RUN where PowerShell
+             # is, ps1_tcc_pins_problems): uv's --help asked first, one install line that takes the file, and the three
+             # ways of installing without it said as install.sh says them.
+             ("@tccForce @tccHeld $TccSpec" in ps1 and len(re.findall(r"tool install --quiet --python 3\.12", ps1)) == 1,
+              "install.ps1 has one app install line, and it hands uv @tccHeld (#179)"),
+             ("tool install --help" in ps1 and '.Contains(" --constraints ")' in ps1,
+              "install.ps1 asks uv's tool install --help for ' --constraints ' before the install (#179)"),
+             (all(w in ps1 for w in ("this uv cannot hold the app to the versions it was tested with (that needs uv "
+                                     "0.5.6 or newer)", "was tested with could not be read, so uv chooses the versions",
+                                     "was not fetched, so the versions it was tested with are not read -- uv chooses "
+                                     "them", "held to the versions $TccRef was tested with")),
+              "install.ps1 says an old uv, a release without its constraints.txt and a tag not fetched as install.sh "
+              "does (#179)"))
     out += [f"{what} -- does not hold (#142)" for holds, what in reads if not holds]
     return out
 
@@ -2518,6 +2699,106 @@ def ps1_run_problems(ps1):
     return out, True
 
 
+#: #179: install.ps1's functions that Test-TccTag runs on, cut out as they stand; Test-TagSignature is a stand-in that
+#: says yes (the signature is install.sh's run above, and the read checks of install.ps1's).
+PS1_PINS_FUNCTIONS = ("Say", "Warn", "Test-ReleaseTag", "Test-SettledByName", "Test-TccTag")
+
+
+def ps1_tcc_pins_problems(ps1):
+    """#179: install.ps1's Test-TccTag RUN under PowerShell, where there is one, against tags made here -- v1.1.4 holds
+    `constraints.txt`, v1.2.0 does not, v1.2.1 holds a folder by that name; `(problems, ran)`. Each fetch is the real
+    one, into a bare repository under a $Scratch of the case's own: when Test-TccTag is done the copy of the file is the
+    one thing left there -- one folder, one file, the tag's bytes -- and nothing at all when the tag gave no file. A tag
+    settled by its name (the switch) is not fetched and leaves nothing."""
+    import tempfile
+    shell = find_powershell()
+    if not shell:
+        return [], False
+    cut, lacking = [], []
+    for name in PS1_PINS_FUNCTIONS:
+        m = (re.search(rf"^function {re.escape(name)}\s+\{{[^\n]*\}}[ \t]*$", ps1, re.M)
+             or re.search(rf"^function {re.escape(name)} \{{\n.*?^\}}", ps1, re.M | re.S))
+        (cut.append(m.group(0)) if m else lacking.append(name))
+    if lacking:
+        return [f"install.ps1: no {lacking} to run under PowerShell (#179)"], True
+    tmp = tempfile.mkdtemp(prefix="autosound_ps1_pins_")
+    out = []
+    try:
+        repo = Path(tmp, "tcc")
+        git_vars = dict(GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t", GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t",
+                        GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1")
+        genv = dict(os.environ, **git_vars)
+
+        def git(*args):
+            subprocess.run(["git", "-C", str(repo), *args], env=genv, capture_output=True, check=True)
+        repo.mkdir()
+        git("init", "-q")
+        (repo / TCC_PINS_NAME).write_bytes(TCC_PINS_BYTES)
+        for args in (("add", "-A"), ("commit", "-q", "-m", "pins"), ("tag", "-a", "v1.1.4", "-m", "t"),
+                     ("rm", "-q", TCC_PINS_NAME), ("commit", "-q", "-m", "no pins"), ("tag", "-a", "v1.2.0", "-m", "t")):
+            git(*args)
+        (repo / TCC_PINS_NAME).mkdir()
+        (repo / TCC_PINS_NAME / "x").write_bytes(b"x\n")
+        for args in (("add", "-A"), ("commit", "-q", "-m", "a folder"), ("tag", "-a", "v1.2.1", "-m", "t")):
+            git(*args)
+        for ref, skip, want_copy, want_why in (("v1.1.4", "", True, ""),
+                                               ("v1.2.0", "", False, "v1.2.0 carries no constraints.txt"),
+                                               ("v1.2.1", "", False, "a folder in the tag, not a file (git mode 040000)"),
+                                               ("v1.1.4", "1", False, "")):
+            case = f"{ref}{'-skip' if skip else ''}"
+            scratch = Path(tmp, f"scratch-{case}")
+            scratch.mkdir()
+            script = Path(tmp, f"{case}.ps1")
+            body = ('$ErrorActionPreference = "Continue"\n$DryRun = $false\n$TccSignedFrom = "v0.1.45"\n'
+                    f"$TccRepo = '{repo.as_posix()}'\n$Scratch = '{scratch}'\n" + "\n".join(cut) + "\n"
+                    'function Test-TagSignature { param([string]$Dir, [string]$Ref, [string]$SignedFrom, '
+                    '[string]$Whose) return $true }\n'
+                    '$script:TccPins = "stale"; $script:TccPinsWhy = "stale"\n'
+                    f'$ok = Test-TccTag "{ref}"\n'
+                    'Write-Host "OK=[$ok]"\nWrite-Host "PINS=[$($script:TccPins)]"\n'
+                    'Write-Host "WHY=[$($script:TccPinsWhy)]"\n')
+            script.write_bytes(body.encode("utf-8"))
+            env = powershell_env()
+            env.pop("AUTOSOUND_SKIP_TAG_VERIFY", None)
+            if skip:
+                env["AUTOSOUND_SKIP_TAG_VERIFY"] = skip
+            r = subprocess.run([shell, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File",
+                                str(script)], capture_output=True, timeout=120, env=dict(env, **git_vars))
+            said = (r.stdout + r.stderr).decode("utf-8", "replace")
+            pins = re.search(r"^PINS=\[(.*)\]\s*$", said, re.M)
+            why = re.search(r"^WHY=\[(.*)\]\s*$", said, re.M)
+            left = sorted(p.relative_to(scratch).as_posix() for p in scratch.rglob("*"))
+            wrong = [] if r.returncode == 0 and "OK=[True]" in said else [f"exit {r.returncode}, want OK=[True]"]
+            if want_copy:
+                folder = left[0] if left else ""
+                copy = scratch / folder / TCC_PINS_NAME
+                if left != [folder, f"{folder}/{TCC_PINS_NAME}"] or not copy.is_file():
+                    wrong.append(f"leaves {left} in its $Scratch, want one folder holding one file {TCC_PINS_NAME}")
+                elif copy.read_bytes() != TCC_PINS_BYTES:
+                    wrong.append(f"its copy holds {copy.read_bytes()[:60]!r}, want the tag's bytes")
+                if not pins or Path(pins.group(1)).resolve() != copy.resolve():
+                    wrong.append(f"$script:TccPins is {pins.group(1) if pins else 'not printed'!r}, want that copy")
+                if not why or why.group(1):
+                    wrong.append(f"$script:TccPinsWhy is {why.group(1) if why else 'not printed'!r}, want empty")
+            else:
+                if left:
+                    wrong.append(f"leaves {left} in its $Scratch, want nothing")
+                if not pins or pins.group(1):
+                    wrong.append(f"$script:TccPins is {pins.group(1) if pins else 'not printed'!r}, want empty")
+                if not why or (want_why not in why.group(1) if want_why else why.group(1)):
+                    wrong.append(f"$script:TccPinsWhy is {why.group(1) if why else 'not printed'!r}, want "
+                                 + (f"one naming {want_why!r}" if want_why else "empty"))
+            if wrong:
+                out.append(f"install.ps1 Test-TccTag {case} under {Path(shell).name}, the tag's {TCC_PINS_NAME} "
+                           f"(#179): " + "; ".join(wrong) + f" -- said {said.strip()[-300:]!r}")
+    except (OSError, subprocess.SubprocessError) as exc:
+        out.append(f"Test-TccTag's fixtures could not be made or run under {shell} ({exc}) -- unrun is not agreed "
+                   f"(#179)")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    return out, True
+
+
 def exit_contract_problems(sh, ps1):
     """#142 (T-44, J6a item 4): the exit table and the receipt; [] when both installers keep them.
 
@@ -3171,6 +3452,17 @@ def main():
             problems.append(f"the app's first signed tag differs -- install.sh {t_sh!r}, install.ps1 {t_ps!r}")
         else:
             checked.append(f"the app's first signed tag agrees in both installers ({t_sh})")
+    # #179: the first app release that carries constraints.txt -- TCC's TCC_CONSTRAINTS_FROM (1, 1, 4), whose own copy
+    # is in its repository: from it on, a release that gives none is said, as TCC's updater says it (`nopins`).
+    c_sh, e1 = one(r'^TCC_CONSTRAINTS_FROM="([^"]+)"', sh, "TCC_CONSTRAINTS_FROM", "install.sh")
+    c_ps, e2 = one(r'^\$TccConstraintsFrom\s*=\s*"([^"]+)"', ps1, "$TccConstraintsFrom", "install.ps1")
+    problems.extend(e for e in (e1, e2) if e)
+    if c_sh and c_ps:
+        if len({c_sh, c_ps, TCC_PINS_FROM}) != 1:
+            problems.append(f"the app's first release with constraints.txt differs -- install.sh {c_sh!r}, install.ps1 "
+                            f"{c_ps!r}, TCC's {TCC_PINS_FROM!r} (#179)")
+        else:
+            checked.append(f"the app's first release with constraints.txt agrees in both installers ({c_sh}) (#179)")
     signers = ROOT / "allowed_signers"
     listed = [ln.split() for ln in (signers.read_text(encoding="utf-8").splitlines() if signers.exists() else [])
               if ln.strip() and not ln.startswith("#")]
@@ -3198,6 +3490,9 @@ def main():
                        "-- each stand-in seen to run (T-35, run)")
         checked.append("install.sh's check_tcc_tag does the same for the app's tags from a bare fetch, hands on the "
                        "verified commit, refuses a tag it cannot fetch, and tcc_tag_still_at refuses a moved tag (run)")
+        checked.append("install.sh's check_tcc_tag copies a verified tag's constraints.txt out byte for byte before "
+                       "its scratch repository goes, and only a file: none, a folder or a link by that name, and a tag "
+                       "settled by its name leave nothing behind (run) (#179)")
     landed = checkout_problems(sh, ps1)
     if landed:
         problems.extend(landed)
@@ -3228,7 +3523,10 @@ def main():
         checked.append(f"install.sh's app block and its line in the checks, run over {len(APP_CASES)} cases: installed "
                        f"now is ready; refused, unreadable behind a proxy (git's own line said), an upgrade that failed "
                        f"over an app from before, an install that failed, and no uv each name TCC missing; install.ps1 "
-                       f"counts the same four ways, its arm for an app from before read (#142)")
+                       f"counts the same four ways, its arm for an app from before read (#142); and over "
+                       f"{len(APP_PIN_CASES)} more, a tag's constraints.txt handed to uv when it takes --constraints, "
+                       f"and the plain install said for an old uv, a release without the file and a tag not fetched -- "
+                       f"one install each, never a retry (#179)")
     for found, ok_line in ((option_problems(sh), f"install.sh's options that take a value say so and end 2 when given "
                                                  f"none, run over {len(OPTION_CASES)} command lines (#142)"),
                            (plugin_check_problems(sh, ps1), "the plugin's check tells a copy that is not as signed "
@@ -3291,6 +3589,16 @@ def main():
     else:
         checked.append("install.ps1's end, Run and Test-Quiet are NOT run here -- no PowerShell on this machine; the "
                        "Windows job runs them (#142)")
+    pins_ps1, pins_ran = ps1_tcc_pins_problems(ps1)
+    if pins_ps1:
+        problems.extend(pins_ps1)
+    elif pins_ran:
+        checked.append(f"install.ps1's Test-TccTag run under {Path(find_powershell()).name}: a tag's constraints.txt is "
+                       f"copied out byte for byte before the scratch repository goes; none, a folder by that name, or a "
+                       f"tag not fetched leaves nothing (#179)")
+    else:
+        checked.append("install.ps1's Test-TccTag is NOT run here -- no PowerShell on this machine; the Windows job "
+                       "runs it (#179)")
     # The exit contract (#142): what the run ended as, in its exit code and its receipt.
     contract = exit_contract_problems(sh, ps1)
     if contract:

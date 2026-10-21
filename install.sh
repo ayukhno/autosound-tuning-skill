@@ -74,6 +74,10 @@ SKILL_SIGNED_FROM="v3.0.64"
 # The app's tags are signed with the same key, from its own first signed tag (TCC's core/signed_tags.py, skill #101),
 # and checked the same way before uv installs one. Same value as install.ps1 (installer-consistency.py compares them).
 TCC_SIGNED_FROM="v0.1.45"
+# From this release the app's tag carries constraints.txt -- uv.lock's export for `[gui,claude]`, the versions it was
+# tested with (TCC's TCC_CONSTRAINTS_FROM, tcc #194) -- and a fresh install is held to it as TCC's own update is (skill
+# #179). A release from it on that gives none is said; one before it installs as it always did. Same as install.ps1.
+TCC_CONSTRAINTS_FROM="v1.1.4"
 # Where a local change to the installed clone is kept before the update resets it (skill #91). Same as upkeep.py.
 LOCAL_CHANGES="${HOME}/.claude/skills/autosound-local-changes"
 # The app's supported line. It is `v*` and not `v3.*` because the app versions independently of the
@@ -1762,8 +1766,14 @@ fi
 # signature. The mirror of TCC's own updater (core/updates.py `check_tcc_tag`): there is no clone of TCC on disk, so
 # the one tag is fetched into a temporary BARE repository and verified there. 0 = install it, and TCC_SHA is the
 # commit the verified tag names -- "" when nothing was verified (settled by its name); 1 = it is not installed.
+#   #179: the verified tag's constraints.txt is copied out of that repository before it goes -- the signed commit's
+# bytes, and no second download -- into a folder of its own: TCC_PINS is the copy, for uv's --constraints, and the app's
+# block removes it after the install. No copy, TCC_PINS_WHY says why: the tag carries none, git could not list or read
+# it, or the entry is not a file (TCC's `_tag_constraints`: a symbolic link would hand uv its target's NAME as the
+# text, a folder or a gitlink no text at all). Never a refusal -- the signature decides whether the app is installed;
+# this only decides how closely uv is held. A tag settled by its name is not fetched and hands on neither.
 check_tcc_tag() {  # check_tcc_tag <ref>
-  _ct_ref="$1"; TCC_SHA=""
+  _ct_ref="$1"; TCC_SHA=""; TCC_PINS=""; TCC_PINS_WHY=""
   settled_by_name "$_ct_ref" "$TCC_SIGNED_FROM" && return 0
   _ct_git="$(mktemp -d)"
   _ct_rc=0
@@ -1777,6 +1787,35 @@ check_tcc_tag() {  # check_tcc_tag <ref>
   fi
   if ! verify_tag "$_ct_git" "$_ct_ref" "$TCC_SIGNED_FROM" "TCC"; then rm -rf "$_ct_git"; return 1; fi
   TCC_SHA="$(git -C "$_ct_git" rev-parse --verify --quiet "refs/tags/$_ct_ref^{commit}" 2>/dev/null)" || TCC_SHA=""
+  if [ -n "$TCC_SHA" ]; then
+    _ct_rc=0
+    _ct_entry="$(git -C "$_ct_git" ls-tree --full-tree "refs/tags/$_ct_ref" -- constraints.txt 2>&1)" || _ct_rc=$?
+    # Only the line that names the file: `100644 blob <sha><TAB>constraints.txt`.
+    _ct_mode="$(printf '%s\n' "$_ct_entry" | awk -F '\t' '$2 == "constraints.txt" { split($1, f, " "); print f[1]; exit }')"
+    if [ "$_ct_rc" != 0 ]; then
+      TCC_PINS_WHY="constraints.txt not read: $(printf '%s\n' "$_ct_entry" | tail -1)"
+    elif [ -z "$_ct_mode" ]; then
+      TCC_PINS_WHY="$_ct_ref carries no constraints.txt"
+    elif [ "$_ct_mode" != 100644 ] && [ "$_ct_mode" != 100755 ]; then
+      case "$_ct_mode" in
+        040000) _ct_kind="a folder" ;;
+        120000) _ct_kind="a symbolic link" ;;
+        160000) _ct_kind="a gitlink (a submodule)" ;;
+        *) _ct_kind="an entry" ;;
+      esac
+      TCC_PINS_WHY="constraints.txt is $_ct_kind in the tag, not a file (git mode $_ct_mode) -- not used"
+    else
+      # Named, and under TMPDIR when there is one: a copy a stopped run leaves says what it is.
+      _ct_pins="$(mktemp -d "${TMPDIR:-/tmp}/autosound-tcc-pins.XXXXXX")"
+      # `git show` of a blob is its bytes as they are: no text conversion between the tag and uv.
+      if _ct_said="$(git -C "$_ct_git" show "refs/tags/$_ct_ref:constraints.txt" 2>&1 > "$_ct_pins/constraints.txt")"; then
+        TCC_PINS="$_ct_pins/constraints.txt"
+      else
+        TCC_PINS_WHY="constraints.txt not read: $(printf '%s\n' "$_ct_said" | tail -1)"
+        rm -rf "$_ct_pins"
+      fi
+    fi
+  fi
   rm -rf "$_ct_git"
   # Fail closed, as TCC does: a verified tag whose commit git cannot name is not installed unpinned.
   [ -n "$TCC_SHA" ] || { warn "git names no commit for $_ct_ref, verified a moment ago -- it is not installed"; return 1; }
@@ -1793,6 +1832,9 @@ UV=""
 # Why the app's tag was not installed, when it was not (skill #101); said in its block, in the checks, and last.
 TCC_REFUSED=""
 TCC_SHA=""
+# The tag's constraints.txt, copied out by check_tcc_tag, or why there is none (#179).
+TCC_PINS=""
+TCC_PINS_WHY=""
 if [ "$MODE" = "tcc" ]; then
   step "Autosound TCC — the desktop app"
   UV="$(find_bin uv || true)"
@@ -1878,10 +1920,50 @@ if [ "$MODE" = "tcc" ]; then
     TCC_FORCE="--force"
     say "  the app's launcher here was not put there by uv (TCC's own updater did) — replacing it"
   fi
+  # #179 (hub #280): held to the versions the tag was tested with -- its constraints.txt, copied out of the tag that was
+  # verified (check_tcc_tag) -- as TCC's own update is (core/updates.py, tcc #194). Whether this uv takes the file is
+  # asked before the install, not guessed after it: a uv older than 0.5.6 has no `uv tool install --constraints`
+  # (uv #9547), and the file must never fail an install that would have gone through without it. So an option line
+  # ` --constraints ` (not `--build-constraints`) in its --help is the pinned install; anything else -- an old uv, one
+  # that would not answer -- installs plain, said with uv's own version. Captured, not piped into grep -q: under
+  # pipefail a grep that stops reading early fails the pipe. Never a retry after a pinned install that failed: a dropped
+  # network or a locked file is not an old uv, and a retry without the file would put an untested set on the machine
+  # and blame the file for it (TCC's lesson, the re-review of #194). Each way without the file is a warning, never a
+  # refusal: TCC_REFUSED is the signature's and uv's alone.
+  TCC_HELD=""
+  if [ -z "$TCC_REFUSED" ]; then
+    if [ -z "$TCC_SHA" ]; then
+      # Settled by its name -- a dry run, a name that is not a release, the developer's switch, a tag before signing:
+      # nothing was fetched, so nothing was read.
+      if [ "$DRY_RUN" = 1 ]; then
+        say "  a dry run fetches no tag: the versions $TCC_REF was tested with (its constraints.txt) are not read here"
+      else
+        warn "$TCC_REF was not fetched, so the versions it was tested with are not read -- uv chooses them"
+      fi
+    elif [ -n "$TCC_PINS" ]; then
+      _tcc_help="$("$UV" tool install --help 2>/dev/null)" || true
+      case "$_tcc_help" in
+        *' --constraints '*)
+          TCC_HELD="$TCC_PINS"
+          say "  held to the versions $TCC_REF was tested with (its constraints.txt)" ;;
+        *)
+          warn "this uv cannot hold the app to the versions it was tested with (that needs uv 0.5.6 or newer) --" \
+               "installing without them, so uv chooses the versions. This uv: $("$UV" --version 2>/dev/null || true)" ;;
+      esac
+    else
+      # A release from TCC_CONSTRAINTS_FROM on carries the file (TCC's ship.py refuses one without it): one that gives
+      # none is said, with why. One from before it installs as it always did, and says nothing.
+      _tcc_ver="${TCC_REF#beta-}"; _tcc_ver="${_tcc_ver%%-rc*}"
+      if [ "$(printf '%s\n%s\n' "$TCC_CONSTRAINTS_FROM" "$_tcc_ver" | sort -V | head -1)" = "$TCC_CONSTRAINTS_FROM" ]; then
+        warn "the versions $TCC_REF was tested with could not be read, so uv chooses the versions: $TCC_PINS_WHY"
+      fi
+    fi
+  fi
   if [ -n "$TCC_REFUSED" ]; then
     warn "the app is not installed: $TCC_REFUSED."
     warn "The method is installed and works without it; the end of this run says so again."
-  elif run "$UV" tool install --quiet --python 3.12 --upgrade $TCC_FORCE "$TCC_SPEC"; then
+  elif run "$UV" tool install --quiet --python 3.12 --upgrade $TCC_FORCE ${TCC_HELD:+--constraints "$TCC_HELD"} \
+         "$TCC_SPEC"; then
     # Where uv actually put it, which is not always `~/.local/bin`.
     TCC_BIN="$(command -v autosound-tcc 2>/dev/null || true)"
     [ -z "$TCC_BIN" ] && [ -x "${UV_TOOL_BIN_DIR:-$LOCAL_BIN}/autosound-tcc" ] \
@@ -1893,6 +1975,8 @@ if [ "$MODE" = "tcc" ]; then
     # Recorded (#142): the checks below read an app from an earlier run as this run's, and the run ended 0, ready.
     TCC_REFUSED="its install did not finish -- uv's lines above say why"
   fi
+  # The copy of the tag's constraints.txt has done its work, whichever way the install went (#179).
+  [ -z "$TCC_PINS" ] || rm -rf "${TCC_PINS%/*}"
 
   if on_mac; then
     # The app builds ITSELF: `autosound-tcc --install-desktop` makes the bundle in ~/Applications,
