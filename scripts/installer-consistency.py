@@ -4262,10 +4262,10 @@ def main():
                        + ("Git's, Claude Code's, uv's and Python's steps armed before their call, put back when it "
                           "failed and changed nothing, a dry run writing none (#180); " if os.name == "nt" else
                           "NOT the four steps' receipt (Windows alone, #180); ")
-                       + f"the tag pick, Sync-MethodCheckout's dry "
-                       f"runs and the UNSIGNED line "
-                       f"(#164, #171); the module path over SQL Server's entry and over pwsh's, and Invoke-Upstream's "
-                       f"child (#161)")
+                       + "the tag pick, Sync-MethodCheckout's dry "
+                       "runs and the UNSIGNED line "
+                       "(#164, #171); the module path over SQL Server's entry and over pwsh's, and Invoke-Upstream's "
+                       "child (#161)")
     else:
         checked.append("install.ps1's end, Run and Test-Quiet are NOT run here -- no PowerShell on this machine; the "
                        "Windows job runs them (#142)")
