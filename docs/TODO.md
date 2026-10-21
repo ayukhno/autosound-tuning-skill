@@ -1627,12 +1627,12 @@ S-062, S-064 (with TCC's half, hub #217 SKL-056), S-065, S-066. When he says to 
 four assessment lines, and nothing is built before his `ok` on that task. Resume: `hub/bin/role skill --resume
 6b9c70d1-4094-4337-a1fd-23976307dfc2`.
 
-## S-106 · W-11 is collecting: findings go to this pool
+## S-106 · W-11 · v3.2.0 — the last development wave, then the freeze
 
-**Status**: open 2026-10-21 · the Arbiter (hub #295 HUB-090): W-11 is the last development wave; items 15 and 16 are out (new features, deferred, back only on his word); next: on his «збір закінчено» the milestone `W-11 · v3.1.5` opens with items 1–11, 13 and 14 of `docs/W-11-CANDIDATES.md` as issues, `ok` on each, item 12 discussed first; the wave ends with a joint release with TCC (#246), then the freeze — only bug fixes users report; resume: `hub/bin/role skill --no-sp --resume 399f09ea-0ac5-4b63-9757-c07b86eef653` · was: open 2026-10-15 · paused on the Arbiter's «добраніч»; next: on his «збір закінчено» the milestone `W-11 · v3.1.5` opens with items 1–11 and 13–16 of `docs/W-11-CANDIDATES.md` as issues, `ok` on each, item 12 discussed first; research's answer on hub #291 awaited; resume: `hub/bin/role skill --resume ee680a15-27d7-42d6-8272-06aa06631483` · was: open 2026-10-15 · collecting; the scope set by the Arbiter's «так»: 1–11, 13–16, 12 discussed before the build, 12 discussed before the build (the Arbiter, 2026-10-15); the ranked list for the review is `docs/W-11-CANDIDATES.md` (the Arbiter: «сформуй список кандидатів на W-11») · was: open 2026-10-15 · collecting, on the Arbiter's «збираємо W-11» (2026-10-15, after v3.1.4); the milestone `W-11 · v3.1.5` opens on his «збір закінчено»; nothing built
+**Status**: open 2026-10-21 · milestone `W-11 · v3.2.0` (milestone 10) opened on the Arbiter's word with 14 issues (#176–#189), each with the four assessment lines and its group, `ok` on 13 — #189 (item 12, the description's recall) has none, discussed before the build; a minor: the joint release is TCC v1.2.0 with the skill's v3.2.0 (hub #296 TCC-063); the bus tickets the wave answers are taken (hub #280, #281, #285, #289); built without the superpowers engine (hub H-022), so the PR carries `Engine: none`; next: item 12 discussed, then the plan `docs/PLAN-W-11.md`, its cost, then his «го»; resume: `hub/bin/role skill --no-sp --resume ce7cbfd4-9c13-4ff0-8c28-28a6701075c9` · was: open 2026-10-21 · the Arbiter (hub #295 HUB-090): W-11 is the last development wave; items 15 and 16 are out (new features, deferred, back only on his word); next: on his «збір закінчено» the milestone `W-11 · v3.1.5` opens with items 1–11, 13 and 14 of `docs/W-11-CANDIDATES.md` as issues, `ok` on each, item 12 discussed first; the wave ends with a joint release with TCC (#246), then the freeze — only bug fixes users report; resume: `hub/bin/role skill --no-sp --resume 399f09ea-0ac5-4b63-9757-c07b86eef653` · was: open 2026-10-15 · paused on the Arbiter's «добраніч»; next: on his «збір закінчено» the milestone `W-11 · v3.1.5` opens with items 1–11 and 13–16 of `docs/W-11-CANDIDATES.md` as issues, `ok` on each, item 12 discussed first; research's answer on hub #291 awaited; resume: `hub/bin/role skill --resume ee680a15-27d7-42d6-8272-06aa06631483` · was: open 2026-10-15 · collecting; the scope set by the Arbiter's «так»: 1–11, 13–16, 12 discussed before the build, 12 discussed before the build (the Arbiter, 2026-10-15); the ranked list for the review is `docs/W-11-CANDIDATES.md` (the Arbiter: «сформуй список кандидатів на W-11») · was: open 2026-10-15 · collecting, on the Arbiter's «збираємо W-11» (2026-10-15, after v3.1.4); the milestone `W-11 · v3.1.5` opens on his «збір закінчено»; nothing built
 
 The number is read: no milestone is open in skill (W-10 closed with v3.1.4), none in TCC (`W-10 · v1.1.4` closed), so
-`max(W-N) + 1` = 11. The version is a patch, `v3.1.5`: the catalog stays on v3.1.1 until the audit's waves are done.
+`max(W-N) + 1` = 11. The version is a patch, `v3.1.5`: the catalog stays on v3.1.1 until the audit's waves are done. It became a minor, `v3.2.0`, on 2026-10-21 (hub #296 TCC-063): W-11 ends with the joint release, TCC v1.2.0 with the skill's v3.2.0, and `minor-pair` refuses a v3.1.x method beside it.
 
 The pool at the start, recorded, not diagnosed:
 - **hub #285 (TCC-060)**: rounds on one level base — the skill's halves of tcc #198 and #199, W-11's by the Arbiter's
@@ -1652,6 +1652,14 @@ The pool at the start, recorded, not diagnosed:
 - **what a change does to the sound** (PAS-014 hub #264, S-021): the method's engine, static then AI, and an interface
   for TCC — TCC asked as SKL-078 (hub #292);
 - S-105 done: TCC answered SKL-076 (hub #288) — the audit's minimum is TCC's alone (G8 phase 1, G7's remainder), nothing for the skill's W-11.
+
+On the milestone (`docs/W-11-CANDIDATES.md` ranks and assesses them; `hub:seam`, one review per group):
+- **Rounds and levels** (`Risk: high`): #176 hub #285, #177;
+- **Installers** (`Risk: high`): #179 hub #280, #180, #181;
+- **Captures**: #182, #183, #184;
+- **Reviewer**: #178 hub #281, #186;
+- **CI**: #185; **Journal**: #187 hub #289; **Method text**: #188;
+- **Agent start**: #189, no `ok` — discussed before the build.
 
 Not taken unless the Arbiter says so: hub #113 (PAS-005) and skill #169 deferred on his word; skill #26 with no target
 version; S-017, S-021, S-055, S-059 wait for a run, S-001 for the first `frozen` run.

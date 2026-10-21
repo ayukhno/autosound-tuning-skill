@@ -1,6 +1,6 @@
 # W-11 candidates — the collection's pool, ranked
 
-**Status:** the scope is cut 2026-10-21 · the Arbiter in the hub session (hub #295 HUB-090): W-11 is the last
+**Status:** the milestone `W-11 · v3.2.0` (milestone 10) opened 2026-10-21 on the Arbiter's word: items 1–14 are issues #176–#189 (the table's `issue` column), each with the four lines and its group, `ok` on all but #189 (item 12, discussed before the build); a minor, not the patch v3.1.5 — the joint release is TCC v1.2.0 with the skill's v3.2.0 (hub #296 TCC-063); every item was checked unfixed at `0c4628f` · was: the scope is cut 2026-10-21 · the Arbiter in the hub session (hub #295 HUB-090): W-11 is the last
 development wave — bugs, hygiene, small clear improvements; items 15 and 16 are new features and leave it («винести
 обидві»), deferred, back only on his word (below); the scope is 1–11, 13, 14, item 12 discussed before the build; the
 wave ends with a joint release with TCC and the freeze (below) · was: the scope is set 2026-10-15 · the Arbiter: «так» on W-11 = 1–11, 13, 14, 15 (one change and a picked
@@ -23,22 +23,22 @@ S ~1–2 h · M ~half a day · L a day or more.
 
 ## To build — ranked
 
-| # | item | source | class | risk | complexity | model | group |
-|---|---|---|---|---|---|---|---|
-| 1 | Rounds on one level base (stays in W-11: TCC builds its half of #285 only if the skill builds its own, hub #295): each capture shifted by its `splOffsetdB` from the base round wherever rounds stand side by side (verify, predict/verify, session_report), the shift said; a round's control capture checked outside the changed bands; `capture-check` names an `splOffsetdB` change in a field TCC reads. Mirrors the bench's `levelbase.py` and the playbook's rule, not invented | hub #285 TCC-060 (tcc #198, PAS-015); S-104, the Arbiter «У W-11» | feature (method math) | high (verdicts, the seam) | L | opus · high | Rounds and levels |
-| 2 | tcc #199's method part: TCC v1.1.4 passes `under` and `level` through `start_capture`; what the method still owes for unplanned takes' verdict is not named — name it or close it | S-104 (hub #260, PAS-013) | question → defect | high (the seam) | XS to name; S if any | opus · high | Rounds and levels |
-| 3 | `failure_reason` finds only a lower-case `error:`; Codex prints `ERROR: …` last, so TCC shows Codex's start banner instead of its refusal (tcc #182) | hub #281 TCC-059 | defect | ordinary | XS–S | opus · medium | Reviewer |
-| 4 | The installers resolve TCC's dependencies afresh (PySide6 6.12.0 against the lock's 6.11.2 on the VM); from v1.1.4 TCC's tag carries `constraints.txt` — pass it to `uv tool install`, never fail the install over it | hub #280 TCC-058 (TCC finding 158) | defect | high (installer) | S–M | opus · high | Installers |
-| 5 | `install.ps1` still arms the receipt before winget's Git, Claude's `Invoke-Upstream` and uv's: a failed download writes `stopped` over a good receipt with nothing changed (W-10's final review M3, half done in `d4250f3`) | S-104 | defect | high (installer) | S | opus · high | Installers |
-| 6 | Uninstall leaves the empty `~/.agents/skills` folders it made | S-104 | defect | high (installer) | XS | opus · medium | Installers |
-| 7 | An AMBIGUOUS capture's stored issue names both spellings but not the fix («keep one: rename or delete the other in REW»); TCC's card shows the stored issue, never stdout | S-104 | defect | high (the seam) | XS | opus · high | Captures |
-| 8 | A window between `capture-check`'s two REW reads can judge an old take (a stale check, not a wrong record) | S-104 | defect | high (gate verdict) | S–M | opus · high | Captures |
-| 9 | `verify`'s summary calls every not-applicable sweep «not checked (not a sweep)» — wrong for a sweep outside the band | S-104 | defect | ordinary (TCC reads it) | S | opus · medium | Captures |
-| 10 | `project.py`'s selftest `_check_two_writers_lose_nothing` starved once on Windows CI (a writer waited 60 s, got `Busy`); a red CI by chance, not a user's case | S-104 (CI run 38558929626) | infra | ordinary (test only) | S | opus · medium | CI |
-| 11 | `bounded_run` starts the reviewer CLIs with stdin closed (said in v3.1.4's Upgrading) — check that no reviewer needs it | S-104 | check | ordinary | XS | sonnet · medium (trial) | Reviewer |
-| 13 | A slow git writes a false `written_by` header: each method process asks git for its sha within 3 s, a miss gives `""`, and `real → "" → real` writes two headers that say the writer changed (`Process._stamp`, `provenance`); seen on TCC's Windows CI, can happen on a slow Windows machine | hub #289 TCC-061 | defect | high (the journal's provenance) | S | opus · high | Journal |
-| 14 | «Two visits make the tune» (README, FAQ; uk/de/pl through the Advisor) is said with no condition. The Arbiter, 2026-10-15: «беремо, з корекцією, що це більш маркетингова фраза і має на увазі отримання першого результату, а далі іде циклічне покращення до перемоги на чемпіонаті» — two visits give the first result; after it, improvement goes round by round, as far as you want to take it | S-103 (the audit's J7 P1/P10), taken back on his word | docs | ordinary | S | opus · medium; the Advisor for uk/de/pl | Method text |
-| 12 | In a folder that names nothing, the description fires on 10 of 26 car-audio queries (resume, de/pl, EMMA, TCC bug reports): the description's recall | S-104 (#170's neutral run, 2026-10-14) | docs (description) + eval | ordinary | M | opus · high | Agent start |
+| # | issue | item | source | class | risk | complexity | model | group |
+|---|---|---|---|---|---|---|---|---|
+| 1 | #176 | Rounds on one level base (stays in W-11: TCC builds its half of #285 only if the skill builds its own, hub #295): each capture shifted by its `splOffsetdB` from the base round wherever rounds stand side by side (verify, predict/verify, session_report), the shift said; a round's control capture checked outside the changed bands; `capture-check` names an `splOffsetdB` change in a field TCC reads. Mirrors the bench's `levelbase.py` and the playbook's rule, not invented | hub #285 TCC-060 (tcc #198, PAS-015); S-104, the Arbiter «У W-11» | feature (method math) | high (verdicts, the seam) | L | opus · high | Rounds and levels |
+| 2 | #177 | tcc #199's method part: TCC v1.1.4 passes `under` and `level` through `start_capture`; what the method still owes for unplanned takes' verdict is not named — name it or close it | S-104 (hub #260, PAS-013) | question → defect | high (the seam) | XS to name; S if any | opus · high | Rounds and levels |
+| 3 | #178 | `failure_reason` finds only a lower-case `error:`; Codex prints `ERROR: …` last, so TCC shows Codex's start banner instead of its refusal (tcc #182) | hub #281 TCC-059 | defect | ordinary | XS–S | opus · medium | Reviewer |
+| 4 | #179 | The installers resolve TCC's dependencies afresh (PySide6 6.12.0 against the lock's 6.11.2 on the VM); from v1.1.4 TCC's tag carries `constraints.txt` — pass it to `uv tool install`, never fail the install over it | hub #280 TCC-058 (TCC finding 158) | defect | high (installer) | S–M | opus · high | Installers |
+| 5 | #180 | `install.ps1` still arms the receipt before winget's Git, Claude's `Invoke-Upstream` and uv's: a failed download writes `stopped` over a good receipt with nothing changed (W-10's final review M3, half done in `d4250f3`) | S-104 | defect | high (installer) | S | opus · high | Installers |
+| 6 | #181 | Uninstall leaves the empty `~/.agents/skills` folders it made | S-104 | defect | high (installer) | XS | opus · medium | Installers |
+| 7 | #182 | An AMBIGUOUS capture's stored issue names both spellings but not the fix («keep one: rename or delete the other in REW»); TCC's card shows the stored issue, never stdout | S-104 | defect | high (the seam) | XS | opus · high | Captures |
+| 8 | #183 | A window between `capture-check`'s two REW reads can judge an old take (a stale check, not a wrong record) | S-104 | defect | high (gate verdict) | S–M | opus · high | Captures |
+| 9 | #184 | `verify`'s summary calls every not-applicable sweep «not checked (not a sweep)» — wrong for a sweep outside the band | S-104 | defect | ordinary (TCC reads it) | S | opus · medium | Captures |
+| 10 | #185 | `project.py`'s selftest `_check_two_writers_lose_nothing` starved once on Windows CI (a writer waited 60 s, got `Busy`); a red CI by chance, not a user's case | S-104 (CI run 38558929626) | infra | ordinary (test only) | S | opus · medium | CI |
+| 11 | #186 | `bounded_run` starts the reviewer CLIs with stdin closed (said in v3.1.4's Upgrading) — check that no reviewer needs it | S-104 | check | ordinary | XS | sonnet · medium (trial) | Reviewer |
+| 13 | #187 | A slow git writes a false `written_by` header: each method process asks git for its sha within 3 s, a miss gives `""`, and `real → "" → real` writes two headers that say the writer changed (`Process._stamp`, `provenance`); seen on TCC's Windows CI, can happen on a slow Windows machine | hub #289 TCC-061 | defect | high (the journal's provenance) | S | opus · high | Journal |
+| 14 | #188 | «Two visits make the tune» (README, FAQ; uk/de/pl through the Advisor) is said with no condition. The Arbiter, 2026-10-15: «беремо, з корекцією, що це більш маркетингова фраза і має на увазі отримання першого результату, а далі іде циклічне покращення до перемоги на чемпіонаті» — two visits give the first result; after it, improvement goes round by round, as far as you want to take it | S-103 (the audit's J7 P1/P10), taken back on his word | docs | ordinary | S | opus · medium; the Advisor for uk/de/pl | Method text |
+| 12 | #189 | In a folder that names nothing, the description fires on 10 of 26 car-audio queries (resume, de/pl, EMMA, TCC bug reports): the description's recall | S-104 (#170's neutral run, 2026-10-14) | docs (description) + eval | ordinary | M | opus · high | Agent start |
 
 **Groups** (one theme, one review per group, `hub:seam`): **Rounds and levels** 1–2 — `Risk: high`, the full loop and a
 Fable seat; **Installers** 4–6 — `Risk: high`; **Captures** 7–9; **Reviewer** 3, 11; **CI** 10; **Agent start** 12; **Journal** 13; **Method text** 14.
@@ -46,8 +46,8 @@ Fable seat; **Installers** 4–6 — `Risk: high`; **Captures** 7–9; **Reviewe
 ## The wave's end: a joint release, then the freeze
 
 The Arbiter, 2026-10-21 (hub #295): W-11 is the last development wave of both products. It ends with a joint release
-with TCC (#246: TCC's stable version goes out with the skill's), and the release role's catalog move then takes plugin
-users from v3.1.1 to v3.1.5 (the audit leaves nothing to the skill, `AUDIT-2026-10-CLOSE.md`). After the release the
+with TCC (#246: TCC's stable version goes out with the skill's) — a minor pair, TCC v1.2.0 with the skill's v3.2.0 (hub #296 TCC-063; `minor-pair` in `release-preflight.py` refuses v1.2.0 beside a v3.1.x method), and the release role's catalog move then takes plugin
+users from v3.1.1 to v3.2.0 (the audit leaves nothing to the skill, `AUDIT-2026-10-CLOSE.md`). After the release the
 skill freezes with TCC: only bug fixes that users report. The freeze is joint because TCC is pinned to the method's
 version — a method that keeps changing keeps TCC changing. Deferred items stay deferred; a new feature comes back only
 on his word. Promotion is a separate project, which he sets up with the hub.
