@@ -316,13 +316,23 @@ appended line is fsynced (and the folder, when the append made the file), so it 
 - **An unplanned take is judged, and counts nowhere** (#177, hub #260, PAS-013). One inherits the
   round's `under` and `level`; `capture-check` with no titles checked the round's `expected` alone,
   so it had no verdict until `capture-close`. It checks the round's standing unplanned takes too --
-  `taken` rows off `expected` by `title_key`, never a superseded row; the level control and an
-  optional capture are on the list -- and prints each after the list's lines, `unplanned` after the
-  title's ` — `, never in the title: `UNUSABLE <title> — unplanned; <why>`, `OK      <title> —
+  `taken` rows off `expected` by `title_key`, never a superseded row, one per key (a round from
+  before #153 can hold `w-R_01 (sw)` and `w-R_1 (sw)` both standing: the first is asked); the level
+  control and an optional capture are on the list -- and prints each after the list's lines,
+  `unplanned` after the title's ` — `, never in the title: `UNUSABLE <title> — unplanned; <why>`, `OK      <title> —
   unplanned` (`; judged over …` after it), `N/A     <title> — unplanned; <why>`. Named in `titles`,
   as a front end's window names it, it was judged and not printed: printed now. Its verdict lands on
   its own row; the `N/M придатні` totals, the exit code and `unusable_captures` stay the list's --
-  nobody asked for it, so it is no gap.
+  nobody asked for it, so it is no gap. A round that expects nothing and took one prints its line
+  and `0/0 придатні`, exit 0. Nor does it reach what reads the round whole: the `--session` probe
+  is handed the list's verdicts alone (an unplanned test sweep is never its loudest, its quietest
+  nor the title levels are brought to), and the level base counts the list's captures alone -- the
+  round's own offsets, and a base or previous round's read back from the journal, whose
+  `capture_verified` keeps every checked title's `spl_offsets_db`: `capture_rounds()` carries each
+  round's `expected` for it. An unplanned calibration set `mixed` on a plain check, or moved a later
+  round's base. It is looked up and pulled by the one listing like any title (#183): its curve is
+  pulled on every plain check, and one re-taken or deleted in REW while the check reads refuses the
+  whole check, exit 69, as a listed one does.
 - **Nothing is cleared over work that is only in the chat** (S-044). `handoff` answers one question — is everything the
   NEXT session needs on disk — and REFUSES while it is not: no phase recorded, an open capture round, a plan step left
   `todo`/`in_progress`, a done step whose evidence resolves to nothing, no ledger snapshot, a `tuning-changelog` with no

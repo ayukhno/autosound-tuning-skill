@@ -1118,9 +1118,12 @@ def _level_key(level):
 
 
 def _recorded_offsets(round_record):
-    """`{title: splOffsetdB}` a round's checks recorded, the titles REW listed no calibration for left out (#176)."""
+    """`{title: splOffsetdB}` a round's checks recorded, the titles REW listed no calibration for left out (#176); of a
+    record that carries its list (`expected`), the list's alone -- the journal keeps an unplanned take's too (#177)."""
+    listed = (round_record or {}).get("expected")
     return {t: v for t, v in ((round_record or {}).get("spl_offsets_db") or {}).items()
-            if isinstance(v, (int, float)) and not isinstance(v, bool)}
+            if isinstance(v, (int, float)) and not isinstance(v, bool)
+            and (listed is None or _row_for(listed, t) is not None)}
 
 
 def _ledger_version_of(round_record):
@@ -1243,13 +1246,14 @@ def title_key(title):
 
 
 def _band_said(verified):
-    """What an OK line says of the band a sweep was judged over (#154, the group round's SF-1): ` — judged over
-    20–200 Hz`, and when REW listed no range of its own, that the truncation check was not made. "" with no band."""
+    """What an OK line says of the band a sweep was judged over (#154, the group round's SF-1): `judged over
+    20–200 Hz`, and when REW listed no range of its own, that the truncation check was not made. "" with no band. The
+    line puts it after the title's ` — ` (#177): its own text, no separator to cut."""
     band = verified.get("band_hz")
     if not band or len(band) != 2:
         return ""
     lo, hi = (f"{round(float(x), 1):g}" for x in band)
-    return (f" — judged over {lo}–{hi} Hz"
+    return (f"judged over {lo}–{hi} Hz"
             + ("; truncation not checked: REW lists no range" if verified.get("band_source") == "asked" else ""))
 
 
@@ -1401,9 +1405,14 @@ def _taken_rows(round_):
 
 def _unplanned_rows(round_):
     """The standing takes a round did not ask for (#177): `_taken_rows` off its `expected` by `title_key` -- never a
-    superseded row, nor the level control or an optional capture, which the list carries."""
-    expected = round_.get("expected") or []
-    return [t for t in _taken_rows(round_) if _row_for(expected, t) is None]
+    superseded row, nor the level control or an optional capture, which the list carries. One per key, the first: a
+    round from before #153 can hold two standing rows of one (`w-R_01 (sw)`, `w-R_1 (sw)`), one capture."""
+    expected, out, keys = round_.get("expected") or [], [], set()
+    for t in _taken_rows(round_):
+        if _row_for(expected, t) is None and title_key(t) not in keys:
+            keys.add(title_key(t))
+            out.append(t)
+    return out
 
 
 def _now():
@@ -2898,13 +2907,15 @@ class Process:
         one replaces, a title checked with no calibration listed is None -- the one record of a round's level that
         survives its close; `level_base`, the base round named at its start (`capture-start --level-base`), or None;
         `control`, its level control's title, or None; `under` and `version_kind`, which say the ledger version it was
-        taken under -- what the control's changed bands are read from."""
+        taken under -- what the control's changed bands are read from; `expected`, its list as issued (#177)."""
         rounds, order = {}, []
         for event in self._events(kinds=(EV_CAPTURE_ISSUED, EV_CAPTURE_TAKEN, EV_CAPTURE_VERIFIED)):
             cid = event.get("capture")
             if event.get("type") == EV_CAPTURE_ISSUED:
                 rounds[cid] = {"id": cid, "version": str(event.get("version")),
                                "phase": event.get("phase"), "titles": list(event.get("expected") or []),
+                               # The list alone (#177's task review): `titles` gains every take, unplanned ones too.
+                               "expected": list(event.get("expected") or []),
                                "version_kind": event.get("version_kind"), "under": event.get("under"),
                                "level_base": event.get("level_base"), "control": event.get("control"),
                                "level": event.get("level"),
@@ -3195,9 +3206,12 @@ class Process:
         name is unchanged while the data is not, so a verdict keyed by title would outlive the
         graph it judged. A measurement REW no longer holds records no uuid and reads as not ok.
 
-        No `titles` is the round's list and its standing unplanned takes (#177, PAS-013): one inherits the round's
-        `under` and `level`, and stood with no verdict until `capture-close`. Its verdict lands on its own row; it is
-        never one of `unusable_captures` -- nobody asked for it.
+        No `titles` is the round's list and its standing unplanned takes (#177, PAS-013), one per `title_key`: one
+        inherits the round's `under` and `level`, and stood with no verdict until `capture-close`. Its verdict lands on
+        its own row; it is never one of `unusable_captures` -- nobody asked for it -- nor in the session probe or the
+        level base, which read the list alone. It is looked up and pulled by the one listing like any title (#183): its
+        curve is pulled on every plain check, and one re-taken or deleted in REW while the check reads refuses the whole
+        check, 69, as a listed one does.
 
         **A check reads; it does not take** (#134, audit T-1). Every title's verdict goes into the
         round's `checks` (`{title: verified}`), `exists` as the check said it: True or False. A
@@ -3374,8 +3388,11 @@ class Process:
         if session and hasattr(verifier, "session_report"):
             # The drift's impulses pulled by the one listing too (#183's group seat), never a look-up of their own.
             rate_for = proc_rate if capture_rates else None
-            probe = (verifier.session_report(verdicts, processing_rate_hz=rate_for) if records is None
-                     else verifier.session_report(verdicts, processing_rate_hz=rate_for, measurements=records))
+            # The list's captures alone (#177's task review): an unplanned test sweep is never the loudest, the
+            # quietest nor the take the levels are brought to, and the probe's counts are the totals' below.
+            listed = [v for v in verdicts if _row_for(round_.get("expected") or [], v.get("name")) is not None]
+            probe = (verifier.session_report(listed, processing_rate_hz=rate_for) if records is None
+                     else verifier.session_report(listed, processing_rate_hz=rate_for, measurements=records))
             session_probe = {"at": _now(), "spread": probe["spread"], "drift": probe["drift"],
                              "capture_rates_hz": probe["capture_rates_hz"], "rows": probe["rows"],
                              # The rows brought to one SPL calibration when REW's differ inside the round (#176).
@@ -3480,7 +3497,9 @@ class Process:
         Pure arithmetic over records; REW is not read here."""
         lb = _levelbase()            # stdlib only: one that will not load is a bug, raised (the task review, #176)
         checks = live.get("checks") or {}
-        held = [t for t, c in checks.items() if isinstance(c, dict) and c.get("exists") is True]
+        # The list's captures (#177's task review): an unplanned take's calibration set `mixed` on a plain check.
+        held = [t for t, c in checks.items() if isinstance(c, dict) and c.get("exists") is True
+                and _row_for(live.get("expected") or [], t) is not None]
         mine = {t: checks[t]["spl_offset_db"] for t in held if lb._number(checks[t].get("spl_offset_db")) is not None}
         # Every capture REW holds is listed, `offset_db` null where REW lists no calibration (the task review, #176):
         # dropped, a round with one uncalibrated capture read `ok`.
@@ -7758,6 +7777,94 @@ def _check_a_check_judges_unplanned_takes():
         shutil.rmtree(top, ignore_errors=True)
 
 
+def _check_unplanned_takes_stay_off_the_rounds_readers():
+    """#177's task review: the unplanned takes on every line form, and kept out of what reads the round as a whole.
+    `N/A … — unplanned; …`, `OK … — unplanned` with no band, AMBIGUOUS after the mark; two standing rows of one key
+    from before #153 asked and printed once, the first; the session probe and the level base -- the round's own
+    offset, and a base round's read back from the journal -- built on the list alone, so a test sweep nobody asked for
+    is never the loudest, the quietest nor a `mixed` level; a round that expects nothing says `0/0`, exit 0."""
+    import shutil
+    import tempfile
+
+    class Verifier:
+        def __init__(self):
+            self.asked, self.probed = [], []
+
+        def verify(self, titles):
+            self.asked.append(list(titles))
+            out = []
+            for t in titles:
+                v = {"name": t, "exists": True, "reachable": True, "valid": True, "issues": [], "stats": {}}
+                if t in ("a (sw)", "b (sw)"):
+                    v["stats"] = {"band_hz": [20, 200], "band_source": "rew", "spl_offset_db": 100.0}
+                elif t in ("w-R_01 (sw)", "k (sw)"):
+                    v["stats"] = {"spl_offset_db": 105.0}   # another calibration, and most: `mixed`, were they counted
+                elif t == "n (rta)":
+                    v.update(valid=False, applicable=False, why="not_a_sweep", issues=["an RTA: not a sweep"])
+                elif t == "z (sw)":
+                    v.update(valid=False, ambiguous=2, issues=["REW holds 2"])
+                elif t == "u (sw)":
+                    v.update(valid=False, issues=["silence"])
+                out.append(v)
+            return out
+
+        def session_report(self, verdicts, processing_rate_hz=None, measurements=None):
+            self.probed.append([v["name"] for v in verdicts])
+            return {"spread": None, "drift": None, "capture_rates_hz": [], "rows": []}
+
+        def summary(self, rows):
+            return {}
+
+        def render_session(self, probe):
+            return "(the session probe)"
+
+    top = tempfile.mkdtemp(prefix="autosound_process_unplanned_readers_")
+    real = Process._load_verifier
+    try:
+        d = os.path.join(top, "process")
+        p = Process(d)
+        p.enter_phase("-1")
+        p.start_capture("1", expected=["a (sw)"])
+        with open(p.state_path, encoding="utf-8") as fh:
+            state = json.load(fh)
+        state["capture"]["taken"] = {t: {"at": "t", "planned": t == "a (sw)"}      # two of one key, as before #153
+                                     for t in ("a (sw)", "w-R_01 (sw)", "w-R_1 (sw)", "k (sw)", "n (rta)", "z (sw)")}
+        with open(p.state_path, "w", encoding="utf-8") as fh:
+            json.dump(state, fh)
+        verifier = Verifier()
+        Process._load_verifier = lambda self: verifier
+        rc, out, err = _run_main(["process.py", d, "capture-check", "--session"])
+        lines = [x for x in out.splitlines() if x.split(" ")[0] in ("OK", "UNUSABLE", "N/A", "SKIP")]
+        assert verifier.asked == [["a (sw)", "w-R_01 (sw)", "k (sw)", "n (rta)", "z (sw)"]], verifier.asked
+        assert verifier.probed == [["a (sw)"]], verifier.probed
+        assert lines == ["OK      a (sw) — judged over 20–200 Hz", "OK      w-R_01 (sw) — unplanned",
+                         "OK      k (sw) — unplanned",
+                         "N/A     n (rta) — unplanned; an RTA: not a sweep",
+                         "UNUSABLE z (sw) — unplanned; AMBIGUOUS: REW holds 2 measurements under this title; rename "
+                         "so titles are unique, then run capture-check again"], (rc, out, err)
+        assert rc == 0 and out.splitlines()[-1] == "1/1 придатні", (rc, out, err)
+        lb = p.load()["capture"]["level_base"]
+        assert lb["status"] == "no_base" and list(lb["titles"]) == ["a (sw)"], lb
+        # The next round's base is round one as the journal holds it: its list's offset, 100.0, never the 105.0 most
+        # of its takes carry.
+        p.close_capture("done")
+        p.start_capture("2", expected=["b (sw)"])
+        p.record_capture("b (sw)")
+        rc, out, err = _run_main(["process.py", d, "capture-check"])
+        lb = p.load()["capture"]["level_base"]
+        assert rc == 0 and lb["status"] == "ok" and lb["base_offset_db"] == 100.0, (rc, out, err, lb)
+        # Nothing expected, one unplanned take: judged and printed; the list's totals are none, and none is unusable.
+        p.close_capture("done")
+        p.start_capture("3", expected=[])
+        p.record_capture("u (sw)")
+        rc, out, err = _run_main(["process.py", d, "capture-check"])
+        assert out.splitlines() == ["UNUSABLE u (sw) — unplanned; silence", "0/0 придатні"] and rc == 0, \
+            (rc, out, err)
+    finally:
+        Process._load_verifier = real
+        shutil.rmtree(top, ignore_errors=True)
+
+
 def _check_check_never_invents_taken():
     """T-1 (#134): a check records a verdict for every title (`round.checks`), and creates a `taken` row only for a
     title REW holds (#77) -- a title REW does not hold stays outstanding; a row already there is updated. A check
@@ -10421,6 +10528,7 @@ def _selftest():
                   _check_route_line_over_a_project_json_no_object, _check_plan_over_a_word_says_neither,
                   _check_handoff_names_a_changelog_copy_that_differs, _check_superseded_not_taken,
                   _check_check_never_invents_taken, _check_a_check_judges_unplanned_takes,
+                  _check_unplanned_takes_stay_off_the_rounds_readers,
                   _check_a_round_matches_titles_by_name_key,
                   _check_a_check_asks_rew_by_key, _check_a_check_judges_one_snapshot_of_rew, _check_rounds_on_one_level_base,
                   _check_the_round_control_names_a_chain_change, _check_level_base_review_fixes,
@@ -11608,7 +11716,7 @@ def _main(argv):
                     print(f"CONTROL {title} — the round's level control (optional): not taken; chain change not checked")
                     continue
                 if verdict.get("ok"):
-                    head, said = f"OK      {title}", _band_said(verdict)[len(" — "):]
+                    head, said = f"OK      {title}", _band_said(verdict)
                 elif _row_for(round_.get("skipped") or {}, title) is not None:
                     head, said = f"SKIP    {title}", ""
                 elif superseded:
