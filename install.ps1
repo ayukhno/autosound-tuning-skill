@@ -2068,69 +2068,71 @@ if ($Mode -eq "tcc") {
                 $TccRef = $TccTagGlob
             }
         }
-        if ($TccRef) {
-            $TccSpec = "autosound-tcc[gui,claude] @ git+$TccRepo@$TccRef"
-            Say "version $TccRef$tccHow"
-            # Its signature, before uv sees it (skill #101). A tag that does not check out is not installed, and the
-            # method's install goes on without it. A name that is not a release (-TccRef) is said UNSIGNED there.
-            if (-not (Test-TccTag $TccRef)) { $TccRefused = "$TccRef could not be shown to be a signed release of TCC" }
-        } else {
-            # No tag could be read -- no network, no git: the app is not installed (T-37, #142). Its default branch was,
-            # with nothing checked. The method goes on without it, and the checks below count the app as missing.
-            $TccRefused = "could not read the app's release tags ($($script:TagsWhy)) -- run again when GitHub answers, or name a tag with -TccRef"
-        }
-        if (-not $TccRefused -and $script:TccSha -and -not (Test-TccTagStillAt $TccRef $script:TccSha)) {
-            $TccRefused = "$TccRef changed after its signature was checked, or the server did not answer"
-        }
-        # skill #62: a launcher uv did not put there (TCC's own updater did) makes `uv tool install --upgrade` refuse
-        # ("Executable already exists"), and on the Windows VM that refusal left the old app unable to start. So uv
-        # is asked first: a tool it lists is upgraded, a launcher it does not own is replaced, and said. A running app
-        # never gets this far (above).
-        $tccForce = @()
-        if (-not $TccRefused -and $HaveTcc -and -not ((& $Uv tool list 2>$null | Out-String) -match '(?m)^autosound-tcc ')) {
-            $tccForce = @("--force")
-            Say "the app's launcher here was not put there by uv (TCC's own updater did) -- replacing it"
-        }
-        # #179 (hub #280): held to the versions the tag was tested with, its constraints.txt copied out by Test-TccTag,
-        # as TCC's own update is -- see install.sh for the whole rule: uv's --help is asked first, and only an option
-        # line ` --constraints ` (not `--build-constraints`) takes the file; an old uv, a release from
-        # $TccConstraintsFrom on without the file, and a tag not fetched install plain, said; never a retry after a
-        # pinned install that failed. A warning each, never a refusal: $TccRefused is the signature's and uv's alone.
-        $tccHeld = @()
-        if (-not $TccRefused) {
-            # Only a release tag reads as a [version]; a candidate counts as its release, as TCC's channel_key[:3] does.
-            $tccFrom = $false
-            if (Test-ReleaseTag $TccRef) {
-                $tccVer = (($TccRef -replace '^beta-', '') -replace '-rc[0-9]+\z', '') -replace '^v', ''
-                $tccFrom = ([version]$tccVer -ge [version]($TccConstraintsFrom -replace '^v', ''))
-            }
-            if (-not $script:TccFetched) {
-                # Settled by its name -- a dry run, a name that is not a release, a tag before signing: nothing was
-                # fetched, so nothing was read. Said, except for a release from before $TccConstraintsFrom: none of
-                # those had the file.
-                if ((Test-ReleaseTag $TccRef) -and -not $tccFrom) { }
-                elseif ($DryRun) { Say "a dry run fetches no tag: the versions $TccRef was tested with (its constraints.txt) are not read here" }
-                else { Warn "$TccRef was not fetched, so the versions it was tested with are not read -- uv chooses them" }
-            } elseif ($script:TccPins) {
-                $help = ""
-                try { $help = (& $Uv tool install --help 2>$null | Out-String) } catch { $help = "" }
-                if ($help.Contains(" --constraints ")) {
-                    $tccHeld = @("--constraints", $script:TccPins)
-                    Say "held to the versions $TccRef was tested with (its constraints.txt)"
-                } elseif ($help.Trim()) {
-                    $uvSaid = ""
-                    try { $uvSaid = (& $Uv --version 2>$null | Out-String).Trim() } catch { $uvSaid = "" }
-                    Warn "this uv cannot hold the app to the versions it was tested with (that needs uv 0.5.6 or newer) -- installing without them, so uv chooses the versions. This uv: $uvSaid"
-                } else {
-                    # No answer at all is not an old uv: a uv that cannot start, or that says its help elsewhere.
-                    Warn "uv gave no answer to ``uv tool install --help``, so it is not known to take the versions the app was tested with -- installing without them, so uv chooses the versions"
-                }
-            } elseif ($tccFrom) {
-                Warn "the versions $TccRef was tested with could not be read, so uv chooses the versions: $($script:TccPinsWhy)"
-            }
-        }
-        # The copy goes whichever way the install went -- and on a Ctrl-C during it, which runs this `finally` (#179).
+        # The copy of the tag's constraints.txt goes whichever way the install went -- and on a Ctrl-C from Test-TccTag
+        # on, which makes it, through Test-TccTagStillAt's network and uv's probes to the install: this `finally`
+        # removes it (#179, the group seat: the `try` opened only at the install, and a Ctrl-C before left it a day).
         try {
+            if ($TccRef) {
+                $TccSpec = "autosound-tcc[gui,claude] @ git+$TccRepo@$TccRef"
+                Say "version $TccRef$tccHow"
+                # Its signature, before uv sees it (skill #101). A tag that does not check out is not installed, and the
+                # method's install goes on without it. A name that is not a release (-TccRef) is said UNSIGNED there.
+                if (-not (Test-TccTag $TccRef)) { $TccRefused = "$TccRef could not be shown to be a signed release of TCC" }
+            } else {
+                # No tag could be read -- no network, no git: the app is not installed (T-37, #142). Its default branch was,
+                # with nothing checked. The method goes on without it, and the checks below count the app as missing.
+                $TccRefused = "could not read the app's release tags ($($script:TagsWhy)) -- run again when GitHub answers, or name a tag with -TccRef"
+            }
+            if (-not $TccRefused -and $script:TccSha -and -not (Test-TccTagStillAt $TccRef $script:TccSha)) {
+                $TccRefused = "$TccRef changed after its signature was checked, or the server did not answer"
+            }
+            # skill #62: a launcher uv did not put there (TCC's own updater did) makes `uv tool install --upgrade` refuse
+            # ("Executable already exists"), and on the Windows VM that refusal left the old app unable to start. So uv
+            # is asked first: a tool it lists is upgraded, a launcher it does not own is replaced, and said. A running app
+            # never gets this far (above).
+            $tccForce = @()
+            if (-not $TccRefused -and $HaveTcc -and -not ((& $Uv tool list 2>$null | Out-String) -match '(?m)^autosound-tcc ')) {
+                $tccForce = @("--force")
+                Say "the app's launcher here was not put there by uv (TCC's own updater did) -- replacing it"
+            }
+            # #179 (hub #280): held to the versions the tag was tested with, its constraints.txt copied out by Test-TccTag,
+            # as TCC's own update is -- see install.sh for the whole rule: uv's --help is asked first, and only an option
+            # line ` --constraints ` (not `--build-constraints`) takes the file; an old uv, a release from
+            # $TccConstraintsFrom on without the file, and a tag not fetched install plain, said; never a retry after a
+            # pinned install that failed. A warning each, never a refusal: $TccRefused is the signature's and uv's alone.
+            $tccHeld = @()
+            if (-not $TccRefused) {
+                # Only a release tag reads as a [version]; a candidate counts as its release, as TCC's channel_key[:3] does.
+                $tccFrom = $false
+                if (Test-ReleaseTag $TccRef) {
+                    $tccVer = (($TccRef -replace '^beta-', '') -replace '-rc[0-9]+\z', '') -replace '^v', ''
+                    $tccFrom = ([version]$tccVer -ge [version]($TccConstraintsFrom -replace '^v', ''))
+                }
+                if (-not $script:TccFetched) {
+                    # Settled by its name -- a dry run, a name that is not a release, a tag before signing: nothing was
+                    # fetched, so nothing was read. Said, except for a release from before $TccConstraintsFrom: none of
+                    # those had the file.
+                    if ((Test-ReleaseTag $TccRef) -and -not $tccFrom) { }
+                    elseif ($DryRun) { Say "a dry run fetches no tag: the versions $TccRef was tested with (its constraints.txt) are not read here" }
+                    else { Warn "$TccRef was not fetched, so the versions it was tested with are not read -- uv chooses them" }
+                } elseif ($script:TccPins) {
+                    $help = ""
+                    try { $help = (& $Uv tool install --help 2>$null | Out-String) } catch { $help = "" }
+                    if ($help.Contains(" --constraints ")) {
+                        $tccHeld = @("--constraints", $script:TccPins)
+                        Say "held to the versions $TccRef was tested with (its constraints.txt)"
+                    } elseif ($help.Trim()) {
+                        $uvSaid = ""
+                        try { $uvSaid = (& $Uv --version 2>$null | Out-String).Trim() } catch { $uvSaid = "" }
+                        Warn "this uv cannot hold the app to the versions it was tested with (that needs uv 0.5.6 or newer) -- installing without them, so uv chooses the versions. This uv: $uvSaid"
+                    } else {
+                        # No answer at all is not an old uv: a uv that cannot start, or that says its help elsewhere.
+                        Warn "uv gave no answer to ``uv tool install --help``, so it is not known to take the versions the app was tested with -- installing without them, so uv chooses the versions"
+                    }
+                } elseif ($tccFrom) {
+                    Warn "the versions $TccRef was tested with could not be read, so uv chooses the versions: $($script:TccPinsWhy)"
+                }
+            }
             if ($TccRefused) {
                 Warn "the app is not installed: $TccRefused."
                 Warn "The method is installed and works without it; the end of this run says so again."

@@ -1806,12 +1806,45 @@ CODEX_UNLINK_CASES = (
      "both"),
     ("a-real-folder", "folder", None, False, ("not a link this script made",), ("removing",), "folder", None, None,
      "both"),
-    ("nothing-there", None, "clone", False, (), ("removing", "left alone"), "nothing", "clone", None, "neither"))
+    ("nothing-there", None, "clone", False, (), ("removing", "left alone"), "nothing", "clone", None, "neither"),
+    # The group seat: ~/.agents, or ~/.agents/skills, a link (a junction on Windows) to a folder of somebody's, which
+    # the link's removal leaves empty -- the linked folder and its target stay, and nothing tries to remove them.
+    ("ours-agents-a-linked-folder", "clone", "clone", False, ("removing the Codex link",),
+     ("left alone", "could not remove"), "nothing", None, "agents-linked", "agents"),
+    ("ours-skills-a-linked-folder", "clone", "clone", False, ("removing the Codex link",),
+     ("left alone", "could not remove"), "nothing", None, "skills-linked", "both"))
+
+
+def _codex_linked(home, beside, junction=False):
+    """#181 (the group seat): before the case's link is made, ~/.agents (`agents-linked`) or ~/.agents/skills
+    (`skills-linked`) as a link to a folder of somebody's, ~/theirs-agents -- a symbolic link, or a junction on Windows,
+    as the person would make one. None for any other case."""
+    if beside not in ("agents-linked", "skills-linked"):
+        return None
+    elsewhere = Path(home, "theirs-agents")
+    elsewhere.mkdir(parents=True)
+    at = Path(home, ".agents") if beside == "agents-linked" else Path(home, ".agents", "skills")
+    at.parent.mkdir(parents=True, exist_ok=True)
+    if junction:
+        import _winapi
+        _winapi.CreateJunction(str(elsewhere), str(at))
+    else:
+        os.symlink(elsewhere, at)
+    return at
+
+
+def _codex_linked_problems(at):
+    """#181: the linked folder and its target are both still there after the uninstall."""
+    if at is None:
+        return []
+    out = [] if os.path.lexists(at) and at.is_dir() else [f"the linked folder {at.name} is gone"]
+    return out + ([] if Path(at.parent if at.name == ".agents" else at.parent.parent, "theirs-agents").is_dir()
+                  else ["the linked folder's target is gone"])
 
 
 def _codex_beside(link, beside):
     """#181: the case's file of somebody's beside the Codex link -- in ~/.agents/skills or in ~/.agents."""
-    if beside:
+    if beside in ("skills", "agents"):
         folder = link.parent if beside == "skills" else link.parent.parent
         folder.mkdir(parents=True, exist_ok=True)
         (folder / "theirs").write_text("theirs\n")
@@ -2001,7 +2034,7 @@ def codex_link_problems(sh):
             places[name].mkdir(parents=True)
         link = home / ".agents" / "skills" / "autosound-tuning"
         if before in ("clone", "plugin", "old", "foreign", "dotdot"):
-            link.parent.mkdir(parents=True)
+            link.parent.mkdir(parents=True, exist_ok=True)
             os.symlink(spelled[before], link)
         elif before == "folder":
             (link / "mine").mkdir(parents=True)
@@ -2050,9 +2083,11 @@ def codex_link_problems(sh):
                 out.append(f"install.sh's Codex link, {case}: " + "; ".join(wrong) + f" -- said {said.strip()[-240:]!r}"
                            " (#149)")
         for case, before, recorded, dry, words, never, after, codex_after, beside, folders in CODEX_UNLINK_CASES:
+            linked = _codex_linked(Path(tmp, "unlink-" + case), beside)
             home, stub, spelled, places, link, manifest, head = fixture("unlink-" + case, False, before, recorded)
             _codex_beside(link, beside)
             rc, said = run(home, stub, head + f"DRY_RUN={int(dry)}\ncodex_unlink\n")
+            linked_wrong = _codex_linked_problems(linked)
             wrong = [f"exit {rc}, want 0"] if rc else []
             wrong += [f"never says {w!r}" for w in words if w not in said]
             wrong += [f"says {w!r}" for w in never if w in said]
@@ -2063,7 +2098,7 @@ def codex_link_problems(sh):
                 wrong.append(f"~/.agents/skills and ~/.agents: {_codex_folders(link)} there, want {folders} (#181)")
             if before == "folder" and not (link / "mine").is_dir():
                 wrong.append("the real folder's content is gone")
-            wrong += _codex_manifest_problems(manifest, spelled[codex_after] if codex_after else None)
+            wrong += _codex_manifest_problems(manifest, spelled[codex_after] if codex_after else None) + linked_wrong
             if wrong:
                 out.append(f"install.sh's uninstall of the Codex link, {case}: " + "; ".join(wrong)
                            + f" -- said {said.strip()[-240:]!r} (#149)")
@@ -2183,6 +2218,7 @@ def ps1_codex_link_problems(ps1):
                 out.append(f"install.ps1's Codex link under {Path(shell).name}, {case}: " + "; ".join(wrong)
                            + f" -- said {said.strip()[-300:]!r} (#149)")
         for case, before, recorded, dry, words, never, after, codex_after, beside, folders in CODEX_UNLINK_CASES:
+            linked = _codex_linked(Path(tmp, "unlink-" + case), beside, junction=True)
             home, spelled, places, link, manifest, head = fixture("unlink-" + case, False, before, recorded)
             _codex_beside(link, beside)
             rc, said = run(home, head + f"$DryRun = ${str(dry).lower()}\nRemove-CodexLink\n")
@@ -2195,6 +2231,7 @@ def ps1_codex_link_problems(ps1):
             if _codex_folders(link) != folders:
                 wrong.append(f"~/.agents/skills and ~/.agents: {_codex_folders(link)} there, want {folders} (#181)")
             wrong += _codex_manifest_problems(manifest, spelled[codex_after] if codex_after else None)
+            wrong += _codex_linked_problems(linked)
             if wrong:
                 out.append(f"install.ps1's uninstall of the Codex link under {Path(shell).name}, {case}: "
                            + "; ".join(wrong) + f" -- said {said.strip()[-300:]!r} (#149)")
@@ -2680,6 +2717,11 @@ PS1_ARM_AFTER_CASES = (
      "$script:Leaves = $true\n", 0, "armed", ("INSTALLER RAN", "OK   git version")),
     ("claude-fails-nothing-left", ("claude",), PS1_UPSTREAM.format(leave="", ok="false"), 0, "kept",
      ("Claude Code did not install",)),
+    # The group seat: Git installs (its hold must be used up there), then Claude Code fails and leaves nothing -- the
+    # pre-run receipt is NOT put back, Git is installed: #160's bug if it were.
+    ("git-installs-then-claude-fails", ("git", "claude"), "$script:Winget = $true\n$script:WingetRc = 0\n"
+     "$script:Leaves = $true\n" + PS1_UPSTREAM.format(leave="", ok="false"), 0, "armed",
+     ("OK   git version", "Claude Code did not install")),
     ("claude-fails-no-earlier-receipt", ("claude",), PS1_UPSTREAM.format(leave="", ok="false"), 0, "none", ()),
     ("claude-fails-armed-before", ("claude",), "$script:ReceiptArmed = $true\n"
      + PS1_UPSTREAM.format(leave="", ok="false"), 0, "kept-armed", ()),
@@ -3769,6 +3811,9 @@ def exit_contract_problems(sh, ps1):
                 'TCC_PINS_MADE="$TMPDIR/autosound-tcc-pins.abc123"\nTCC_PINS="$TCC_PINS_MADE/constraints.txt"\n')
         foreign = ('mkdir -p "$HOME/keep"\n: > "$HOME/keep/x"\nTCC_PINS="$HOME/keep/x"\nTCC_PINS_MADE="$HOME/keep"\n'
                    'TMPDIR="$HOME/tmp"\n')
+        # The group seat: the prefix is right and a `/` after it climbs out -- the shape's second half refuses it.
+        climbs = ('TMPDIR="$HOME/tmp"\nmkdir -p "$TMPDIR/autosound-tcc-pins.x" "$HOME/keep"\n: > "$HOME/keep/x"\n'
+                  'TCC_PINS_MADE="$TMPDIR/autosound-tcc-pins.x/../../keep"\nTCC_PINS="$TCC_PINS_MADE/x"\n')
         # A signal on POSIX only: Git Bash's own `kill` of itself is not the terminal's Ctrl-C.
         for case, body, gone, kept in (
                 ("the-pins-copy-and-a-failure", go + live + "false\nfinish\n", "tmp/autosound-tcc-pins.abc123", ""),
@@ -3777,7 +3822,8 @@ def exit_contract_problems(sh, ps1):
                 *((("the-pins-copy-and-a-signal", go + live + "kill -TERM $$\nsleep 5\nfinish\n",
                     "tmp/autosound-tcc-pins.abc123", ""),) if os.name != "nt" else ()),
                 ("a-foreign-pins-path-and-a-stop", go + foreign + 'stop 1 "stopped: a stand-in"\n', "", "keep/x"),
-                ("a-foreign-pins-path-and-a-failure", go + foreign + "false\nfinish\n", "", "keep/x")):
+                ("a-foreign-pins-path-and-a-failure", go + foreign + "false\nfinish\n", "", "keep/x"),
+                ("a-pins-path-climbing-out-and-a-stop", go + climbs + 'stop 1 "stopped: a stand-in"\n', "", "keep/x")):
             rc, said, *_ = run(case, body, "python3", "0", False)
             wrong = [] if rc != 0 else ["exit 0, want a stop"]
             if gone and Path(tmp, case, gone).exists():
@@ -4185,7 +4231,8 @@ def main():
                        f"{len(CODEX_UNLINK_CASES)} uninstall cases run for install.sh "
                        + ("here" if codex_sh_ran else "NOT here (Windows: Git Bash's ln -s copies)")
                        + " and for install.ps1 " + (f"under {Path(find_powershell()).name}" if codex_ps_ran
-                                                    else "NOT here -- no PowerShell; the Windows job runs them"))
+                                                    else "NOT here -- " + ("no PowerShell" if os.name == "nt" else "not Windows")
+                                                    + "; the Windows job runs them"))
     # install.ps1's end and its probes RUN under PowerShell, where there is one (#142): the Windows job's runner.
     ran_ps1, ps1_ran = ps1_run_problems(ps1)
     if ran_ps1:
@@ -4213,8 +4260,9 @@ def main():
                        f"for an old uv, a silent one, a release without the file and a tag not fetched -- one install "
                        f"each, never a retry, the copy gone after (#179)")
     else:
-        checked.append("install.ps1's app block is NOT run here -- no PowerShell on this machine; the Windows job runs "
-                       "it (#179)")
+        checked.append("install.ps1's app block is NOT run here -- "
+                       + ("no PowerShell on this machine" if os.name == "nt" else "not Windows")
+                       + "; the Windows job runs it (#179)")
     pins_ps1, pins_ran = ps1_tcc_pins_problems(ps1)
     if pins_ps1:
         problems.extend(pins_ps1)
@@ -4223,8 +4271,9 @@ def main():
                        f"copied out byte for byte before the scratch repository goes; none, a folder by that name, or a "
                        f"tag not fetched leaves nothing (#179)")
     else:
-        checked.append("install.ps1's Test-TccTag is NOT run here -- no PowerShell on this machine; the Windows job "
-                       "runs it (#179)")
+        checked.append("install.ps1's Test-TccTag is NOT run here -- "
+                       + ("no PowerShell on this machine" if os.name == "nt" else "not Windows")
+                       + "; the Windows job runs it (#179)")
     # The exit contract (#142): what the run ended as, in its exit code and its receipt.
     contract = exit_contract_problems(sh, ps1)
     if contract:
@@ -4288,6 +4337,17 @@ def main():
                                        "refs/tags/${Ref}^{}")))
     tcc_missing = [f"{where}: {needle}" for where, text, needles in tcc_calls for needle in needles
                    if needle not in text]
+    # #179 (the group seat): the copy Test-TccTag makes is live from that call on -- through Test-TccTagStillAt's network
+    # and uv's probes to the install -- so the `try` whose `finally` removes it opens before the call, not after them.
+    app_at = ps1.find("if (-not (Test-TccTag $TccRef))")
+    app_ref = ps1.rfind("if ($TccRef) {", 0, app_at) if app_at >= 0 else -1
+    app_try = ps1.rfind("try {", 0, app_ref) if app_ref >= 0 else -1
+    app_fin = ps1.find("if ($script:TccPins) { Remove-Item -LiteralPath (Split-Path -Parent $script:TccPins)", app_at)
+    if app_at < 0 or app_ref < 0 or app_try < 0 or ps1[app_try + len("try {"):app_ref].strip() \
+            or re.search(r"^\s*try \{\s*$", ps1[app_at:app_fin], re.M) or not 0 < app_fin - app_at < 9000:
+        tcc_missing.append("install.ps1: the app block's try (its finally removes the constraints.txt copy) does not "
+                           "open right before `if ($TccRef) {` -- a Ctrl-C between Test-TccTag and the install leaves the "
+                           "copy for a day (#179)")
     if tcc_missing:
         problems.append("the app's tag is not checked the same way before uv -- missing " + "; ".join(tcc_missing))
     else:
