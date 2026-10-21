@@ -60,8 +60,7 @@ panel had nothing real to render and every resume re-derived the phase by re-rea
                                                     //   the car is taken in -- never the phase plan
     "optional": ["Ws_1 (sw)", "ALL+C_1 (rta)"],     // skill #80: on the list, not a gap when left (#191: out of
                                                     //   `unusable_captures`, the totals and the exit code until
-                                                    //   taken; taken and unusable, it gates). Never a title the
-                                                    //   list asks for: typed both, it stays required
+                                                    //   taken; taken and unusable, it gates)
     "control": "ALL+C_1 (rta)",                     // #176: the round's level control (the glossary's fullest
                                                     //   combo with an active channel, an RTA at the round's `_N`)
     "control_added": true,                          //   true: the method put it on `optional` -- no gap, out of
@@ -320,7 +319,8 @@ appended line is fsynced (and the folder, when the append made the file), so it 
   in `<what>`.
 - **An optional capture not taken is no gap** (#191, S-107; skill #80: «listed, ordered, recorded
   when taken, and not a gap when not»). One on the round's `optional` with no standing `taken` row
-  (N17, by `title_key`) is out of `unusable_captures` -- so out of the step's gate in `done` -- out of
+  (N17, by `title_key`) and no check that found REW holding it (`checks[title].exists` true: typed
+  under a wrong title, corrected away, then really taken -- its only row superseded) is out of `unusable_captures` -- so out of the step's gate in `done` -- out of
   `capture-check`'s `N/M придатні` denominator and its exit code, and its line reads
   `OPTIONAL <title> — optional: not taken; not a gap`, a prefix that is none of OK/SKIP/N/A/UNUSABLE,
   beside the method's control's `CONTROL <title> — …` (#176); a skip of one stays `SKIP`. It counted
@@ -328,8 +328,6 @@ appended line is fsynced (and the folder, when the append made the file), so it 
   as any capture: unusable, it is an `UNUSABLE` line, in the totals and gating -- the person chose to
   take it. `capture-close`, `open_work` and `handoff` already read `_outstanding`, which leaves it out
   (`N optional left`, never OUTSTANDING); `contract.py`'s `round_verdict` names it `missing_optional`.
-  A title the list asks for -- the plan's, or typed as expected -- and typed with `--optional` too stays
-  required: `capture-start` keeps it off `optional`; the list's requirement wins.
 - **A not-checked capture keeps why** (#184). A verdict `verify` did not check -- `applicable: false`
   -- carries `why`, `not_a_sweep` (an RTA) or `outside_band` (its own range wholly outside the band),
   and `capture-check` keeps it on the capture's `verified` in `checks` and in its `taken` row, beside
