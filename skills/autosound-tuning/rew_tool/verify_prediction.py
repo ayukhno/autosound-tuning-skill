@@ -175,6 +175,11 @@ def measured_from_rew(titles, api=None, allow_rta=False, freqs=None, window=None
             off = float(timing.get("offset_s") or 0.0)
             base = "sw" if ("loopback" in ref and abs(off) < 1e-9) else f"sw(offset {off * 1e3:.3f} ms)"
         out[title] = (np.asarray(f, float), np.asarray(mag, float), base)
+    if shifts is not None and to_level is None:
+        # No title carries a calibration: nothing to bring, and nothing to say (the re-review, #176) -- every row
+        # read "not brought to the base" on a REW that lists none. As compare.py does.
+        for title in [t for t, v in shifts.items() if v is None]:
+            shifts[title] = 0.0
     return out
 
 
@@ -1084,6 +1089,13 @@ def _selftest():
     rep_bare = verify(pred, dict(got_bare, **{"w-L_2 (rta)": got["w-L_2 (rta)"]}),
                       solo_names={"w-L": "w-L_2 (rta)", "m-L": "tw-L_2 (rta)"}, rew_calibration=bare)
     assert "not brought to the base: REW lists no splOffsetdB" in render(rep_bare), render(rep_bare)
+    # A REW that lists no calibration for any title: nothing to bring, and nothing said (the re-review, #176).
+    class _NoCal(_Rew):
+        listing = {k: {"title": v["title"]} for k, v in _Rew.listing.items()}
+    none_cal = {}
+    got_none = measured_from_rew(["w-L_2 (rta)", "m-L_2 (rta)"], api=_NoCal(), allow_rta=True, shifts=none_cal)
+    assert none_cal == {"w-L_2 (rta)": 0.0, "m-L_2 (rta)": 0.0}, none_cal
+    assert "not brought" not in render(verify(pred, got_none, **rta_names, rew_calibration=none_cal))
     print("selftest[verify_prediction] OK -- exact car → TRUSTED with zero deltas; +7.3 dB → still "
           "TRUSTED and the offsets say 7.3; an extra 0.6 ms → NOT trusted at the named junction; "
           "missing pair → UNVERIFIED; an RTA base is said in the verdict; entry control: the exact "

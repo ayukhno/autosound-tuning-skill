@@ -220,6 +220,22 @@ def _selftest():
         raise AssertionError("a title REW holds twice was called missing")
     except KeyError as exc:
         assert "Ambiguous" in str(exc), exc
+    # ...and the command line says it, exit 1, no traceback (the re-review, #176).
+    import contextlib
+    import io
+    import rew_api
+    saved = {n: getattr(rew_api, n) for n in ("get_measurements", "find_measurement_id")}
+    try:
+        rew_api.get_measurements = lambda: {"1": {"title": "ALL_3 (rta)"}, "2": {"title": "ALL_3 (rta)"}}
+        rew_api.find_measurement_id = lambda title, measurements=None, exact=True: (_ for _ in ()).throw(
+            rew_api.AmbiguousTitle(f"Ambiguous: 2 measurements titled {title!r}"))
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            rc = main(["--titles", "ALL_3 (rta)"])
+        assert rc == 1 and "REW holds ALL_3 (rta) twice -- rename one" in err.getvalue(), (rc, err.getvalue())
+    finally:
+        for n, fn in saved.items():
+            setattr(rew_api, n, fn)
     print("selftest[compare] OK -- values at named frequencies with the difference, a band's log-weighted mean, "
           "the RMS against a target or the first curve with the level removed, and the smoothing named; titles REW "
           "calibrated apart brought to the first one's splOffsetdB, the shift said (#176)")
@@ -245,6 +261,15 @@ def main(argv=None):
     except MissingTitle as exc:
         print(f"refusing: REW holds no measurement titled {exc.args[0]!r}", file=sys.stderr)
         return 3
+    except KeyError as exc:
+        import rew_api
+        if not isinstance(exc, rew_api.AmbiguousTitle):
+            raise
+        # A title REW holds twice (the re-review, #176): which one was meant is not knowable -- said, never a traceback.
+        title = next((t for t in args.titles if repr(t) in str(exc)), "a title")
+        print(f"refusing: REW holds {title} twice -- rename one ({exc.args[0] if exc.args else exc})",
+              file=sys.stderr)
+        return 1
     at = [float(x) for x in args.at.split(",") if x.strip()]
     band = tuple(float(x) for x in args.band.split("-")) if args.band else None
     target = variant_front.read_target(args.target) if args.target else None

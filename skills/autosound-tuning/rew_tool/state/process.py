@@ -1103,6 +1103,15 @@ def _outstanding(round_, optional=False):
     ]
 
 
+def _control_exempt(round_, title):
+    """Whether `title` is the round's level control AND the method put it on the list (#176): only then is it no gap.
+    A round written before `control_added` existed (the first build) had its control added only to `optional`, so the
+    key absent reads from there (the re-review): read as False, the method's own control gated the round."""
+    if not title or title != round_.get("control"):
+        return False
+    return bool(round_.get("control_added", title in (round_.get("optional") or [])))
+
+
 def _levelbase():
     """`levelbase.py` (#176): stdlib, with numpy where it reads curves. One that will not load is a bug -- raised as
     it is, so the command exits 70 -- never "cannot tell": `_load_sibling` would read a syntax error in it as no level
@@ -3452,9 +3461,19 @@ class Process:
                 live["level_base"]["control"] = self._control_of(live, control_read)
             elif live.get("control_why"):
                 # No control on this round, and why -- said in the record (the task review, #176).
-                live["level_base"]["control"] = {"title": None, "taken": False, "verdict": "not_taken",
+                # `none`, never `not_taken` (the re-review): that is a control that exists and was not measured.
+                live["level_base"]["control"] = {"title": None, "taken": False, "verdict": "none",
                                                  "common_db": None, "bands": {}, "why": live["control_why"]}
             self._write(state)
+            # A check that finds NONE of the round's titles in REW -- REW restarted, the session not reloaded yet --
+            # records no offsets: recorded null, the replay dropped them all, and a named base read `missing` from then
+            # on (the re-review, #176). The last numbers stand, and it is said. A title gone while others are there is
+            # recorded gone, as before.
+            on_list = [(t, v) for t, v in checked if _row_for(live.get("expected") or [], t) is not None]
+            offsets_unread = None
+            if on_list and not any(v.get("exists") is True for _t, v in on_list):
+                offsets_unread = ("REW holds none of the round's titles checked -- REW restarted, or its session not "
+                                  "reloaded? -- so no offsets were recorded; the last ones stand")
             self._append(
                 EV_CAPTURE_VERIFIED,
                 capture=live["id"],
@@ -3471,7 +3490,9 @@ class Process:
                 # the round's level that outlives it -- `capture_rounds` replays it, the latest check per title.
                 # Every title checked: one REW no longer holds is null, so the replay drops the offset an earlier check
                 # recorded for it (the task review, #176) -- it kept a stale one.
-                spl_offsets_db={t: (v.get("spl_offset_db") if v.get("exists") is True else None) for t, v in checked},
+                spl_offsets_db={} if offsets_unread else
+                {t: (v.get("spl_offset_db") if v.get("exists") is True else None) for t, v in checked},
+                **({"spl_offsets_unread": offsets_unread} if offsets_unread else {}),
             )
         # Told AFTER the record is on disk, never before -- issue #21. This print used to sit
         # where `rate_note` is computed, and on a cp1252 console the warning glyph raised
@@ -3482,6 +3503,9 @@ class Process:
         # the moment it had something to say.
         if rate_note:
             print(f"  ⚠ {rate_note}")
+        if offsets_unread:
+            print("  note: REW holds none of this round's titles -- no level offsets recorded; the last ones stand "
+                  "(reload the session in REW and check again)")
         return live
 
     def _level_base_of(self, live):
@@ -3519,8 +3543,8 @@ class Process:
             status = "ok"
         out = {"status": status, "base_round": base_id, "previous_round": prev["id"] if prev else None,
                "base_offset_db": base_off, "previous_offset_db": prev_off, "titles": {}}
-        if status in ("ok", "no_base"):
-            out["offset_db"] = own
+        if mine and agree and not uncalibrated:
+            out["offset_db"] = own     # the round's own, whenever its captures agree -- the base may lack one (SKL-080)
         for title in held:
             off = mine.get(title)
             out["titles"][title] = {
@@ -3690,7 +3714,7 @@ class Process:
         out = []
         taken = round_.get("taken") or {}
         for title in round_.get("expected", []):
-            if title == round_.get("control") and round_.get("control_added"):
+            if _control_exempt(round_, title):
                 continue  # the method's own level control (#176): judged in `level_base.control`, never a gap
             if _row_for(round_.get("skipped") or {}, title) is not None:   # by `title_key` (#153)
                 continue  # a decision, and decisions are recorded, not re-litigated
@@ -8524,6 +8548,76 @@ def _check_level_base_review_fixes():
     assert not failures, "\n  ".join(["#176's review fixes:"] + failures)
 
 
+def _check_level_base_second_fixes():
+    """#176's re-review: (1) a round written before `control_added` existed reads its control as the method's when it
+    sits on `optional`, so it never gates; (2) a round with no control says `none`, never `not_taken` -- that is a
+    control that exists and was not measured; (4) a check that finds none of the round's titles in REW (REW restarted,
+    the session not reloaded) records no offsets -- the last numbers stand -- and says so; (5) a round whose own
+    captures agree keeps its `offset_db` when only the base lacks one."""
+    import shutil
+    import tempfile
+    failures = []
+
+    def want(label, ok, detail=None):
+        if not ok:
+            failures.append(f"{label}: {detail!r}")
+    base_off = 103.34649658203125
+    top = tempfile.mkdtemp(prefix="autosound_process_level_second_")
+    try:
+        with _LevelRew() as rew:
+            def project(name, glossary):
+                proj = os.path.join(top, name)
+                os.makedirs(proj)
+                with open(os.path.join(proj, "glossary.json"), "w", encoding="utf-8") as fh:
+                    json.dump(glossary, fh)
+                p = Process(os.path.join(proj, "process"))
+                p.enter_phase("-1")
+                return p, os.path.join(proj, "process")
+            # (1) the key removed, as a round of the first build holds it.
+            p, d = project("one", {"channels": [{"code": c} for c in ("w-L", "c")], "combos": {"ALL+C": ["w-L", "c"]}})
+            p.start_capture("4", expected=["w-L_4 (sw)"])
+            with open(p.state_path, encoding="utf-8") as fh:
+                state = json.load(fh)
+            want("1 the round has the method's control", state["capture"].get("control") == "ALL+C_4 (rta)", state)
+            state["capture"].pop("control_added", None)
+            with open(p.state_path, "w", encoding="utf-8") as fh:
+                json.dump(state, fh)
+            rew.hold({"w-L_4 (sw)": base_off})
+            rc, out, err = _run_main(["process.py", d, "capture-check"])
+            want("1 not a gap", p.unusable_captures() == [] and rc == 0 and "CONTROL ALL+C_4 (rta)" in out, (rc, out))
+            # (2) no combo: `none`, with why.
+            p, d = project("two", {"channels": [{"code": "w-L"}]})
+            p.start_capture("1", expected=["w-L_1 (sw)"])
+            rew.hold({"w-L_1 (sw)": base_off})
+            p.check_captures()
+            ctl = p.load()["capture"]["level_base"].get("control") or {}
+            want("2 none, not not_taken", ctl.get("verdict") == "none" and ctl.get("title") is None
+                 and "combo" in (ctl.get("why") or ""), ctl)
+            # (4) REW restarted: none of the round's titles held -- nothing recorded for the offsets, said.
+            p, d = project("four", {"channels": [{"code": c} for c in ("w-L", "w-R")]})
+            p.start_capture("1", expected=["w-L_1 (sw)", "w-R_1 (sw)"])
+            rew.hold({"w-L_1 (sw)": base_off, "w-R_1 (sw)": base_off})
+            p.check_captures()
+            rew.hold({})
+            rc, out, err = _run_main(["process.py", d, "capture-check"])
+            r1 = {x["id"]: x for x in Process(d).capture_rounds()}["cap_001"]
+            want("4 the last numbers stand", _recorded_offsets(r1) == {"w-L_1 (sw)": base_off, "w-R_1 (sw)": base_off},
+                 r1["spl_offsets_db"])
+            ev = [e for e in p.events() if e.get("type") == EV_CAPTURE_VERIFIED][-1]
+            want("4 the event records none and says why", ev.get("spl_offsets_db") == {}
+                 and "none of the round's titles" in (ev.get("spl_offsets_unread") or ""), ev)
+            want("4 said", "REW holds none of this round's titles" in out, out)
+            # (5) the round agrees, the base has no offset: `missing`, and the round's own offset kept.
+            live = {"id": "cap_002", "expected": ["w-L_2 (sw)", "w-R_2 (sw)"],
+                    "checks": {t: {"exists": True, "spl_offset_db": 120.0} for t in ("w-L_2 (sw)", "w-R_2 (sw)")}}
+            p._level_rounds = lambda _live: ("cap_001", {"cap_001": {"id": "cap_001", "spl_offsets_db": {}}}, None)
+            lb = p._level_base_of(live)
+            want("5 offset kept", lb["status"] == "missing" and lb.get("offset_db") == 120.0, lb)
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["#176's re-review fixes:"] + failures)
+
+
 class _SnapshotRew:
     """REW behind the real `verify`, for #183: `get_measurements` answers `listings` in turn (the last one again once
     they run out; `_SnapshotRew.DOWN` there raises REW down, `_SnapshotRew.ERROR` REW answering an HTTP 500), and every
@@ -10532,6 +10626,7 @@ def _selftest():
                   _check_a_round_matches_titles_by_name_key,
                   _check_a_check_asks_rew_by_key, _check_a_check_judges_one_snapshot_of_rew, _check_rounds_on_one_level_base,
                   _check_the_round_control_names_a_chain_change, _check_level_base_review_fixes,
+                  _check_level_base_second_fixes,
                   _check_close_stops_on_a_moved_snapshot, _check_a_check_holds_its_snapshot_whole,
                   _check_a_session_drift_reads_the_one_listing,
                   _check_retakes_and_superseded_rows,
@@ -11711,7 +11806,7 @@ def _main(argv):
                 # row is no capture (N17): the line says what it was corrected to.
                 superseded = row.get("superseded_by")
                 verdict = {} if superseded else (row.get("verified") if held is not None else checks.get(title)) or {}
-                if title == round_.get("control") and round_.get("control_added") and held is None:
+                if _control_exempt(round_, title) and held is None:
                     # The method's level control, not taken (#176): optional, and no unusable capture -- said so.
                     print(f"CONTROL {title} — the round's level control (optional): not taken; chain change not checked")
                     continue
@@ -11747,7 +11842,7 @@ def _main(argv):
                 print(level_said)
             left = p.unusable_captures(p.load(strict=True))   # the exit code is a verdict (#136)
             asked = [t for t in round_.get("expected", [])            # the control the method added counts apart
-                     if not (t == round_.get("control") and round_.get("control_added"))]
+                     if not _control_exempt(round_, t)]
             print(f"{len(asked) - len(left)}/{len(asked)} придатні")
             return 1 if left else 0
         elif cmd == "capture-taken":
