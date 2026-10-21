@@ -1349,9 +1349,12 @@ function Test-TccTag {
     param([string]$Ref)
     $script:TccSha = ""; $script:TccPins = ""; $script:TccPinsWhy = ""; $script:TccFetched = $false
     # A copy an earlier run left -- a Ctrl-C during uv's install, before the app's block could remove it -- goes first;
-    # not on a dry run, which changes nothing.
+    # not on a dry run, which changes nothing. Only one older than a day: nothing keeps two runs apart, and another
+    # run's copy may be in use right now. Never a junction or a link: Remove-Item -Recurse on 5.1 follows one.
     if (-not $DryRun) {
+        $staleBefore = (Get-Date).AddDays(-1)
         Get-ChildItem -LiteralPath $Scratch -Directory -Filter "tcc-pins-*" -ErrorAction SilentlyContinue |
+            Where-Object { -not ($_.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -and $_.LastWriteTime -lt $staleBefore } |
             ForEach-Object { Remove-Item -LiteralPath $_.FullName -Recurse -Force -ErrorAction SilentlyContinue }
     }
     # The developer's switch skips the SIGNATURE, not the tag's pins (as TCC since tcc #227) -- see check_tcc_tag in
@@ -1376,13 +1379,13 @@ function Test-TccTag {
         # Under the switch the fetch only ever brought the pins: one that failed installs as the switch always did.
         $script:TccPinsWhy = "could not fetch ${Ref}: $(@($said | ForEach-Object { "$_" }) | Select-Object -Last 1)"
         $script:TccFetched = $true
-        Remove-Item $repo -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $repo -Recurse -Force -ErrorAction SilentlyContinue
         return $true
     }
     if ($rc -ne 0) {
         Warn "could not fetch $Ref to check its signature -- it is not installed:"
         $said | Select-Object -Last 2 | ForEach-Object { Write-Host "      $_" }
-        Remove-Item $repo -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $repo -Recurse -Force -ErrorAction SilentlyContinue
         return $false
     }
     $script:TccFetched = $true
@@ -1431,7 +1434,7 @@ function Test-TccTag {
         }
         $ErrorActionPreference = $prev
     }
-    Remove-Item $repo -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $repo -Recurse -Force -ErrorAction SilentlyContinue
     if ($underSwitch) { return $true }
     if (-not $verified) { return $false }
     # Fail closed, as TCC does: a verified tag whose commit git cannot name is not installed unpinned.

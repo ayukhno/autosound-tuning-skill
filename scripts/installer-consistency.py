@@ -572,13 +572,15 @@ def signing_problems(sh):
         what = f"{ref}{' (skip)' if skip else ''}{' (dry run)' if dry == '1' else ''}{f' ({cond})' if cond else ''}"
         own = Path(tmp, f"pins-tmp-{ref}-{skip or 0}-{dry}-{cond}")
         own.mkdir()
-        rc, said = run(f'TMPDIR="{own.as_posix()}"; export TMPDIR\nTCC_PINS=stale TCC_PINS_WHY=stale TCC_FETCHED=stale\n'
+        rc, said = run(f'TMPDIR="{own.as_posix()}"; export TMPDIR\n'
+                       'TCC_PINS=stale TCC_PINS_WHY=stale TCC_FETCHED=stale TCC_PINS_MADE=stale\n'
                        f'check_tcc_tag "{ref}" 2>&1; rc=$?\n'
-                       'printf "TCC_PINS=[%s]\\nTCC_PINS_WHY=[%s]\\nTCC_FETCHED=[%s]\\nTCC_SHA=[%s]\\n" '
-                       '"${TCC_PINS-unset}" "${TCC_PINS_WHY-unset}" "${TCC_FETCHED-unset}" "${TCC_SHA-unset}"\n'
+                       'printf "TCC_PINS=[%s]\\nTCC_PINS_WHY=[%s]\\nTCC_FETCHED=[%s]\\nTCC_SHA=[%s]\\nTCC_PINS_MADE=[%s]\\n" '
+                       '"${TCC_PINS-unset}" "${TCC_PINS_WHY-unset}" "${TCC_FETCHED-unset}" "${TCC_SHA-unset}" '
+                       '"${TCC_PINS_MADE-unset}"\n'
                        'exit $rc\n', skip, dry, config=autocrlf if cond == "autocrlf" else os.devnull,
                        first_on_path=no_mktemp if cond == "no-mktemp" else None)
-        got = dict(re.findall(r"^(TCC_PINS|TCC_PINS_WHY|TCC_FETCHED|TCC_SHA)=\[(.*)\]$", said, re.M))
+        got = dict(re.findall(r"^(TCC_PINS|TCC_PINS_WHY|TCC_FETCHED|TCC_SHA|TCC_PINS_MADE)=\[(.*)\]$", said, re.M))
         left = sorted(p.relative_to(own).as_posix() for p in own.rglob("*"))
         wrong = [] if rc == 0 else [f"exit {rc}, want 0"]
         if want_bytes is not None:
@@ -590,11 +592,16 @@ def signing_problems(sh):
                 wrong.append(f"its copy holds {copy.read_bytes()[:60]!r}, want the tag's bytes {want_bytes[:60]!r}")
             if not got.get("TCC_PINS", "").endswith(f"{folder}/{TCC_PINS_NAME}"):
                 wrong.append(f"TCC_PINS is {got.get('TCC_PINS', 'not printed')!r}, want that copy's path")
+            if not folder.startswith("autosound-tcc-pins.") \
+                    or got.get("TCC_PINS_MADE", "") + f"/{TCC_PINS_NAME}" != got.get("TCC_PINS"):
+                wrong.append(f"TCC_PINS_MADE is {got.get('TCC_PINS_MADE', 'not printed')!r}, want the folder it made, "
+                             f"autosound-tcc-pins.* in TMPDIR")
         else:
             if left:
                 wrong.append(f"leaves {left} in its TMPDIR, want nothing")
-            if got.get("TCC_PINS") != "":
-                wrong.append(f"TCC_PINS is {got.get('TCC_PINS', 'not printed')!r}, want empty")
+            if got.get("TCC_PINS") != "" or got.get("TCC_PINS_MADE") != "":
+                wrong.append(f"TCC_PINS is {got.get('TCC_PINS', 'not printed')!r} and TCC_PINS_MADE "
+                             f"{got.get('TCC_PINS_MADE', 'not printed')!r}, want both empty")
         why = got.get("TCC_PINS_WHY")
         if why is None or (want_why not in why if want_why else why):
             wrong.append(f"TCC_PINS_WHY is {why if why is not None else 'not printed'!r}, want "
@@ -1554,6 +1561,8 @@ def app_problems(sh, ps1):
                   + f'DESKTOP_LINK="{(home / "no-link").as_posix()}"\n'
                   + f'MODE=tcc\nCHANNEL=stable\nTCC_REF="{tcc_ref}"\nDRY_RUN={1 if dry else 0}\nMISSING=""\nUV_VERSION=0.12.10\n'
                   + f'TCC_CONSTRAINTS_FROM={TCC_PINS_FROM}\n'
+                  # install.sh's early globals for the copy, cleared before the run goes ahead (#179, the re-review).
+                  + 'TCC_PINS=""\nTCC_PINS_MADE=""\nTCC_PINS_WHY=""\nTCC_FETCHED=""\n'
                   + 'TCC_REPO="https://github.com/ayukhno/autosound-tcc"\nTCC_TAG_GLOB="v*"\nTCC_BETA_GLOB="beta-v*"\n'
                   + block.group(0) + check_line.group(0)
                   + 'printf "MISSING=[%s] MODE=[%s]\\n" "$MISSING" "$MODE"\n')
@@ -1594,8 +1603,8 @@ def app_problems(sh, ps1):
             fetched = "" if pins == "settled" else "1"
             if pins in ("file", "fetched"):
                 check = ('check_tcc_tag() { TCC_SHA="%s"; TCC_FETCHED=%s; mkdir -p "@HOME@/pins"; '
-                         'cp "@HOME@/pins.src" "@HOME@/pins/%s"; TCC_PINS="@HOME@/pins/%s"; TCC_PINS_WHY=""; }\n'
-                         % (sha, fetched, TCC_PINS_NAME, TCC_PINS_NAME))
+                         'cp "@HOME@/pins.src" "@HOME@/pins/%s"; TCC_PINS="@HOME@/pins/%s"; TCC_PINS_MADE="@HOME@/pins"; '
+                         'TCC_PINS_WHY=""; }\n' % (sha, fetched, TCC_PINS_NAME, TCC_PINS_NAME))
             else:
                 why = f"{ref} carries no {TCC_PINS_NAME}" if pins == "absent" else ""
                 check = ('check_tcc_tag() { TCC_SHA="%s"; TCC_FETCHED="%s"; TCC_PINS=""; TCC_PINS_WHY="%s"; }\n'
@@ -1663,6 +1672,13 @@ def app_problems(sh, ps1):
               "install.ps1 has one app install line, and it hands uv @tccHeld (#179)"),
              ("tool install --help" in ps1 and '.Contains(" --constraints ")' in ps1,
               "install.ps1 asks uv's tool install --help for ' --constraints ' before the install (#179)"),
+             # The re-review: the EXIT trap removes TCC_PINS_MADE's folder, so no value from the environment may reach
+             # it -- the early globals clear it before the run goes ahead, with TCC_PINS beside it.
+             (all(re.search(rf"^{v}=\"\"$", sh, re.M) and re.search(r"^going_ahead$", sh, re.M)
+                  and re.search(rf"^{v}=\"\"$", sh, re.M).start() < re.search(r"^going_ahead$", sh, re.M).start()
+                  for v in ("TCC_PINS", "TCC_PINS_MADE")),
+              "install.sh clears TCC_PINS and TCC_PINS_MADE among its early globals, before going_ahead arms the "
+              "EXIT trap that removes the copy (#179)"),
              (all(w in ps1 for w in ("this uv cannot hold the app to the versions it was tested with (that needs uv "
                                      "0.5.6 or newer)", "was tested with could not be read, so uv chooses the versions",
                                      "was not fetched, so the versions it was tested with are not read -- uv chooses "
@@ -2996,7 +3012,9 @@ def ps1_app_pins_problems(ps1):
     probe asked once and only when there is a file, the copy gone after; `(problems, ran)`."""
     import tempfile
     shell = find_powershell()
-    if not shell:
+    # Windows alone, as ps1_codex_link_problems (CI 38543860362): GitHub's Ubuntu image ships pwsh, and the stand-in uv
+    # is a .cmd -- these cases are the installer's Windows half, not PowerShell's on any system.
+    if not shell or os.name != "nt":
         return [], False
     block = re.search(r'^\$TccExe = \$null\n.*?(?=^if \(\$Mode -eq "tcc" -and \(\$TccExe -or \$DryRun\)\) \{)', ps1,
                       re.M | re.S)
@@ -3089,8 +3107,10 @@ def ps1_tcc_pins_problems(ps1):
     gave no file. The developer's switch fetches and reads the file, and verifies nothing (tcc #227); a dry run is not
     fetched and leaves nothing."""
     import tempfile
+    import time
     shell = find_powershell()
-    if not shell:
+    # Windows alone, as ps1_app_pins_problems: install.ps1 runs there, and $Scratch's paths are Windows'.
+    if not shell or os.name != "nt":
         return [], False
     cut, lacking = [], []
     for name in PS1_PINS_FUNCTIONS:
@@ -3146,8 +3166,14 @@ def ps1_tcc_pins_problems(ps1):
                 ("v1.1.4", "", True, False, None, "", False, False)):
             case = f"{ref}{'-skip' if skip else ''}{'-dry' if dry else ''}{'-autocrlf' if crlf else ''}"
             scratch = Path(tmp, f"scratch-{case}")
+            # A copy an earlier run left two days ago is swept; one another run is using now is not (the re-review:
+            # nothing keeps two runs apart).
             (scratch / "tcc-pins-from-an-earlier-run").mkdir(parents=True)
             (scratch / "tcc-pins-from-an-earlier-run" / TCC_PINS_NAME).write_bytes(b"stale\n")
+            aged = time.time() - 2 * 86400
+            os.utime(scratch / "tcc-pins-from-an-earlier-run", (aged, aged))
+            (scratch / "tcc-pins-another-run-now").mkdir()
+            (scratch / "tcc-pins-another-run-now" / TCC_PINS_NAME).write_bytes(b"live\n")
             script = Path(tmp, f"{case}.ps1")
             body = ('$ErrorActionPreference = "Continue"\n'
                     f'$DryRun = ${"true" if dry else "false"}\n$TccSignedFrom = "v0.1.45"\n'
@@ -3173,6 +3199,10 @@ def ps1_tcc_pins_problems(ps1):
             got = dict(re.findall(r"^(OK|PINS|WHY|FETCHED|SHA)=\[(.*)\]\s*$", said, re.M))
             left = sorted(p.relative_to(scratch).as_posix() for p in scratch.rglob("*"))
             wrong = [] if r.returncode == 0 and got.get("OK") == "True" else [f"exit {r.returncode}, want OK=[True]"]
+            other = ["tcc-pins-another-run-now", f"tcc-pins-another-run-now/{TCC_PINS_NAME}"]
+            if any(o not in left for o in other):
+                wrong.append("another run's copy, made now, was swept")
+            left = [x for x in left if x not in other]
             if want_bytes is not None:
                 folder = left[0] if left else ""
                 copy = scratch / folder / TCC_PINS_NAME
@@ -3653,18 +3683,32 @@ def exit_contract_problems(sh, ps1):
                            + f" -- said {said.strip()[-240:]!r} (#142)")
         # #179 (the task review): the copy of the app's constraints.txt, live when the run ends some other way than
         # through the app's block -- a failure, a stop, a Ctrl-C during uv's long install -- goes with the run: the
-        # EXIT trap removes it. The copy's folder is the case's own `pins`.
-        live = 'mkdir -p "$HOME/pins"\n: > "$HOME/pins/constraints.txt"\nTCC_PINS="$HOME/pins/constraints.txt"\n'
+        # EXIT trap removes the folder check_tcc_tag made (TCC_PINS_MADE, a TMPDIR/autosound-tcc-pins.* of its own).
+        # And only that one (the re-review): a TCC_PINS and a TCC_PINS_MADE that name some other folder -- a value from
+        # the environment the early globals did not clear -- leave it and its file where they are.
+        live = ('TMPDIR="$HOME/tmp"\nmkdir -p "$TMPDIR/autosound-tcc-pins.abc123"\n'
+                ': > "$TMPDIR/autosound-tcc-pins.abc123/constraints.txt"\n'
+                'TCC_PINS_MADE="$TMPDIR/autosound-tcc-pins.abc123"\nTCC_PINS="$TCC_PINS_MADE/constraints.txt"\n')
+        foreign = ('mkdir -p "$HOME/keep"\n: > "$HOME/keep/x"\nTCC_PINS="$HOME/keep/x"\nTCC_PINS_MADE="$HOME/keep"\n'
+                   'TMPDIR="$HOME/tmp"\n')
         # A signal on POSIX only: Git Bash's own `kill` of itself is not the terminal's Ctrl-C.
-        for case, body in (("the-pins-copy-and-a-failure", go + live + "false\nfinish\n"),
-                           ("the-pins-copy-and-a-stop", go + live + 'stop 1 "stopped: a stand-in"\n'),
-                           *((("the-pins-copy-and-a-signal", go + live + "kill -TERM $$\nsleep 5\nfinish\n"),)
-                             if os.name != "nt" else ())):
+        for case, body, gone, kept in (
+                ("the-pins-copy-and-a-failure", go + live + "false\nfinish\n", "tmp/autosound-tcc-pins.abc123", ""),
+                ("the-pins-copy-and-a-stop", go + live + 'stop 1 "stopped: a stand-in"\n',
+                 "tmp/autosound-tcc-pins.abc123", ""),
+                *((("the-pins-copy-and-a-signal", go + live + "kill -TERM $$\nsleep 5\nfinish\n",
+                    "tmp/autosound-tcc-pins.abc123", ""),) if os.name != "nt" else ()),
+                ("a-foreign-pins-path-and-a-stop", go + foreign + 'stop 1 "stopped: a stand-in"\n', "", "keep/x"),
+                ("a-foreign-pins-path-and-a-failure", go + foreign + "false\nfinish\n", "", "keep/x")):
             rc, said, *_ = run(case, body, "python3", "0", False)
-            if rc == 0 or Path(tmp, case, "pins").exists():
-                out.append(f"install.sh's exit contract, {case}: exit {rc}, the copy's folder "
-                           f"{'left' if Path(tmp, case, 'pins').exists() else 'gone'} -- want a stop and the copy gone "
-                           f"(#179) -- said {said.strip()[-200:]!r}")
+            wrong = [] if rc != 0 else ["exit 0, want a stop"]
+            if gone and Path(tmp, case, gone).exists():
+                wrong.append(f"{gone} is left, want the copy gone")
+            if kept and not Path(tmp, case, kept).is_file():
+                wrong.append(f"{kept} is gone -- the trap removed a folder the installer did not make")
+            if wrong:
+                out.append(f"install.sh's exit contract, {case}: " + "; ".join(wrong) + f" (#179) -- said "
+                           f"{said.strip()[-200:]!r}")
     except OSError as exc:
         out.append(f"the exit contract's fixtures could not be made ({exc}) -- unrun is not agreed")
     finally:

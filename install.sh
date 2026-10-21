@@ -166,6 +166,14 @@ CHANNEL="stable"
 # Same idea for the app: empty means "the newest release", not "whatever is on main".
 # Resolved beside the install itself, where the app is actually asked for.
 TCC_REF=""
+# The app's tag's constraints.txt (#179): the copy check_tcc_tag makes (TCC_PINS), the folder it made for it
+# (TCC_PINS_MADE, the one thing the EXIT trap removes), why there is none, and whether the tag was fetched. Cleared
+# HERE, before going_ahead arms that trap: a TCC_PINS_MADE from the environment and a stop during the method's install
+# would have removed whatever folder it named (the re-review).
+TCC_PINS=""
+TCC_PINS_MADE=""
+TCC_PINS_WHY=""
+TCC_FETCHED=""
 #: The parts this run leaves not ready, by their short names, ", "-joined (#142): each check that finds one says why
 #: and adds it with `missing`; `finish` reads this and nothing else -- empty is exit 0, anything else exit 3.
 MISSING=""
@@ -615,8 +623,16 @@ changing() {
 unplanned_end() {
   _ue_rc=$?
   # The copy of the app's constraints.txt (#179), when the run ends while it is live -- a Ctrl-C during uv's long
-  # install: the app's block removes it otherwise, and empties TCC_PINS.
-  [ -z "${TCC_PINS:-}" ] || rm -rf "${TCC_PINS%/*}" 2>/dev/null || true
+  # install: the app's block removes it otherwise, and empties TCC_PINS_MADE. Only the folder check_tcc_tag made, and
+  # only by its shape -- one TMPDIR/autosound-tcc-pins.* with no further `/` -- never whatever a variable names.
+  _ue_made="${TCC_PINS_MADE:-}"
+  case "$_ue_made" in
+    "${TMPDIR:-/tmp}"/autosound-tcc-pins.*)
+      case "${_ue_made#"${TMPDIR:-/tmp}"/autosound-tcc-pins.}" in
+        ''|*/*) ;;
+        *) rm -rf "$_ue_made" 2>/dev/null || true ;;
+      esac ;;
+  esac
   [ -n "${ENDED:-}" ] && return 0
   if [ "$_ue_rc" = 0 ]; then _ue_rc=""; else _ue_rc=" (exit $_ue_rc)"; fi
   stop 1 "stopped$_ue_rc -- the lines above say where; run this again"
@@ -1794,7 +1810,7 @@ fi
 # this only decides how closely uv is held. TCC_FETCHED is 1 when the tag was fetched; a tag settled by its name is
 # not, and hands on neither.
 check_tcc_tag() {  # check_tcc_tag <ref>
-  _ct_ref="$1"; TCC_SHA=""; TCC_PINS=""; TCC_PINS_WHY=""; TCC_FETCHED=""
+  _ct_ref="$1"; TCC_SHA=""; TCC_PINS=""; TCC_PINS_MADE=""; TCC_PINS_WHY=""; TCC_FETCHED=""
   # The developer's switch skips the SIGNATURE, not the tag's pins (#179, as TCC since tcc #227): a release from signing
   # on is fetched under it too, its constraints.txt read the same way, and nothing verified -- TCC_SHA stays "", so
   # nothing is said or guarded as checked. Fetched or not is the one difference; a dry run, a name that is not a
@@ -1850,11 +1866,12 @@ check_tcc_tag() {  # check_tcc_tag <ref>
              && [ -d "$_ct_pins" ]; }; then
       TCC_PINS_WHY="no temporary folder for the copy"; _ct_pins=""
     # `git show` of a blob is its bytes as they are: no text conversion between the tag and uv.
-    elif _ct_said="$(git -C "$_ct_git" show "refs/tags/$_ct_ref:constraints.txt" 2>&1 > "$_ct_pins/constraints.txt")"; then
+    elif TCC_PINS_MADE="$_ct_pins" \
+         && _ct_said="$(git -C "$_ct_git" show "refs/tags/$_ct_ref:constraints.txt" 2>&1 > "$_ct_pins/constraints.txt")"; then
       TCC_PINS="$_ct_pins/constraints.txt"
     else
       TCC_PINS_WHY="constraints.txt not read: $(printf '%s\n' "$_ct_said" | tail -1)"
-      rm -rf "$_ct_pins"
+      rm -rf "$_ct_pins"; TCC_PINS_MADE=""
     fi
   fi
   rm -rf "$_ct_git"
@@ -1874,10 +1891,6 @@ UV=""
 # Why the app's tag was not installed, when it was not (skill #101); said in its block, in the checks, and last.
 TCC_REFUSED=""
 TCC_SHA=""
-# The tag's constraints.txt, copied out by check_tcc_tag, or why there is none, and whether the tag was fetched (#179).
-TCC_PINS=""
-TCC_PINS_WHY=""
-TCC_FETCHED=""
 if [ "$MODE" = "tcc" ]; then
   step "Autosound TCC — the desktop app"
   UV="$(find_bin uv || true)"
@@ -2023,8 +2036,8 @@ if [ "$MODE" = "tcc" ]; then
   fi
   # The copy of the tag's constraints.txt has done its work, whichever way the install went (#179). A removal that
   # fails is no reason to end the run as stopped after the app installed: `|| true` under set -e.
-  [ -z "$TCC_PINS" ] || rm -rf "${TCC_PINS%/*}" || true
-  TCC_PINS=""
+  [ -z "$TCC_PINS_MADE" ] || rm -rf "$TCC_PINS_MADE" || true
+  TCC_PINS=""; TCC_PINS_MADE=""
 
   if on_mac; then
     # The app builds ITSELF: `autosound-tcc --install-desktop` makes the bundle in ~/Applications,
