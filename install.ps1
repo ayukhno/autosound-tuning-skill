@@ -161,12 +161,12 @@ function Write-Receipt {
             $ErrorActionPreference = $prev
             $python = if ($ver) { "$py $ver" } else { "$py does not run" }
         }
-        $engine = if ($EngineDid) { $EngineDid } else { "not reached" }
+        $engineSaid = if ($EngineDid) { $EngineDid } else { "not reached" }
         # What the method's step left as it was, when it did (#142) -- not a tag this run never installed.
         $ref = if ($MethodLeft) { $MethodLeft } else { "$SkillRef" }
         $receipt = [ordered]@{ installer = "install.ps1"; installer_sha256 = $sha; method_ref = $ref;
                                mode = "$Mode"; at = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ");
-                               platform = "Windows-$env:PROCESSOR_ARCHITECTURE"; engine = $engine;
+                               platform = "Windows-$env:PROCESSOR_ARCHITECTURE"; engine = $engineSaid;
                                installer_version = $InstallerVersion; status = $Status;
                                missing = [string[]]@($script:Missing); python = $python;
                                codex_link = "$($script:CodexDid)" }
@@ -2120,12 +2120,14 @@ if ($Mode -eq "tcc") {
                     elseif ($DryRun) { Say "a dry run fetches no tag: the versions $TccRef was tested with (its constraints.txt) are not read here" }
                     else { Warn "$TccRef was not fetched, so the versions it was tested with are not read -- uv chooses them" }
                 } elseif ($script:TccPins) {
-                    $help = ""
-                    try { $help = (& $Uv tool install --help 2>$null | Out-String) } catch { $help = "" }
-                    if ($help.Contains(" --constraints ")) {
+                    # Not `$help`: names are case-insensitive, and at script scope that is the [switch]$Help parameter,
+                    # which a string does not convert to -- the app's install stopped there on the VM (W-11 rc1).
+                    $uvHelp = ""
+                    try { $uvHelp = (& $Uv tool install --help 2>$null | Out-String) } catch { $uvHelp = "" }
+                    if ($uvHelp.Contains(" --constraints ")) {
                         $tccHeld = @("--constraints", $script:TccPins)
                         Say "held to the versions $TccRef was tested with (its constraints.txt)"
-                    } elseif ($help.Trim()) {
+                    } elseif ($uvHelp.Trim()) {
                         $uvSaid = ""
                         try { $uvSaid = (& $Uv --version 2>$null | Out-String).Trim() } catch { $uvSaid = "" }
                         Warn "this uv cannot hold the app to the versions it was tested with (that needs uv 0.5.6 or newer) -- installing without them, so uv chooses the versions. This uv: $uvSaid"

@@ -659,6 +659,32 @@ def ps1_stop_problems(ps1):
     return out
 
 
+def ps1_switch_name_problems(ps1):
+    """No variable in install.ps1 takes a [switch] parameter's name; [] when none does.
+
+    PowerShell's names are case-insensitive, so at script scope `$help = ""` IS the parameter `[switch]$Help`, and a
+    string does not convert to a switch: the assignment throws. W-11's rc1 on the Windows VM: the TCC step's
+    `$help = ""` (uv's --help) stopped the app's install, «Autosound TCC is not installed», while every check was green
+    -- the Windows cases run that block outside the script's param(). A function's own variable would only shadow the
+    parameter, but one rule for the whole file is the one a reader can hold.
+    """
+    block = re.search(r"^param\((.*?)^\)", ps1, re.M | re.S)
+    if not block:
+        return ["install.ps1: no `param( ... )` block -- the switch names cannot be checked"]
+    switches = re.findall(r"\[switch\]\$(\w+)", block.group(1))
+    first = ps1.count("\n", 0, block.end()) + 1
+    out = []
+    for n, line in enumerate(ps1.splitlines(), 1):
+        if n <= first or line.lstrip().startswith("#"):
+            continue
+        for name in switches:
+            if re.search(rf"\${name}\s*=(?!=)", line, re.I):
+                out.append(f"install.ps1:{n}: `${name}` here is the parameter [switch]${name} (names are "
+                           f"case-insensitive), and assigning it a value that is not a switch throws -- rename the "
+                           f"variable")
+    return out
+
+
 def utf8_locales():
     """The en_US UTF-8 locale this machine lists (`locale -a`; glibc spells it `en_US.utf8`), or () -- none, or no
     `locale` at all (Windows)."""
@@ -4060,6 +4086,13 @@ def main():
         checked.append("the install time is said one way: 10 to 20 minutes on a Mac without Apple's tools, 5 to 15 on "
                        "Windows without Git, a few minutes otherwise -- both installers' plan screen, README.md and FAQ.md")
 
+    # 4a. No variable takes a [switch] parameter's name (see ps1_switch_name_problems).
+    clashes = ps1_switch_name_problems(ps1)
+    if clashes:
+        problems.extend(clashes)
+    else:
+        checked.append("no variable in install.ps1 takes a [switch] parameter's name (a string there throws)")
+
     # 4b. install.ps1 stops without closing a one-liner user's window (see ps1_stop_problems).
     stops = ps1_stop_problems(ps1)
     if stops:
@@ -4554,9 +4587,19 @@ def main():
     elif not tcc_installs or any("--python 3.12" not in line for line in tcc_installs):
         problems.append("commands/install-tcc.md: an install line has no `--python 3.12` -- uv takes whatever "
                         "Python it finds, which the installers never let it do (T-45)")
+    elif any(not re.search(r"--constraints \S*/autosound-tcc/v[0-9.]+/constraints\.txt", line) for line in tcc_installs):
+        # #179: the installers hold TCC's dependencies to the tag's own constraints.txt; the page does it by URL.
+        problems.append("commands/install-tcc.md: an install line has no `--constraints …/autosound-tcc/<tag>/"
+                        "constraints.txt` -- uv resolves TCC's dependencies afresh, which the installers no longer let "
+                        "it do (#179)")
+    elif {f"@{t}" for line in tcc_installs
+          for t in re.findall(r"/autosound-tcc/(v[0-9.]+)/constraints\.txt", line)} != tcc_refs:
+        # A bump that moves the app's tag and not the constraints' (or back) installs one tag under another's pins.
+        problems.append(f"commands/install-tcc.md: the constraints file is not the pinned tag's -- the app at "
+                        f"{sorted(tcc_refs)}, the constraints at {sorted(set(re.findall(r'/autosound-tcc/(v[0-9.]+)/', tcc_doc)))}")
     else:
-        checked.append(f"commands/install-tcc.md pins the app at {tcc_refs.pop().lstrip('@')}, with --python 3.12 "
-                       f"on all {len(tcc_installs)} lines")
+        checked.append(f"commands/install-tcc.md pins the app at {next(iter(tcc_refs)).lstrip('@')}, with --python 3.12 "
+                       f"and that tag's constraints on all {len(tcc_installs)} lines")
 
     for line in checked:
         print(f"  ok   {line}")
