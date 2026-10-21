@@ -1,6 +1,9 @@
 # W-11 candidates — the collection's pool, ranked
 
-**Status:** the scope is set 2026-10-15 · the Arbiter: «так» on W-11 = 1–11, 13, 14, 15 (one change and a picked
+**Status:** the scope is cut 2026-10-21 · the Arbiter in the hub session (hub #295 HUB-090): W-11 is the last
+development wave — bugs, hygiene, small clear improvements; items 15 and 16 are new features and leave it («винести
+обидві»), deferred, back only on his word (below); the scope is 1–11, 13, 14, item 12 discussed before the build; the
+wave ends with a joint release with TCC and the freeze (below) · was: the scope is set 2026-10-15 · the Arbiter: «так» on W-11 = 1–11, 13, 14, 15 (one change and a picked
 set in; «what if» later, TCC's answer on hub #293) and 16, the boost rule («ми хотіли по підйом EQ взяти правило»); 12 is discussed before the
 build; the boost's class and cap wait for research (hub #291); S-021's use of item 15 waits with S-021 · was: `ok` on 13 («289 - ок»), 14 and 15 taken on his word (below) · was: the Arbiter: «1-11 ок. 12 розберемо до виконання W-11» — `ok` on 1–11 (it goes on
 their issues when the milestone opens), item 12 is discussed before W-11 is built, item 13 arrived after and has no
@@ -22,7 +25,7 @@ S ~1–2 h · M ~half a day · L a day or more.
 
 | # | item | source | class | risk | complexity | model | group |
 |---|---|---|---|---|---|---|---|
-| 1 | Rounds on one level base: each capture shifted by its `splOffsetdB` from the base round wherever rounds stand side by side (verify, predict/verify, session_report), the shift said; a round's control capture checked outside the changed bands; `capture-check` names an `splOffsetdB` change in a field TCC reads. Mirrors the bench's `levelbase.py` and the playbook's rule, not invented | hub #285 TCC-060 (tcc #198, PAS-015); S-104, the Arbiter «У W-11» | feature (method math) | high (verdicts, the seam) | L | opus · high | Rounds and levels |
+| 1 | Rounds on one level base (stays in W-11: TCC builds its half of #285 only if the skill builds its own, hub #295): each capture shifted by its `splOffsetdB` from the base round wherever rounds stand side by side (verify, predict/verify, session_report), the shift said; a round's control capture checked outside the changed bands; `capture-check` names an `splOffsetdB` change in a field TCC reads. Mirrors the bench's `levelbase.py` and the playbook's rule, not invented | hub #285 TCC-060 (tcc #198, PAS-015); S-104, the Arbiter «У W-11» | feature (method math) | high (verdicts, the seam) | L | opus · high | Rounds and levels |
 | 2 | tcc #199's method part: TCC v1.1.4 passes `under` and `level` through `start_capture`; what the method still owes for unplanned takes' verdict is not named — name it or close it | S-104 (hub #260, PAS-013) | question → defect | high (the seam) | XS to name; S if any | opus · high | Rounds and levels |
 | 3 | `failure_reason` finds only a lower-case `error:`; Codex prints `ERROR: …` last, so TCC shows Codex's start banner instead of its refusal (tcc #182) | hub #281 TCC-059 | defect | ordinary | XS–S | opus · medium | Reviewer |
 | 4 | The installers resolve TCC's dependencies afresh (PySide6 6.12.0 against the lock's 6.11.2 on the VM); from v1.1.4 TCC's tag carries `constraints.txt` — pass it to `uv tool install`, never fail the install over it | hub #280 TCC-058 (TCC finding 158) | defect | high (installer) | S–M | opus · high | Installers |
@@ -35,15 +38,31 @@ S ~1–2 h · M ~half a day · L a day or more.
 | 11 | `bounded_run` starts the reviewer CLIs with stdin closed (said in v3.1.4's Upgrading) — check that no reviewer needs it | S-104 | check | ordinary | XS | sonnet · medium (trial) | Reviewer |
 | 13 | A slow git writes a false `written_by` header: each method process asks git for its sha within 3 s, a miss gives `""`, and `real → "" → real` writes two headers that say the writer changed (`Process._stamp`, `provenance`); seen on TCC's Windows CI, can happen on a slow Windows machine | hub #289 TCC-061 | defect | high (the journal's provenance) | S | opus · high | Journal |
 | 14 | «Two visits make the tune» (README, FAQ; uk/de/pl through the Advisor) is said with no condition. The Arbiter, 2026-10-15: «беремо, з корекцією, що це більш маркетингова фраза і має на увазі отримання першого результату, а далі іде циклічне покращення до перемоги на чемпіонаті» — two visits give the first result; after it, improvement goes round by round, as far as you want to take it | S-103 (the audit's J7 P1/P10), taken back on his word | docs | ordinary | S | opus · medium; the Advisor for uk/de/pl | Method text |
-| 15 | What a change does to the sound: the method describes a diff of two versions — the net change of the whole chain, not band by band; voice, instruments, overall; the tracks to listen on; time, polarity and crossover changes too. Static from the target-curves tool's data (`FREQ_ENTRIES`, `BAND_INSTRUMENTS`, `INSTR_INFO`, moved to one data file both read), then AI on top: the session's AI in the main mode, the Advisor in the control mode. One engine for PAS-014's «Описати зміни»/«Обговорити з ШІ» in TCC (an interface TCC uses; SKL-078, hub #292) and for the method's own cycles (S-021: what a variant buys and spends). The Arbiter, 2026-10-15: «тут нам не треба чекати … варто це проектувати і робити, а для ТСС дати інтерфейси» | hub #264 PAS-014 (to:tcc); S-021; DESIGN-2026-09-17-phase1-variants item 11 | feature | high (a new seam interface) | L | `feature-dev:feature-dev` (explorer, architects) → opus · high | Describe changes |
-| 16 | The boost rule (the Arbiter, 2026-10-15): the method's EQ cuts by default; a boost is made only (a) on the user's request, or (b) on Resonalyze's advice with the user's confirmation; before it the method says what it knows (the null check — `curve_view`'s NULL-SUSPECT, `eq_gate`; the headroom it spends), and the user decides. The method text in one pass: `FAQ.md:133` and uk/de/pl, `phase_2_eq.md`, `virtual-first.md`, `happy-paths.md`. The class, the cap and what Resonalyze's «advice» is come from research's RFC (SKL-077, hub #291), built only on his permission | the Arbiter's ruling; #173's note | docs (method text) + check that a requested boost can be entered | ordinary | S–M | opus · medium; the Advisor for uk/de/pl | Method text |
 | 12 | In a folder that names nothing, the description fires on 10 of 26 car-audio queries (resume, de/pl, EMMA, TCC bug reports): the description's recall | S-104 (#170's neutral run, 2026-10-14) | docs (description) + eval | ordinary | M | opus · high | Agent start |
 
 **Groups** (one theme, one review per group, `hub:seam`): **Rounds and levels** 1–2 — `Risk: high`, the full loop and a
-Fable seat; **Installers** 4–6 — `Risk: high`; **Captures** 7–9; **Reviewer** 3, 11; **CI** 10; **Agent start** 12; **Journal** 13; **Method text** 14; **Describe changes** 15 — a new feature: questions, a code map and 2–3
-architects first (`hub:seam`), its interface agreed with TCC (hub #292) before the plan.
+Fable seat; **Installers** 4–6 — `Risk: high`; **Captures** 7–9; **Reviewer** 3, 11; **CI** 10; **Agent start** 12; **Journal** 13; **Method text** 14.
 
-**Item 15's interface, TCC's answer on hub #292** (2026-10-15, tcc `8eedeed`; the channel is the Arbiter's call):
+## The wave's end: a joint release, then the freeze
+
+The Arbiter, 2026-10-21 (hub #295): W-11 is the last development wave of both products. It ends with a joint release
+with TCC (#246: TCC's stable version goes out with the skill's), and the release role's catalog move then takes plugin
+users from v3.1.1 to v3.1.5 (the audit leaves nothing to the skill, `AUDIT-2026-10-CLOSE.md`). After the release the
+skill freezes with TCC: only bug fixes that users report. The freeze is joint because TCC is pinned to the method's
+version — a method that keeps changing keeps TCC changing. Deferred items stay deferred; a new feature comes back only
+on his word. Promotion is a separate project, which he sets up with the hub.
+
+## Out of W-11 — new features, deferred, back only on his word
+
+The Arbiter, 2026-10-21 (hub #295): «винести обидві». Kept as they were ranked on 2026-10-15, so either returns whole.
+TCC dropped its half of item 15 (hub #264) from its W-11 the same way.
+
+| # | item | source | class | risk | complexity | model | group |
+|---|---|---|---|---|---|---|---|
+| 15 | What a change does to the sound: the method describes a diff of two versions — the net change of the whole chain, not band by band; voice, instruments, overall; the tracks to listen on; time, polarity and crossover changes too. Static from the target-curves tool's data (`FREQ_ENTRIES`, `BAND_INSTRUMENTS`, `INSTR_INFO`, moved to one data file both read), then AI on top: the session's AI in the main mode, the Advisor in the control mode. One engine for PAS-014's «Описати зміни»/«Обговорити з ШІ» in TCC (an interface TCC uses; SKL-078, hub #292) and for the method's own cycles (S-021: what a variant buys and spends). The Arbiter, 2026-10-15: «тут нам не треба чекати … варто це проектувати і робити, а для ТСС дати інтерфейси» | hub #264 PAS-014 (to:tcc); S-021; DESIGN-2026-09-17-phase1-variants item 11 | feature | high (a new seam interface) | L | `feature-dev:feature-dev` (explorer, architects) → opus · high | Describe changes |
+| 16 | The boost rule (the Arbiter, 2026-10-15): the method's EQ cuts by default; a boost is made only (a) on the user's request, or (b) on Resonalyze's advice with the user's confirmation; before it the method says what it knows (the null check — `curve_view`'s NULL-SUSPECT, `eq_gate`; the headroom it spends), and the user decides. The method text in one pass: `FAQ.md:133` and uk/de/pl, `phase_2_eq.md`, `virtual-first.md`, `happy-paths.md`. The class, the cap and what Resonalyze's «advice» is come from research's RFC (SKL-077, hub #291), built only on his permission | the Arbiter's ruling; #173's note | docs (method text) + check that a requested boost can be entered | ordinary | S–M | opus · medium; the Advisor for uk/de/pl | Method text |
+
+**Item 15's interface, TCC's answer on hub #292** — kept for when item 15 returns (2026-10-15, tcc `8eedeed`; the channel is the Arbiter's call):
 - in: two versions as `<preset>/v_NNN` (a file allowed in place of «now»), `--first <channel>`, `--lang uk|en|de|pl`;
 - scope: the whole diff, every channel, the open one first; the chain's **net** change, not each band alone;
 - scope, the Arbiter 2026-10-15 («мені може бути цікаво вплив не змін всього сета, а конкретних змін полоси EQ, чи
@@ -69,7 +88,7 @@ and what TCC's #198 half waits on; 3–6 are small and found in real use; 7–11
 Rough machine time: Rounds and levels ~1 day, the rest ~half a day together. Item 12 is a measurement first (the eval
 on a neutral folder), the description change after; it can wait a wave.
 
-## Ruled: the rule is item 16, the numbers wait for research
+## Ruled: the boost rule — out of W-11 with item 16 (hub #295), the numbers wait for research
 
 - **The boost path** (#173, research done 2026-10-14). The Arbiter, 2026-10-15: «залишаємо як є, але за запитом
   користувача, або з поради рушія Resonalyze і підтвердження користувача можемо робити»; «дослідження — відправ тікет
