@@ -225,6 +225,10 @@ function Get-PathStamps {
             $f
             if ($f.PSIsContainer) { Get-ChildItem -LiteralPath $f.FullName -Force -ErrorAction SilentlyContinue }
         })
+        # Each read afresh (CI 39595279381): a listing -- Get-ChildItem, and Get-Item over a wildcard -- hands on the
+        # times the parent folder's index holds, which NTFS updates lazily: a version folder added under
+        # share\claude\versions left `versions` with the time it was listed with before.
+        foreach ($i in $seen) { try { $i.Refresh() } catch { $null = $_ } }
         $stamps[$p] = (@($seen | ForEach-Object { "$($_.FullName)|$($_.LastWriteTimeUtc.Ticks)" }) -join "`n")
     }
     return $stamps

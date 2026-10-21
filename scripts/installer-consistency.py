@@ -459,11 +459,20 @@ def signing_problems(sh):
         sh_run("git", "-C", repo, "update-index", "--add", "--cacheinfo", f"120000,{blob},{TCC_PINS_NAME}")
         sh_run("git", "-C", repo, "commit", "-q", "-m", "a link")
         sh_run(*author_signed, "v1.2.2", "-m", "s")
-        # v1.3.0: LF only, read under a person's core.autocrlf=true (the task review).
+        # v1.3.0: LF only, read under a person's core.autocrlf=true (the task review). The link's index entry goes
+        # first (CI 39595279381): under core.symlinks=false -- Windows' git -- a file added over a path the index
+        # holds as a link keeps mode 120000, and v1.3.0 was a link too.
+        sh_run("git", "-C", repo, "rm", "-q", "--cached", TCC_PINS_NAME)
         Path(repo, TCC_PINS_NAME).write_bytes(TCC_PINS_LF)
         sh_run("git", "-C", repo, "add", TCC_PINS_NAME)
         sh_run("git", "-C", repo, "commit", "-q", "-m", "LF pins")
         sh_run(*author_signed, "v1.3.0", "-m", "s")
+        # A tag that is not what its case means is the fixture's failure, said as one -- not the installer's.
+        for tag, mode in (("v1.1.4", "100644"), ("v1.2.2", "120000"), ("v1.3.0", "100644")):
+            listed = sh_run("git", "-C", repo, "ls-tree", tag, "--", TCC_PINS_NAME).split()
+            if not listed or listed[0] != mode:
+                raise RuntimeError(f"the fixture's {tag} holds {TCC_PINS_NAME} as {listed[:1] or 'nothing'}, "
+                                   f"want mode {mode} (#179)")
         autocrlf = Path(tmp, "autocrlf.gitconfig")
         autocrlf.write_bytes(AUTOCRLF_CONFIG)
         no_mktemp = Path(tmp, "no-mktemp")
@@ -3236,9 +3245,18 @@ def ps1_tcc_pins_problems(ps1):
         for args in (("update-index", "--add", "--cacheinfo", f"120000,{blob},{TCC_PINS_NAME}"),
                      ("commit", "-q", "-m", "a link"), ("tag", "-a", "v1.2.2", "-m", "t")):
             git(*args)
+        # The link's index entry goes first (CI 39595279381): under core.symlinks=false -- Windows' git -- a file added
+        # over a path the index holds as a link keeps mode 120000, and v1.3.0 was a link too.
+        git("rm", "-q", "--cached", TCC_PINS_NAME)
         (repo / TCC_PINS_NAME).write_bytes(TCC_PINS_LF)
         for args in (("add", TCC_PINS_NAME), ("commit", "-q", "-m", "LF pins"), ("tag", "-a", "v1.3.0", "-m", "t")):
             git(*args)
+        # A tag that is not what its case means is the fixture's failure, said as one -- not the installer's.
+        for tag, mode in (("v1.1.4", "100644"), ("v1.2.2", "120000"), ("v1.3.0", "100644")):
+            listed = git("ls-tree", tag, "--", TCC_PINS_NAME).split()
+            if not listed or listed[0] != mode:
+                raise OSError(f"the fixture's {tag} holds {TCC_PINS_NAME} as {listed[:1] or 'nothing'}, want mode "
+                              f"{mode} (#179)")
         autocrlf = Path(tmp, "autocrlf.gitconfig")
         autocrlf.write_bytes(AUTOCRLF_CONFIG)
         # (ref, the switch, a dry run, a person's core.autocrlf=true, the copy's bytes or None, words in TccPinsWhy,
