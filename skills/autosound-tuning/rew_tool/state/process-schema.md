@@ -59,10 +59,12 @@ panel had nothing real to render and every resume re-derived the phase by re-rea
                 "names": ["tw-L_1 (sw)"]}, ...],                        //   front-end draws, in the order
                                                     //   the car is taken in -- never the phase plan
     "optional": ["Ws_1 (sw)", "ALL+C_1 (rta)"],     // skill #80: on the list, not a gap when left
-    "control": "ALL+C_1 (rta)",                     // #176: the round's level control, added by the method
-                                                    //   (the glossary's fullest combo, an RTA at the round's
-                                                    //   `_N`); never a gap, out of the totals and the exit
-                                                    //   code; null with no combo or a ledger-keyed round
+    "control": "ALL+C_1 (rta)",                     // #176: the round's level control (the glossary's fullest
+                                                    //   combo with an active channel, an RTA at the round's `_N`)
+    "control_added": true,                          //   true: the method put it on `optional` -- no gap, out of
+                                                    //   the totals and the exit code; false: the list asked for
+                                                    //   it already, and it stays required
+    "control_why": null,                            //   why there is none, when `control` is null
     "as_typed": {"sw_1 (sw) 86dB": "sw_1 86dB (sw)"},   // #155: the list is kept in `canonical_title`'s
                                                     //   form; a title typed otherwise, beside it
     "setup": {"first": "sw", "from": "m-L_0 (sw)",  // skill #78: the method taken first and why;
@@ -113,7 +115,8 @@ panel had nothing real to render and every resume re-derived the phase by re-rea
                                                     //   else the project's first round with offsets
       "base_offset_db": 103.35, "previous_offset_db": 103.35,
       "offset_db": 120.0,                           // only when every capture of the round agrees
-      "titles": {"w-L_4 (sw)": {"offset_db": 120.0,
+      "titles": {"w-L_4 (sw)": {"offset_db": 120.0,  // every capture REW holds; null where REW lists no
+                                                    //   calibration -- the round is then `missing`
                                 "to_base_db": 16.65,     // the shift that brings it to the base (subtracted)
                                 "to_previous_db": 16.65}},  // the jump against the previous round; null with none
       "control": {"title": "ALL+C_4 (rta)", "taken": true,     // the round's control against the base round's,
@@ -125,7 +128,8 @@ panel had nothing real to render and every resume re-derived the phase by re-rea
                   "changed_bands": ["mid"],         //   null when the diff could not be read
                   "bands": {"low": {"mean_db": 1.21, "spread_db": 0.3, "used": true},
                             "mid": {"mean_db": -0.9, "spread_db": 1.5, "used": false}},
-                  "why": "…"}}                      //   absent: the round has no control
+                  "reference": true,                //   only on the base round's own: compared with nothing
+                  "why": "…"}}                      //   no control: {title: null, verdict: not_taken, why}
   }
 }
 ```
@@ -141,7 +145,8 @@ One JSON object per line, oldest first: `{"at": …, "type": …, …}`. Types:
 `capture_taken` carries `as_in_rew` and `capture_skipped` carries `as_typed` when the title typed was another
 spelling of a listed one (#153): `title` is then the list's, the round's own, and the field is the spelling typed.
 `capture_verified` carries `bands` -- `{title: {"band_hz": [lo, hi], "band_source": "rew"|"asked"}}` -- the band each
-sweep was judged over (#154), and `spl_offsets_db` -- `{title: splOffsetdB or null}` for every title REW holds (#176):
+sweep was judged over (#154), and `spl_offsets_db` -- `{title: splOffsetdB or null}` for every title checked, null
+where REW lists no calibration or no longer holds the title (#176):
 the one record of a round's level that outlives it; `capture_rounds()` replays it, the latest check per title.
 `capture_task_issued` carries `level_base` when the round named one (`--level-base <round id>`, #176), and `control`,
 the round's level control's title, when it has one -- what a later round reads the base round's control by.

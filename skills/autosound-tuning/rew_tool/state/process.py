@@ -1103,6 +1103,20 @@ def _outstanding(round_, optional=False):
     ]
 
 
+def _levelbase():
+    """`levelbase.py` (#176): stdlib, with numpy where it reads curves. One that will not load is a bug -- raised as
+    it is, so the command exits 70 -- never "cannot tell": `_load_sibling` would read a syntax error in it as no level
+    base and the round as `missing` (the task review)."""
+    return _siblings().load("levelbase.py")
+
+
+def _level_key(level):
+    """A round's recorded `--level` as a comparable pair (value, read_as), stripped and lower-cased; None unrecorded."""
+    if not isinstance(level, dict) or not (level.get("value") or level.get("read_as")):
+        return None
+    return tuple(str(level.get(k) or "").strip().lower() for k in ("value", "read_as"))
+
+
 def _recorded_offsets(round_record):
     """`{title: splOffsetdB}` a round's checks recorded, the titles REW listed no calibration for left out (#176)."""
     return {t: v for t, v in ((round_record or {}).get("spl_offsets_db") or {}).items()
@@ -1142,16 +1156,26 @@ def _round_control(naming, glossary, version, kind):
     as an RTA at the round's series -- `generate_name(<combo>, <N>, "rta")`, `ALL+C_4 (rta)`; the bench's
     `ALL+C+FX_4 (rta)` carries a modifier the grammar keeps per project (`FX`, a Helix's), which no glossary names as
     "the system as it plays", so none is added. None when the glossary has no combo, or the round is keyed by a ledger
-    version (no `_N` to name it at)."""
+    version (no `_N` to name it at).
+
+    Returns `(title, why)`: the title, or None with why there is none -- said in the round's record (`control_why`),
+    never silently (the task review, #176). Only the combos with an active channel are the system as it plays; only
+    the grammar's own refusal (`NamingError`) means no control -- anything else is a bug, raised as it is."""
     combos = getattr(glossary, "combos", None) or {}
-    if not combos or not (kind == "series" or str(version).strip() == "final"):
-        return None
+    if not combos:
+        return None, "the glossary names no combo -- no whole system to take the level control of"
+    if not (kind == "series" or str(version).strip() == "final"):
+        return None, (f"the round is keyed by {str(version).strip()!r}, not a series number -- no `_N` to name the "
+                      "level control at")
     active = set(glossary.channel_codes(active_only=True))
-    code = max(combos, key=lambda c: len(set(combos[c] or []) & active))
+    playing = [c for c in combos if set(combos[c] or []) & active]
+    if not playing:
+        return None, "no combo of the glossary holds an active channel -- no whole system plays to take a control of"
+    code = max(playing, key=lambda c: len(set(combos[c] or []) & active))
     try:
-        return naming.generate_name(code, str(version).strip(), "rta")
-    except Exception:  # noqa: BLE001 -- a series the grammar will not name is a round with no control, not a refusal
-        return None
+        return naming.generate_name(code, str(version).strip(), "rta"), None
+    except naming.NamingError as exc:
+        return None, f"the grammar names no level control for {code} at {str(version).strip()!r}: {exc}"
 
 
 def render_round_list(round_):
@@ -2179,8 +2203,12 @@ class Process:
             # The round's level control (#176 ask 2; the Arbiter, 2026-10-21: «Метод додає його сам»): one RTA of the
             # whole system as it plays, in this round's state and at its volume, on the optional list of every round
             # the grammar can name it for -- unless the list asks for it already, then that capture is the control.
-            control = _round_control(naming, glossary, version, kind)
-            if control is not None and _row_for(listed + expected + optional, control) is None:
+            control, control_why = _round_control(naming, glossary, version, kind)
+            # Exempt from the round's gaps only when the METHOD put it on the list (the task review, #176): a capture
+            # the plan or the person already asks for -- phase 3's `ALL_N (rta)` on a car with no centre -- stays
+            # required, and is judged as the control besides.
+            control_added = control is not None and _row_for(listed + expected + optional, control) is None
+            if control_added:
                 optional = optional + [control]
 
             def _listed_as(titles):
@@ -2206,7 +2234,8 @@ class Process:
         else:
             typed_as = {}
             setup = None
-            control = None
+            control, control_added = None, False
+            control_why = f"naming.py could not be loaded{_load_failure('naming.py')} -- no title to name it by"
             expected = expected + [t for t in optional if t not in expected]
         round_ = {
             "id": "cap_%03d" % number,
@@ -2240,6 +2269,10 @@ class Process:
             # The round's level control (#176): the title on the list the check reads the chain off, or None -- a
             # glossary with no combo, a round keyed by a ledger version, names none.
             "control": control,
+            # Whether the method added it (#176): only then is it no gap; one the list asked for stays required.
+            "control_added": bool(control_added),
+            # Why there is no control, when there is none (#176): said, never silently.
+            "control_why": None if control else control_why,
             # Why the list is in this order (skill #78): the method taken first, from which capture it was read.
             "setup": setup,
             "taken": {},
@@ -2874,6 +2907,7 @@ class Process:
                                "phase": event.get("phase"), "titles": list(event.get("expected") or []),
                                "version_kind": event.get("version_kind"), "under": event.get("under"),
                                "level_base": event.get("level_base"), "control": event.get("control"),
+                               "level": event.get("level"),
                                "spl_offsets_db": {}}
                 order.append(cid)
             elif cid in rounds and event.get("type") == EV_CAPTURE_VERIFIED:
@@ -3399,6 +3433,10 @@ class Process:
             live["level_base"] = self._level_base_of(live)
             if control_read is not None:
                 live["level_base"]["control"] = self._control_of(live, control_read)
+            elif live.get("control_why"):
+                # No control on this round, and why -- said in the record (the task review, #176).
+                live["level_base"]["control"] = {"title": None, "taken": False, "verdict": "not_taken",
+                                                 "common_db": None, "bands": {}, "why": live["control_why"]}
             self._write(state)
             self._append(
                 EV_CAPTURE_VERIFIED,
@@ -3414,7 +3452,9 @@ class Process:
                        for t, v in checked if v.get("band_hz") is not None},
                 # REW's SPL calibration of every capture REW holds, None where it lists none (#176): the one record of
                 # the round's level that outlives it -- `capture_rounds` replays it, the latest check per title.
-                spl_offsets_db={t: v.get("spl_offset_db") for t, v in checked if v.get("exists") is True},
+                # Every title checked: one REW no longer holds is null, so the replay drops the offset an earlier check
+                # recorded for it (the task review, #176) -- it kept a stale one.
+                spl_offsets_db={t: (v.get("spl_offset_db") if v.get("exists") is True else None) for t, v in checked},
             )
         # Told AFTER the record is on disk, never before -- issue #21. This print used to sit
         # where `rate_note` is computed, and on a cp1252 console the warning glyph raised
@@ -3438,19 +3478,19 @@ class Process:
         round (16.65 on 08.10), None with no previous. `status`: `missing` when this round or its base carries no
         calibration, `mixed` when this round's captures disagree (no one `offset_db` then), `no_base`, else `ok`.
         Pure arithmetic over records; REW is not read here."""
-        lb = _load_sibling("levelbase.py")
-        if lb is None:
-            return {"status": "missing", "base_round": None, "previous_round": None, "titles": {},
-                    "why": f"levelbase.py could not be loaded{_load_failure('levelbase.py')}"}
+        lb = _levelbase()            # stdlib only: one that will not load is a bug, raised (the task review, #176)
         checks = live.get("checks") or {}
-        mine = {t: c["spl_offset_db"] for t, c in checks.items()
-                if isinstance(c, dict) and c.get("exists") is True and lb._number(c.get("spl_offset_db")) is not None}
+        held = [t for t, c in checks.items() if isinstance(c, dict) and c.get("exists") is True]
+        mine = {t: checks[t]["spl_offset_db"] for t in held if lb._number(checks[t].get("spl_offset_db")) is not None}
+        # Every capture REW holds is listed, `offset_db` null where REW lists no calibration (the task review, #176):
+        # dropped, a round with one uncalibrated capture read `ok`.
+        uncalibrated = [t for t in held if t not in mine]
         base_id, by_id, prev = self._level_rounds(live)
         base_offsets = mine if base_id == live["id"] else _recorded_offsets(by_id.get(base_id) or {})
         own, agree = lb.round_offset(mine)
         base_off = lb.round_offset(base_offsets)[0]
         prev_off = lb.round_offset(_recorded_offsets(prev))[0] if prev else None
-        if not mine or base_off is None:
+        if not mine or base_off is None or uncalibrated:
             status = "missing"
         elif not agree:
             status = "mixed"
@@ -3460,13 +3500,14 @@ class Process:
             status = "ok"
         out = {"status": status, "base_round": base_id, "previous_round": prev["id"] if prev else None,
                "base_offset_db": base_off, "previous_offset_db": prev_off, "titles": {}}
-        if mine and agree:
+        if status in ("ok", "no_base"):
             out["offset_db"] = own
-        for title, off in mine.items():
+        for title in held:
+            off = mine.get(title)
             out["titles"][title] = {
                 "offset_db": off,
-                "to_base_db": None if base_off is None else round(lb.spl_shift(off, base_off), 2),
-                "to_previous_db": None if prev_off is None else round(lb.spl_shift(off, prev_off), 2)}
+                "to_base_db": None if base_off is None or off is None else round(lb.spl_shift(off, base_off), 2),
+                "to_previous_db": None if prev_off is None or off is None else round(lb.spl_shift(off, prev_off), 2)}
         return out
 
     def _level_rounds(self, live):
@@ -3491,7 +3532,7 @@ class Process:
         """`{"base_round", "offset_db"}` of the project's level base as it stands (#176), or None with no round on
         record: the round last named (`--level-base`), else the first that recorded offsets -- what a reader of REW's
         frequency response outside `capture-check` (`verify_prediction --project`) brings its reads to."""
-        lb = _load_sibling("levelbase.py")
+        lb = _levelbase()
         rounds = self.capture_rounds()
         named = next((r["level_base"] for r in reversed(rounds) if r.get("level_base")), None)
         base = next((r for r in rounds if r["id"] == named), None) if named else \
@@ -3523,6 +3564,9 @@ class Process:
         base = by_id.get(base_id) or {}
         out["base_title"] = base_title = base.get("control")
         out["versions"] = (_ledger_version_of(base), _ledger_version_of(round_))
+        # The volume each round was played at, as recorded (`--level`): two rounds at different volumes are no chain
+        # to judge (the task review, #176).
+        out["levels"] = (base.get("level"), round_.get("level"))
         reader = getattr(verifier, "read_fr", None)
         if not base_title:
             out["why"] = f"the base round {base_id} has no level control on record -- it was opened before the method " \
@@ -3550,16 +3594,26 @@ class Process:
         if not read["taken"]:
             return out
         if read.get("is_base"):
-            out.update(verdict="same_chain", common_db=0.0,
+            # Compared with nothing (the task review, #176): `reference` says so; the verdict stays.
+            out.update(verdict="same_chain", common_db=0.0, reference=True,
                        why="this round is the level base: its control is the reference the next rounds are read against")
             return out
         out["base_title"] = read.get("base_title")
-        lb = _load_sibling("levelbase.py")
-        if read.get("why") or lb is None:
-            out.update(verdict="unattributed",
-                       why=read.get("why") or f"levelbase.py could not be loaded{_load_failure('levelbase.py')}")
+        if read.get("why"):
+            out.update(verdict="unattributed", why=read["why"])
             return out
+        lb = _levelbase()
         cur, ref = read["cur"], read["ref"]
+        # Both on a calibration, or no comparison (the task review, #176): `spl_shift` is 0 for a missing offset, and
+        # the two raw curves then read REW's reset as a chain change -- "align -16.65 dB", the verdict that must not be
+        # wrong.
+        bare = [t for t, c in ((read["title"], cur), (read.get("base_title"), ref)) if lb._number(c.get("spl_offset_db"))
+                is None]
+        if bare:
+            out.update(verdict="unattributed",
+                       why=f"REW lists no SPL calibration (splOffsetdB) for {' and '.join(bare)} -- the two controls "
+                           "cannot be put on one base")
+            return out
         shift = lb.spl_shift(cur.get("spl_offset_db"), ref.get("spl_offset_db"))
         offsets = lb.band_offsets(cur["freqs"], lb.to_base(cur["mag"], shift), ref["freqs"], ref["mag"])
         changed, why = self._changed_bands(*read["versions"])
@@ -3568,6 +3622,13 @@ class Process:
                    why=why or verdict["why"], changed_bands=None if changed is None else sorted(changed))
         if "align_db" in verdict:
             out["align_db"] = verdict["align_db"]
+        was, now = (_level_key(x) for x in (read.get("levels") or (None, None)))
+        if was is not None and now is not None and was != now:
+            # The volume moved between the rounds (`--level`): a remainder is the knob he turned, not the chain.
+            out.pop("align_db", None)
+            out.update(verdict="unattributed",
+                       why=f"the rounds were played at different volumes ({' / '.join(x for x in was if x)} against "
+                           f"{' / '.join(x for x in now if x)}) -- a remainder is the volume, not the chain")
         return out
 
     def _changed_bands(self, base_version, version):
@@ -3580,9 +3641,9 @@ class Process:
                           "which bands the round changed cannot be read")
         if base_version == version:
             return set(), None
-        lb, state_mod = _load_sibling("levelbase.py"), _load_sibling("state/state.py")
-        if lb is None or state_mod is None:
-            return None, "the ledger cannot be read: " + (_load_failure("state/state.py") or "a module did not load")
+        lb, state_mod = _levelbase(), _load_sibling("state/state.py")
+        if state_mod is None:
+            return None, "the ledger cannot be read: state.py did not load" + _load_failure("state/state.py")
         snaps = []
         for v in (base_version, version):
             snap, why = _ledger_snapshot(state_mod, self.project_dir, v)
@@ -3610,7 +3671,7 @@ class Process:
         out = []
         taken = round_.get("taken") or {}
         for title in round_.get("expected", []):
-            if title == round_.get("control"):
+            if title == round_.get("control") and round_.get("control_added"):
                 continue  # the method's own level control (#176): judged in `level_base.control`, never a gap
             if _row_for(round_.get("skipped") or {}, title) is not None:   # by `title_key` (#153)
                 continue  # a decision, and decisions are recorded, not re-litigated
@@ -4393,10 +4454,16 @@ def _level_line(level_base):
     moved = {t: r for t, r in titles.items() if isinstance(r, dict) and r.get("to_previous_db") not in (None, 0, 0.0)}
     control = lb.get("control") if isinstance(lb.get("control"), dict) else None
     changed = control is not None and control.get("verdict") == "chain_change"
-    if not moved and not changed:
+    # A capture REW lists no calibration for, with a base to bring it to (the task review, #176): said.
+    bare = [t for t, r in titles.items() if isinstance(r, dict) and r.get("offset_db") is None]
+    unbrought = bool(bare) and lb.get("base_offset_db") is not None
+    if not moved and not changed and not unbrought:
         return None
     prev, base = lb.get("previous_round"), lb.get("base_round")
     parts = []
+    if unbrought:
+        parts.append(f"REW lists no SPL calibration (splOffsetdB) for {', '.join(bare)}: not brought to the base "
+                     f"{base} -- its level is not comparable with other rounds'")
     if moved and lb.get("status") == "mixed":
         jumps = ", ".join(f"{t} {r['to_previous_db']:+.2f} dB" for t, r in moved.items())
         parts.append(f"REW's SPL calibration differs inside this round (mixed): {jumps} against {prev}; each capture "
@@ -4409,7 +4476,7 @@ def _level_line(level_base):
                         isinstance(now, (int, float)) else "")
                      + (f": this round's levels are brought to the base {base} by {-shift:+.2f} dB"
                         if isinstance(shift, (int, float)) else ""))
-    if control is not None:
+    if control is not None and control.get("title"):
         # The control's word beside it (#176 ask 2): the chain, on the bands the round did not change.
         used = [b for b, r in (control.get("bands") or {}).items() if isinstance(r, dict) and r.get("used")]
         verdict = control.get("verdict")
@@ -8126,7 +8193,8 @@ def _check_rounds_on_one_level_base():
             rew.hold({"w-L_4 (sw)": None})
             p3.check_captures()
             lb = p3.load()["capture"]["level_base"]
-            assert lb["status"] == "missing" and lb["titles"] == {}, lb
+            assert lb["status"] == "missing" and lb["titles"] == {"w-L_4 (sw)": {
+                "offset_db": None, "to_base_db": None, "to_previous_db": None}}, lb
     finally:
         shutil.rmtree(top, ignore_errors=True)
 
@@ -8232,6 +8300,121 @@ def _check_the_round_control_names_a_chain_change():
             assert lb["control"]["verdict"] == "unattributed" and "ALL+C_1 (rta)" in lb["control"]["why"], lb
     finally:
         shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_level_base_review_fixes():
+    """#176's task review, each a case of its own: (1) a capture the plan asks for that is also the fullest combo's RTA
+    (phase 3's `ALL_N (rta)` on a car with no centre) stays required -- the control exempts only what the method itself
+    put on `optional`; (2) two controls one of which REW lists no calibration for are unattributed, never compared raw;
+    (3) every checked title is in `level_base.titles`, `offset_db` null where REW lists none, the round `missing` and
+    said on a LEVEL line, and levelbase failing to load is a bug (70); (9) a title a later check finds gone is null in
+    `capture_verified` and dropped on replay; (10) the base round's own control is `reference`; (12) rounds recorded
+    at different volumes are unattributed; (13) a combo with no active channel names no control, and the round says
+    why."""
+    import shutil
+    import tempfile
+    failures = []
+
+    def want(label, ok, detail=None):
+        if not ok:
+            failures.append(f"{label}: {detail!r}")
+    base_off, reset = 103.34649658203125, 120.0
+    top = tempfile.mkdtemp(prefix="autosound_process_level_fixes_")
+    try:
+        with _LevelRew() as rew:
+            def project(name, glossary):
+                proj = os.path.join(top, name)
+                os.makedirs(proj)
+                with open(os.path.join(proj, "glossary.json"), "w", encoding="utf-8") as fh:
+                    json.dump(glossary, fh)
+                p = Process(os.path.join(proj, "process"))
+                p.enter_phase("-1")
+                return p, os.path.join(proj, "process")
+            # (1) Phase 3 asks for ALL_1 (rta); the glossary's only combo is ALL: the control, still required.
+            p, d = project("one", {"channels": [{"code": c} for c in ("sw", "w-L", "w-R")],
+                                   "combos": {"ALL": ["sw", "w-L", "w-R"]}})
+            r = p.start_capture("1", phase="3", plan=True)
+            want("1 control named", r.get("control") == "ALL_1 (rta)", r.get("control"))
+            want("1 not made optional", "ALL_1 (rta)" not in r["optional"] and r.get("control_added") is False, r)
+            want("1 still a gap", "ALL_1 (rta)" in p.unusable_captures(), p.unusable_captures())
+            rew.hold({"sw_1 (rta)": base_off})
+            rc, out, err = _run_main(["process.py", d, "capture-check"])
+            lines = out.splitlines()
+            want("1 UNUSABLE, not CONTROL", any(x.startswith("UNUSABLE ALL_1 (rta) — ") for x in lines)
+                 and not any(x.startswith("CONTROL") for x in lines) and rc == EXIT_NO, (rc, out))
+            # (3) a title with no calibration: listed with null, the round missing, said.
+            p, d = project("three", {"channels": [{"code": c} for c in ("w-L", "w-R")]})
+            p.start_capture("1", expected=["w-L_1 (sw)", "w-R_1 (sw)"])
+            rew.hold({"w-L_1 (sw)": base_off, "w-R_1 (sw)": base_off})
+            p.check_captures()
+            _run_main(["process.py", d, "capture-close", "--no-rew"])
+            p.start_capture("2", expected=["w-L_2 (sw)", "w-R_2 (sw)"])
+            rew.hold({"w-L_2 (sw)": base_off, "w-R_2 (sw)": None})
+            rc, out, err = _run_main(["process.py", d, "capture-check"])
+            lb = p.load()["capture"]["level_base"]
+            want("3 null title listed", lb["titles"].get("w-R_2 (sw)") ==
+                 {"offset_db": None, "to_base_db": None, "to_previous_db": None}, lb["titles"])
+            want("3 status missing", lb["status"] == "missing" and "offset_db" not in lb, lb)
+            said = [x for x in out.splitlines() if x.startswith("LEVEL")]
+            want("3 LEVEL said on missing", len(said) == 1 and "w-R_2 (sw)" in said[0] and "splOffsetdB" in said[0]
+                 and rc == 0, (rc, out))
+            # (9) a title gone since: null in the journal, dropped on replay.
+            rew.hold({"w-L_2 (sw)": base_off, "w-R_2 (sw)": base_off})
+            p.check_captures()
+            rew.hold({"w-L_2 (sw)": base_off})
+            p.check_captures()
+            ev = [e for e in p.events() if e.get("type") == EV_CAPTURE_VERIFIED][-1]
+            want("9 gone is null in the event", "w-R_2 (sw)" in ev["spl_offsets_db"]
+                 and ev["spl_offsets_db"]["w-R_2 (sw)"] is None, ev["spl_offsets_db"])
+            r2 = {x["id"]: x for x in Process(d).capture_rounds()}["cap_002"]
+            want("9 dropped on replay", _recorded_offsets(r2) == {"w-L_2 (sw)": base_off}, r2["spl_offsets_db"])
+            # (3) levelbase that cannot load is a bug: exit 70, nothing taken for a level read.
+            real_lb = globals().get("_levelbase")
+            want("3 one loader for levelbase", real_lb is not None)
+            try:
+                def broken():
+                    raise SyntaxError("levelbase.py: invalid syntax (planted)")
+                globals()["_levelbase"] = broken
+                rc, out, err = _run_main(["process.py", d, "capture-check"])
+                want("3 levelbase failing is 70", rc == EXIT_UNEXPECTED and "SyntaxError" in err, (rc, err[-300:]))
+            finally:
+                if real_lb is None:
+                    globals().pop("_levelbase", None)
+                else:
+                    globals()["_levelbase"] = real_lb
+            # (2), (10), (12): the control's verdict from what was read.
+            f = [20.0 * 2 ** (k / 48) for k in range(480)]
+            m = [80.0 + 3.0 * math.sin(k / 9.0) for k in range(480)]
+            read = {"title": "ALL_2 (rta)", "taken": True, "base_title": "ALL_1 (rta)", "versions": ("v_001", "v_001"),
+                    "cur": {"freqs": f, "mag": [x + 16.65 for x in m], "spl_offset_db": reset},
+                    "ref": {"freqs": f, "mag": m, "spl_offset_db": None}}
+            c = p._control_of({"id": "cap_002"}, read)
+            want("2 one offset missing: unattributed", c["verdict"] == "unattributed" and "splOffsetdB" in c["why"]
+                 and "align_db" not in c, c)
+            read["ref"]["spl_offset_db"] = base_off
+            want("2 both offsets: the same chain", p._control_of({"id": "cap_002"}, dict(read))["verdict"] ==
+                 "same_chain", p._control_of({"id": "cap_002"}, dict(read)))
+            loud = dict(read, levels=({"value": "-25 dB rel. max", "read_as": None},
+                                      {"value": "-20 dB rel. max", "read_as": None}))
+            loud["cur"] = dict(read["cur"], mag=[x + 16.65 + 5.0 for x in m])
+            c = p._control_of({"id": "cap_002"}, loud)
+            want("12 other volume: unattributed", c["verdict"] == "unattributed" and "different volumes" in c["why"], c)
+            c = p._control_of({"id": "cap_001"}, {"title": "ALL_1 (rta)", "taken": True, "is_base": True})
+            want("10 the base's control is the reference", c.get("reference") is True and c["verdict"] == "same_chain",
+                 c)
+            # (13) the only combo plays nothing: no control, and the round says why.
+            p, d = project("thirteen", {"channels": [{"code": "w-L"}, {"code": "r-L", "active": False},
+                                                     {"code": "r-R", "active": False}],
+                                        "combos": {"REAR": ["r-L", "r-R"]}})
+            r = p.start_capture("1", expected=["w-L_1 (sw)"])
+            want("13 no control", r.get("control") is None and "active" in (r.get("control_why") or ""), r)
+            rew.hold({"w-L_1 (sw)": base_off})
+            p.check_captures()
+            ctl = p.load()["capture"]["level_base"].get("control") or {}
+            want("13 said in the record", ctl.get("title") is None and "active" in (ctl.get("why") or ""), ctl)
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["#176's review fixes:"] + failures)
 
 
 class _SnapshotRew:
@@ -10240,7 +10423,7 @@ def _selftest():
                   _check_check_never_invents_taken, _check_a_check_judges_unplanned_takes,
                   _check_a_round_matches_titles_by_name_key,
                   _check_a_check_asks_rew_by_key, _check_a_check_judges_one_snapshot_of_rew, _check_rounds_on_one_level_base,
-                  _check_the_round_control_names_a_chain_change,
+                  _check_the_round_control_names_a_chain_change, _check_level_base_review_fixes,
                   _check_close_stops_on_a_moved_snapshot, _check_a_check_holds_its_snapshot_whole,
                   _check_a_session_drift_reads_the_one_listing,
                   _check_retakes_and_superseded_rows,
@@ -11420,7 +11603,7 @@ def _main(argv):
                 # row is no capture (N17): the line says what it was corrected to.
                 superseded = row.get("superseded_by")
                 verdict = {} if superseded else (row.get("verified") if held is not None else checks.get(title)) or {}
-                if title == round_.get("control") and held is None:
+                if title == round_.get("control") and round_.get("control_added") and held is None:
                     # The method's level control, not taken (#176): optional, and no unusable capture -- said so.
                     print(f"CONTROL {title} — the round's level control (optional): not taken; chain change not checked")
                     continue
@@ -11455,7 +11638,8 @@ def _main(argv):
             if level_said:
                 print(level_said)
             left = p.unusable_captures(p.load(strict=True))   # the exit code is a verdict (#136)
-            asked = [t for t in round_.get("expected", []) if t != round_.get("control")]   # the control counts apart
+            asked = [t for t in round_.get("expected", [])            # the control the method added counts apart
+                     if not (t == round_.get("control") and round_.get("control_added"))]
             print(f"{len(asked) - len(left)}/{len(asked)} придатні")
             return 1 if left else 0
         elif cmd == "capture-taken":
