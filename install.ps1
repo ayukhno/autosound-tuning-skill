@@ -179,12 +179,43 @@ function Write-Receipt {
 }
 # The run's first real change on disk is next (#160): from here the receipt says `stopped` until the end writes how
 # the run ended, so a terminating error, Ctrl-C or a closed window leaves no earlier run's `ready` standing -- install.sh's
-# `changing`. Called where a step has changed something -- right before a write, or after a download that may fail with
-# nothing changed, once it ran or left its binary (#180); once is enough.
+# `changing`. Called right before a step's first write; once is enough. A call that may fail with nothing changed -- Git's
+# installer, Claude Code's and uv's Invoke-Upstream, `uv python install` -- arms through Enter-TentativeChange instead,
+# BEFORE it, and is put back when it left nothing (#180).
 function Enter-Change {
     if ($script:ReceiptArmed) { return }
     $script:ReceiptArmed = $true
     Write-Receipt "stopped"
+}
+# A call that may fail with nothing changed (#180, W-10's final review M3). Enter-TentativeChange keeps the receipt that
+# is there -- its bytes, or none -- and then arms, so a stop, a terminating error, Ctrl-C or a closed window DURING the
+# download leaves `stopped`. Undo-TentativeChange, called when the call failed and left nothing, writes those bytes back
+# (or removes the receipt there was none of) and disarms: the stop that follows keeps the last real receipt, as it did
+# before the call. A call that ran, or left something, stays armed. Already armed by an earlier step, or a receipt that
+# cannot be read: Enter-Change alone, and nothing to put back. Never in a dry run: Write-Receipt writes nothing there.
+$script:TentativeHeld = $false
+$script:TentativeBytes = $null
+function Enter-TentativeChange {
+    $script:TentativeHeld = $false
+    if (-not $script:ReceiptArmed -and -not $DryRun) {
+        $file = Join-Path $env:LOCALAPPDATA "autosound\install-receipt.json"
+        try {
+            $script:TentativeBytes = $null
+            if (Test-Path -LiteralPath $file -PathType Leaf) { $script:TentativeBytes = [System.IO.File]::ReadAllBytes($file) }
+            $script:TentativeHeld = $true
+        } catch { $script:TentativeBytes = $null }
+    }
+    Enter-Change
+}
+function Undo-TentativeChange {
+    if (-not $script:TentativeHeld) { return }
+    $script:TentativeHeld = $false
+    $file = Join-Path $env:LOCALAPPDATA "autosound\install-receipt.json"
+    try {
+        if ($null -ne $script:TentativeBytes) { [System.IO.File]::WriteAllBytes($file, $script:TentativeBytes) }
+        elseif (Test-Path -LiteralPath $file) { Remove-Item -LiteralPath $file -Force -ErrorAction Stop }
+        $script:ReceiptArmed = $false
+    } catch { Warn "the receipt was not put back ($(Pretty $file)): $($_.Exception.Message)" }
 }
 # What the run leaves not ready, by short names (#142) -- install.sh's MISSING. Each check that finds a part not ready
 # says why and adds it with Add-Missing, which names a part once; the end reads this list and nothing else. $script:
@@ -444,7 +475,9 @@ function Invoke-Upstream {
     Say "  the official installer, $($Url -replace '^https://','')"
     # Its module path first (#161): this script may be PowerShell 7, whose PSModulePath the child would inherit.
     $cmd = "`$Ps51PwshFolders = {$Ps51PwshFolders}; $Ps51ModulePath; [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12; irm '$Url' -UseBasicParsing | iex"
-    $global:LASTEXITCODE = 0
+    # Cleared, as Run's (#142, #180): a child that could not start sets no exit code, and the 0 set here read as an
+    # upstream installer that ran.
+    $global:LASTEXITCODE = $null
     if ($Capture) {
         $script:UpstreamOutput = @(& powershell -NoProfile -ExecutionPolicy Bypass -Command $cmd 2>&1 | Out-String -Stream)
     } else {
@@ -453,7 +486,7 @@ function Invoke-Upstream {
         # that ran.
         & powershell -NoProfile -ExecutionPolicy Bypass -Command $cmd | Out-Host
     }
-    return ($LASTEXITCODE -eq 0)
+    return ($null -ne $LASTEXITCODE -and $LASTEXITCODE -eq 0)
 }
 $script:UpstreamOutput = @()
 # Installers write to the registry PATH (uv, agy, winget for Git); this process's copy of PATH
@@ -1071,12 +1104,20 @@ $env:Path = "$LocalBin;$env:Path"
 if (-not $HaveGit) {
     Step "Git for Windows"
     Say "Windows will ask for permission (a dialog: click Yes). Nothing else here asks for anything."
-    # Armed once Git's installer has run or git is there (#180), not before: winget or a download that failed and left
-    # nothing changed nothing, and the stop below then keeps the last real receipt -- install.sh's Claude Code step.
-    # winget's own lines go to Out-Null inside the block, so Run's answer is its exit code alone.
+    # Armed before Git's installer runs (#180), so a stop during it says `stopped`; put back when it failed and left
+    # nothing -- winget neither ended 0 nor with its restart-to-finish code, the official installer did not run, and no
+    # git after -- so the stop below keeps the last real receipt.
+    Enter-TentativeChange
+    $gitRan = $false
     if (Have winget) {
         Say "through winget..."
-        if (Run { winget install --id Git.Git -e --source winget --accept-package-agreements --accept-source-agreements --silent | Out-Null } "winget install --id Git.Git") { Enter-Change }
+        # winget's lines to the screen, not into Run's answer (CI 38542204702): its reason -- "already installed",
+        # "Installer failed with exit code 1602" -- is what the person needs, and $LASTEXITCODE stays winget's.
+        $gitRan = Run { winget install --id Git.Git -e --source winget --accept-package-agreements --accept-source-agreements --silent | Out-Host } "winget install --id Git.Git"
+        $wingetRc = $LASTEXITCODE
+        # 0x8A150109, "restart your PC to finish installation": Git is installed.
+        if (-not $gitRan -and $wingetRc -eq -1978334967) { $gitRan = $true }
+        if (-not $gitRan -and $null -ne $wingetRc) { Warn "winget ended $wingetRc" }
     } else {
         # No winget (older Windows 10, or a Store-less build): the official installer, silently.
         $g = Get-LatestAsset "git-for-windows/git" ("^Git-.*-" + $(if ($Arch -eq "arm64") { "arm64" } else { "64-bit" }) + "\.exe$")
@@ -1104,8 +1145,10 @@ if (-not $HaveGit) {
                         Warn "signer: $who"
                     } else {
                         Say "  signature OK ($(($who -split ',')[0]))"
-                        Start-Process -FilePath $tmp -ArgumentList "/VERYSILENT", "/NORESTART" -Wait
-                        Enter-Change   # the installer ran (#180)
+                        # It ran, whatever it ended (#180): the receipt stays armed; its code is said.
+                        $p = Start-Process -FilePath $tmp -ArgumentList "/VERYSILENT", "/NORESTART" -Wait -PassThru
+                        $gitRan = $true
+                        if ($p -and $p.ExitCode -ne 0) { Warn "the Git installer ended $($p.ExitCode)" }
                     }
                 } catch { Warn "the Git installer did not run: $($_.Exception.Message)" }
                 Remove-Item $tmp -Force -ErrorAction SilentlyContinue
@@ -1115,7 +1158,8 @@ if (-not $HaveGit) {
         }
     }
     Sync-ProcessPath
-    if (Have git) { Enter-Change; Say "OK   $(& git --version)" }
+    if (-not $gitRan -and -not (Have git)) { Undo-TentativeChange }
+    if (Have git) { Say "OK   $(& git --version)" }
     elseif (-not $DryRun) {
         Warn "git is still not found. Install Git for Windows from git-scm.com/download/win, open a NEW"
         Warn "window, and run this again. Nothing below works without it."
@@ -1130,9 +1174,14 @@ if ($ClaudeBin) {
     Say "OK   $(& $ClaudeBin --version 2>$null)"
 } else {
     # Invoke-Upstream says whose script runs, so the step does not say it first (skill #96: it read twice).
-    # Armed once it has run or left its binary (#180): a download that failed and left nothing changed nothing.
+    # Armed before it runs (#180), so a stop during its download says `stopped`; put back when it failed and left
+    # nothing: no claude.exe, and none of what its installer writes before it -- ~\.claude\downloads and
+    # ~\.local\share\claude, under $env:USERPROFILE, where claude.ai/install.ps1 writes them.
+    Enter-TentativeChange
     $claudeRan = Invoke-Upstream "https://claude.ai/install.ps1" "Claude Code"
-    if ($claudeRan -or (Test-Path (Join-Path $LocalBin "claude.exe"))) { Enter-Change }
+    $claudeLeft = @((Join-Path $LocalBin "claude.exe"), (Join-Path $env:USERPROFILE ".claude\downloads"),
+                    (Join-Path $env:USERPROFILE ".local\share\claude")) | Where-Object { Test-Path $_ }
+    if (-not $claudeRan -and -not $claudeLeft) { Undo-TentativeChange }
     if ($claudeRan) {
         Sync-ProcessPath
         if (Test-Path (Join-Path $LocalBin "claude.exe")) { Add-ManifestEntry "claude" }
@@ -1157,9 +1206,10 @@ if ($Uv) {
 } else {
     # PINNED -- see the same note in install.sh; the two versions must match, and
     # installer-consistency.py fails when they drift. The URL Invoke-Upstream prints carries the pin.
-    # Armed once it has run or left its binary (#180), as Claude Code's.
+    # Armed before it runs and put back when it failed and left no uv.exe (#180), as Claude Code's.
+    Enter-TentativeChange
     $uvRan = Invoke-Upstream "https://astral.sh/uv/$UvVersion/install.ps1" "uv"
-    if ($uvRan -or (Test-Path (Join-Path $LocalBin "uv.exe"))) { Enter-Change }
+    if (-not $uvRan -and -not (Test-Path (Join-Path $LocalBin "uv.exe"))) { Undo-TentativeChange }
     if ($uvRan) {
         Sync-ProcessPath
         if (Test-Path (Join-Path $LocalBin "uv.exe")) { Add-ManifestEntry "uv" }
@@ -1175,9 +1225,12 @@ if ($Uv) {
         Say "OK   $(& $Py3 -V 2>&1) at $(Pretty $Py3)"
     } else {
         Say "Python 3.12, as this profile's python, python3 and python3.12..."
-        # Armed once it has run or left python3.exe (#180), as uv's; its own lines to Out-Null, as winget's.
-        $pyRan = Run { & $Uv python install 3.12 --default --quiet | Out-Null } "uv python install 3.12 --default"
-        if ($pyRan -or (Test-Path $Py3)) { Enter-Change }
+        # Armed before it runs and put back when it failed and left nothing (#180), as uv's: no python3.exe, and no
+        # toolchain in %APPDATA%\uv\python -- uv can fail at the link step with Python already there. Its lines to the
+        # screen, as winget's.
+        Enter-TentativeChange
+        $pyRan = Run { & $Uv python install 3.12 --default --quiet | Out-Host } "uv python install 3.12 --default"
+        if (-not $pyRan -and -not (Test-Path $Py3) -and -not (Test-Path (Join-Path $env:APPDATA "uv\python\cpython-3.12*"))) { Undo-TentativeChange }
         if (Test-Path $Py3) { Say "OK   $(& $Py3 -V 2>&1) at $(Pretty $Py3)" }
         elseif (-not $DryRun) { Warn "python3.exe did not appear in $(Pretty $LocalBin); the method's tools will not run until it does." }
     }
