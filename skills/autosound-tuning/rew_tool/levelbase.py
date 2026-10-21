@@ -313,14 +313,22 @@ def _corner_move(leg, was, now):
     return min(was, now) / 2 ** _CORNER_OCT, max(was, now) * 2 ** _CORNER_OCT
 
 
-def _uniform_delay(tier, rows, before, after):
-    """Whether the diff shifts EVERY channel of `tier` by one and the same delay (the re-review, #176): the whole
-    system later by the same time changes nothing a microphone hears -- no sum moves -- so it is no change. Every row
-    the tier has on both sides must carry a delay on both and move by the same amount (to a microsecond)."""
-    was = (before or {}).get(tier) or {}
-    now = (after or {}).get(tier) or {}
+def _uniform_delay(diff, before, after):
+    """Whether the diff shifts EVERY output by one and the same delay (the re-review, #176): the whole system later by
+    the same time changes nothing a microphone hears -- no sum moves -- so it is no change. The outputs are the
+    `channels` tier, two at least -- a tier of one row is never alike on its own (a lone centre +0.7 ms moved its
+    passband) -- each carrying a delay on both sides and moving by the same amount, to a microsecond; and no other
+    tier's delay moved, since a virtual row feeding some outputs and not others breaks the likeness."""
+    for tier, rows in diff.items():
+        if tier in ("from", "to", "preset", "channels") or not isinstance(rows, dict):
+            continue
+        if any(isinstance(f, dict) and "ta_ms" in f for f in rows.values()):
+            return False
+    rows = diff.get("channels") if isinstance(diff.get("channels"), dict) else {}
+    was = (before or {}).get("channels") or {}
+    now = (after or {}).get("channels") or {}
     both = [ch for ch in was if ch in now]
-    if not both:
+    if len(both) < 2:
         return False
     deltas = []
     for ch in both:
@@ -343,7 +351,7 @@ def changed_ranges(diff, before, after):
     back as the chain: a channel's level (gain, mute, off), its delay or its `eq_ptr` reaches its passband, as does a
     channel added or removed; its polarity or phase reaches either side of each corner as far as that leg sums with its
     neighbour (`_leg_reach`: ~12 dB down by its own slope), a channel with no corner its passband. A delay
-    that moves every channel of a tier by the same amount is no change (`_uniform_delay`). A preset's rate or virtual
+    that moves every output by the same amount is no change (`_uniform_delay`). A preset's rate or virtual
     EQ file reaches everything."""
     if not isinstance(diff, dict) or not isinstance(diff.get("preset", {}), dict):
         return None
@@ -355,7 +363,7 @@ def changed_ranges(diff, before, after):
             continue
         if not isinstance(rows, dict):
             return None
-        uniform = _uniform_delay(tier, rows, before, after)
+        uniform = tier == "channels" and _uniform_delay(diff, before, after)
         for ch, fields in rows.items():
             if not isinstance(fields, dict):
                 return None
@@ -565,10 +573,30 @@ def _selftest():
     left = {what: len(set(CONTROL_BANDS) - changed_bands(plus(chs), v12, v12))
             for what, chs in (("tweeter", ["tw-L"]), ("sub", ["sw"]), ("all", list(v12["channels"])),
                               ("mid", ["m-L"]))}
+    # By hand: tw-L HP 3000 BW24, no LP -> passband 1500 Hz up -> presence (1600-3150) and top: low, mid left (2). sw
+    # no HP, LP 80 LR24 -> 0-160 Hz -> low (125-500): mid, presence, top left (3). m-L HP 280 / LP 2500 -> 140-5000 Hz
+    # -> all four: none left (0). Every output alike -> no change: all four left.
     assert left == {"tweeter": 2, "sub": 3, "all": 4, "mid": 0}, left
     uneven = plus(list(v12["channels"]))
     uneven["channels"]["sw"]["ta_ms"][1] += 0.05
     assert changed_bands(uneven, v12, v12) == set(CONTROL_BANDS), "not alike: every channel's passband"
+    # 13b. "Alike" is every OUTPUT (the channels tier), two at least, and no other tier's delay moved (the re-review,
+    #      #176): a tier of one row is never alike on its own -- a lone centre +0.7 ms, a lone virtual VC 0 -> 0.5 ms
+    #      moved its passband -- and a virtual row moved beside the outputs breaks it. A flip or a mute beside a
+    #      uniform shift still counts.
+    lone_c = {"channels": {"c": {"hp": {"f": 560, "type": "LR", "slope": 24},
+                                 "lp": {"f": 1000, "type": "LR", "slope": 24}, "ta_ms": 1.8}}}
+    assert changed_bands({"preset": {}, "channels": {"c": {"ta_ms": [1.8, 2.5]}}}, lone_c, lone_c) == \
+        {"low", "mid", "presence"}
+    lone_v = dict(v12, virtual_channels={"VC": {"ta_ms": 0.0}})
+    assert changed_bands({"preset": {}, "virtual_channels": {"VC": {"ta_ms": [0.0, 0.5]}}}, lone_v, lone_v) == \
+        set(CONTROL_BANDS)
+    outs_and_v = plus(list(v12["channels"]))
+    outs_and_v["virtual_channels"] = {"VFL": {"ta_ms": [0.0, 0.1]}}
+    assert changed_bands(outs_and_v, v12, v12) == set(CONTROL_BANDS), "a virtual delay beside the outputs"
+    flip_too = plus(list(v12["channels"]))
+    flip_too["channels"]["c"]["polarity"] = ["INV", "NORM"]
+    assert changed_bands(flip_too, v12, v12) == {"low", "mid"}, changed_bands(flip_too, v12, v12)
     # 14. Each unattributed verdict names its reason, a code a reader can sort the real doubts by.
     assert chain_change(uniform, changed=None)["reason"] == "changes_unread"
     assert mixed["reason"] == "disagree" and cc["reason"] is None and chain_change(
