@@ -308,6 +308,16 @@ appended line is fsynced (and the folder, when the append made the file), so it 
   and `capture-check` keeps it on the capture's `verified` in `checks` and in its `taken` row, beside
   the session rows: what a front end's card reads. A verdict with no `why` (a `verify` from before
   #184) stores none.
+- **An unplanned take is judged, and counts nowhere** (#177, hub #260, PAS-013). One inherits the
+  round's `under` and `level`; `capture-check` with no titles checked the round's `expected` alone,
+  so it had no verdict until `capture-close`. It checks the round's standing unplanned takes too --
+  `taken` rows off `expected` by `title_key`, never a superseded row; the level control and an
+  optional capture are on the list -- and prints each after the list's lines, `unplanned` after the
+  title's ` — `, never in the title: `UNUSABLE <title> — unplanned; <why>`, `OK      <title> —
+  unplanned` (`; judged over …` after it), `N/A     <title> — unplanned; <why>`. Named in `titles`,
+  as a front end's window names it, it was judged and not printed: printed now. Its verdict lands on
+  its own row; the `N/M придатні` totals, the exit code and `unusable_captures` stay the list's --
+  nobody asked for it, so it is no gap.
 - **Nothing is cleared over work that is only in the chat** (S-044). `handoff` answers one question — is everything the
   NEXT session needs on disk — and REFUSES while it is not: no phase recorded, an open capture round, a plan step left
   `todo`/`in_progress`, a done step whose evidence resolves to nothing, no ledger snapshot, a `tuning-changelog` with no

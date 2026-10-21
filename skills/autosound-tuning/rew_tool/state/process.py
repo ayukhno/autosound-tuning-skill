@@ -1375,6 +1375,13 @@ def _taken_rows(round_):
     return [t for t, entry in (round_.get("taken") or {}).items() if isinstance(entry, dict) and _row_stands(entry)]
 
 
+def _unplanned_rows(round_):
+    """The standing takes a round did not ask for (#177): `_taken_rows` off its `expected` by `title_key` -- never a
+    superseded row, nor the level control or an optional capture, which the list carries."""
+    expected = round_.get("expected") or []
+    return [t for t in _taken_rows(round_) if _row_for(expected, t) is None]
+
+
 def _now():
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
@@ -3154,6 +3161,10 @@ class Process:
         name is unchanged while the data is not, so a verdict keyed by title would outlive the
         graph it judged. A measurement REW no longer holds records no uuid and reads as not ok.
 
+        No `titles` is the round's list and its standing unplanned takes (#177, PAS-013): one inherits the round's
+        `under` and `level`, and stood with no verdict until `capture-close`. Its verdict lands on its own row; it is
+        never one of `unusable_captures` -- nobody asked for it.
+
         **A check reads; it does not take** (#134, audit T-1). Every title's verdict goes into the
         round's `checks` (`{title: verified}`), `exists` as the check said it: True or False. A
         `taken` row is created only for a title REW HOLDS (the rule `capture-close` closes by, skill
@@ -3195,7 +3206,8 @@ class Process:
                 f"verify.py could not be loaded{_load_failure('verify.py')} — cannot check captures. "
                 "The curves are still there; this is the checker, not the data."
             )
-        wanted = [str(t) for t in (titles or round_.get("expected") or [])]
+        # No titles: the list, and the takes the round did not ask for (#177), never a superseded row.
+        wanted = [str(t) for t in (titles or (list(round_.get("expected") or []) + _unplanned_rows(round_)))]
         if not wanted:
             raise ProcessError("this round expects no captures — nothing to check")
         # Asked of REW as REW holds it NOW, landing on the round's own title (#153 and its group round, SF-2): each
@@ -7626,6 +7638,59 @@ def _check_close_says_what_rew_did():
         shutil.rmtree(top, ignore_errors=True)
 
 
+def _check_a_check_judges_unplanned_takes():
+    """#177 (hub #260, PAS-013 point 3): an unplanned take inherits the round's `under` and `level`, and `capture-check`
+    with no titles checked and printed `expected` alone -- the take stood with no verdict until `capture-close`. The
+    round's standing unplanned takes are checked and printed too, `unplanned` after the title's ` — `, so the title
+    TCC reads stays whole; a superseded one is never asked. The totals, the exit code and `unusable_captures` stay
+    the planned ones': an unplanned take was never asked for, and is no gap."""
+    import shutil
+    import tempfile
+
+    class Verifier:
+        def __init__(self, good):
+            self.good, self.asked = good, []
+
+        def verify(self, titles):
+            self.asked.append(list(titles))
+            return [{"name": t, "exists": True, "reachable": True, "valid": t in self.good,
+                     "issues": [] if t in self.good else ["in-band mean -94.0 dB — silence, not a sweep"],
+                     "stats": {"band_hz": [20, 200], "band_source": "rew"} if t in self.good else {}}
+                    for t in titles]
+
+    top = tempfile.mkdtemp(prefix="autosound_process_unplanned_")
+    real = Process._load_verifier
+    try:
+        d = os.path.join(top, "process")
+        p = Process(d)
+        p.enter_phase("-1")
+        p.start_capture("1", expected=["a (sw)"])
+        p.record_capture("a (sw)")
+        p.record_capture("q (sw)")                              # unplanned, and a typo...
+        p.supersede_capture("q (sw)", "x (sw)", "typed q for x")  # ...for x, unplanned too
+        verifier = Verifier({"a (sw)"})
+        Process._load_verifier = lambda self: verifier
+        rc, out, err = _run_main(["process.py", d, "capture-check"])
+        lines = out.splitlines()
+        assert verifier.asked == [["a (sw)", "x (sw)"]], verifier.asked
+        assert lines == ["OK      a (sw) — judged over 20–200 Hz",
+                         "UNUSABLE x (sw) — unplanned; in-band mean -94.0 dB — silence, not a sweep",
+                         "1/1 придатні"], (rc, out, err)
+        assert rc == 0 and p.unusable_captures() == [], (rc, p.unusable_captures())
+        assert p.load()["capture"]["taken"]["x (sw)"]["verified"]["ok"] is False, p.load()["capture"]["taken"]
+        # Named, as TCC's window names it: printed as well, and an OK one says its band after the mark.
+        verifier.good.add("x (sw)")
+        rc, out, err = _run_main(["process.py", d, "capture-check", "x (sw)"])
+        lines = out.splitlines()
+        assert verifier.asked[-1] == ["x (sw)"] and rc == 0, (verifier.asked, rc, out, err)
+        assert lines == ["OK      a (sw) — judged over 20–200 Hz",
+                         "OK      x (sw) — unplanned; judged over 20–200 Hz",
+                         "1/1 придатні"], (rc, out, err)
+    finally:
+        Process._load_verifier = real
+        shutil.rmtree(top, ignore_errors=True)
+
+
 def _check_check_never_invents_taken():
     """T-1 (#134): a check records a verdict for every title (`round.checks`), and creates a `taken` row only for a
     title REW holds (#77) -- a title REW does not hold stays outstanding; a row already there is updated. A check
@@ -10172,7 +10237,8 @@ def _selftest():
                   _check_handoff_says_a_cut_changelog_as_cut, _check_route_line_reads_a_bom,
                   _check_route_line_over_a_project_json_no_object, _check_plan_over_a_word_says_neither,
                   _check_handoff_names_a_changelog_copy_that_differs, _check_superseded_not_taken,
-                  _check_check_never_invents_taken, _check_a_round_matches_titles_by_name_key,
+                  _check_check_never_invents_taken, _check_a_check_judges_unplanned_takes,
+                  _check_a_round_matches_titles_by_name_key,
                   _check_a_check_asks_rew_by_key, _check_a_check_judges_one_snapshot_of_rew, _check_rounds_on_one_level_base,
                   _check_the_round_control_names_a_chain_change,
                   _check_close_stops_on_a_moved_snapshot, _check_a_check_holds_its_snapshot_whole,
@@ -11344,7 +11410,10 @@ def _main(argv):
                 print(verifier.render_session(probe))
                 print()
             taken, checks = round_.get("taken") or {}, round_.get("checks") or {}
-            for title in round_.get("expected", []):
+            # The list, then the takes the round did not ask for (#177, PAS-013): an unplanned take inherits the
+            # round's `under` and `level`, and had no verdict until `capture-close`. Printed, never counted below.
+            for title, unplanned in ([(t, False) for t in round_.get("expected", [])]
+                                     + [(t, True) for t in _unplanned_rows(round_)]):
                 held = _row_for(taken, title)            # by `title_key`: a row on disk under another spelling (#153)
                 row = taken.get(held) or {}
                 # A taken title reads its own verdict; one the round did not take reads its check (T-1). A superseded
@@ -11356,25 +11425,30 @@ def _main(argv):
                     print(f"CONTROL {title} — the round's level control (optional): not taken; chain change not checked")
                     continue
                 if verdict.get("ok"):
-                    print(f"OK      {title}{_band_said(verdict)}")
+                    head, said = f"OK      {title}", _band_said(verdict)[len(" — "):]
                 elif _row_for(round_.get("skipped") or {}, title) is not None:
-                    print(f"SKIP    {title}")
+                    head, said = f"SKIP    {title}", ""
                 elif superseded:
-                    print(f"UNUSABLE {title} — superseded by {superseded}")
+                    head, said = f"UNUSABLE {title}", f"superseded by {superseded}"
                 elif verdict.get("applicable") is False:
-                    print(f"N/A     {title} — {'; '.join(verdict.get('issues') or [])}")
+                    head, said = f"N/A     {title}", "; ".join(verdict.get("issues") or [])
                 elif verdict.get("ambiguous_titles"):
                     # REW holds more than one spelling of it (#153's group round): each named, none picked.
-                    print(f"UNUSABLE {title} — AMBIGUOUS: REW holds {' and '.join(verdict['ambiguous_titles'])} for "
-                          "this capture; keep one (rename or delete the other in REW), then run capture-check again")
+                    head, said = (f"UNUSABLE {title}",
+                                  f"AMBIGUOUS: REW holds {' and '.join(verdict['ambiguous_titles'])} for this capture; "
+                                  "keep one (rename or delete the other in REW), then run capture-check again")
                 elif verdict.get("ambiguous"):
                     # Its own verdict (H I-8): REW holds it, so it is not missing -- and not usable until renamed. On
                     # an UNUSABLE line, `UNUSABLE <title> — `, the form TCC's strip keeps (R57): it shows there as it is.
-                    print(f"UNUSABLE {title} — AMBIGUOUS: REW holds {verdict['ambiguous']} measurements under this "
-                          "title; rename so titles are unique, then run capture-check again")
+                    head, said = (f"UNUSABLE {title}",
+                                  f"AMBIGUOUS: REW holds {verdict['ambiguous']} measurements under this title; rename "
+                                  "so titles are unique, then run capture-check again")
                 else:
-                    reason = "; ".join(verdict.get("issues") or ["не перевірено"])
-                    print(f"UNUSABLE {title} — {reason}")
+                    head, said = f"UNUSABLE {title}", "; ".join(verdict.get("issues") or ["не перевірено"])
+                if unplanned:
+                    # After the title's ` — `, never in it: what precedes it is the title a reader of the line takes.
+                    said = "unplanned" + (f"; {said}" if said else "")
+                print(f"{head} — {said}" if said else head)
             # The round on the level base (#176, hub #285): one line when REW's calibration moved against the previous
             # round, in a form that is none of the verdict lines; the exit code stays the verdicts'.
             level_said = _level_line(round_.get("level_base"))
