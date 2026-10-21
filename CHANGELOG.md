@@ -178,7 +178,28 @@ engine (hub H-022), the ledger is `docs/W-11-LEDGER.md`.
   receives.
 - **An AMBIGUOUS capture says how to fix it** (#182): the issue stored for a capture REW holds under two spellings
   now ends «keep one: rename or delete the other in REW» — TCC's card shows that stored issue.
+- **`capture-check` judges one snapshot of REW** (#183). It read REW's list twice — once to match the titles, once
+  inside `verify` for the curves — and a take that landed between the two reads was judged by the older one. Now one
+  list serves both, and the list is read once more after the curves are pulled: if anything it looked at moved — an
+  index, a title gone or new, a second spelling, a uuid or a date replaced — it records nothing and says «REW
+  changed while it was read — run capture-check again» (exit 69, the «run it again» code). `capture-close` stops
+  the same way, its round left open. REW not answering at the first read is now a refusal too, never a fall-back to
+  a second, unchecked read.
+- **«Not checked» says why** (#184). `verify`'s summary said «not checked (not a sweep)» for every capture it left
+  out, also for a sweep whose own range lies outside the band asked for. A verdict now carries `why`
+  (`not_a_sweep` · `outside_band`), and the summary says «N not checked (not a sweep)», «N not checked (outside the
+  band)», or plain «not checked» for an older row with no reason.
+- **A slow git no longer writes a false «the method changed» into the journal** (#187, hub #289). Each method call
+  asks git for its commit within 3 s; on a slow Windows machine one miss answered `""`, and a run read A → `""` → A
+  wrote two headers that said the writer changed. A git that misses is now asked once more for 2 s (five seconds in
+  all, inside TCC's wait for its own lock), and a `""` that is a timeout after a real commit writes no header. Every
+  other `""` — no checkout, no git, a repository around the copy — is still written, so a journal carried to a copy
+  with no git says so.
 - `target_bands.band_target`, which only its selftest called, is gone; use `band_targets([f], …)[0]` (#190).
+- For maintainers: `project.py`'s two-writers selftest no longer races 2 × 40 writes against the clock (it starved
+  once on Windows CI). Two processes hand off: writer A stops after its load and again as its save begins, the lock
+  is probed «held» at each stop and by writer B, and B's update lands on A's (#185). Shown red with the save outside
+  the hold, the load before it, and the hold split between them.
 
 ## [v3.1.4] — 2026-10-14 · W-10: captures by the series key, Codex finds the skill, installers that say how they ended
 
