@@ -195,11 +195,29 @@ _APF_OCT = 1.0
 #: wrong -- and `eq_ptr`, the pointer to an EQ file whose bands the ledger does not carry.
 _WHOLE_ROW = ("mute", "off", "gain_db", "eq_ptr")
 #: The fields whose change moves the summation with the neighbours: the channel's time and polarity, read where it
-#: overlaps them -- half an octave either side of its own corners, where two drivers sum within ~6 dB of each other
-#: (the task review, #176: a full octave put the bench's centre, 560-1000 Hz, over `low`'s and `presence`'s edges and
-#: left one band of four). `tag` (which hardware control moves it) and `status` (bookkeeping) move nothing.
+#: overlaps them -- each leg out to where it is ~12 dB below its passband (`_leg_reach`). `tag` (which hardware
+#: control moves it) and `status` (bookkeeping) move nothing.
 _CORNER_ROW = ("ta_ms", "polarity", "phase_deg")
-_OVERLAP_OCT = 0.5
+#: How far down a leg must be before a change of its channel's time no longer moves the sum with a neighbour, dB.
+_SUM_FLOOR_DB = 12.0
+#: The least reach a leg is given, octaves; and the slope read for a leg whose slope the ledger does not give -- the
+#: shallowest a crossover has, so the reach is the widest it could be.
+_MIN_REACH_OCT, _SHALLOWEST_DB_OCT = 0.5, 6.0
+
+
+def _leg_reach(leg):
+    """Octaves either side of a leg's corner where its channel still sums with its neighbour (the re-review, #176):
+    out to ~12 dB down, `_SUM_FLOOR_DB / slope` -- 1/2 octave for 24 dB/oct (the bench's LR24 centre), 1 for 12 (its
+    BW12 rear at 460 Hz), 2 for 6 -- rounded up to the half octave, never below 1/2. A slope the ledger does not give
+    (`slope`, or the digits of a `type` such as `LR24`) is read as 6 dB/oct, the widest reach: an uncertain reach
+    leaves more bands out and the verdict unattributed, never a chain change named on a band the change touched."""
+    slope = _number(leg.get("slope")) if isinstance(leg, dict) else None
+    if slope is None and isinstance(leg, dict):
+        digits = "".join(ch for ch in str(leg.get("type") or "") if ch.isdigit())
+        slope = float(digits) if digits else None
+    if slope is None or slope <= 0:
+        slope = _SHALLOWEST_DB_OCT
+    return max(_MIN_REACH_OCT, math.ceil(_SUM_FLOOR_DB / slope * 2 - 1e-9) / 2)
 #: Preset-level fields whose change moves every band: the rate reshapes every filter, the virtual tier's EQ file is
 #: bands nobody listed.
 _WHOLE_PRESET = ("sample_rate", "virtual_eq_ptr")
@@ -276,8 +294,8 @@ def changed_ranges(diff, before, after):
     crossover leg moved reaches from the lower corner to the higher, an octave past each, and switched on or off it runs
     open on its side. A band bypassed on both sides changes nothing. Beside them, so that no change of the DSP is read
     back as the chain: a channel's level (gain, mute, off) or its `eq_ptr` reaches its passband, as does a channel
-    added or removed; its delay, polarity or phase reaches half an octave either side of its corners, where it sums
-    with its neighbours. A preset's rate or virtual EQ file reaches everything."""
+    added or removed; its delay, polarity or phase reaches either side of each corner as far as that leg sums with its
+    neighbour (`_leg_reach`: ~12 dB down by its own slope). A preset's rate or virtual EQ file reaches everything."""
     if not isinstance(diff, dict) or not isinstance(diff.get("preset", {}), dict):
         return None
     if any(k in (diff.get("preset") or {}) for k in _WHOLE_PRESET):
@@ -303,9 +321,11 @@ def changed_ranges(diff, before, after):
             if any(k in fields for k in _CORNER_ROW):
                 for row in (was, now):
                     for leg in ("hp", "lp"):
-                        f = _leg_f((row or {}).get(leg)) if isinstance(row, dict) else None
+                        side = (row or {}).get(leg) if isinstance(row, dict) else None
+                        f = _leg_f(side)
                         if f is not None:
-                            out.append((f / 2 ** _OVERLAP_OCT, f * 2 ** _OVERLAP_OCT))
+                            reach = _leg_reach(side)
+                            out.append((f / 2 ** reach, f * 2 ** reach))
             for leg in ("hp", "lp"):
                 if leg in fields:
                     pair = fields[leg] if isinstance(fields[leg], (list, tuple)) and len(fields[leg]) == 2 else None
@@ -418,10 +438,15 @@ def _selftest():
     #    A channel's gain: its passband, here the woofer up to 300 Hz and an octave past it.
     gain = {"preset": {}, "channels": {"w-L": {"gain_db": [0, -1.5]}}}
     assert changed_bands(gain, before, before) == {"low", "mid"}, changed_bands(gain, before, before)
-    #    The centre's polarity flipped: half an octave either side of its corners -- 141-283 Hz (low) and 2.8-5.7 kHz
-    #    (presence, top); `mid`, between them, is the centre playing alone and is not where the flip sums.
+    #    The centre's polarity flipped: its HP 200 LR24 reaches half an octave, 141-283 Hz (low); its LP 4000 names no
+    #    slope, so it is read as 6 dB/oct and reaches two, 1-16 kHz (mid, presence, top) -- the widest it could be.
     flip = {"preset": {}, "channels": {"c": {"polarity": ["NORM", "INV"]}}}
-    assert changed_bands(flip, before, before) == {"low", "presence", "top"}, changed_bands(flip, before, before)
+    assert changed_bands(flip, before, before) == set(CONTROL_BANDS), changed_bands(flip, before, before)
+    sloped = json.loads(json.dumps(before))
+    sloped["channels"]["c"]["lp"] = {"f": 4000, "type": "LR", "slope": 24}
+    #    ...and with its slope given, LR24, half an octave: 2.8-5.7 kHz (presence, top); `mid` between the corners is
+    #    the centre playing alone, not where the flip sums.
+    assert changed_bands(flip, sloped, sloped) == {"low", "presence", "top"}, changed_bands(flip, sloped, sloped)
     #    `status` and `tag` move nothing.
     assert changed_bands({"preset": {}, "channels": {"c": {"status": ["proposed", "applied"]}}}, before, before) == set()
     #    Nothing changed: no band. The rate, or a band with no frequency: everything / unreadable.
@@ -444,6 +469,22 @@ def _selftest():
                                  ([byp], [on], {"presence", "top"})):
         got_b = changed_bands({"preset": {}, "channels": {"c": {"eq": [old_eq, new_eq]}}}, before, after)
         assert got_b == must, (old_eq, new_eq, got_b)
+    # 9. A delay, polarity or phase change reaches as far as the channel's own legs sum with their neighbours: the
+    #    octave distance at which each leg is ~12 dB down -- 1/2 oct for 24 dB/oct, 1 for 12, 2 for 6 or a slope not
+    #    given (the re-review, #176). The bench's rear: HP 460 BW12, LP 4000 LR12 -- 230-920 Hz and 2-8 kHz.
+    assert _leg_reach({"f": 560, "type": "LR", "slope": 24}) == 0.5 and _leg_reach({"f": 460, "type": "BW",
+                                                                                     "slope": 12}) == 1.0
+    assert _leg_reach({"f": 460, "type": "BW", "slope": 18}) == 1.0 and _leg_reach({"f": 460, "type": "BW"}) == 2.0
+    assert _leg_reach({"f": 460, "type": "LR24"}) == 0.5 and _leg_reach({"f": 460, "slope": 6}) == 2.0
+    rear = {"channels": {"r-L": {"hp": {"f": 460, "type": "BW", "slope": 12},
+                                 "lp": {"f": 4000, "type": "LR", "slope": 12}, "ta_ms": 1.0}}}
+    rear_ta = {"preset": {}, "channels": {"r-L": {"ta_ms": [1.0, 1.4]}}}
+    assert changed_bands(rear_ta, rear, rear) == {"low", "mid", "presence", "top"}, changed_bands(rear_ta, rear, rear)
+    lr24 = {"channels": {"c": {"hp": {"f": 1414, "type": "LR", "slope": 24}, "lp": None, "ta_ms": 1.0}}}
+    c_ta = {"preset": {}, "channels": {"c": {"ta_ms": [1.0, 1.5]}}}
+    reach_c = changed_ranges(c_ta, lr24, lr24)
+    assert all(abs(lo - 1414 / 2 ** 0.5) < 1e-6 and abs(hi - 1414 * 2 ** 0.5) < 1e-6 for lo, hi in reach_c), reach_c
+    assert changed_bands(c_ta, lr24, lr24) == {"mid", "presence"}, changed_bands(c_ta, lr24, lr24)
     # 8. END TO END, the bench as built: its own ledger (v_008 under cap_003, v_012 under cap_004 --
     #    `testdata/rew/bench-ledger-v008-v012.json`) through `state.diff_states` and `changed_bands`, then its own two
     #    controls through `band_offsets` and `chain_change`. The bench's conclusion (08.10): the same chain.
