@@ -298,6 +298,29 @@ def verdict(name, measurements=None, f_low=20, f_high=20000):
     return out
 
 
+def read_fr(title, measurements=None, smoothing=None):
+    """`{"freqs", "mag", "spl_offset_db"}` of the curve REW holds under `title`, or `{"why": ...}` when REW holds none,
+    holds it twice, or answers otherwise (#176): what `capture-check` reads a round's level control and the base
+    round's by. Read at `smoothing` -- REW's finest, 1/48, unless asked -- since `levelbase.band_offsets` makes its own
+    1/6-octave cells; the view is untouched (hub TCC-015). `spl_offset_db` is the listing's `splOffsetdB`, None when
+    REW lists none: the curve is dB SPL on it. A bug is raised as it is (H I-6)."""
+    try:
+        ms = _api.get_measurements() if measurements is None else measurements
+        mid = _api.find_measurement_id(title, ms, exact=True)
+        freqs, mag, _phase = _api.get_fr(mid, smoothing=smoothing or _api.FINEST_SMOOTHING)
+    except KeyError as exc:
+        return {"why": str(exc.args[0] if exc.args else exc).split(" (have:")[0].strip('"')}
+    except Exception as exc:  # noqa: BLE001 -- REW's own answers are a reason; anything else is raised as it is
+        if not _from_rew(exc):
+            raise
+        return {"why": f"REW did not give it: {exc}"}
+    if not freqs or not mag:
+        return {"why": "REW's frequency response for it is empty"}
+    spl = (ms.get(mid) or {}).get("splOffsetdB")
+    ok = isinstance(spl, (int, float)) and not isinstance(spl, bool) and spl == spl and abs(spl) != float("inf")
+    return {"freqs": list(freqs), "mag": list(mag), "spl_offset_db": float(spl) if ok else None}
+
+
 def verify(names, f_low=20, f_high=20000, measurements=None):
     """Verdicts for a list of titles, in the order given. One REW round trip for the index.
 
@@ -1330,6 +1353,15 @@ def _check_spl_offset_recorded():
     assert v_rta["applicable"] is False and v_rta["stats"].get("spl_offset_db") == 120.0, v_rta
     assert v_sw["valid"] is True and v_sw["stats"].get("spl_offset_db") == 120.0, v_sw
     assert "spl_offset_db" not in v_none["stats"] and "spl_offset_db" not in v_text["stats"], (v_none, v_text)
+    # `read_fr`, the control's reader: the curve at REW's finest unless asked, with the listing's calibration beside
+    # it; a title REW does not hold is a reason, never a curve.
+    asked = []
+    with _rew_as(get_fr=lambda mid, smoothing=None: (asked.append(smoothing), _sweep_fr(mid))[1]):
+        got = read_fr("ALL+C+FX_4 (rta)", measurements=listing)
+        bare = read_fr("w-L_60 (sw)", measurements=listing)
+        gone = read_fr("gone_4 (rta)", measurements=listing)
+    assert got["spl_offset_db"] == 120.0 and len(got["freqs"]) == len(got["mag"]) == 301 and asked[0] == "1/48", got
+    assert bare["spl_offset_db"] is None and "No measurement titled 'gone_4 (rta)'" in gone["why"], (bare, gone)
 
 
 def _selftest():

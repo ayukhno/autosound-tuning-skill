@@ -58,7 +58,11 @@ panel had nothing real to render and every resume re-derived the phase by re-rea
     "groups": [{"kind": "solo", "label": "Solo (sw)", "method": "sw",   // skill #79/#83: the columns a
                 "names": ["tw-L_1 (sw)"]}, ...],                        //   front-end draws, in the order
                                                     //   the car is taken in -- never the phase plan
-    "optional": ["Ws_1 (sw)"],                      // skill #80: on the list, not a gap when left
+    "optional": ["Ws_1 (sw)", "ALL+C_1 (rta)"],     // skill #80: on the list, not a gap when left
+    "control": "ALL+C_1 (rta)",                     // #176: the round's level control, added by the method
+                                                    //   (the glossary's fullest combo, an RTA at the round's
+                                                    //   `_N`); never a gap, out of the totals and the exit
+                                                    //   code; null with no combo or a ledger-keyed round
     "as_typed": {"sw_1 (sw) 86dB": "sw_1 86dB (sw)"},   // #155: the list is kept in `canonical_title`'s
                                                     //   form; a title typed otherwise, beside it
     "setup": {"first": "sw", "from": "m-L_0 (sw)",  // skill #78: the method taken first and why;
@@ -111,7 +115,17 @@ panel had nothing real to render and every resume re-derived the phase by re-rea
       "offset_db": 120.0,                           // only when every capture of the round agrees
       "titles": {"w-L_4 (sw)": {"offset_db": 120.0,
                                 "to_base_db": 16.65,     // the shift that brings it to the base (subtracted)
-                                "to_previous_db": 16.65}}}  // the jump against the previous round; null with none
+                                "to_previous_db": 16.65}},  // the jump against the previous round; null with none
+      "control": {"title": "ALL+C_4 (rta)", "taken": true,     // the round's control against the base round's,
+                  "base_title": "ALL+C_3 (rta)",   //   each brought to the base on its own offset, over
+                  "verdict": "chain_change",        //   the bands the ledger's diff (`--under` of both
+                                                    //   rounds) did not change: same_chain | chain_change |
+                                                    //   unattributed | not_taken (chain change not checked)
+                  "common_db": 1.2, "align_db": -1.2,   // align_db: offered on a chain change only
+                  "changed_bands": ["mid"],         //   null when the diff could not be read
+                  "bands": {"low": {"mean_db": 1.21, "spread_db": 0.3, "used": true},
+                            "mid": {"mean_db": -0.9, "spread_db": 1.5, "used": false}},
+                  "why": "…"}}                      //   absent: the round has no control
   }
 }
 ```
@@ -129,7 +143,8 @@ spelling of a listed one (#153): `title` is then the list's, the round's own, an
 `capture_verified` carries `bands` -- `{title: {"band_hz": [lo, hi], "band_source": "rew"|"asked"}}` -- the band each
 sweep was judged over (#154), and `spl_offsets_db` -- `{title: splOffsetdB or null}` for every title REW holds (#176):
 the one record of a round's level that outlives it; `capture_rounds()` replays it, the latest check per title.
-`capture_task_issued` carries `level_base` when the round named one (`--level-base <round id>`, #176).
+`capture_task_issued` carries `level_base` when the round named one (`--level-base <round id>`, #176), and `control`,
+the round's level control's title, when it has one -- what a later round reads the base round's control by.
 
 `critic_called` carries its `phase`. One review is one record (#166) -- `record_reviewer` sorts each record, under
 the writer lock, by five rules:
