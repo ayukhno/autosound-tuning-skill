@@ -63,7 +63,7 @@ brew install --cask antigravity-cli      # the REAL agy — NOT a symlink to gem
   when they find the ADC file and count ADC as the reviewer being set up. `doctor` names which sign-in agy will use
   (ADC with the file, gcloud's account and project, and where the switch came from; agy's account; or none). Under
   ADC agy offers Gemini 3.6–3.8 Flash in three tiers, 3.1 Pro only at `low`, and older Flash: **the reviewer's model
-  there is `gemini-3.8-flash-high`**. The full walk, with the commands: FAQ, «agy through Google Cloud's ADC».
+  there is `gemini-3.8-flash-medium`** (its `-high` hangs on a one-line prompt, #193). The full walk, with the commands: FAQ, «agy through Google Cloud's ADC».
 - **agy's own settings do not reach the method's reviews.** Headless `-p` runs honour agy's persisted
   `settings.json` (Tool Permission, sandbox, auto-execution, Artifact Review); `always-proceed`, set for comfort in
   agy's own window, gave a review prompt a shell in the project folder. The reviewer therefore runs agy as a
@@ -231,7 +231,9 @@ Check it took: `python3 scripts/autosound_ai.py doctor` names the key it found, 
   similar), with a bounded wait, and the wait is announced before it starts. The wait grows with
   the job: 600 s at least, and 25 s per KB of prompt above that (a 31 KB translation waits ~13 min;
   on 2026-09-22 three of them took 170–370 s, and one was cut at the old fixed 300 s).
-  `AUTOSOUND_CLI_TIMEOUT` (seconds) overrides it for a run. It used to be refused outright after field sessions hung. On 2026-09-22 `agy` answered
+  `AUTOSOUND_CLI_TIMEOUT` (seconds) overrides it for a run. Before a package goes to `agy`, doctor's one line goes
+  first, waited for 60 s (#193): no answer, and the package stays unsent, the model is named as the cause, what agy
+  printed by then is shown and kept, and the line's next lower tier is offered as `--model …`, never taken. It used to be refused outright after field sessions hung. On 2026-09-22 `agy` answered
   from inside a Claude Code session in 4 s with the markers stripped and in 27–48 s with them kept,
   and TCC-024 (hub #187) saw the same by hand. So a TCC-launched session, which has no separate
   terminal, reaches the reviewer too (skill #54). `AUTOSOUND_ALLOW_NESTED_CLI` is no longer needed.
@@ -400,6 +402,7 @@ for when that tool answers with a refusal.
    not a crash (§6); a minute or a model-group switch often costs less than changing channel.
    One retry is automatic: an agy answer cut off mid-stream ("The stream was interrupted") is run
    once more on the same rung before the script reports a failure (skill #68). A cut is not a refusal.
+   A model silent on agy's one line is a hang: take the lower tier offered, not a longer wait (§3).
 1. **ANOTHER vendor than the one driving** — `python3 scripts/autosound_ai.py critic|advisor <pkg> --record` (or `ask`),
    through that vendor's key (§3) or its CLI. This is the recommended default: Generator one vendor,
    reviewer the other, which is what cross-vendor anti-anchoring means. Verify with `doctor`. From

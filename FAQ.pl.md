@@ -137,7 +137,7 @@ Zaktualizuj z poziomu TCC lub uruchom ponownie polecenie instalacyjne: instaluje
 
 ### Które modele AI są oficjalnie wspierane?
 - 🧠 **Główny model (Generator):** **Claude Opus** (skonfigurowany z poziomem Effort `xhigh` lub wyższym; `max` dla trudnych kroków). Precyzyjne dostrajanie w aucie najlepiej wykonać z modelem o najwyższych możliwościach (obecnie Claude Fable). Inne AI również mogą prowadzić proces poprzez `omp` (instalowane wyłącznie na życzenie, z flagą `--with-omp`) — na własne ryzyko.
-- 👁️ **Recenzent AI (Krytyk):** **Gemini Pro (High)** poprzez Google Antigravity (`agy`) lub **Gemini Flash (High)** tam, gdzie Pro (High) nie jest oferowany. Przy logowaniu przez Google Cloud (ADC, bezpłatny okres próbny) modelem recenzenta jest **Gemini 3.8 Flash (High)** (`gemini-3.8-flash-high`).
+- 👁️ **Recenzent AI (Krytyk):** **Gemini Pro (High)** poprzez Google Antigravity (`agy`) lub **Gemini Flash (High)** tam, gdzie Pro (High) nie jest oferowany. Przy logowaniu przez Google Cloud (ADC, bezpłatny okres próbny) modelem recenzenta jest **Gemini 3.8 Flash (Medium)** (`gemini-3.8-flash-medium`).
 - 🛠️ **Inni recenzenci:** selektor w TCC oferuje również model Codex (oraz, z flagą `--with-omp`, inne modele) w roli recenzenta.
 - 🧪 **Przetestowane przez autora:** Gemini poprzez Antigravity (`agy`) jako główne AI w terminalu, z modelem Codex jako recenzentem i TCC w trybie [Control mode](#control-mode-sesja-w-terminalu).
 

@@ -161,7 +161,7 @@ The official **Antigravity CLI (`agy`)** needs no API key — you authenticate i
    ```env
    AUTOSOUND_CRITIC_MODEL=gemini-3.1-pro-high
    ```
-  TCC sets it from its own picker. If `agy` reports that the model is not supported in your location, pick another ID from the list. When signed in through Google Cloud ADC, use `gemini-3.8-flash-high`.
+  TCC sets it from its own picker. If `agy` reports that the model is not supported in your location, pick another ID from the list. When signed in through Google Cloud ADC, use `gemini-3.8-flash-medium` (`-high` of that line hangs on a one-line prompt).
 - **Check:**
    ```bash
    python3 ~/.claude/skills/autosound-tuning/scripts/autosound_ai.py doctor
@@ -186,9 +186,9 @@ If AI Studio does not provide an API key (for example with a new account), Googl
    AGY_ADC_AUTH=true
    ```
   The installer offers to write this line when it finds the ADC file. For `agy` in your own terminal, also add `export AGY_ADC_AUTH=true` to `~/.zshrc` (on Windows: `setx AGY_ADC_AUTH true`).
-- Pick the reviewer model. Under ADC, Pro at its high tier is not offered, so use `gemini-3.8-flash-high`:
+- Pick the reviewer model. Under ADC, Pro at its high tier is not offered, and Flash's `-high` hangs on a one-line prompt, so use `gemini-3.8-flash-medium`:
    ```env
-   AUTOSOUND_CRITIC_MODEL=gemini-3.8-flash-high
+   AUTOSOUND_CRITIC_MODEL=gemini-3.8-flash-medium
    ```
 - Check with `doctor`: it confirms the Google Cloud ADC sign-in and makes one short live call.
 

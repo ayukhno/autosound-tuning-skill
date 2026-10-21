@@ -137,7 +137,7 @@ Aktualisiere innerhalb von TCC oder führe den Installationsbefehl erneut aus: E
 
 ### Welche KI-Modelle werden offiziell unterstützt?
 - 🧠 **Hauptmodell (Generator):** **Claude Opus** (konfiguriert mit `xhigh`-Effort-Level oder höher; `max` für schwierige Schritte). Das Feintuning im Auto wird am besten mit dem leistungsfähigsten Modell durchgeführt (derzeit Claude Fable). Andere KIs können den Ablauf auch über `omp` steuern (wird nur auf Anfrage mit `--with-omp` installiert) – auf eigenes Risiko.
-- 👁️ **KI-Reviewer (Critic):** **Gemini Pro (High)** über Google Antigravity (`agy`), oder **Gemini Flash (High)**, falls Pro (High) nicht angeboten wird. Mit einer Google Cloud-Anmeldung (ADC, das kostenlose Testguthaben) lautet das Reviewer-Modell **Gemini 3.8 Flash (High)** (`gemini-3.8-flash-high`).
+- 👁️ **KI-Reviewer (Critic):** **Gemini Pro (High)** über Google Antigravity (`agy`), oder **Gemini Flash (High)**, falls Pro (High) nicht angeboten wird. Mit einer Google Cloud-Anmeldung (ADC, das kostenlose Testguthaben) lautet das Reviewer-Modell **Gemini 3.8 Flash (Medium)** (`gemini-3.8-flash-medium`).
 - 🛠️ **Andere Reviewer:** Die Auswahlliste von TCC bietet für die Rolle des Reviewers auch Codex (und mit `--with-omp` weitere Modelle) an.
 - 🧪 **Vom Autor getestet:** Gemini über Antigravity (`agy`) als Haupt-KI im Terminal, mit Codex als Reviewer und TCC im [Control mode](#control-mode-die-session-im-terminal).
 

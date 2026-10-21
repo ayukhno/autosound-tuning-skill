@@ -4,8 +4,8 @@
   "next_phase": "to its Goal-node",
   "phases": {
     "-1": {
-      "tokens": 62148,
-      "chars": 248592,
+      "tokens": 62255,
+      "chars": 249020,
       "files": {
         "SKILL.md": 23356,
         "references/phases/phase_-1_intake.md": 33177,
@@ -13,7 +13,7 @@
         "references/core/project-intake.md": 28005,
         "references/phases/virtual-first.md": 39814,
         "references/phases/capture-session-sheet.md": 10425,
-        "references/tooling/setup-critic-channel.md": 40376,
+        "references/tooling/setup-critic-channel.md": 40804,
         "references/core/naming-and-structure.md": 37454,
         "references/core/review-loop.md": 10613,
         "knowledge/dsp/helix-dsp-ultra-s.md": 22997
@@ -98,5 +98,5 @@
       }
     }
   },
-  "full_tune_tokens": 275585
+  "full_tune_tokens": 275692
 }

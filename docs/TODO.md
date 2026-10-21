@@ -1629,7 +1629,7 @@ four assessment lines, and nothing is built before his `ok` on that task. Resume
 
 ## S-109 · The agy reviewer hangs on its ADC default model, `gemini-3.8-flash-high`
 
-**Status**: open 2026-10-21 · reported by the Arbiter from a hub-kit probe, during W-11's release; recorded, not diagnosed; joins rc2 or the freeze only on his word
+**Status**: open 2026-10-21 · on W-11's milestone as #193 with `ok`, all three parts in rc2 (the Arbiter: «Усе в rc2»); built on `release-3.2.0` · was: reported by the Arbiter from a hub-kit probe, during W-11's release; recorded, not diagnosed
 
 Under ADC, `gemini-3.8-flash-high` (the reviewer's model in `references/tooling/setup-critic-channel.md` §1, line 66
 at `82e8e43`; TCC's `ADC_REVIEWER`, tcc `core/model_choices.py:736`) stays silent 90–180 s and more even on a one-line

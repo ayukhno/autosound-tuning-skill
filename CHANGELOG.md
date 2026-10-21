@@ -208,6 +208,13 @@ engine (hub H-022), the ledger is `docs/W-11-LEDGER.md`.
   terminal. A CLI that asks a login question on its first run fails instead of waiting: sign in once in a terminal
   first (`references/tooling/setup-critic-channel.md`). A check in the selftest holds what each reviewer's child
   receives.
+- **A reviewer model that hangs is found within a minute** (#193). Under Google Cloud's ADC, `gemini-3.8-flash-high` —
+  the model the method named there — stayed silent 90–180 s and more even on a one-line prompt, so a package waited
+  its whole wait (600 s and up) and was then told to wait longer. Now doctor's one-line call goes to agy first, waited
+  for 60 s: with no answer the package is not sent, the run names the model as the cause, shows what agy printed by
+  then (kept in the raw exchange too) and offers the same line's next lower tier as `--model …` — offered, never
+  taken. `doctor`'s live call on agy is that one line, with the same advice. The guides now name
+  `gemini-3.8-flash-medium` for ADC (it answered in 9 s); a critic-env that pins `-high` keeps it until you change it.
 - **An AMBIGUOUS capture says how to fix it** (#182): the issue stored for a capture REW holds under two spellings
   now ends «keep one: rename or delete the other in REW» — TCC's card shows that stored issue.
 - **`capture-check` judges one snapshot of REW** (#183). It read REW's list twice — once to match the titles, once

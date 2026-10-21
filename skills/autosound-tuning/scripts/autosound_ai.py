@@ -1641,6 +1641,41 @@ def nested_session_marker(env=None):
 CLI_WAIT_MIN_S = 600
 CLI_WAIT_PER_KB_S = 25          # 31 KB -> 776 s: twice the slowest of the three translations
 
+# The one line that goes to agy before a real package, and doctor's live call on agy (#193, S-109). Under ADC
+# `gemini-3.8-flash-high` stayed silent 90-180 s and more on a one-line prompt while `-medium` answered in 9 s and 3.7's
+# `-high` in 4 s (a hub-kit probe, 2026-10-21), so a package waited its whole `cli_wait` -- 600 s and up -- to learn what
+# one line learns within a minute. agy only: only agy hung so, and only agy names its tiers as models.
+PROBE_PROMPT = "Reply with exactly: channel works"
+PROBE_WAIT_S = 60
+
+
+def wants_probe(provider, cli_bin):
+    return provider == "google" and bool(cli_bin) and cli_flavor(cli_bin) == "agy"
+
+
+def next_tier(model, known):
+    """The model to offer after `model` gave no answer (#193): the same line's next lower tier among `known`
+    (`-high` → `-medium` → `-low`), or None -- at the lowest tier, or with no tier in the name. Offered, never taken:
+    a model nobody chose is no reviewer (`resolve_model`)."""
+    m = re.fullmatch(r"(.+)-(high|medium|low)", str(model or ""))
+    if not m:
+        return None
+    tiers = ("high", "medium", "low")
+    return next((f"{m.group(1)}-{t}" for t in tiers[tiers.index(m.group(2)) + 1:]
+                 if f"{m.group(1)}-{t}" in (known or ())), None)
+
+
+def hang_advice(model, one_line):
+    """What agy's timeout means, and the next rung (#193). After the one-line call it is the model and not the
+    package's size, so a longer wait is no cure; after a package the line let through, it can be either."""
+    lower = next_tier(model, list_cli_models())
+    offer = (f"наступна сходинка — нижчий рівень тієї ж моделі: `--model {lower}` для цього запуску "
+             f"(або AUTOSOUND_CRITIC_MODEL={lower} у critic-env)" if lower
+             else "нижчого рівня цієї лінії agy не пропонує — вибери іншу модель зі списку `agy models`")
+    if one_line:
+        return f"модель `{model}` не відповіла на один рядок за {PROBE_WAIT_S} с — висить модель, а не розмір пакета; {offer}"
+    return f"{FAILURE_ADVICE['timeout']}; {offer}"
+
 
 def cli_wait(prompt):
     """Seconds to wait for a CLI answer: `AUTOSOUND_CLI_TIMEOUT` when set, else by the size of the job."""
@@ -1708,9 +1743,16 @@ def call_cli(provider, cli_bin, model, prompt, timeout=None):
                                   input=stdin, capture_output=True,
                                   text=True, encoding="utf-8", timeout=timeout, cwd=workspace,
                                   shell=(sys.platform == "win32"), env=child_env(cli_bin))
-            except subprocess.TimeoutExpired:
-                keep_raw("cli", stdin or prompt, f"(no answer in {timeout} s)")
-                return None, "timeout", f"no answer in {timeout} s"
+            except subprocess.TimeoutExpired as exc:
+                # What the CLI printed by then is kept and shown (#193): «nothing at all» and «stuck mid-answer» are
+                # different failures, and with only «no answer» kept neither could be told from the other.
+                so_far = [s.decode("utf-8", "replace") if isinstance(s, bytes) else (s or "")
+                          for s in (exc.output, exc.stderr)]
+                keep_raw("cli", stdin or prompt, f"(no answer in {timeout} s)\n--- stdout so far\n{so_far[0]}"
+                                                 f"\n--- stderr so far\n{so_far[1]}")
+                tail = " ".join(" ".join(so_far).split())[-300:]
+                return None, "timeout", (f"no answer in {timeout} s; "
+                                         + (f"by then it printed: {tail}" if tail else "it printed nothing"))
             keep_raw("cli", stdin or prompt, f"exit {proc.returncode}\n--- stdout\n{proc.stdout}\n--- stderr\n{proc.stderr}")
             answer_file = codex_answer_path(prompt_path) if provider == "openai" else None
             if answer_file and proc.returncode == 0 and os.path.isfile(answer_file):
@@ -3691,6 +3733,117 @@ def _check_the_quarantine_read_has_a_deadline():
     assert seen == [10, 10, 10], f"the deadlines xattr was given: {seen}"
 
 
+def _check_a_hanging_model_is_named_in_a_minute():
+    """#193 (S-109): under ADC `gemini-3.8-flash-high` stayed silent 90-180 s and more on a one-line prompt while its
+    neighbours answered in seconds, and a package waited its whole `cli_wait` to be told «a longer timeout». Before a
+    package goes to agy, doctor's one-line call goes first with `PROBE_WAIT_S`; no answer -- no package, the model
+    named as the cause, what agy printed by then shown and kept, and the line's next lower tier offered, never taken.
+    The same advice from `doctor`, whose call on agy is that probe. Codex gets no probe. `_run_child` is a stand-in."""
+    import contextlib
+    import io
+    wait = globals().get("PROBE_WAIT_S")
+    assert isinstance(wait, int) and 0 < wait <= 60, f"no short wait for the probe: PROBE_WAIT_S={wait!r}"
+    names = ("AUTOSOUND_PROJECT_DIR", "AUTOSOUND_REVIEW_RAW_DIR", "AUTOSOUND_CRITIC_MODEL", "AUTOSOUND_CRITIC_BIN",
+             "GEMINI_BIN", "GEMINI_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "AUTOSOUND_CLI_TIMEOUT",
+             "AUTOSOUND_ALLOW_NESTED_CLI")
+    saved = {k: os.environ.pop(k) for k in list(os.environ) if k in names or _is_marker(k)}
+    real = {k: globals()[k] for k in ("_run_child", "list_cli_models", "copy_to_clipboard")}
+    real_run, real_argv = subprocess.run, sys.argv
+    calls, hang = [], set()
+    line = ["gemini-3.8-flash-high", "gemini-3.8-flash-medium", "gemini-3.8-flash-low", "gemini-3.7-flash-high"]
+    done = '{"event":"result","result":{"status":"SUCCESS","response":"%s"}}'
+
+    def fake(cmd, **kw):
+        fed = kw.get("input") or ""
+        try:
+            said = json.loads(fed)["message"]["content"]
+        except (ValueError, KeyError, TypeError):
+            said = fed
+        if not fed:                                   # the doctor's other children: none of them a reviewer
+            return subprocess.CompletedProcess(cmd, 0, "", "")
+        kind = "probe" if said == "Reply with exactly: channel works" else "package"
+        calls.append((kind, kw.get("timeout")))
+        if kind in hang:
+            raise subprocess.TimeoutExpired(cmd, kw.get("timeout"), output='{"event":"init"}\n',
+                                            stderr="thinking about " + kind)
+        return subprocess.CompletedProcess(cmd, 0, done % ("channel works" if kind == "probe" else "a review"), "")
+
+    def run_main(*args):
+        sys.argv = ["autosound_ai.py", *args]
+        with contextlib.redirect_stdout(io.StringIO()) as out, contextlib.redirect_stderr(io.StringIO()) as err:
+            try:
+                main()
+                code = 0
+            except SystemExit as stop:
+                code = stop.code
+        return code, out.getvalue(), err.getvalue()
+
+    try:
+        with tempfile.TemporaryDirectory() as project:
+            open(os.path.join(project, "project.json"), "w").close()
+            pkg = os.path.join(project, "question.md")
+            with open(pkg, "w", encoding="utf-8") as fh:
+                fh.write("Translate: stage")
+            raw = os.path.join(project, "raw")
+            os.environ.update({"AUTOSOUND_PROJECT_DIR": project, "AUTOSOUND_REVIEW_RAW_DIR": raw,
+                               "AUTOSOUND_CRITIC_MODEL": "gemini-3.8-flash-high",
+                               "AUTOSOUND_CRITIC_BIN": os.path.join(project, "bin", "agy")})
+            subprocess.run = globals()["_run_child"] = fake
+            globals()["list_cli_models"] = lambda: list(line)
+            globals()["copy_to_clipboard"] = lambda text: False
+            reviews = os.path.join(project, "process", "reviews")
+            # (1) The probe hangs: the package is never sent, and the cause is the model, not the package's size.
+            hang.add("probe")
+            code, out, err = run_main("ask", pkg)
+            assert code == 4 and calls == [("probe", wait)], (code, calls, err)
+            assert "--model gemini-3.8-flash-medium" in err and "довшим AUTOSOUND_CLI_TIMEOUT" not in err, err
+            assert "gemini-3.8-flash-high" in err and "thinking about probe" in err, err
+            assert not any(n.endswith(".md") and not n.endswith("-package.md") for n in os.listdir(reviews)), \
+                os.listdir(reviews)
+            kept = [n for n in os.listdir(raw) if n.endswith("-received.txt")]
+            assert kept and any('{"event":"init"}' in open(os.path.join(raw, n), encoding="utf-8").read()
+                                for n in kept), kept
+            # (2) The probe answers: the package goes, once, with its own wait.
+            hang.clear()
+            del calls[:]
+            code, out, err = run_main("ask", pkg)
+            assert code == 0 and [k for k, _ in calls] == ["probe", "package"] and "a review" in out, (code, calls)
+            assert calls[1][1] >= CLI_WAIT_MIN_S, calls
+            # (3) The package hangs after a probe that answered: what agy printed is shown, the next tier offered.
+            hang.add("package")
+            del calls[:]
+            code, out, err = run_main("ask", pkg)
+            assert code == 4 and [k for k, _ in calls] == ["probe", "package"], (code, calls)
+            assert "thinking about package" in err and "--model gemini-3.8-flash-medium" in err, err
+            # (4) The line's lowest tier has no next rung: nothing is offered, never another line's model.
+            os.environ["AUTOSOUND_CRITIC_MODEL"] = "gemini-3.8-flash-low"
+            hang.add("probe")
+            del calls[:]
+            code, out, err = run_main("ask", pkg)
+            assert code == 4 and calls == [("probe", wait)] and "--model gemini" not in err, (code, calls, err)
+            # (5) doctor's live call on agy is the probe, and says the same.
+            os.environ["AUTOSOUND_CRITIC_MODEL"] = "gemini-3.8-flash-high"
+            del calls[:]
+            with contextlib.redirect_stdout(io.StringIO()) as out:
+                run_doctor(smoke=True)
+            said = out.getvalue()
+            assert calls == [("probe", wait)], calls
+            assert "--model gemini-3.8-flash-medium" in said and "довшим AUTOSOUND_CLI_TIMEOUT" not in said, said
+            # (6) Codex: no probe, the package goes straight.
+            os.environ.update({"AUTOSOUND_CRITIC_MODEL": "gpt-6-astra",
+                               "AUTOSOUND_CRITIC_BIN": os.path.join(project, "bin", "codex")})
+            hang.clear()
+            del calls[:]
+            run_main("ask", pkg)
+            assert [k for k, _ in calls] == ["package"], calls
+    finally:
+        subprocess.run, sys.argv = real_run, real_argv
+        globals().update(real)
+        for k in names:
+            os.environ.pop(k, None)
+        os.environ.update(saved)
+
+
 def _own_tempdir(selftest):
     """`selftest` run with tempfile's folder -- and TMPDIR, for the children it starts -- set to one folder of its own,
     removed with everything in it when the selftest ends, passed or failed, both put back (#148): a check that forgets
@@ -3741,7 +3894,7 @@ def _selftest():
                   _check_a_failed_copy_is_not_a_copy, _check_a_copy_beside_a_background_child,
                   _check_a_copy_off_darwin, _check_a_copy_with_no_temp_file, _check_help_is_the_usage,
                   _check_an_unknown_task_names_every_task,
-                  _check_the_quarantine_read_has_a_deadline):
+                  _check_the_quarantine_read_has_a_deadline, _check_a_hanging_model_is_named_in_a_minute):
         try:
             check()
         except AssertionError as exc:
@@ -4053,11 +4206,12 @@ def _selftest():
             assert "Запиши посилання" not in err and "REVIEW_FILE" not in err, err
             assert json.loads(runs[-1][1])["message"]["content"].endswith("Translate: stage"), runs[-1]
             # Inside an agent session the CLI RUNS now, without the session's markers, and the
-            # wait is announced first (hub #187 ask 2, skill #54) -- it used to be refused.
+            # wait is announced first (hub #187 ask 2, skill #54) -- it used to be refused. Two runs: agy's one-line
+            # call, which only a timeout stops, then the package (#193).
             os.environ["CLAUDECODE"] = "1"
             before = len(runs)
             code, out, err = run_main("ask", pkg)
-            assert code == 4 and len(runs) == before + 1 and "без маркерів сесії" in err, (code, err)
+            assert code == 4 and len(runs) == before + 2 and "без маркерів сесії" in err, (code, err)
             assert "CLAUDECODE" not in runs[-1][2] and runs[-1][2], "the CLI inherited the session's marker"
             assert "AUTOSOUND_ALLOW_NESTED_CLI" not in err, err
             del os.environ["CLAUDECODE"]
@@ -4073,10 +4227,10 @@ def _selftest():
                 code, out, err = run_main("ask", pkg)
                 assert code == 0 and len(runs) == before and "AUTOSOUND_CRITIC_VIA=clipboard" in err, (code, err)
                 code, out, err = run_main("ask", pkg, "--via", "cli")
-                assert code == 4 and len(runs) == before + 1, (code, len(runs) - before, err)
+                assert code == 4 and len(runs) == before + 2, (code, len(runs) - before, err)
                 os.environ["AUTOSOUND_CRITIC_VIA"] = "bogus"
                 code, out, err = run_main("ask", pkg)
-                assert code == 1 and "AUTOSOUND_CRITIC_VIA" in err and len(runs) == before + 1, (code, err)
+                assert code == 1 and "AUTOSOUND_CRITIC_VIA" in err and len(runs) == before + 2, (code, err)
             finally:
                 os.environ.pop("AUTOSOUND_CRITIC_VIA", None)
             subprocess.run = globals()["_run_child"] = lambda cmd, **kw: subprocess.CompletedProcess(cmd, 0, ok_out, "")
@@ -4085,21 +4239,24 @@ def _selftest():
             code, out, err = run_main("ask", pkg)
             del os.environ["AUTOSOUND_REVIEW_RAW_DIR"]
             assert code == 0 and "pong" in out and "REVIEW_FILE: " in err and "REVIEW_ROUTE: cli" in err, (code, err)
-            kept = sorted(os.listdir(raw))
-            assert len(kept) == 2 and kept[0].endswith("-cli-received.txt") and kept[1].endswith("-cli-sent.txt"), kept
+            kept = sorted(os.listdir(raw))                  # the one-line call's pair, then the package's (#193)
+            assert len(kept) == 4 and all(n.endswith(("-cli-received.txt", "-cli-sent.txt", "-cli-2-received.txt",
+                                                      "-cli-2-sent.txt")) for n in kept), kept
+            assert any("Translate: stage" in open(os.path.join(raw, n), encoding="utf-8").read()
+                       for n in kept if n.endswith("-sent.txt")), kept
             # An agy stream cut mid-answer is not a refusal (skill #68, hub #204): one more try on the same rung, and a
             # second cut fails as before, saying so. A refusal is never retried (read_file above: one run each time).
             cut_out = json.dumps({"event": "result", "result": {"status": "ERROR", "response": "", "error": cut}})
-            replies = [cut_out, ok_out]
+            replies = [ok_out, cut_out, ok_out]             # the one-line call answers first (#193)
             subprocess.run = globals()["_run_child"] = lambda cmd, **kw: (runs.append((cmd, kw.get("input"), kw.get("env") or {})),
                                                 subprocess.CompletedProcess(cmd, 0, replies.pop(0), ""))[1]
             before = len(runs)
             code, out, err = run_main("ask", pkg)
-            assert code == 0 and "pong" in out and len(runs) == before + 2 and "повторюю" in err, (code, err)
-            replies = [cut_out, cut_out, ok_out]
+            assert code == 0 and "pong" in out and len(runs) == before + 3 and "повторюю" in err, (code, err)
+            replies = [ok_out, cut_out, cut_out, ok_out]
             before = len(runs)
             code, out, err = run_main("ask", pkg)
-            assert code == 4 and len(runs) == before + 2 and "двічі" in err, (code, len(runs) - before, err)
+            assert code == 4 and len(runs) == before + 3 and "двічі" in err, (code, len(runs) - before, err)
             subprocess.run = globals()["_run_child"] = lambda cmd, **kw: subprocess.CompletedProcess(cmd, 0, ok_out, "")
             # The transport follows the model (hub #187): an agy slug with a key present goes to
             # the CLI, not to the API that 404s on it.
@@ -5176,7 +5333,9 @@ def run_doctor(smoke=True, via=None):
     answered = None
     smoked = False
     if model and smoke:
-        prompt = "Reply with exactly: channel works"
+        prompt = PROBE_PROMPT
+        # On agy the check is the round's own one-line call, with its wait (#193): a model that hangs is named as one.
+        short = PROBE_WAIT_S if wants_probe(provider, cli_bin) else 120
         text = kind = error = via = None
         if api_provider:
             try:
@@ -5196,10 +5355,10 @@ def run_doctor(smoke=True, via=None):
                     # ...while any other API failure hands the call to the CLI, as `main` does.
                     print(f"· API не відповів ({str(e).strip()[:120]}) -- як і раунд, пробую CLI {cli_bin}")
                     via = f"CLI {cli_bin}"
-                    text, kind, error = call_cli(provider, cli_bin, model, prompt, timeout=120)
+                    text, kind, error = call_cli(provider, cli_bin, model, prompt, timeout=short)
         elif cli_bin:
             via = f"CLI {cli_bin}"
-            text, kind, error = call_cli(provider, cli_bin, model, prompt, timeout=120)
+            text, kind, error = call_cli(provider, cli_bin, model, prompt, timeout=short)
         if text is not None or error is not None:
             smoked = True
             if text and "channel works" in text.lower():
@@ -5214,7 +5373,8 @@ def run_doctor(smoke=True, via=None):
                       + ", ".join(list_omp_models(cli_bin) if omp else list_cli_models()))
                 ok = False
             else:
-                advice = FAILURE_ADVICE.get(kind, "")
+                advice = (hang_advice(model, True) if kind == "timeout" and wants_probe(provider, cli_bin)
+                          else FAILURE_ADVICE.get(kind, ""))
                 print(f"✗ Живий виклик не вдався: {failure_reason(error, 200)}" + (f" → {advice}" if advice else ""))
                 ok = False
 
@@ -6044,8 +6204,18 @@ def main():
                   f"сесії, чекаю до {wait} с", file=sys.stderr)
         else:
             print(f">> Виклик локального CLI '{cli_bin}' ({provider}), чекаю до {wait} с...", file=sys.stderr)
+        line_failed = False
         try:
-            text, kind, error = call_cli(provider, cli_bin, model, compiled_prompt, timeout=wait)
+            if wants_probe(provider, cli_bin):
+                # One line first (#193): a model that hangs is found within a minute, not after the package's wait.
+                print(f">> Спершу один рядок моделі `{model}` (до {PROBE_WAIT_S} с): чи вона відповідає",
+                      file=sys.stderr)
+                text, kind, error = call_cli(provider, cli_bin, model, PROBE_PROMPT, timeout=PROBE_WAIT_S)
+                # Only silence stops the package: any other refusal of the line is the package's to meet, in its
+                # own words, as before -- the line exists to find a hang, not to stand in for the round.
+                line_failed = text is None and kind == "timeout"
+            if not line_failed:
+                text, kind, error = call_cli(provider, cli_bin, model, compiled_prompt, timeout=wait)
         except Exception as e:  # noqa: BLE001
             text, kind, error = None, "other", f"не виконано: {e}"
         if text:
@@ -6060,7 +6230,11 @@ def main():
                                     list_cli_models(), role_var, source="cli").render(), file=sys.stderr)
             sys.exit(3)
         advice = FAILURE_ADVICE.get(kind, "")
-        if kind == "timeout" and (api_key_for(provider) or suppressed_key(provider)):
+        if kind == "timeout" and wants_probe(provider, cli_bin):
+            advice = hang_advice(model, line_failed) + ("; пакет не надсилано" if line_failed else "")
+            if api_key_for(provider) or suppressed_key(provider):
+                advice += "; у середовищі є ключ API — або `--via api` для цього запуску"
+        elif kind == "timeout" and (api_key_for(provider) or suppressed_key(provider)):
             advice = ("CLI не відповів вчасно. У середовищі є ключ API — повтори з `--via api` "
                       "(для цього запуску; конфігурацію не змінює)")
         failures.append(f"CLI '{cli_bin}': {failure_reason(error)}" + (f"\n     → {advice}" if advice else ""))
