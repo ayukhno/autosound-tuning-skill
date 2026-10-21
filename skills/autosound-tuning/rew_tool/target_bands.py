@@ -248,11 +248,6 @@ def band_targets(freqs: list[float], house: HouseCurve, name: str, ch: dict,
             for f, h, low in zip(freqs, hp, lp)]
 
 
-def band_target(freq: float, house: HouseCurve, name: str, ch: dict,
-                cfg: dict[str, dict], summ_kw: dict, fs: float | None = None) -> float:
-    return band_targets([freq], house, name, ch, cfg, summ_kw, fs)[0]
-
-
 def _warn_if_demo_config(cfg: dict[str, dict]) -> None:
     """Catch the real incident this guards against: per-band targets committed
     for an actual project while `cfg` was still (partly) the module's demo
@@ -362,7 +357,7 @@ def _selftest() -> None:
 
     def leg(typ, kind, f):
         key = "hpf" if kind == "hp" else "lpf"
-        return band_target(f, flat, "tw-L", {key: fc, key + "_type": typ}, {}, {})
+        return band_targets([f], flat, "tw-L", {key: fc, key + "_type": typ}, {}, {})[0]
 
     # Anchored to DEFINITIONS, not to the module under test: every Bessel here is -3 dB at its
     # corner (norm="mag", the Helix's own, dsp_math bench fact 9) and a Linkwitz-Riley is -6.02,
@@ -386,7 +381,7 @@ def _selftest() -> None:
            "tw-L": {"hpf": 2800, "hpf_type": "BE24", "gain": -4.0, "is_stereo": True}}
     t_car = generate(house, car, npts=60)
     assert set(t_car) == set(car)
-    w_knee = band_target(1.25 * 65, flat, "w-L", {"hpf": 65, "hpf_type": "BE12"}, {}, {})
+    w_knee = band_targets([1.25 * 65], flat, "w-L", {"hpf": 65, "hpf_type": "BE12"}, {}, {})[0]
     assert -2.0 < w_knee < -1.8, w_knee
     # The two original spellings mean what they always meant, in any case.
     assert crossover_type("lr4") == crossover_type("LR4") == crossover_type("LR24") == ("LR", 24)
