@@ -3,8 +3,8 @@
 **Status:** written 2026-10-21 on branch `wave-2026-10-21` from four code maps (sonnet · medium, 10:31–10:41 local);
 reviewed by Codex (the W-11 trial, below): 17 findings, 1 blocker and 9 important, each checked against the code
 and taken into this text (T1, T2, T4, T5, T7, T8, T10–T12, T14, the lanes, the cost); no finding on T3, T6, T9, T13.
-Waits for the Arbiter's «го» and his answer on T1's control capture.
-`ok` on 14 issues (#176–#189); #190 (the test audit) has none yet. Built without `superpowers` (hub H-022): the PR
+The Arbiter, 2026-10-21: «го»; the control capture — the method adds it itself; #190 taken; the seats on Opus and Gemini, Codex's limits being out.
+`ok` on 15 issues (#176–#190). Built without `superpowers` (hub H-022): the PR
 carries `Engine: none`; the ledger is `docs/W-11-LEDGER.md`.
 
 Paths: `SK` = `skills/autosound-tuning`, `RT` = `SK/rew_tool`, `P` = `RT/state/process.py`, `V` = `RT/verify.py`,
@@ -17,14 +17,13 @@ Paths: `SK` = `skills/autosound-tuning`, `RT` = `SK/rew_tool`, `P` = `RT/state/p
   task review (opus · high) → one fix round → re-review of the fix. Ordinary code: implementer with one test per
   behaviour the issue asks for, no task review. Text: `docs-check`, no new tests, at most one review. Each group ends
   with its seats on the shared diff and one fix round. The wave ends with ONE final branch review.
-- **The seats — the Codex trial** (`hub:seam` «Models by role», the Arbiter 2026-10-21). This plan's review, the group
-  seats and the final branch review run on Codex: `codex exec -m gpt-6-astra -c model_reasoning_effort=high -s
-  read-only --ephemeral -o <file> -`, the seat's brief on stdin (silent failures + test gaps, as the two Claude seats
-  ask). On the first `Risk: high` group (Rounds and levels) the two Opus seats
-  (`pr-review-toolkit:silent-failure-hunter`, `pr-review-toolkit:pr-test-analyzer`, opus · high) run beside Codex, to
-  compare. User-facing text (README, FAQ, the description, the CHANGELOG) goes to Gemini through the Advisor
-  (`AI ask --model gemini-3.8-flash-high`). Every finding is checked against the code before acting. The ledger
-  counts per vendor: findings, real ones, real ones the other seat missed.
+- **The seats.** The Codex trial ran this plan's review only: Codex's limits ran out the same day, and the Arbiter
+  (2026-10-21, with his «го»): «Кодекс не доступний — закінчились ліміти, тому використовуй Опус або Джеміні». So the
+  group seats are the two Opus seats (`pr-review-toolkit:silent-failure-hunter`, `pr-review-toolkit:pr-test-analyzer`,
+  opus · high), one seat for a small risky diff, and the final branch review is on opus · high. User-facing text
+  (README, FAQ, the description, the CHANGELOG) goes to Gemini through the Advisor (`AI ask --model
+  gemini-3.8-flash-high`). Every finding is checked against the code before acting. The ledger counts findings, real
+  ones and fix rounds per seat.
 - **Models**: implementer `Risk: high` opus · high; ordinary opus · medium; T11 is the Sonnet trial (sonnet · medium,
   beside T10 on opus — the same kind of work, `AI`'s reviewer door); the release bookkeeping's version bumps are the
   Haiku trial against Sonnet (haiku · high and sonnet · medium on one half each, `hub:seam` «Haiku: mechanical only»).
@@ -49,7 +48,7 @@ Paths: `SK` = `skills/autosound-tuning`, `RT` = `SK/rew_tool`, `P` = `RT/state/p
 |---|---|---|---|
 | **A** | `P`, `V`, `RT/contract.py`, `RT/verify_prediction.py`, `RT/compare.py`, `RT/predict.py` (read, tests only), `RT/provenance.py`, new `RT/levelbase.py`, `RT/rew_stub.py`, `RT/testdata/rew/`, `RT/state/process-schema.md`, `scripts/selftests.txt` | Captures T3–T5 | Journal T6, then Rounds and levels T1–T2 (after the Arbiter's answer on the control) |
 | **B** | `install.sh`, `install.ps1`, `commands/install-tcc.md`, `IC` | Installers T7–T9 | — |
-| **C** | `AI`, `RT/project.py`, `SK/references/tooling/setup-critic-channel.md`, `README*.md`, `FAQ*.md`, `SK/SKILL.md`, `SK/evals/` | Reviewer T10, then T11 (one writer on `AI` at a time), CI T12 | Method text T13, Agent start T14 |
+| **C** | `AI`, `RT/project.py`, `SK/references/tooling/setup-critic-channel.md`, `README*.md`, `FAQ*.md`, `SK/SKILL.md`, `SK/evals/` | Reviewer T10, then T11 (one writer on `AI` at a time), CI T12 | Method text T13, Agent start T14, the test audit T15 (`RT/target_bands.py`) |
 
 Captures go first in lane A: small, they settle `V`'s verdict fields that T1 then extends. T14's eval runs read the
 skill from the working tree, so they run while nothing edits `SK/SKILL.md` and no other agent is working: its baseline
@@ -95,8 +94,13 @@ at `RT/resonalyze_ir.py:471`); the jump warning is TCC's alone (tcc #198). Mirro
   amp; `V` `session_report` compares `mean_dB` on the shifted level when its source is REW's FR and offsets differ
   within one round, and `render_session` says so.
 - **The control** (ask 2): the method has no level control across rounds — its `ctl1`/`ctl3` pair (`RT/naming.py:146`)
-  is a time-base drift check inside one session. **How a round's control is named waits for the Arbiter** (the
-  question below). Once named: `band_offsets` on the shifted control against the base round's, over the bands the
+  is a time-base drift check inside one session. **The method adds it itself** (the Arbiter, 2026-10-21: «Метод
+  додає його сам»): `capture-start` puts one optional capture on every round's `optional` list — an RTA of the whole
+  system as it plays, in the round's state and at the round's volume (the bench's `ALL+C+FX_N (rta)`; its title from
+  `naming`'s grammar for the full system, read in `naming-and-structure.md` first), marked as the round's `control`.
+  `capture.level_base.control` = {`title`, `taken`, `verdict` (`same_chain` · `chain_change` · `unattributed` ·
+  `not_taken`), `common_db`, per band `mean_db`, `spread_db`, `used`}. Not taken → «chain change not checked», no
+  verdict. `band_offsets` on the shifted control against the base round's, over the bands the
   round did not change — taken from the ledger's diff between the base version and the round's (the bands under
   changed EQ filters and crossovers). A chain change is named only when at least two bands survive and their means
   agree within `DAILY_SPREAD_DB` of each other and their common mean exceeds it; then an alignment on those bands is
@@ -126,7 +130,7 @@ presets in one round) is the method's rule, not a gap: one round is one DSP stat
 Tests first: a round with one planned and one unplanned sweep, and a superseded unplanned row → the standing two
 printed, exact line forms asserted, the totals and exit planned-only (exit 0 when only the unplanned one is unusable).
 
-Group seats on T1–T2's diff: Codex and the two Opus seats beside it, one fix round.
+Group seats on T1–T2's diff: the two Opus seats, one fix round.
 
 ## Group Captures — lane A, first
 
@@ -161,7 +165,7 @@ checked», no reason claimed. TCC does not read the phrase. Tests: `V:1287` and 
 outside-band case at `V:1181–1187`; a mixed session (an RTA and an outside-band sweep) through the process CLI, and a
 legacy row.
 
-Group seats on T3–T5: Codex, one fix round.
+Group seats on T3–T5: the two Opus seats, one fix round.
 
 ## Group Journal — `Risk: high`, lane A
 
@@ -172,7 +176,7 @@ fresh journal still gets its header (`P:9513–9515`).
 Tests first: in the HUB-002 block (`P:9482–9517`), `_writer_sha` patched to a×40 → `""` → a×40 over three `Process`
 runs → one header (red before: three).
 
-One seat (a small risky diff): Codex.
+One seat (a small risky diff): `silent-failure-hunter`, opus · high.
 
 ## Group Installers — `Risk: high`, lane B
 
@@ -219,7 +223,7 @@ change.
 gone; a sibling file keeps both; a `.agents` with other content kept; a dry run removes nothing; the ps1 twin in
 `ps1_codex_link_problems` (`IC:1820`).
 
-Group seats on T7–T9: Codex, one fix round.
+Group seats on T7–T9: the two Opus seats, one fix round.
 
 ## Group Reviewer — ordinary, lane C
 
@@ -240,7 +244,7 @@ echoes what it read, and each stdin-reading provider's child receives the prompt
 one paragraph in `setup-critic-channel.md` (near `:221`); the CHANGELOG entry says it plainly: «stdin is the prompt or
 the null device, never the terminal».
 
-Group seat on T10–T11: Codex.
+Group seat on T10–T11: one Opus seat (`pr-test-analyzer`).
 
 ## Group CI — ordinary, lane C
 
@@ -277,10 +281,10 @@ is kept, and a void or timed-out run is rerun, not counted. The runs go when no 
 idle), since earlier runs timed out under agent load (`SK/evals/README.md:234`). Gemini reads the new description.
 The bench queries that fire 0/7 whatever the wording are not chased (`SK/evals/README.md`, «does NOT ask for»).
 
-## #190 — the test audit (no `ok` yet)
+## #190 — the test audit, lane C
 
-On his `ok`: `band_target` retired (XS, the session), and the sweep resumed on the lock's overlap — report only; what
-it finds is a separate `ok`.
+**T15 · #190.** XS + a report. `band_target` retired (the session; `target_bands.py --selftest`), and the sweep
+resumed on the lock's overlap — report only; what it finds is a separate `ok`.
 
 ## The end of the wave
 
@@ -288,7 +292,7 @@ it finds is a separate `ok`.
    (T4's new refusal, T5's `why`, T1's fields and stdout line, T6's header rule, T2's unplanned lines), `plugin.json`
    3.2.0, `INSTALLER_VERSION`/`$InstallerVersion` 3.2.0, the install pins and `commands/install-tcc.md` on TCC
    v1.2.0 with `--constraints`; Gemini reads the CHANGELOG entry.
-2. The final branch review, Codex, on `main..wave-2026-10-21` — after the bookkeeping, since it changes executable
+2. The final branch review, opus · high, on `main..wave-2026-10-21` — after the bookkeeping, since it changes executable
    installer commands and release pins; one fix round.
 3. One PR with `Engine: none` in its body → its full CI on every system → `git merge --ff-only` → the candidate
    `beta-v3.2.0-rc1` on that commit.
@@ -301,13 +305,12 @@ it finds is a separate `ok`.
 ## Cost
 
 14 tasks for 14 issues in eight groups (#190 adds one XS task and one report on its `ok`). By vendor, roughly:
-- **Claude agent runs ~42**: Rounds and levels 11 (T1 and T2: implementer, task review, fix, re-review; the two Opus
+- **Claude agent runs ~50** (the seats on Opus now: +8 against the Codex plan): Rounds and levels 11 (T1 and T2: implementer, task review, fix, re-review; the two Opus
   seats and their fix round), Installers 10, Captures 6, Journal 4, Reviewer 3, CI 2, Agent start 2, the bookkeeping
   2 (Haiku and Sonnet halves), the final fix round 2 — against W-10's ~60 for 19 tasks.
-- **Codex calls ~8**: this plan's review (done), six group seats, the final review.
+- **Codex calls 1**: this plan's review (done); the seats moved to Opus when Codex's limits ran out.
 - **Advisor (Gemini) calls ~6**: three translations, the method text, the description, the CHANGELOG.
 - **T14's eval**: six runs of 68 queries (~400 `claude -p` calls), ~1–1.5 h, plus a rerun for any void run.
 
-Time: lane A is the critical path — ~21 of the runs, ~7–8 h of machine time, T1 alone ~4 h, and it waits for the
-Arbiter's answer on the control. Lanes B and C finish inside it. With the CI rounds, the eval and the release
+Time: lane A is the critical path — ~21 of the runs, ~7–8 h of machine time, T1 alone ~4 h. Lanes B and C finish inside it. With the CI rounds, the eval and the release
 bookkeeping: ~9–11 h of wall clock, two days with the stops.

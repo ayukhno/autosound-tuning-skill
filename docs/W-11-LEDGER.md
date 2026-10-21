@@ -1,8 +1,9 @@
 # W-11 · v3.2.0 — the ledger (the arm without the engine, hub H-022; the Codex trial)
 
 The wave is built without `superpowers` (`hub/bin/role skill --no-SP`): every PR of the wave carries `Engine: none`.
-It is also the Codex trial (`hub:seam` «Models by role», the Arbiter 2026-10-21): the plan review, the group seats and
-the final branch review run on Codex `gpt-6-astra`; on the first `Risk: high` group the two Opus seats run beside it.
+It was to be the Codex trial (`hub:seam` «Models by role», the Arbiter 2026-10-21): the plan review, the group seats and
+the final branch review on Codex `gpt-6-astra`. Only the plan review ran on it: Codex's limits ran out on 2026-10-21, and the
+Arbiter moved the seats to Opus and the texts to Gemini.
 This file holds what H-022 and H-019 compare: speed from `ok` to merge, agent runs, findings per vendor (all, real,
 real the other seat missed), fix rounds and red CI runs, per group. Times are UTC.
 
@@ -16,6 +17,7 @@ real the other seat missed), fix rounds and red CI runs, per group. Times are UT
 | 2026-10-21 08:40 | #190 opened from `/test-audit` (report only), no `ok` |
 | 2026-10-21 ~08:45 | `docs/PLAN-W-11.md` written by the session from the maps; Codex's plan review started |
 | 2026-10-21 ~08:55 | Codex's plan review back: 17 findings; checked against the code, taken into the plan; waits for «го» and the control answer |
+| 2026-10-21 ~09:08 | «го» (the Arbiter); the control — the method adds it itself; #190 `ok`; Codex's limits out — the seats on Opus, text on Gemini |
 
 ## Agent runs
 
