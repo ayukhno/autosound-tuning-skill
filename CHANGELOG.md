@@ -169,8 +169,9 @@ engine (hub H-022), the ledger is `docs/W-11-LEDGER.md`. A minor, released with 
 Windows (hub #300, TCC PR #231): green, and none of the four failures it met on the way was the skill's. The Arbiter's
 Windows VM run on rc1 found the app's install stopped on Windows: the TCC step's `$help` is, in PowerShell's
 case-insensitive names, the installer's own `-Help` switch, and a string does not go into a switch. rc2 renames it and
-`installer-consistency` now refuses any variable named like a switch; it also adds #193 (the reviewer that hung) and
-the release's bookkeeping.
+`installer-consistency` now refuses any variable named like a switch. With it the VM installed the candidate and TCC
+v1.1.4 held to the versions TCC was tested with (`PySide6 6.11.2`, not 6.12), the receipt `ready`. rc2 also adds #193
+(the reviewer that hung) and the release's bookkeeping.
 
 **Upgrading:** what changes for whom.
 

@@ -78,6 +78,22 @@ real the other seat missed), fix rounds and red CI runs, per group. Times are UT
 | Agent start | 0 | session | T14 #189: four eval runs (sonnet-5-5 ×3, opus-5-5 ×1), 26/26 neutral recall every run; the description stays — `30d2655` |
 | (end) | 1 | opus · high | the final branch review |
 | Method text | 0 | session + Advisor (Gemini) | T13 #188: English by the session `c939da0`; uk/de/pl from gemini-3.8-flash-high on its second ask (quota spent at the first) `e18a6c0` |
+| Reviewer (rc2) | 0 + 1 | session; opus · high | #193 (S-109) built by the session (test red first) — `932fd26`; one seat (`silent-failure-hunter`), 6 findings, 5 taken — `d2bcb5e` |
+| Bookkeeping (rc2) | 1 | haiku · high | the version bumps (plugin.json, the installer version, install.cmd's PS1URL, install.ps1's one-liner) — exact, 5 lines, its check's FAIL was the brief's (the CHANGELOG heading not yet there) |
+| Bookkeeping (rc2) | 1 | sonnet · medium | `install-tcc` on TCC v1.2.0 with `--constraints` — exact |
+| Bookkeeping (rc2) | 1 + 1 | opus · high; Advisor (gemini-3.8-flash-medium) | one seat on the bookkeeping (3 minor, 2 taken); Gemini on the CHANGELOG's new parts (4, all taken) — `26439cb` |
+
+## The Arbiter's VM run on rc1
+
+2026-10-21, Windows-ARM64 in UTM (no longer Parallels), an Administrator window (the VM's only kind). `-Uninstall` on a
+machine with nothing of ours: exit 0, `~\.agents` absent. `-SkillRef beta-v3.2.0-rc1 -Tcc`: the method installed, then
+the TCC step threw «Cannot convert value "System.String" to type SwitchParameter» at `$help = ""` (install.ps1:2123) —
+PowerShell's names are case-insensitive, and at script scope `$help` is the `-Help` switch — so «Autosound TCC is not
+installed»; the VM then hung (UTM, not the installer). Every check had been green: the Windows cases run #179's block
+outside the script's param(). Fixed in `26439cb` (`$uvHelp`, and `installer-consistency` refuses a variable named like
+a switch — red on rc1). The installer from `release-3.2.0` then: «held to the versions v1.1.4 was tested with (its
+constraints.txt)», TCC installed, exit 0, the receipt `ready` with `method_ref` the candidate, `PySide6 6.11.2` (the
+lock's, not 6.12). `-Uninstall` after it: the method's junction and checkout, autosound-tcc (4 executables), both shortcuts removed; exit 0, `~\.agents` absent, TCC's tool folder gone. Not run on the VM: the receipt after a failed download (#180; Windows CI's cases hold it).
 
 ## Findings per vendor
 
