@@ -55,7 +55,28 @@ real the other seat missed), fix rounds and red CI runs, per group. Times are UT
 | Installers | 1 | opus · high | T8 fix re-review: 1 regression (leftovers from before the call counted as a change) |
 | Installers | 1 | opus · high | T8 second fix (resumed) |
 | Installers | 1 | opus · medium | T9 #181 implementer — `1c2bd89` |
-| Rounds and levels | 1 | opus · high | T1 #176 implementer |
+| Rounds and levels | 1 | opus · high | T1 #176 implementer — `c2f6e2a` `7587a0a` `b0c2d49` `bf54b0d` (~29 min) |
+| Rounds and levels | 1 | opus · high | T1 task review: 1 critical (a required capture turned into the control), 5 important |
+| Rounds and levels | 1 | opus · high | T1 fix round (resumed) — `ff1deb7` `23b301d` `8bc04f9` |
+| Rounds and levels | 1 | opus · high | T1 fix re-review: 1 high (rounds from before `control_added`), the slope-blind reach |
+| Rounds and levels | 1 | opus · high | T1 second fix (resumed) — `8793fd3` `aa747ef` |
+| Rounds and levels | 1 | opus · high | T2 #177 implementer — `2af8721` |
+| Rounds and levels | 1 | opus · high | T2 task review: unplanned takes leaking into the session probe |
+| Rounds and levels | 1 | opus · high | T2 fix (resumed) — `fd9a499` (without it a false LEVEL −5 dB) |
+| Rounds and levels | 2 | opus · high | group seats (silent-failure, test-analyzer) on T1–T2 |
+| Rounds and levels | 1 | opus · high | group fix round (resumed T1) — `4b80724` `a69904f` `5fd1a00` |
+| Rounds and levels | 1 | opus · high | group fix re-review: the control judged against the base never gives a verdict after a time alignment; LEVEL noise |
+| Rounds and levels | 1 | opus · high | third fix (resumed T1): the control against the PREVIOUS round, as the bench did — `eb4da50` `e9a9a3b` `f00fa3d` `3327af3` |
+| Rounds and levels | 1 | opus · high | third fix re-review: 2 high (a re-taken series against itself; a previous control never taken) |
+| Rounds and levels | 1 | opus · high | fourth fix (resumed T1) — `a245774` `497c3ab` `e7ea437` |
+| Captures | 1 | opus · high | T16 #191 implementer — `22d8988` |
+| Captures | 1 | opus · high | T16 review: the brief's own mistake (a listed title kept off `optional`) reverted; a superseded bad optional hidden |
+| Captures | 1 | opus · high | T16 fix (resumed) — `f77cdde` |
+| Captures | 1 | opus · medium | Captures group fix round (resumed T4) — `9f658c7` (the drift read the wrong take) |
+| Installers | 1 | opus · high | group seat: no defect, 3 test gaps — it also downloaded pwsh and ran the Windows cases on the Mac, which popped Cursor up on the user's screen (now forbidden in every brief) |
+| Installers | 1 | opus · high | group fix round (resumed T8) — `0da8199` |
+| Agent start | 0 | session | T14 #189: four eval runs (sonnet-5-5 ×3, opus-5-5 ×1), 26/26 neutral recall every run; the description stays — `30d2655` |
+| (end) | 1 | opus · high | the final branch review |
 | Method text | 0 | session + Advisor (Gemini) | T13 #188: English by the session `c939da0`; uk/de/pl from gemini-3.8-flash-high on its second ask (quota spent at the first) `e18a6c0` |
 
 ## Findings per vendor
@@ -74,3 +95,12 @@ real the other seat missed), fix rounds and red CI runs, per group. Times are UT
 | T7 fix re-review | Opus | 6 (1 high, 1 medium, 3 low, 1 note) | 2 regressions of the fix, both real (reproduced) | — |
 | T8 task review | Opus | 5 (1 medium, 4 low) | all taken; the medium (no receipt during the download) became save-and-restore | — |
 | T8 fix re-review | Opus | 6 (2 medium, 4 low) | 1 regression of the fix (pre-existing leftovers), 1 readability (winget's output on 5.1) | — |
+| T1 task review | Opus | 13 (1 critical, 5 important, 7 minor) | all real; the critical reproduced (phase 3 plan `ALL_5 (rta)`) | — |
+| T1 fix re-review | Opus | 8 (1 high, 3 medium, 4 low) | the high was dev-build only; the slope-blind ½-octave reach real | — |
+| T2 task review | Opus | 6 (1 medium, 5 low) | the medium real (the session probe counted unplanned takes) | — |
+| Rounds group, silent-failure | Opus | 11 (4 important, 7 minor) | all real (LEVEL line silent on doubts; full-range channels reached no band) | — |
+| Rounds group, tests | Opus | 9 | the bench's full chain untested end to end; TCC keys unpinned | — |
+| Rounds group fix re-review | Opus | 7 (2 high, 2 medium) | both highs a design flaw: the control judged against the base | — |
+| T1 third fix re-review | Opus | 6 (2 high, 2 medium) | both highs hid a real chain change | — |
+| T16 review | Opus | 4 (1 high, 1 medium) | the high was the session's brief (outside #191), reverted | — |
+| Installers group | Opus | 6 (1 important, 5 minor) | test gaps, no defect | — |
