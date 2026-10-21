@@ -838,10 +838,17 @@ def main(argv=None):
         level_base_db = None
         if args.project:
             sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "state"))
-            from process import Process, ProcessError
             try:
+                from process import Process, ProcessError
                 based = Process(os.path.join(args.project, "process")).level_base_offset()
-            except (ProcessError, OSError) as exc:      # the project's own refusals; a bug is raised (#176)
+            except Exception as exc:  # noqa: BLE001 -- the project's own refusals degrade, said; a bug is raised (#176)
+                # Its refusals (ProcessError), an OS error, and a file it cannot read -- `project_io.Unreadable`, a
+                # journal line in another code page or a file held on Windows, matched by `is_unreadable` on its class
+                # (the re-review) -- leave the reads on the first title's calibration. Anything else is a bug.
+                refused = (getattr(type(exc), "is_unreadable", False) or isinstance(exc, (OSError, ImportError))
+                           or any(k.__name__ == "ProcessError" for k in type(exc).__mro__))
+                if not refused:
+                    raise
                 based = None
                 print(f"  level base not read: {exc} -- the reads are brought to the first title's calibration",
                       file=sys.stderr)
@@ -1141,8 +1148,15 @@ def _selftest():
         rew_api.get_timing = lambda mid: {"has_ir": False}
         rew_api.get_fr = lambda mid, smoothing=None: (list(f), list(_db(A) + 120.0), None)
         argv = ["--predicted", path, "--rew", "--allow-rta", "--solo", "w-L=w-L_2 (rta)", "--json"]
+        # A journal the project cannot read -- a line in another code page (cp1251), `project_io.Unreadable`, neither
+        # ProcessError nor OSError -- is said and the reads brought to the first title: never a crash (the re-review).
+        bad = os.path.join(top, "cp1251")
+        os.makedirs(os.path.join(bad, "process"))
+        with open(os.path.join(bad, "process", "journal.jsonl"), "wb") as fh:
+            fh.write('{"type": "user_decision", "answer": "бас гуде"}\n'.encode("cp1251"))
         for project, want_cal, said in ((proj, 16.65, "base round cap_002 (splOffsetdB 103.35)"),
-                                        (os.path.join(top, "empty"), 0.0, "no level base on record")):
+                                        (os.path.join(top, "empty"), 0.0, "no level base on record"),
+                                        (bad, 0.0, "level base not read")):
             os.makedirs(project, exist_ok=True)
             out, err = io.StringIO(), io.StringIO()
             with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
