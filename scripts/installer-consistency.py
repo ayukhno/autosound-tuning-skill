@@ -2559,7 +2559,8 @@ def powershell_env(environ=None):
 
 #: The functions of install.ps1 that its end and its probes need, cut out as they stand.
 PS1_RUN_FUNCTIONS = ("Stop-Installer", "Write-Receipt", "Enter-Change", "Enter-TentativeChange",
-                     "Undo-TentativeChange", "Invoke-Upstream", "Sync-MethodCheckout",
+                     "Undo-TentativeChange", "Get-PathStamps", "Test-PathsChanged", "Select-ToolReason",
+                     "Invoke-Upstream", "Sync-MethodCheckout",
                      "Save-LocalChanges", "Add-Missing", "Say", "Warn", "Pretty", "Run", "Test-Quiet",
                      "Test-ReleaseTag", "Test-SettledByName", "Select-MethodRef", "Select-NewestOnChannel")
 #: #164, #171: install.ps1's tag pick over a stand-in tag list -- Read-ReleaseTags answers $script:StubTags, or nothing
@@ -2603,7 +2604,12 @@ PS1_ARM_AFTER_GIT = ('$HaveGit = $false\n$Scratch = Join-Path $env:LOCALAPPDATA 
                      'if ($n -eq "git") { return (Test-Path $script:GitMarker) }; return $false }\n'
                      'function git { "git version 2.0 (a stand-in)" }\n'
                      # winget's chatter on its output: Run's answer is the step's, not the lines winget printed.
-                     'function winget { Write-Output "Found Git [Git.Git]"; '
+                     # Built from char codes: the case file is read in the ANSI code page by Windows PowerShell.
+                     '$script:Bar = ([string][char]0x2588) * 12 + ([string][char]0x2592) * 8\n'
+                     'function winget { Write-Output "Found Git [Git.Git] Version 2.0"; '
+                     'Write-Output ("-`r\\`r|`r/"); Write-Output ("  " + $script:Bar + "  1.2 MB / 58.3 MB"); '
+                     'Write-Output "  42%"; Write-Output ""; '
+                     'if ($script:WingetRc -ne 0) { Write-Output "Installer failed with exit code: 1602" }; '
                      'if ($script:StopInside) { Stop-Installer 1; return }; '
                      'if ($script:Leaves) { Set-Content -Path $script:GitMarker -Value "" }; '
                      '$global:LASTEXITCODE = $script:WingetRc }\n'
@@ -2626,6 +2632,13 @@ PS1_CLAUDE_EXE = 'Set-Content -Path (Join-Path $LocalBin "claude.exe") -Value ""
 PS1_CLAUDE_DOWNLOADS = 'New-Item -ItemType Directory -Force -Path (Join-Path $env:USERPROFILE ".claude\\downloads") | Out-Null; '
 PS1_CLAUDE_SHARE = 'New-Item -ItemType Directory -Force -Path (Join-Path $env:USERPROFILE ".local\\share\\claude") | Out-Null; '
 PS1_UV_EXE = 'Set-Content -Path (Join-Path $LocalBin "uv.exe") -Value ""; '
+#: A folder that was there before the call, a day old -- an earlier attempt's, or a toolchain uv already holds (#180).
+PS1_AGED = ('function New-Aged {{ param($Path) New-Item -ItemType Directory -Force -Path $Path | Out-Null; '
+            '(Get-Item -LiteralPath $Path).LastWriteTimeUtc = (Get-Date).ToUniversalTime().AddDays(-1) }}\n'
+            'New-Aged {path}\n')
+PS1_DOWNLOADS = '(Join-Path $env:USERPROFILE ".claude\\downloads")'
+PS1_VERSIONS = '(Join-Path $env:USERPROFILE ".local\\share\\claude\\versions")'
+PS1_TOOLCHAIN = '(Join-Path $env:APPDATA "uv\\python\\cpython-3.12.7-windows-x86_64-none")'
 #: Python's: `& $Uv python install` reaches a stand-in uv; python3 is a .cmd outside ~\.local\bin, so the receipt's own
 #: python3 probe does not run it.
 PS1_ARM_AFTER_PY = ('$Py3 = Join-Path $env:LOCALAPPDATA "py\\python3.cmd"\n'
@@ -2642,7 +2655,8 @@ WINGET_REBOOT_TO_FINISH = -1978334967
 #: none after, disarmed; "kept-armed" -- armed by an earlier step, which a failure here does not undo.
 PS1_ARM_AFTER_CASES = (
     ("git-winget-fails-nothing-left", ("git",), "$script:Winget = $true\n$script:WingetRc = 1\n$script:Leaves = $false\n",
-     1, "kept", ("winget ended 1", "git is still not found")),
+     1, "kept", ("winget ended 1 (0x00000001)", "winget: Found Git [Git.Git] Version 2.0",
+                 "winget: Installer failed with exit code: 1602", "git is still not found")),
     ("git-winget-fails-git-left", ("git",), "$script:Winget = $true\n$script:WingetRc = 1\n$script:Leaves = $true\n",
      0, "armed", ("OK   git version",)),
     ("git-winget-says-0-no-git-yet", ("git",), "$script:Winget = $true\n$script:WingetRc = 0\n$script:Leaves = $false\n",
@@ -2651,6 +2665,9 @@ PS1_ARM_AFTER_CASES = (
      "$script:Leaves = $false\n", 1, "armed", ("git is still not found",)),
     ("git-winget-installs", ("git",), "$script:Winget = $true\n$script:WingetRc = 0\n$script:Leaves = $true\n",
      0, "armed", ("OK   git version",)),
+    ("git-winget-already-armed-fails", ("git",), "$script:ReceiptArmed = $true\n$script:Winget = $true\n"
+     f"$script:WingetRc = {WINGET_REBOOT_TO_FINISH + 2}\n$script:Leaves = $false\n", 1, "armed",
+     ("winget ended -1978334965 (0x8A15010B)",)),
     ("git-stop-during-winget", ("git",), "$script:Winget = $true\n$script:WingetRc = 0\n$script:Leaves = $false\n"
      "$script:StopInside = $true\n", 1, "armed", ()),
     ("git-download-fails", ("git",), "$script:Winget = $false\n$script:DownloadFails = $true\n$script:Leaves = $false\n",
@@ -2670,6 +2687,15 @@ PS1_ARM_AFTER_CASES = (
     ("claude-fails-downloads-left", ("claude",), PS1_UPSTREAM.format(leave=PS1_CLAUDE_DOWNLOADS, ok="false"), 0,
      "armed", ()),
     ("claude-fails-share-left", ("claude",), PS1_UPSTREAM.format(leave=PS1_CLAUDE_SHARE, ok="false"), 0, "armed", ()),
+    ("claude-fails-downloads-from-before", ("claude",), PS1_AGED.format(path=PS1_DOWNLOADS)
+     + PS1_UPSTREAM.format(leave="", ok="false"), 0, "kept", ()),
+    ("claude-fails-downloads-touched", ("claude",), PS1_AGED.format(path=PS1_DOWNLOADS) + PS1_UPSTREAM.format(
+        leave=f'Set-Content -Path (Join-Path {PS1_DOWNLOADS} "claude.exe") -Value ""; ', ok="false"), 0, "armed", ()),
+    ("claude-fails-versions-from-before", ("claude",), PS1_AGED.format(path=PS1_VERSIONS)
+     + PS1_UPSTREAM.format(leave="", ok="false"), 0, "kept", ()),
+    ("claude-fails-new-version", ("claude",), PS1_AGED.format(path=PS1_VERSIONS) + PS1_UPSTREAM.format(
+        leave=f'New-Item -ItemType Directory -Force -Path (Join-Path {PS1_VERSIONS} "2.0.0") | Out-Null; ', ok="false"),
+     0, "armed", ()),
     ("claude-installs", ("claude",), PS1_UPSTREAM.format(leave=PS1_CLAUDE_EXE, ok="true"), 0, "armed",
      ("MANIFEST claude ARMED=True",)),
     ("claude-stop-during", ("claude",), PS1_UPSTREAM.format(leave="Stop-Installer 1; ", ok="true"), 1, "armed", ()),
@@ -2684,6 +2710,11 @@ PS1_ARM_AFTER_CASES = (
     ("python-fails-python3-left", ("python",), PS1_ARM_AFTER_PY.format(leave=PS1_PY3, rc=1), 0, "armed", ()),
     ("python-fails-toolchain-left", ("python",), PS1_ARM_AFTER_PY.format(leave=PS1_PY_TOOLCHAIN, rc=1), 0, "armed",
      ("python3.exe did not appear",)),
+    # The common one: uv holds 3.12 already, ~\.local\bin\python3.exe is missing, and the link step fails.
+    ("python-fails-toolchain-from-before", ("python",), PS1_AGED.format(path=PS1_TOOLCHAIN)
+     + PS1_ARM_AFTER_PY.format(leave="", rc=1), 0, "kept", ("python3.exe did not appear",)),
+    ("python-fails-toolchain-touched", ("python",), PS1_AGED.format(path=PS1_TOOLCHAIN) + PS1_ARM_AFTER_PY.format(
+        leave=f'Set-Content -Path (Join-Path {PS1_TOOLCHAIN} "python.exe") -Value ""; ', rc=1), 0, "armed", ()),
     ("python-installs", ("python",), PS1_ARM_AFTER_PY.format(leave=PS1_PY3, rc=0), 0, "armed", ()),
     ("python-stop-during", ("python",), PS1_ARM_AFTER_PY.format(leave="Stop-Installer 1; return; ", rc=0), 1, "armed",
      ()),
@@ -2712,7 +2743,16 @@ def ps1_arm_after_run_problems(ps1, run_case, earlier, tmp, shell_name):
     if lacking:
         return [f"install.ps1: no {lacking} step to run under {shell_name} (#180)"]
     out = []
+    never_by_case = {"git-winget-fails-nothing-left": ("1.2 MB / 58.3 MB", "42%", "winget: -", "winget: /"),
+                     "git-winget-installs": ("winget:", "winget ended", "58.3 MB"),
+                     "git-winget-fails-git-left": ("58.3 MB",)}
+    plain = {"kept": "the earlier receipt put back byte for byte and unarmed",
+             "kept-armed": "the earlier receipt untouched and still armed (an earlier step armed it)",
+             "kept-dry": "the earlier receipt untouched (a dry run writes nothing)",
+             "none": "no receipt after (there was none before) and unarmed",
+             "armed": "the receipt `stopped`" }
     for case, keys, stand_ins, want_rc, want, words in PS1_ARM_AFTER_CASES:
+        never = never_by_case.get(case, ())
         body = ("$script:ReceiptArmed = $false\n" + PS1_ARM_AFTER_HEAD + (PS1_ARM_AFTER_GIT if "git" in keys else "")
                 + stand_ins + "".join(blocks[k].group(0) for k in keys)
                 + 'Write-Host "ARMED=$($script:ReceiptArmed)"\nWrite-Host "END"\n')
@@ -2725,12 +2765,16 @@ def ps1_arm_after_run_problems(ps1, run_case, earlier, tmp, shell_name):
                    "armed": isinstance(receipt, dict) and receipt.get("status") == "stopped"}[want]
         flag_ok = want_rc != 0 or want == "kept-dry" or (
             armed_at_end is not None and armed_at_end.group(1) == ("True" if want in ("armed", "kept-armed") else "False"))
-        if rc != want_rc or (want_rc == 0 and "END" not in said) or any(w not in said for w in words) or not file_ok \
+        missing_words = [w for w in words if w not in said]
+        said_never = [w for w in never if w in said]
+        if rc != want_rc or (want_rc == 0 and "END" not in said) or missing_words or said_never or not file_ok \
                 or not flag_ok:
-            out.append(f"install.ps1's {'+'.join(keys)} step under {shell_name}, {case}: exit {rc}, receipt "
-                       f"{got[:120]!r}, {armed_at_end.group(0).strip() if armed_at_end else 'no ARMED= line'} -- want "
-                       f"{want_rc}, {' + '.join(map(repr, words)) or 'its end'} and the receipt {want} -- said "
-                       f"{said.strip()[-300:]!r} (#180)")
+            out.append(f"install.ps1's {' + '.join(keys)} step under {shell_name}, case {case}: want exit {want_rc} and "
+                       f"{plain[want]}{' (armed at its end)' if want == 'armed' and want_rc == 0 else ''} -- got exit "
+                       f"{rc}, receipt {got[:120]!r}, {armed_at_end.group(0).strip() if armed_at_end else 'no ARMED= line'}"
+                       + (f"; did not say {missing_words}" if missing_words else "")
+                       + (f"; said {said_never}, which it must not" if said_never else "")
+                       + f" -- said {said.strip()[-300:]!r} (#180)")
     return out
 
 
@@ -2940,7 +2984,10 @@ def ps1_run_problems(ps1):
                                f"{got[:120]!r} -- want {want_rc}, {word!r} and "
                                f"{'the earlier receipt byte for byte' if want == 'kept' else 'status ' + repr(want)} -- "
                                f"said {said.strip()[-300:]!r} (#160)")
-        out.extend(ps1_arm_after_run_problems(ps1, run_case, earlier, tmp, Path(shell).name))
+        # #180: Windows alone, as ps1_tcc_pins_problems -- the cases stand in %APPDATA%, %USERPROFILE%, .exe and .cmd
+        # files and winget; the Ubuntu job's pwsh runs the rest of this function as before.
+        if os.name == "nt":
+            out.extend(ps1_arm_after_run_problems(ps1, run_case, earlier, tmp, Path(shell).name))
         rc, said, _ = run_case("probes", probes)
         want = {"Q-absent": "False", "Q-zero": "True", "Q-three": "False", "R-absent": "False", "R-zero": "True",
                 "R-three": "False"}
@@ -3279,6 +3326,37 @@ def ps1_arm_after_problems(ps1):
             or "return ($null -ne $LASTEXITCODE -and $LASTEXITCODE -eq 0)" not in upstream.group(0):
         out.append("install.ps1 Invoke-Upstream: does not clear $global:LASTEXITCODE to $null and answer `$null -ne "
                    "$LASTEXITCODE -and $LASTEXITCODE -eq 0` -- a child that could not start reads as one that ran (#180)")
+    # The re-review: a leftover that was there before the call is not this run's change -- Claude Code's, uv's and
+    # Python's steps stamp what the call may leave before it (Get-PathStamps) and ask Test-PathsChanged after it.
+    for name, call, undo_if in (("Claude Code", 'Invoke-Upstream "https://claude.ai/install.ps1"',
+                                 "if (-not $claudeRan -and -not (Test-PathsChanged $claudeBefore $claudeLeaves))"),
+                                ("uv", 'Invoke-Upstream "https://astral.sh/uv/',
+                                 "if (-not $uvRan -and -not (Test-PathsChanged $uvBefore $uvLeaves))"),
+                                ("Python 3.12", "& $Uv python install 3.12",
+                                 "if (-not $pyRan -and -not (Test-PathsChanged $pyBefore $pyLeaves))")):
+        at = ps1.find(call)
+        var = undo_if.split("Test-PathsChanged ")[1].split()[0]
+        stamp = ps1.rfind(f"{var} = Get-PathStamps ", 0, at) if at >= 0 else -1
+        if at < 0 or stamp < 0 or at - stamp > 600 or not 0 < ps1.find(undo_if, at) - at < 900:
+            out.append(f"install.ps1's {name} step does not stamp what its call may leave before it ({var} = "
+                       f"Get-PathStamps ...) and undo only when `{undo_if}` -- a leftover from before then reads as "
+                       f"this run's change (#180)")
+    git_step = ps1[ps1.find('Step "Git for Windows"'):ps1.find('Step "Claude Code"')]
+    winget_line = next((ln for ln in git_step.splitlines() if "winget install --id Git.Git -e" in ln), "")
+    if "[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false" not in git_step \
+            or not re.search(r"\} finally \{\s*\n\s*if \(\$encoding\) \{ try \{ \[Console\]::OutputEncoding = \$encoding",
+                             git_step) or "Out-Host" in winget_line or "$script:WingetSaid = @(" not in winget_line \
+            or "Select-ToolReason $script:WingetSaid" not in git_step \
+            or """Warn ("winget ended $wingetRc ({0})" -f ('0x{0:X8}' -f $wingetRc))""" not in git_step:
+        out.append("install.ps1's Git step: winget's output is not read back under UTF-8 ([Console]::OutputEncoding set "
+                   "around the call and put back in a finally, the lines in $script:WingetSaid, none to Out-Host) and "
+                   "said on a failure through Select-ToolReason after `winget ended <code> (0x<hex>)` -- Windows "
+                   "PowerShell decodes it in the console's code page (#180)")
+    if "$null -ne $p.ExitCode" not in git_step:
+        out.append("install.ps1's Git step: the official installer's code is read without `$null -ne $p.ExitCode` (#180)")
+    if not enter or 'Warn "the receipt (' not in enter.group(0):
+        out.append("install.ps1 Enter-TentativeChange: a receipt that cannot be read is not said -- want a Warn naming "
+                   "the file and that a stop now says `stopped` (#180)")
     for name, start, calls, end in PS1_ARM_AFTER:
         s = ps1.find(start)
         e = ps1.find(end, s + 1) if s >= 0 else -1
@@ -4115,8 +4193,11 @@ def main():
     elif ps1_ran:
         checked.append(f"install.ps1 run under {Path(find_powershell()).name}: its end (ready, not ready, ready with "
                        f"nothing changed); Run and Test-Quiet (#142); the receipt kept before the first change and "
-                       f"`stopped` after it (#160); Git's, Claude Code's, uv's and Python's steps armed before their "
-                       f"call, put back when it failed and left nothing, a dry run writing none (#180); the tag pick, Sync-MethodCheckout's dry "
+                       f"`stopped` after it (#160); "
+                       + ("Git's, Claude Code's, uv's and Python's steps armed before their call, put back when it "
+                          "failed and changed nothing, a dry run writing none (#180); " if os.name == "nt" else
+                          "NOT the four steps' receipt (Windows alone, #180); ")
+                       + f"the tag pick, Sync-MethodCheckout's dry "
                        f"runs and the UNSIGNED line "
                        f"(#164, #171); the module path over SQL Server's entry and over pwsh's, and Invoke-Upstream's "
                        f"child (#161)")

@@ -203,9 +203,50 @@ function Enter-TentativeChange {
             $script:TentativeBytes = $null
             if (Test-Path -LiteralPath $file -PathType Leaf) { $script:TentativeBytes = [System.IO.File]::ReadAllBytes($file) }
             $script:TentativeHeld = $true
-        } catch { $script:TentativeBytes = $null }
+        } catch {
+            $script:TentativeBytes = $null
+            Warn "the receipt ($(Pretty $file)) could not be read to keep ($($_.Exception.Message)): a stop from here says stopped"
+        }
     }
     Enter-Change
+}
+# What a call may leave, as it stands (#180, the re-review): for each path -- a wildcard allowed, as uv's
+# cpython-3.12* -- every match and its direct children with their last write, or "" when nothing is there. A leftover
+# from before the call that the call did not touch is not this run's change: uv already holding 3.12, or an earlier
+# attempt's ~\.claude\downloads, read as one, and a later stop wrote `stopped` over a good receipt. One level down is
+# where the installers add: a file in downloads, a version folder in share\claude\versions, a file in the toolchain.
+function Get-PathStamps {
+    param([string[]]$Paths)
+    $stamps = @{}
+    foreach ($p in $Paths) {
+        $found = if ($p -match '[*?]') { @(Get-Item -Path $p -Force -ErrorAction SilentlyContinue) }
+                 else { @(Get-Item -LiteralPath $p -Force -ErrorAction SilentlyContinue) }
+        $seen = @(foreach ($f in $found) {
+            $f
+            if ($f.PSIsContainer) { Get-ChildItem -LiteralPath $f.FullName -Force -ErrorAction SilentlyContinue }
+        })
+        $stamps[$p] = (@($seen | ForEach-Object { "$($_.FullName)|$($_.LastWriteTimeUtc.Ticks)" }) -join "`n")
+    }
+    return $stamps
+}
+# Did any of $Paths appear or change since Get-PathStamps took $Before? (#180)
+function Test-PathsChanged {
+    param([hashtable]$Before, [string[]]$Paths)
+    $after = Get-PathStamps $Paths
+    foreach ($p in $Paths) { if ($after[$p] -ne $Before[$p]) { return $true } }
+    return $false
+}
+# A tool's own words for a failure (#180): the last few of the lines it printed, less its progress -- each line's last
+# carriage-return frame, and none made only of bar, block, box or spinner characters, sizes and percentages.
+function Select-ToolReason {
+    param([string[]]$Lines, [int]$Count = 5)
+    $kept = @(foreach ($l in $Lines) {
+        $frame = @("$l" -split "`r" | Where-Object { $_.Trim() }) | Select-Object -Last 1
+        if (-not $frame) { continue }
+        if ($frame -match '^[\s\-\\|/\u2580-\u259F\u2500-\u257F]*([0-9.,]+\s*(%|[KMGT]?B)(\s*/\s*[0-9.,]+\s*[KMGT]?B)?)?\s*$') { continue }
+        $frame.Trim()
+    })
+    return @($kept | Select-Object -Last $Count)
 }
 function Undo-TentativeChange {
     if (-not $script:TentativeHeld) { return }
@@ -1120,13 +1161,26 @@ if (-not $HaveGit) {
     $gitRan = $false
     if (Have winget) {
         Say "through winget..."
-        # winget's lines to the screen, not into Run's answer (CI 38542204702): its reason -- "already installed",
-        # "Installer failed with exit code 1602" -- is what the person needs, and $LASTEXITCODE stays winget's.
-        $gitRan = Run { winget install --id Git.Git -e --source winget --accept-package-agreements --accept-source-agreements --silent | Out-Host } "winget install --id Git.Git"
-        $wingetRc = $LASTEXITCODE
+        # winget's words are read back, not shown as they come (#180): Windows PowerShell decodes a native command's
+        # output in the console's code page and winget writes UTF-8 -- its progress bars, and on a Ukrainian or Russian
+        # Windows its reason too, came out as garbage. UTF-8 for the call, put back after. Into $script:WingetSaid, not
+        # Run's answer (CI 38542204702); on a failure its last lines that are not progress are said -- "already
+        # installed", "Installer failed with exit code 1602". $LASTEXITCODE stays winget's.
+        $script:WingetSaid = @()
+        $encoding = $null
+        try { $encoding = [Console]::OutputEncoding; [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false } catch { $null = $_ }
+        try {
+            $gitRan = Run { $script:WingetSaid = @(winget install --id Git.Git -e --source winget --accept-package-agreements --accept-source-agreements --silent | ForEach-Object { "$_" }) } "winget install --id Git.Git"
+            $wingetRc = $LASTEXITCODE
+        } finally {
+            if ($encoding) { try { [Console]::OutputEncoding = $encoding } catch { $null = $_ } }
+        }
         # 0x8A150109, "restart your PC to finish installation": Git is installed.
         if (-not $gitRan -and $wingetRc -eq -1978334967) { $gitRan = $true }
-        if (-not $gitRan -and $null -ne $wingetRc) { Warn "winget ended $wingetRc" }
+        if (-not $gitRan -and $null -ne $wingetRc) {
+            Warn ("winget ended $wingetRc ({0})" -f ('0x{0:X8}' -f $wingetRc))
+            foreach ($line in (Select-ToolReason $script:WingetSaid)) { Warn "  winget: $line" }
+        }
     } else {
         # No winget (older Windows 10, or a Store-less build): the official installer, silently.
         $g = Get-LatestAsset "git-for-windows/git" ("^Git-.*-" + $(if ($Arch -eq "arm64") { "arm64" } else { "64-bit" }) + "\.exe$")
@@ -1157,7 +1211,7 @@ if (-not $HaveGit) {
                         # It ran, whatever it ended (#180): the receipt stays armed; its code is said.
                         $p = Start-Process -FilePath $tmp -ArgumentList "/VERYSILENT", "/NORESTART" -Wait -PassThru
                         $gitRan = $true
-                        if ($p -and $p.ExitCode -ne 0) { Warn "the Git installer ended $($p.ExitCode)" }
+                        if ($p -and $null -ne $p.ExitCode -and $p.ExitCode -ne 0) { Warn "the Git installer ended $($p.ExitCode)" }
                     }
                 } catch { Warn "the Git installer did not run: $($_.Exception.Message)" }
                 Remove-Item $tmp -Force -ErrorAction SilentlyContinue
@@ -1183,14 +1237,15 @@ if ($ClaudeBin) {
     Say "OK   $(& $ClaudeBin --version 2>$null)"
 } else {
     # Invoke-Upstream says whose script runs, so the step does not say it first (skill #96: it read twice).
-    # Armed before it runs (#180), so a stop during its download says `stopped`; put back when it failed and left
-    # nothing: no claude.exe, and none of what its installer writes before it -- ~\.claude\downloads and
-    # ~\.local\share\claude, under $env:USERPROFILE, where claude.ai/install.ps1 writes them.
+    # Armed before it runs (#180), so a stop during its download says `stopped`; put back when it failed and changed
+    # nothing: claude.exe and what its installer writes before it -- ~\.claude\downloads and ~\.local\share\claude,
+    # under $env:USERPROFILE, where claude.ai/install.ps1 writes them -- as they stood before the call.
+    $claudeLeaves = @((Join-Path $LocalBin "claude.exe"), (Join-Path $env:USERPROFILE ".claude\downloads"),
+                      (Join-Path $env:USERPROFILE ".local\share\claude"))
+    $claudeBefore = Get-PathStamps $claudeLeaves
     Enter-TentativeChange
     $claudeRan = Invoke-Upstream "https://claude.ai/install.ps1" "Claude Code"
-    $claudeLeft = @((Join-Path $LocalBin "claude.exe"), (Join-Path $env:USERPROFILE ".claude\downloads"),
-                    (Join-Path $env:USERPROFILE ".local\share\claude")) | Where-Object { Test-Path $_ }
-    if (-not $claudeRan -and -not $claudeLeft) { Undo-TentativeChange }
+    if (-not $claudeRan -and -not (Test-PathsChanged $claudeBefore $claudeLeaves)) { Undo-TentativeChange }
     if ($claudeRan) {
         Sync-ProcessPath
         if (Test-Path (Join-Path $LocalBin "claude.exe")) { Add-ManifestEntry "claude" }
@@ -1215,10 +1270,12 @@ if ($Uv) {
 } else {
     # PINNED -- see the same note in install.sh; the two versions must match, and
     # installer-consistency.py fails when they drift. The URL Invoke-Upstream prints carries the pin.
-    # Armed before it runs and put back when it failed and left no uv.exe (#180), as Claude Code's.
+    # Armed before it runs and put back when it failed and changed no uv.exe (#180), as Claude Code's.
+    $uvLeaves = @((Join-Path $LocalBin "uv.exe"))
+    $uvBefore = Get-PathStamps $uvLeaves
     Enter-TentativeChange
     $uvRan = Invoke-Upstream "https://astral.sh/uv/$UvVersion/install.ps1" "uv"
-    if (-not $uvRan -and -not (Test-Path (Join-Path $LocalBin "uv.exe"))) { Undo-TentativeChange }
+    if (-not $uvRan -and -not (Test-PathsChanged $uvBefore $uvLeaves)) { Undo-TentativeChange }
     if ($uvRan) {
         Sync-ProcessPath
         if (Test-Path (Join-Path $LocalBin "uv.exe")) { Add-ManifestEntry "uv" }
@@ -1234,12 +1291,15 @@ if ($Uv) {
         Say "OK   $(& $Py3 -V 2>&1) at $(Pretty $Py3)"
     } else {
         Say "Python 3.12, as this profile's python, python3 and python3.12..."
-        # Armed before it runs and put back when it failed and left nothing (#180), as uv's: no python3.exe, and no
-        # toolchain in %APPDATA%\uv\python -- uv can fail at the link step with Python already there. Its lines to the
-        # screen, as winget's.
+        # Armed before it runs and put back when it failed and changed nothing (#180), as uv's: python3.exe and the
+        # toolchain in %APPDATA%\uv\python as they stood before -- uv can fail at the link step with a new Python
+        # already there, and a 3.12 it held before is not this run's. Its output to Out-Null: with --quiet it prints
+        # nothing there, and its errors go to stderr, which reaches the screen as uv wrote it.
+        $pyLeaves = @($Py3, (Join-Path $env:APPDATA "uv\python\cpython-3.12*"))
+        $pyBefore = Get-PathStamps $pyLeaves
         Enter-TentativeChange
-        $pyRan = Run { & $Uv python install 3.12 --default --quiet | Out-Host } "uv python install 3.12 --default"
-        if (-not $pyRan -and -not (Test-Path $Py3) -and -not (Test-Path (Join-Path $env:APPDATA "uv\python\cpython-3.12*"))) { Undo-TentativeChange }
+        $pyRan = Run { & $Uv python install 3.12 --default --quiet | Out-Null } "uv python install 3.12 --default"
+        if (-not $pyRan -and -not (Test-PathsChanged $pyBefore $pyLeaves)) { Undo-TentativeChange }
         if (Test-Path $Py3) { Say "OK   $(& $Py3 -V 2>&1) at $(Pretty $Py3)" }
         elseif (-not $DryRun) { Warn "python3.exe did not appear in $(Pretty $LocalBin); the method's tools will not run until it does." }
     }
