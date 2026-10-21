@@ -298,7 +298,16 @@ appended line is fsynced (and the folder, when the append made the file), so it 
   REW's states is the check's refusal, nothing recorded: REW down 69 (`REW did not answer (<why>)`,
   with "start REW"), any other state 1 (`REW's measurement list was not read (<why>)`) -- never
   `verify`'s own read of the index standing in for the first. The error class names its own
-  `rew_state`, `changed`, and `rew_changed` on its class.
+  `rew_state`, `changed`, and `rew_changed` on its class. With `--session` the drift record's
+  impulses are pulled by the same listing (`verify.session_report(..., measurements=…)`), so the read
+  after the pulls comes after theirs too; they looked the controls up in REW's index again, a take
+  landing between the reads pulled by the newer one. A record with no uuid or no date has none said
+  in `<what>`.
+- **A not-checked capture keeps why** (#184). A verdict `verify` did not check -- `applicable: false`
+  -- carries `why`, `not_a_sweep` (an RTA) or `outside_band` (its own range wholly outside the band),
+  and `capture-check` keeps it on the capture's `verified` in `checks` and in its `taken` row, beside
+  the session rows: what a front end's card reads. A verdict with no `why` (a `verify` from before
+  #184) stores none.
 - **Nothing is cleared over work that is only in the chat** (S-044). `handoff` answers one question — is everything the
   NEXT session needs on disk — and REFUSES while it is not: no phase recorded, an open capture round, a plan step left
   `todo`/`in_progress`, a done step whose evidence resolves to nothing, no ledger snapshot, a `tuning-changelog` with no

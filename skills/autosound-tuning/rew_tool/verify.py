@@ -30,6 +30,7 @@ stdlib only (plus this package's own `rew_api`/`analysis`), py3.9+.
 from __future__ import annotations
 
 import contextlib
+import functools
 import io
 import json
 import os
@@ -425,15 +426,17 @@ class _ImpulseNotRead(Exception):
     impulse_not_read = True
 
 
-def _rew_ir_of(title):
-    """The impulse response REW holds under `title`, or None when REW gives it with no samples.
+def _rew_ir_of(title, measurements=None):
+    """The impulse response REW holds under `title`, or None when REW gives it with no samples. Looked up in
+    `measurements`, REW's index as the caller read it, when given (#183's group seat): the drift's pulls by the
+    listing the checks pulled by, never a read of the index of their own.
 
     REW's own answer -- down, no such title, a title held twice, an error, something it cannot read -- raises
     `_ImpulseNotRead` naming the title and REW's words: the drift record falls back to the peak times it already
     has and says why (H 11); it swallowed every failure and said "peak times" alone. Anything else is a bug, raised
     as it is."""
     try:
-        mid = _api.find_measurement_id(title, exact=True)
+        mid = _api.find_measurement_id(title, measurements, exact=True)
         # Raw, the same convention as every reader; the cross-correlation below is scale-free.
         times, ir = _api.get_impulse_response(mid, normalised=False)
     except Exception as exc:  # noqa: BLE001 -- sorted: REW's states are said, anything else is raised as it is
@@ -444,7 +447,7 @@ def _rew_ir_of(title):
     return ir if ir else None
 
 
-def session_report(verdicts, processing_rate_hz=None, ir_of=_rew_ir_of):
+def session_report(verdicts, processing_rate_hz=None, ir_of=_rew_ir_of, measurements=None):
     """The whole capture session in one table (Phase 0.6): every sweep's level and impulse side
     by side, the loudest and the quietest channel, and the ctl1->ctl3 drift as the DRIFT RECORD.
 
@@ -462,7 +465,10 @@ def session_report(verdicts, processing_rate_hz=None, ir_of=_rew_ir_of):
     `ir_of(title)` fetches an impulse response (REW by default; a file reader offline): with both
     controls' IRs the drift is their cross-correlation peak to a fraction of a sample; without
     them it falls back to the peak times in the verdicts and the record says which -- and, when REW
-    gave no impulse, why (`ir_not_read`, H 11).
+    gave no impulse, why (`ir_not_read`, H 11). `measurements`, given, is REW's index the verdicts were pulled by,
+    and the default reader looks the controls up in it (#183's group seat): `process.py capture-check --session`
+    judges one listing of REW's, and a look-up of the drift's own was a third read, a take landing between them
+    pulled by the newer one. A reader of the caller's own is called as it is.
 
     A control is "missing" only when it was asked for and REW holds no such title -- ctl1 too, which
     the line called "present" whatever REW held (O2). Not asked for, or asked while REW's list could
@@ -470,6 +476,8 @@ def session_report(verdicts, processing_rate_hz=None, ir_of=_rew_ir_of):
     read, `not_read` with `stopped` (O2: "an impulse on both missing"); held twice in REW, the record
     names it (`ambiguous`, H I-8).
     """
+    if measurements is not None and ir_of is _rew_ir_of:
+        ir_of = functools.partial(_rew_ir_of, measurements=measurements)
     rows = []
     for v in verdicts:
         st = v.get("stats") or {}

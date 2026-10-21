@@ -1296,17 +1296,24 @@ def _rew_snapshot(records, keys):
             continue
         key = title_key(str(record.get("title", "")))
         if key in out:
-            out[key].append((str(ordinal), str(record.get("uuid")), str(record.get("date")),
-                             str(record.get("title", ""))))
-    return {key: sorted(rows) for key, rows in out.items()}
+            out[key].append((str(ordinal), record.get("uuid"), record.get("date"), str(record.get("title", ""))))
+    # None kept as None (the Captures group seat): stored as text, a record with no uuid or no date said "None" in the
+    # refusal. Sorted by the text, so a None beside a value never meets `<`.
+    return {key: sorted(rows, key=lambda row: tuple("" if x is None else str(x) for x in row))
+            for key, rows in out.items()}
 
 
 def _rew_change(before, after):
     """What changed between two `_rew_snapshot`s of the same keys, in a few words, or None when nothing did (#183): a
     title gone, a title appeared, one held under a second spelling now, or one at another ordinal or uuid."""
     def said(rows):
-        return " and ".join(f"{title} (index {ordinal}, uuid {uuid}{'' if date is None else f', {date}'})"
-                            for ordinal, uuid, date, title in rows)
+        out = []
+        for ordinal, uuid, date, title in rows:
+            # A uuid or a date REW lists none of is left out, never said "None" (the Captures group seat).
+            facts = ([f"index {ordinal}"] + ([] if uuid is None else [f"uuid {uuid}"])
+                     + ([] if date is None else [str(date)]))
+            out.append(f"{title} ({', '.join(facts)})")
+        return " and ".join(out)
 
     def titles(rows):
         return " and ".join(row[-1] for row in rows)
@@ -3270,6 +3277,10 @@ class Process:
                 "at": _now(),
                 "issues": list(verdict.get("issues") or []),
             }
+            if verdict.get("why"):
+                # Why it was not checked (#184; the Captures group seat): not a sweep, or outside the band -- on the
+                # capture's own `verified`, what TCC's card reads, not only on the session rows.
+                verified["why"] = verdict["why"]
             if verdict.get("ambiguous"):
                 verified["ambiguous"] = verdict["ambiguous"]   # REW holds it more than once (H I-8): rename it
             if verdict.get("ambiguous_titles"):
@@ -3315,7 +3326,10 @@ class Process:
                              f"the measurement")
         session_probe = None
         if session and hasattr(verifier, "session_report"):
-            probe = verifier.session_report(verdicts, processing_rate_hz=proc_rate if capture_rates else None)
+            # The drift's impulses pulled by the one listing too (#183's group seat), never a look-up of their own.
+            rate_for = proc_rate if capture_rates else None
+            probe = (verifier.session_report(verdicts, processing_rate_hz=rate_for) if records is None
+                     else verifier.session_report(verdicts, processing_rate_hz=rate_for, measurements=records))
             session_probe = {"at": _now(), "spread": probe["spread"], "drift": probe["drift"],
                              "capture_rates_hz": probe["capture_rates_hz"], "rows": probe["rows"],
                              # The rows brought to one SPL calibration when REW's differ inside the round (#176).
@@ -8262,7 +8276,7 @@ def _check_a_check_judges_one_snapshot_of_rew():
                 rew.listings, rew.calls = [first, second], []
                 rc, out, err = _run_main(["process.py", d, "capture-check"])
                 if not (rc == EXIT_REW_UNAVAILABLE and "REW changed while it was read — run capture-check again" in err
-                        and "start REW" not in err and not out.strip()):
+                        and "start REW" not in err and not out.strip() and "None" not in err):
                     failures.append(f"{what}: {rc} {out!r} {err!r}")
                 if _project_bytes(d) != before:
                     failures.append(f"{what}: the check wrote over a REW that changed while it was read")
@@ -8275,6 +8289,52 @@ def _check_a_check_judges_one_snapshot_of_rew():
                         failures.append(f"{what}: refused as REW down, not as REW changed: {exc}")
                 if _project_bytes(d) != before:
                     failures.append(f"{what}: check_captures wrote over a REW that changed while it was read")
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n".join(failures)
+
+
+def _check_a_session_drift_reads_the_one_listing():
+    """#183's group seat: `capture-check --session` pulls the controls' impulses for the drift record by the same
+    listing the checks pulled by -- `verify.session_report(..., measurements=records)` -- never by a look-up of its
+    own: `_rew_ir_of` asked REW's index again for each control's title, a third and a fourth read, a take landing
+    between them judged by the older one, and the read after the pulls was no longer the second. Two index reads, the
+    first before every pull and the second after the drift's; and REW moving between them refuses, exit 69, nothing
+    written -- no `session` on the round."""
+    import shutil
+    import tempfile
+    rec = _SnapshotRew.rec
+    names = ["m-L-ctl1_1 (sw)", "m-L-ctl3_1 (sw)"]
+    first = {"1": rec(names[0], "u1"), "2": rec(names[1], "u2")}
+    moved = {"1": rec(names[1], "u2"), "2": rec(names[0], "u1")}
+    top = tempfile.mkdtemp(prefix="autosound_process_session_snapshot_")
+    failures = []
+
+    def fresh():
+        d = os.path.join(tempfile.mkdtemp(dir=top), "process")
+        p = Process(d)
+        p.enter_phase("-1")
+        p.start_capture("1", expected=list(names))
+        return d, p
+    try:
+        with _SnapshotRew() as rew:
+            d, p = fresh()
+            rew.listings, rew.calls = [first], []
+            rc, out, err = _run_main(["process.py", d, "capture-check", "--session"])
+            drift = (Process(d).load()["capture"].get("session") or {}).get("drift") or {}
+            lists = [i for i, c in enumerate(rew.calls) if c == "list"]
+            if not (rc == EXIT_OK and drift.get("method") == "xcorr" and lists == [0, len(rew.calls) - 1]
+                    and rew.calls.count("ir 1") == 2 and rew.calls.count("ir 2") == 2):
+                failures.append(f"the drift's pulls by the one listing: {rc} {rew.calls} {drift} {err[-300:]!r}")
+            d, p = fresh()
+            before = _project_bytes(d)
+            rew.listings, rew.calls = [first, moved], []
+            rc, out, err = _run_main(["process.py", d, "capture-check", "--session"])
+            if not (rc == EXIT_REW_UNAVAILABLE and "REW changed while it was read — run capture-check again" in err
+                    and rew.calls.count("list") == 2 and rew.calls[-1] == "list"):
+                failures.append(f"moved under the drift: {rc} {rew.calls} {out[-200:]!r} {err[-300:]!r}")
+            if _project_bytes(d) != before or Process(d).load()["capture"].get("session"):
+                failures.append("moved under the drift: something was written")
     finally:
         shutil.rmtree(top, ignore_errors=True)
     assert not failures, "\n".join(failures)
@@ -8382,7 +8442,7 @@ def _check_a_check_holds_its_snapshot_whole():
                 rew.listings, rew.calls = listings, []
                 rc, out, err = _run_main(["process.py", d, "capture-check"])
                 if not (rc == code and said in err and ("start REW" in err) is start and not out.strip()
-                        and "Traceback" not in err):
+                        and "Traceback" not in err and "None" not in err):   # no uuid, no date: none said, not "None"
                     failures.append(f"{what}: {rc} {out[-300:]!r} {err[-300:]!r}")
                 if _project_bytes(d) != before:
                     failures.append(f"{what}: the check wrote something")
@@ -8538,8 +8598,10 @@ def _check_listing_never_read_as_rew():
 def _check_not_checked_says_why():
     """`capture-check --session`'s header says why each capture was not checked (#184), through the real `verify`: an
     RTA "not a sweep", a sweep whose own range lies outside the band "outside the band" -- the header called both "not
-    a sweep". The reason is the verdict's `why`, carried on the session rows and read back from them; a row written
-    before `why` existed is "not checked", no reason claimed."""
+    a sweep". The reason is the verdict's `why`, carried on the session rows and read back from them, and kept on each
+    capture's `verified` in `checks` and `taken` (the Captures group seat): what TCC's card reads, which got none. The
+    check run again through a `verify` whose verdicts carry no `why` -- one from before #184 -- claims no reason: "not
+    checked" in the header, and no `why` on `verified`."""
     import shutil
     import tempfile
     verifier = _load_sibling("verify.py")
@@ -8563,6 +8625,10 @@ def _check_not_checked_says_why():
         rows = Process(d).load()["capture"]["session"]["rows"]
         assert {r["name"]: r.get("why") for r in rows} == {"ALL_1 (rta)": "not_a_sweep", "sw_1 (sw)": "outside_band"}, \
             rows
+        round_ = Process(d).load()["capture"]
+        whys = {"ALL_1 (rta)": "not_a_sweep", "sw_1 (sw)": "outside_band"}
+        assert {t: v.get("why") for t, v in round_["checks"].items()} == whys \
+            and {t: (row.get("verified") or {}).get("why") for t, row in round_["taken"].items()} == whys, round_
         # A legacy verdict -- a `verify` from before `why` -- claims no reason: "not checked", never "not a sweep".
         class Legacy:
             def __getattr__(self, name):
@@ -8577,6 +8643,8 @@ def _check_not_checked_says_why():
         header = next((line for line in out.splitlines() if "session probe" in line), "")
         assert rc == EXIT_OK and header.endswith(", 2 not checked") and "(" not in header.split("unusable")[1], \
             (rc, out, err)
+        assert not [t for t, v in Process(d).load()["capture"]["checks"].items() if "why" in v], \
+            Process(d).load()["capture"]["checks"]
     finally:
         api.get_measurements, Process._load_verifier = real, loader
         shutil.rmtree(top, ignore_errors=True)
@@ -10108,6 +10176,7 @@ def _selftest():
                   _check_a_check_asks_rew_by_key, _check_a_check_judges_one_snapshot_of_rew, _check_rounds_on_one_level_base,
                   _check_the_round_control_names_a_chain_change,
                   _check_close_stops_on_a_moved_snapshot, _check_a_check_holds_its_snapshot_whole,
+                  _check_a_session_drift_reads_the_one_listing,
                   _check_retakes_and_superseded_rows,
                   _check_close_says_what_rew_did,
                   _check_listing_never_read_as_rew, _check_ambiguous_capture, _check_not_checked_says_why, _check_close_swallows_only_rew,
