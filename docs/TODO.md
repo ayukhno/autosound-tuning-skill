@@ -1627,6 +1627,18 @@ S-062, S-064 (with TCC's half, hub #217 SKL-056), S-065, S-066. When he says to 
 four assessment lines, and nothing is built before his `ok` on that task. Resume: `hub/bin/role skill --resume
 6b9c70d1-4094-4337-a1fd-23976307dfc2`.
 
+## S-109 · The agy reviewer hangs on its ADC default model, `gemini-3.8-flash-high`
+
+**Status**: open 2026-10-21 · reported by the Arbiter from a hub-kit probe, during W-11's release; recorded, not diagnosed; joins rc2 or the freeze only on his word
+
+Under ADC, `gemini-3.8-flash-high` (the reviewer's model in `references/tooling/setup-critic-channel.md` §1, line 66
+at `82e8e43`; TCC's `ADC_REVIEWER`, tcc `core/model_choices.py:736`) stays silent 90–180 s and more even on a one-line
+prompt, in stream-json and text mode alike. On the same machine and login `gemini-3.8-flash-medium` answers in 9 s,
+`gemini-3.7-flash-high` in 4 s, `gemini-3.6-flash-high` in 3 s (hub-kit probe, 2026-10-21). This session's own final
+text review on that model ended at the timeout (exit 124) the same day. The probe proposes: another default reviewer
+model; `doctor` makes a short live call on the chosen model before a real package; on a timeout agy's partial output
+is kept and shown, and the next model on the ladder is offered.
+
 ## S-108 · The Windows uninstall leaves the installer's scratch and its receipt
 
 **Status**: open 2026-10-21 · found by W-11's Installers group seat; older than this wave; recorded, not diagnosed; joins a wave only on the Arbiter's word
