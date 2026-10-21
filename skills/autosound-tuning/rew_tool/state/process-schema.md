@@ -244,6 +244,17 @@ appended line is fsynced (and the folder, when the append made the file), so it 
   it records nothing and exits 1, `REW's measurement list was not read (<why>) -- nothing was
   recorded` (H I-6). It recorded every title as REW's verdict, `exists` null, and a
   `capture_verified` naming each in `bad`; old states may still hold such a null.
+- **A check judges one REW** (#183). `capture-check` looks its titles up in one listing of REW's, and
+  `verify` pulls the curves by that same listing (`verify(names, f_low, f_high, measurements=…)`); after
+  the pulls REW's index is read once more -- two index reads for a check that lands -- and what it holds
+  under each title looked up (title -> uuid -> ordinal, by `title_key`) is held against the listing
+  the pulls used. An ordinal moved with the uuids unchanged, a title gone, a title held under a second
+  spelling now, a uuid replaced or a title appeared is REW changed while it was read: nothing is
+  recorded, exit 69, `error: REW changed while it was read — run capture-check again (<what>; nothing
+  was recorded)`, no "start REW" -- REW answered. It read REW's index twice before the pulls, once for
+  the titles and once inside `verify`, and a take landing between the two was judged by the older one.
+  REW not answering that last read is 69 as REW down; another of REW's states there is 1, nothing
+  recorded.
 - **Nothing is cleared over work that is only in the chat** (S-044). `handoff` answers one question — is everything the
   NEXT session needs on disk — and REFUSES while it is not: no phase recorded, an open capture round, a plan step left
   `todo`/`in_progress`, a done step whose evidence resolves to nothing, no ledger snapshot, a `tuning-changelog` with no
@@ -337,7 +348,7 @@ usage on stdout, exit 0.
 | 0 | done, or yes |
 | 1 | refused, or no: the reason on stderr (`error: …`); REW answering with an error (`error: REW answered with an error: <REW's words> -- nothing was written`), or with any other state but "unavailable" -- something the method cannot read (`protocol`), `write_mismatch`, `not_found`, `ambiguous`, `config` -- (`error: <its words> -- nothing was written`; a `write_mismatch` ends `-- REW may hold part of the write: check REW's EQ before going on`, and a filter write REW acknowledged and nobody could read back, `rew_unchecked` on its class, is said in its own words); `capture-check` with REW's list not read for any reason but REW not answering (`error: REW's measurement list was not read (<why>) -- nothing was recorded`); a typed mistake in a value the verb parses itself (a leg, a series); a process folder that is no project's, the project's writer lock that cannot be made, a round another writer closed or replaced under `capture-close` or `capture-check`, a phase another writer entered under `enter-phase` (#141, below) |
 | 2 | usage: an unknown verb, a flag the verb does not take, a flag's value missing (one of the verb's flags, `-h` or `--help` in its place, or nothing after it: a value flag left last), a value on a flag that takes none, one of the verb's flags with its hyphens autocorrected to a dash, `--help` or `-h` after other arguments, too few arguments; an `AUTOSOUND_LOCK_TIMEOUT_S` that is no number of seconds (#141) |
-| 69 | REW did not answer, and nothing was written (sysexits' `EX_UNAVAILABLE`) -- but a filter write REW acknowledged before it stopped answering (`rew_unchecked` on its class), said in its own words: sent, acknowledged, not checked |
+| 69 | REW did not answer, and nothing was written (sysexits' `EX_UNAVAILABLE`) -- but a filter write REW acknowledged before it stopped answering (`rew_unchecked` on its class), said in its own words: sent, acknowledged, not checked; and REW that changed while `capture-check` (or `capture-close`'s checks) read it (#183, `rew_changed` on its class): nothing recorded, run it again |
 | 70 | an unexpected error, a bug: Python's traceback on stderr, then `error: unexpected <type>: <message>` (`EX_SOFTWARE`) |
 | 75 | the project busy (`EX_TEMPFAIL`; #141): another writer held the project's writer lock past `AUTOSOUND_LOCK_TIMEOUT_S`, said in one line, `busy: <the lock file> is held by another writer -- nothing was written, safe to retry` -- but `capture-close` stopped past its first hold, whose own `busy:` line names what landed (below) |
 
@@ -469,7 +480,10 @@ usage on stdout, exit 0.
   <the lock file> is held by another writer -- <what> landed; <what> did not; run capture-close again (<what> safe to
   repeat)`, as `... -- the reconcile of cap_002 landed; the checks and the close did not; run capture-close again
   (the reconcile is safe to repeat)`. For this verb past its first hold, then, "nothing was written" does not hold:
-  what landed is said instead.
+  what landed is said instead. REW that changed while the checks read it (#183) stops the close the same way, exit
+  69, the round open and its checks as they were: `error: REW changed while it was read (<what>) -- the reconcile of
+  <id> landed; the checks and the close did not; run capture-close again` -- read as "checks not run", the round
+  closed over a check that may have judged an old take. REW down at the checks is the offline close it was.
 - **`capture-start` says its plan file** (#141, S-101). Once the round is recorded, its list goes to
   `docs/plans/<_N|v_NNN>-capture.md`, and the verb says which: `plan: <the file, its absolute path>`, the last line on
   stdout; or, when the file could not be written, one line on stderr, `note: the round is open, but its plan <path>

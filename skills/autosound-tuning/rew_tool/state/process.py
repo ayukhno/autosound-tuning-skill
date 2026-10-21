@@ -342,6 +342,20 @@ class RewUnavailableError(ProcessError):
     rew_state = "unavailable"
 
 
+class _RewChanged(RewUnavailableError):
+    """REW's measurement list changed while a check read it (#183): an ordinal the curves were pulled by moved, a title
+    looked up is gone, or one is held under a second spelling now. Nothing was recorded -- the verdicts may judge an
+    old take -- and the check is run again: exit 69 like REW down, the same "ask again", but REW answered, so "start
+    REW" is not what to do. `rew_changed` on the class tells it from REW being down: `capture-close`, which goes on past
+    REW down at its checks and closes unchecked, stops at this one (`_close_stopped`) -- a round closed over a check
+    of an older take. On the instance, `what` changed, for that line."""
+    rew_changed = True
+
+    def __init__(self, what):
+        super().__init__(f"REW changed while it was read — run capture-check again ({what}; nothing was recorded)")
+        self.what = what
+
+
 class _StateWithoutItsEvent(ProcessError):
     """The state is written in this run, and its journal line is not (#134, F M-7): the refusal says what landed and
     the line to append. `state_written` on the class, so a caller that goes on past a failure -- `capture-close`'s
@@ -1162,9 +1176,11 @@ def _band_said(verified):
 
 
 def _rew_listing(verifier):
-    """The titles REW holds now, read through the verifier's own REW reader (`verify._api`), or None when it names
-    none -- a stand-in verifier -- or when REW's state stopped the read: `verify` then says that for every title, as it
-    always has. A failure that is none of REW's states is a bug, raised as it is (H I-6)."""
+    """REW's index as it is now -- `get_measurements()`'s map, ordinal -> record -- read through the verifier's own REW
+    reader (`verify._api`), or None when it names none -- a stand-in verifier -- or when REW's state stopped the read:
+    `verify` then reads it for itself and says that for every title, as it always has. A failure that is none of REW's
+    states is a bug, raised as it is (H I-6). The map, not its titles (#183): the check looks its titles up in it and
+    `verify` pulls by it, one REW for both."""
     api = getattr(verifier, "_api", None)
     if api is None or not callable(getattr(api, "get_measurements", None)):
         return None
@@ -1175,8 +1191,63 @@ def _rew_listing(verifier):
         if callable(from_rew) and from_rew(exc):
             return None
         raise
-    return [str((record or {}).get("title", "")) for record in (records or {}).values()
-            if isinstance(record, dict)]
+    return dict(records or {})
+
+
+def _rew_relisting(verifier):
+    """REW's index read once more, after a check pulled its curves (#183), to hold the listing it pulled by against.
+    Strict, where the first read is not: REW not answering now is `RewUnavailableError` (69) and any other of REW's
+    states a refusal (1), nothing recorded either way -- the pulls are in, but whether REW still holds what they were
+    pulled by is not known, and a verdict that may judge an old take is none. A bug raises as it is (H I-6)."""
+    try:
+        return dict(verifier._api.get_measurements() or {})
+    except Exception as exc:  # noqa: BLE001 -- REW's states are said below; anything else raises
+        from_rew = getattr(verifier, "_from_rew", None)
+        if not (callable(from_rew) and from_rew(exc)):
+            raise
+        if getattr(type(exc), "rew_state", None) == "unavailable":
+            raise RewUnavailableError(f"REW did not answer when its list was read again after the curves ({exc}) -- "
+                                      "nothing was recorded") from exc
+        raise ProcessError(f"REW's measurement list was not read again after the curves ({exc}) -- nothing was "
+                           "recorded") from exc
+
+
+def _rew_titles(records):
+    """The titles of REW's index `records` (`_rew_listing`'s map), each as REW holds it."""
+    return [str(record.get("title", "")) for record in records.values() if isinstance(record, dict)]
+
+
+def _rew_snapshot(records, keys):
+    """`{key: [(ordinal, uuid, title), ...]}`: what REW's index `records` holds under each `title_key` of `keys` --
+    the title -> uuid -> ordinal mapping a check looks its titles up in and pulls its curves by (#183). Sorted, so two
+    reads of one REW compare equal, and a key REW holds nothing under is an empty list, compared like any other."""
+    out = {key: [] for key in keys}
+    for ordinal, record in records.items():
+        if not isinstance(record, dict):
+            continue
+        key = title_key(str(record.get("title", "")))
+        if key in out:
+            out[key].append((str(ordinal), str(record.get("uuid")), str(record.get("title", ""))))
+    return {key: sorted(rows) for key, rows in out.items()}
+
+
+def _rew_change(before, after):
+    """What changed between two `_rew_snapshot`s of the same keys, in a few words, or None when nothing did (#183): a
+    title gone, a title appeared, one held under a second spelling now, or one at another ordinal or uuid."""
+    def said(rows):
+        return " and ".join(f"{title} (index {ordinal}, uuid {uuid})" for ordinal, uuid, title in rows)
+    for key, was in before.items():
+        now = after.get(key, [])
+        if now == was:
+            continue
+        if not now:
+            return f"{' and '.join(title for _o, _u, title in was)} is gone"
+        if not was:
+            return f"{' and '.join(title for _o, _u, title in now)} appeared"
+        if len(now) > len(was):
+            return f"REW holds {' and '.join(title for _o, _u, title in now)} now"
+        return f"{said(was)} is {said(now)} now"
+    return None
 
 
 def _row_stands(entry):
@@ -2965,6 +3036,12 @@ class Process:
         project's is refused first, before REW is read (#141, R46). `round_id`, given, is the round the caller read
         (`capture-close`, R7): another open by this check's own read is refused the same way. Either refusal is
         `round_moved` on its class, which `capture-close` stops at.
+
+        **One REW is judged** (#183): the titles are looked up in one listing of REW's, and `verify` pulls the curves
+        by that same listing; after the pulls REW's index is read once more, and the title -> uuid -> ordinal mapping
+        the pulls used is held against it. Anything moved -- an ordinal, a title gone, a second spelling of one -- is
+        REW changed while it was read: `_RewChanged`, a `RewUnavailableError` (69) whose class says `rew_changed`,
+        nothing written; `capture-close` stops at it too.
         """
         self._require_home("check_captures")
         self._ready_to_hold()
@@ -2999,7 +3076,12 @@ class Process:
             else:
                 spelled[title] = row if row is not None else title
             hinted[title] = True
-        listing = _rew_listing(verifier)
+        # One listing for the look-up and the pulls (#183): REW's index read here is the one `verify` pulls the curves
+        # by. It read REW's index again, inside `verify`, for the uuids and the ordinals -- a take landing between the
+        # two reads was judged by the older one. None when the verifier names no REW reader, or REW's state stopped
+        # the read: `verify` then reads it for itself, as it always has, and says that for every title.
+        records = _rew_listing(verifier)
+        listing = None if records is None else _rew_titles(records)
         ambiguous = {}
         if listing is not None:
             for title in spelled:
@@ -3011,8 +3093,13 @@ class Process:
                     spelled[title], hinted[title] = held[0], False
         asked = {title: spelled[title] for title in spelled if title not in ambiguous}
         back = {spelling: title for title, spelling in asked.items()}
+        # What REW held under every title looked up, as the look-up and the pulls saw it: held against the index read
+        # again after the pulls, below. Keyed by `title_key`, so a second spelling landing meanwhile is seen too.
+        keys = list(dict.fromkeys(title_key(spelling) for spelling in spelled.values()))
+        before = None if records is None else _rew_snapshot(records, keys)
         verdicts = [dict(v, name=back.get(v.get("name"), v.get("name")))
-                    for v in verifier.verify(list(asked.values()))]
+                    for v in (verifier.verify(list(asked.values())) if records is None
+                              else verifier.verify(list(asked.values()), measurements=records))]
         for title, held in ambiguous.items():
             verdicts.append({"name": title, "exists": True, "reachable": True, "applicable": True, "valid": False,
                              "ambiguous": len(held), "ambiguous_titles": held, "stats": {},
@@ -3095,6 +3182,15 @@ class Process:
             probe = verifier.session_report(verdicts, processing_rate_hz=proc_rate if capture_rates else None)
             session_probe = {"at": _now(), "spread": probe["spread"], "drift": probe["drift"],
                              "capture_rates_hz": probe["capture_rates_hz"], "rows": probe["rows"]}
+        # The check judges ONE REW (#183): its index is read once more after every pull -- the session probe's too --
+        # and what it holds under the titles looked up is held against the listing they were looked up in and pulled
+        # by. An ordinal moved (the uuids unchanged: a delete or a reorder in REW), a title gone, one held under a
+        # second spelling now, a uuid replaced, one that appeared: REW changed while it was read, and the verdicts
+        # may judge an old take. Refused before the hold, nothing written, exit 69 -- `capture-close` stops at it.
+        if before is not None:
+            changed = _rew_change(before, _rew_snapshot(_rew_relisting(verifier), keys))
+            if changed is not None:
+                raise _RewChanged(changed)
         with _hold(self.project_dir):
             state = self.load(strict=True)
             live = state.get("capture") or {}
@@ -4088,8 +4184,8 @@ def _verb_usage(verb):
 
 def _close_stopped(exc, landed, missed):
     """`capture-close`'s own line, and its exit code, when a stage after its first is stopped (#141, R9; Task 2's
-    review): another writer holds the project's lock past the wait (75), or closed or replaced the round (1). The
-    reconcile has landed by then, and maybe the checks (`landed`); `missed` is what did not. Said so, with whether a
+    review): another writer holds the project's lock past the wait (75), or closed or replaced the round (1), or REW
+    changed while the checks read it (69, #183). The reconcile has landed by then, and maybe the checks (`landed`); `missed` is what did not. Said so, with whether a
     retry is safe: write_lock's own line says "nothing was written", true at the first hold alone. None for anything
     else, and when nothing landed -- the exception says itself, truly."""
     if not landed:
@@ -4099,6 +4195,10 @@ def _close_stopped(exc, landed, missed):
         safe = "the reconcile is" if len(landed) == 1 else "the reconcile and the checks are"
         return (f"busy: {getattr(exc, 'path', 'the project lock')} is held by another writer -- {done} landed; "
                 f"{missed} did not; run capture-close again ({safe} safe to repeat)", EXIT_BUSY)
+    if getattr(type(exc), "rew_changed", False):
+        # REW changed while the checks read it (#183): none recorded, the round open -- the reconcile is safe to repeat.
+        return (f"error: REW changed while it was read ({getattr(exc, 'what', 'its measurement list')}) -- {done} "
+                f"landed; {missed} did not; run capture-close again", EXIT_REW_UNAVAILABLE)
     if getattr(type(exc), "round_moved", False):
         now = getattr(exc, "now", None)
         return (f"error: round {getattr(exc, 'read', '?')} was closed or replaced by another writer while capture-close "
@@ -7404,6 +7504,169 @@ def _check_a_check_asks_rew_by_key():
         shutil.rmtree(top, ignore_errors=True)
 
 
+class _SnapshotRew:
+    """REW behind the real `verify`, for #183: `get_measurements` answers `listings` in turn (the last one again once
+    they run out; `_SnapshotRew.DOWN` there raises REW down), and every read is logged in `calls` -- `list`, `fr <id>`,
+    `ir <id>` -- so a check says which REW it judged by the ORDER of its reads, not by their timing."""
+    DOWN = object()
+
+    class _Down(OSError):
+        """REW not answering, as any copy of `rew_api` raises it: matched by its `rew_state`, never by its class."""
+        rew_state = "unavailable"
+
+    NOTES = "DELAY 22.6504 ms (7.769 m, 25 ft 5.9 in)"
+
+    @classmethod
+    def rec(cls, title, uid):
+        return {"title": title, "uuid": uid, "notes": cls.NOTES, "startFreq": 20.0, "endFreq": 20000.0}
+
+    def __init__(self):
+        self.verify_mod = _load_sibling("verify.py")
+        self.api = self.verify_mod._api
+        self.listings, self.calls = [], []
+
+    @staticmethod
+    def curve():
+        fs, f = [], 20.0
+        while f <= 20000.0 * 1.0001:
+            fs.append(f)
+            f *= 2 ** (1 / 48)
+        return fs, [70.0 + 10 * (k % 7) for k in range(len(fs))], None
+
+    def listing(self):
+        self.calls.append("list")
+        n = self.calls.count("list")
+        answer = self.listings[min(n, len(self.listings)) - 1]
+        if answer is _SnapshotRew.DOWN:
+            raise _SnapshotRew._Down("refused: REW is not running")
+        return {k: dict(v) for k, v in answer.items()}
+
+    def fr(self, mid, smoothing=None):
+        self.calls.append(f"fr {mid}")
+        return self.curve()
+
+    def ir(self, mid, normalised=True):
+        self.calls.append(f"ir {mid}")
+        return [0.0, 1 / 48000, 2 / 48000], [0.0, 1.0, 0.0]
+
+    def __enter__(self):
+        self.saved = {n: getattr(self.api, n) for n in ("get_measurements", "get_fr", "get_impulse_response")}
+        self.real = Process._load_verifier
+        self.api.get_measurements, self.api.get_fr, self.api.get_impulse_response = self.listing, self.fr, self.ir
+        Process._load_verifier = lambda _self: self.verify_mod
+        return self
+
+    def __exit__(self, *exc):
+        for n, f in self.saved.items():
+            setattr(self.api, n, f)
+        Process._load_verifier = self.real
+        return False
+
+
+def _check_a_check_judges_one_snapshot_of_rew():
+    """#183: `capture-check` judges ONE listing of REW's. It read REW's index twice -- once for the titles (their
+    spelling, their ambiguity), once inside `verify` for the uuids and the ordinals the curves are pulled by -- and a
+    take landing between the two was judged by the older read. Now the listing it looks the titles up in is the one
+    `verify` pulls by, and after the pulls the index is read once more: two index reads for a check that lands, the
+    second after every pull. The title -> uuid -> ordinal mapping the pulls used is held against it, and an ordinal
+    moved with the uuids unchanged, a title gone, or a title now held under a second spelling refuses with nothing
+    written: "REW changed while it was read — run capture-check again", exit 69, never "start REW" -- REW answered.
+    Raised, it is a `RewUnavailableError` whose class says `rew_changed`, so a caller tells it from REW being down."""
+    import shutil
+    import tempfile
+    rec = _SnapshotRew.rec
+    first = {"1": rec("w-L_1 (sw)", "u1"), "2": rec("w-R_1 (sw)", "u2")}
+    top = tempfile.mkdtemp(prefix="autosound_process_one_snapshot_")
+    failures = []
+
+    def fresh():
+        d = os.path.join(tempfile.mkdtemp(dir=top), "process")
+        p = Process(d)
+        p.enter_phase("-1")
+        p.start_capture("1", expected=["w-L_1 (sw)", "w-R_1 (sw)"])
+        return d, p
+    try:
+        with _SnapshotRew() as rew:
+            d, p = fresh()
+            rew.listings = [first]
+            rc, out, err = _run_main(["process.py", d, "capture-check"])
+            assert rc == EXIT_OK and "OK      w-L_1 (sw)" in out and "OK      w-R_1 (sw)" in out, (rc, out, err)
+            assert rew.calls == ["list", "fr 1", "ir 1", "fr 2", "ir 2", "list"], \
+                ("one listing for the look-up and the pulls, read again after them", rew.calls)
+            for what, second in (
+                    ("an ordinal moved, the uuids unchanged", {"1": rec("w-R_1 (sw)", "u2"), "2": rec("w-L_1 (sw)", "u1")}),
+                    ("a title gone", {"1": rec("w-L_1 (sw)", "u1")}),
+                    ("a second spelling", dict(first, **{"3": rec("w-L_01 (sw)", "u3")}))):
+                d, p = fresh()
+                before = _project_bytes(d)
+                rew.listings, rew.calls = [first, second], []
+                rc, out, err = _run_main(["process.py", d, "capture-check"])
+                if not (rc == EXIT_REW_UNAVAILABLE and "REW changed while it was read — run capture-check again" in err
+                        and "start REW" not in err and not out.strip()):
+                    failures.append(f"{what}: {rc} {out!r} {err!r}")
+                if _project_bytes(d) != before:
+                    failures.append(f"{what}: the check wrote over a REW that changed while it was read")
+                rew.calls = []
+                try:
+                    p.check_captures()
+                    failures.append(f"{what}: check_captures returned")
+                except RewUnavailableError as exc:
+                    if not getattr(type(exc), "rew_changed", False):
+                        failures.append(f"{what}: refused as REW down, not as REW changed: {exc}")
+                if _project_bytes(d) != before:
+                    failures.append(f"{what}: check_captures wrote over a REW that changed while it was read")
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n".join(failures)
+
+
+def _check_close_stops_on_a_moved_snapshot():
+    """#183 at `capture-close`: its checks refused because REW changed while they read it are no "checks not run" --
+    the round would close over a check that judged an old take. The close stops, exit 69: the round open, its checks
+    as they were, and the line says the reconcile landed (`_close_stopped`) and to run capture-close again. REW down
+    at the checks -- at their first read, or at the read after the pulls -- is the offline close it always was: "checks
+    not run", the round closed on the record, exit 0."""
+    import shutil
+    import tempfile
+    rec = _SnapshotRew.rec
+    first = {"1": rec("w-L_1 (sw)", "u1"), "2": rec("w-R_1 (sw)", "u2")}
+    moved = {"1": rec("w-R_1 (sw)", "u2"), "2": rec("w-L_1 (sw)", "u1")}
+    top = tempfile.mkdtemp(prefix="autosound_process_close_snapshot_")
+    failures = []
+
+    def fresh():
+        d = os.path.join(tempfile.mkdtemp(dir=top), "process")
+        p = Process(d)
+        p.enter_phase("-1")
+        p.start_capture("1", expected=["w-L_1 (sw)", "w-R_1 (sw)"])
+        return d, p
+    try:
+        with _SnapshotRew() as rew:
+            d, p = fresh()
+            round_id = p.load()["capture"]["id"]
+            checks = p.load()["capture"].get("checks")
+            rew.listings = [first, first, moved]          # the reconcile, the checks' listing, the read after the pulls
+            rc, out, err = _run_main(["process.py", d, "capture-close"])
+            round_ = Process(d).load()["capture"]
+            if not (rc == EXIT_REW_UNAVAILABLE and "REW changed while it was read" in err
+                    and f"the reconcile of {round_id} landed" in err and "run capture-close again" in err
+                    and "checks not run" not in out):
+                failures.append(f"moved at the close: {rc} {out!r} {err!r}")
+            if round_.get("closed") or round_.get("id") != round_id or round_.get("checks") != checks:
+                failures.append(f"moved at the close: the round closed or its checks changed: {round_}")
+            for what, listings in (("REW down at the checks' listing", [first, _SnapshotRew.DOWN]),
+                                   ("REW down at the read after the pulls", [first, first, _SnapshotRew.DOWN])):
+                d, p = fresh()
+                rew.listings, rew.calls = listings, []
+                rc, out, err = _run_main(["process.py", d, "capture-close"])
+                if not (rc == EXIT_OK and "checks not run on the taken captures (RewUnavailableError: REW did not "
+                        "answer" in out and Process(d).load()["capture"].get("closed")):
+                    failures.append(f"{what}: {rc} {out!r} {err!r}")
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n".join(failures)
+
+
 def _check_retakes_and_superseded_rows():
     """#153's group round (T-4, R-3; R-1; SF-3, T-5; T-3 for #155; item 9). A superseded row never hides a standing
     one with its key, and a re-take over a superseded row -- on the list or off it -- stands again with the trace kept
@@ -9050,7 +9313,8 @@ def _selftest():
                   _check_route_line_over_a_project_json_no_object, _check_plan_over_a_word_says_neither,
                   _check_handoff_names_a_changelog_copy_that_differs, _check_superseded_not_taken,
                   _check_check_never_invents_taken, _check_a_round_matches_titles_by_name_key,
-                  _check_a_check_asks_rew_by_key, _check_retakes_and_superseded_rows,
+                  _check_a_check_asks_rew_by_key, _check_a_check_judges_one_snapshot_of_rew,
+                  _check_close_stops_on_a_moved_snapshot, _check_retakes_and_superseded_rows,
                   _check_close_says_what_rew_did,
                   _check_listing_never_read_as_rew, _check_ambiguous_capture, _check_close_swallows_only_rew,
                   _check_intake_gate_names_an_unreadable_project_json, _check_close_checks_stage_refusals,
@@ -10179,8 +10443,10 @@ def _main(argv):
                 round_ = p.check_captures(args or None, session=session)
             except RewUnavailableError as exc:
                 # The advice is this verb's (#134): `capture-close` runs the same check and then closes the round, so
-                # "run capture-check again" cannot be followed there.
-                print(f"error: {exc}; start REW and run capture-check again", file=sys.stderr)
+                # "run capture-check again" cannot be followed there. REW that changed while it was read answered
+                # (#183): its words say to run the check again, and "start REW" is not what to do.
+                print(f"error: {exc}" + ("" if getattr(type(exc), "rew_changed", False)
+                                         else "; start REW and run capture-check again"), file=sys.stderr)
                 return EXIT_REW_UNAVAILABLE
             if session and round_.get("session"):
                 verifier = p._load_verifier()
@@ -10569,9 +10835,13 @@ def _main(argv):
                             # So is the project's lock held past the wait at the checks (#141): 75, safe to retry, the
                             # round open -- never a round closed unchecked because another writer held the lock for a
                             # moment. And so is the round another writer closed or replaced meanwhile (Task 2's review):
-                            # read as "checks not run", the close went on over the round that replaced it.
+                            # read as "checks not run", the close went on over the round that replaced it. And so is REW
+                            # changed while the checks read it (#183), though it is a `RewUnavailableError`: REW
+                            # answered, and a round closed here closes over a check that may have judged an old take --
+                            # the close stops, the round open, its checks as they were (`_close_stopped`).
                             if getattr(type(exc), "is_unreadable", False) or getattr(type(exc), "state_written", False) \
-                                    or getattr(type(exc), "is_busy", False) or getattr(type(exc), "round_moved", False):
+                                    or getattr(type(exc), "is_busy", False) or getattr(type(exc), "round_moved", False) \
+                                    or getattr(type(exc), "rew_changed", False):
                                 raise
                             # Said as what happens (#134): the round is closing, so a check cannot be run on it again.
                             print(f"  checks not run on the taken captures ({type(exc).__name__}: {str(exc)[:160]}): "

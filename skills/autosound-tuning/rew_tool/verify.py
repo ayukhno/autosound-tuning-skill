@@ -288,19 +288,26 @@ def verdict(name, measurements=None, f_low=20, f_high=20000):
     return out
 
 
-def verify(names, f_low=20, f_high=20000):
+def verify(names, f_low=20, f_high=20000, measurements=None):
     """Verdicts for a list of titles, in the order given. One REW round trip for the index.
 
     An index REW does not give leaves every title's presence unknown: each verdict is `exists: None`, with
     `reachable: False` when REW did not answer (#134) -- never "missing", which is REW saying it holds no such title.
     A failure of that read that is none of REW's states is a bug, raised as it is (H I-6).
+
+    `measurements`, given, is REW's index as the caller read it -- `get_measurements()`'s map -- and is the one the
+    titles are looked up in and their curves pulled by, with no round trip of its own (#183): `capture-check` looks
+    its titles up in a listing (their spelling, whether REW holds one twice), and a second read here was a second
+    REW, a take landing between the two judged by the older one. An empty map is REW holding nothing, never "read it
+    yourself". Appended, so `verify(titles)` -- `_main`, a stand-in verifier -- reads REW's index as it always has.
     """
-    try:
-        measurements = _api.get_measurements()
-    except Exception as exc:  # noqa: BLE001 -- REW down or answering an error is a verdict for every title
-        if not _from_rew(exc):
-            raise                          # a bug: never a verdict on any title (H I-6)
-        return [_unreached(n, exc) for n in names]
+    if measurements is None:
+        try:
+            measurements = _api.get_measurements()
+        except Exception as exc:  # noqa: BLE001 -- REW down or answering an error is a verdict for every title
+            if not _from_rew(exc):
+                raise                          # a bug: never a verdict on any title (H I-6)
+            return [_unreached(n, exc) for n in names]
     verdicts = [verdict(n, measurements, f_low=f_low, f_high=f_high) for n in names]
     return _flag_outlier_sweeps(verdicts)
 
@@ -1227,6 +1234,29 @@ def _check_recorded_listing_band():
     assert got == expected, f"REW's recorded listing, judged over its own ranges: {got}"
 
 
+def _check_verify_takes_the_listing_given():
+    """A listing handed to `verify` is the one it judges by (#183): REW's index is not read again, a title it does not
+    hold is missing from it, and an empty one is a listing too -- REW holding nothing, never "read it yourself". Not
+    handed one, `verify` reads REW's index once, as it always has (`_main`, and every caller of `verify(titles)`)."""
+    listing = {"1": dict(_SWEPT_RECORD)}
+    title = listing["1"]["title"]
+    read = []
+
+    def counted():
+        read.append("list")
+        return {k: dict(v) for k, v in listing.items()}
+    with _rew_as(get_measurements=counted, get_fr=_sweep_fr, get_impulse_response=_impulse_48k):
+        given = verify([title, "gone_1 (sw)"], measurements=listing)
+        assert read == [], f"a listing handed in was read again from REW: {read}"
+        assert given[0]["exists"] is True and given[0]["stats"].get("uuid") == "u2" and given[1]["exists"] is False, \
+            given
+        empty = verify([title], measurements={})
+        assert read == [] and empty[0]["exists"] is False, (read, empty)
+        own = verify([title, "gone_1 (sw)"])
+        assert read == ["list"], f"verify with no listing reads REW's index once: {read}"
+    assert own == given, (own, given)
+
+
 def _selftest():
     """Offline, REW never reached: REW's states through its readers stood in (`_rew_as`), REW's recorded answers
     replayed (`testdata/rew/`), the command line at a dead port, the drift record, the counts and the outlier rule."""
@@ -1235,7 +1265,7 @@ def _selftest():
                   _check_recorded_no_impulse, _check_ambiguous_title, _check_drift_says_why, _check_counts_add_up,
                   _check_command_line_bug_exits_70, _check_drift_says_what_was_not_read,
                   _check_drift_names_every_missing_control, _check_own_band,
-                  _check_recorded_listing_band):
+                  _check_recorded_listing_band, _check_verify_takes_the_listing_given):
         try:
             check()
         except Exception as exc:  # noqa: BLE001 -- a check that raises is reported by name, like one that fails
