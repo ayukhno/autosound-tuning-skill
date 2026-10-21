@@ -1767,18 +1767,44 @@ CODEX_CASES = (
     ("the-method-not-ours", True, False, False, None, None, None, "skipped: ", False,
      ("the method at ~/.claude/skills/autosound-tuning is not this installer's",), ("made the link",), "nothing"))
 #: The tools install.sh's Codex functions run, and nothing else on their PATH.
-CODEX_SH_TOOLS = ("mkdir", "ln", "readlink", "dirname", "grep", "mv", "rm")
+CODEX_SH_TOOLS = ("mkdir", "ln", "readlink", "dirname", "grep", "mv", "rm", "ls", "rmdir")
 #: What the method is not, said when the method's step left the link's place as it was.
 CODEX_NOT_OURS = "the method at ~/.claude/skills/autosound-tuning is not this installer's"
 #: The uninstall's Codex part: (case, what is at the link's place, the target the manifest records, a dry run, words,
-#: never, what is there after, the manifest's codex-link target after (None: no line)).
+#: never, what is there after, the manifest's codex-link target after (None: no line), a file put beside the link
+#: (`skills` in ~/.agents/skills, `agents` in ~/.agents, None: none), the folders there after (`both`, `agents` alone,
+#: `neither`)). #181: the link gone, ~/.agents/skills and then ~/.agents are removed when that leaves them empty --
+#: never with anything in them (somebody's), never on a dry run, and only after this script's own link went.
 CODEX_UNLINK_CASES = (
-    ("ours", "clone", "clone", False, ("removing the Codex link",), ("left alone",), "nothing", None),
-    ("ours-a-dry-run", "clone", "clone", True, ("removing the Codex link", "would"), (), "clone", "clone"),
-    ("somebody-elses-link", "foreign", "clone", False, ("not ours, left alone",), ("removing",), "foreign", "clone"),
-    ("ours-in-shape-unrecorded", "clone", None, False, ("not ours, left alone",), ("removing",), "clone", None),
-    ("a-real-folder", "folder", None, False, ("not a link this script made",), ("removing",), "folder", None),
-    ("nothing-there", None, "clone", False, (), ("removing", "left alone"), "nothing", "clone"))
+    ("ours", "clone", "clone", False, ("removing the Codex link",), ("left alone", "could not remove"), "nothing",
+     None, None, "neither"),
+    ("ours-a-dry-run", "clone", "clone", True, ("removing the Codex link", "would"), (), "clone", "clone", None,
+     "both"),
+    ("ours-a-sibling-in-skills", "clone", "clone", False, ("removing the Codex link",),
+     ("left alone", "could not remove"), "nothing", None, "skills", "both"),
+    ("ours-more-in-agents", "clone", "clone", False, ("removing the Codex link",), ("left alone", "could not remove"),
+     "nothing", None, "agents", "agents"),
+    ("somebody-elses-link", "foreign", "clone", False, ("not ours, left alone",), ("removing",), "foreign", "clone",
+     None, "both"),
+    ("ours-in-shape-unrecorded", "clone", None, False, ("not ours, left alone",), ("removing",), "clone", None, None,
+     "both"),
+    ("a-real-folder", "folder", None, False, ("not a link this script made",), ("removing",), "folder", None, None,
+     "both"),
+    ("nothing-there", None, "clone", False, (), ("removing", "left alone"), "nothing", "clone", None, "neither"))
+
+
+def _codex_beside(link, beside):
+    """#181: the case's file of somebody's beside the Codex link -- in ~/.agents/skills or in ~/.agents."""
+    if beside:
+        folder = link.parent if beside == "skills" else link.parent.parent
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / "theirs").write_text("theirs\n")
+
+
+def _codex_folders(link):
+    """#181: which of ~/.agents/skills and ~/.agents are there: `both`, `agents` (alone), `neither`, or `skills alone`."""
+    skills, agents = link.parent.is_dir(), link.parent.parent.is_dir()
+    return "both" if skills and agents else "agents" if agents else "neither" if not skills else "skills alone"
 
 
 def codex_read_problems(sh, ps1):
@@ -2007,8 +2033,9 @@ def codex_link_problems(sh):
             if wrong:
                 out.append(f"install.sh's Codex link, {case}: " + "; ".join(wrong) + f" -- said {said.strip()[-240:]!r}"
                            " (#149)")
-        for case, before, recorded, dry, words, never, after, codex_after in CODEX_UNLINK_CASES:
+        for case, before, recorded, dry, words, never, after, codex_after, beside, folders in CODEX_UNLINK_CASES:
             home, stub, spelled, places, link, manifest, head = fixture("unlink-" + case, False, before, recorded)
+            _codex_beside(link, beside)
             rc, said = run(home, stub, head + f"DRY_RUN={int(dry)}\ncodex_unlink\n")
             wrong = [f"exit {rc}, want 0"] if rc else []
             wrong += [f"never says {w!r}" for w in words if w not in said]
@@ -2016,6 +2043,8 @@ def codex_link_problems(sh):
             state = _codex_state(link, places)
             if state != after:
                 wrong.append(f"the link's place holds {state}, want {after}")
+            if _codex_folders(link) != folders:
+                wrong.append(f"~/.agents/skills and ~/.agents: {_codex_folders(link)} there, want {folders} (#181)")
             if before == "folder" and not (link / "mine").is_dir():
                 wrong.append("the real folder's content is gone")
             wrong += _codex_manifest_problems(manifest, spelled[codex_after] if codex_after else None)
@@ -2137,8 +2166,9 @@ def ps1_codex_link_problems(ps1):
             if wrong:
                 out.append(f"install.ps1's Codex link under {Path(shell).name}, {case}: " + "; ".join(wrong)
                            + f" -- said {said.strip()[-300:]!r} (#149)")
-        for case, before, recorded, dry, words, never, after, codex_after in CODEX_UNLINK_CASES:
+        for case, before, recorded, dry, words, never, after, codex_after, beside, folders in CODEX_UNLINK_CASES:
             home, spelled, places, link, manifest, head = fixture("unlink-" + case, False, before, recorded)
+            _codex_beside(link, beside)
             rc, said = run(home, head + f"$DryRun = ${str(dry).lower()}\nRemove-CodexLink\n")
             wrong = [f"exit {rc}, want 0"] if rc else []
             wrong += [f"never says {w!r}" for w in words if w not in said]
@@ -2146,6 +2176,8 @@ def ps1_codex_link_problems(ps1):
             state = _codex_state(link, places)
             if state != after:
                 wrong.append(f"the link's place holds {state}, want {after}")
+            if _codex_folders(link) != folders:
+                wrong.append(f"~/.agents/skills and ~/.agents: {_codex_folders(link)} there, want {folders} (#181)")
             wrong += _codex_manifest_problems(manifest, spelled[codex_after] if codex_after else None)
             if wrong:
                 out.append(f"install.ps1's uninstall of the Codex link under {Path(shell).name}, {case}: "

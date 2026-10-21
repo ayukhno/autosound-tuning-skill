@@ -866,12 +866,22 @@ codex_link() {  # codex_link <target> [<why there is none>]
 }
 
 # The uninstall's part: this script's own link (codex_ours) removed, and its manifest line with it; anything else at
-# the link's place left, and said.
+# the link's place left, and said. Then the folders it was made in (#181), ~/.agents/skills and ~/.agents, each only
+# while empty: anything in one is somebody's, and that folder stays without a word. A dry run removed nothing to empty
+# them.
 codex_unlink() {
   if [ -L "$CODEX_LINK_PATH" ] && codex_ours "$(readlink "$CODEX_LINK_PATH")"; then
     say "  removing the Codex link $(pretty "$CODEX_LINK_PATH")"
     if run rm -f "$CODEX_LINK_PATH"; then
       codex_record || warn "the installer's manifest still records the Codex link -- nothing points Codex there now"
+      [ "${DRY_RUN:-0}" = 1 ] && return 0
+      _cx_dir="$(dirname "$CODEX_LINK_PATH")"
+      for _cx_dir in "$_cx_dir" "$(dirname "$_cx_dir")"; do
+        # -L: a linked folder is somebody's arrangement, not a folder this script made.
+        { [ -d "$_cx_dir" ] && [ ! -L "$_cx_dir" ] && [ -z "$(ls -A "$_cx_dir" 2>/dev/null)" ]; } || return 0
+        _cx_err="$(rmdir "$_cx_dir" 2>&1)" \
+          || { warn "could not remove the empty folder $(pretty "$_cx_dir"): ${_cx_err##*: }"; return 0; }
+      done
     fi
   elif [ -L "$CODEX_LINK_PATH" ]; then
     warn "$CODEX_LINK_PATH points at $(readlink "$CODEX_LINK_PATH") — not ours, left alone"

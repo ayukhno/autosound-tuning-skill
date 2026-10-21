@@ -848,7 +848,8 @@ function Set-CodexLink {
     }
 }
 # The uninstall's part: this script's own junction (Test-CodexOurs) removed, and its manifest line with it; anything
-# else at the link's place left, and said. install.sh's codex_unlink.
+# else at the link's place left, and said. Then the folders it was made in (#181), ~/.agents/skills and ~/.agents, each
+# only while empty: anything in one is somebody's, and that folder stays without a word. install.sh's codex_unlink.
 function Remove-CodexLink {
     $entry = Get-Item -LiteralPath $CodexLink -Force -ErrorAction SilentlyContinue
     if (-not $entry) { return }
@@ -858,6 +859,14 @@ function Remove-CodexLink {
         if ($DryRun) { Say "would remove the junction $(Pretty $CodexLink)"; return }
         try { [System.IO.Directory]::Delete($CodexLink) } catch { Warn "the Codex link was not removed: $($_.Exception.Message)"; return }
         if (-not (Set-CodexRecord)) { Warn "the installer's manifest still records the Codex link -- nothing points Codex there now" }
+        foreach ($dir in @((Split-Path $CodexLink), (Split-Path (Split-Path $CodexLink)))) {
+            # LinkType: a linked folder is somebody's arrangement, not a folder this script made.
+            $folder = Get-Item -LiteralPath $dir -Force -ErrorAction SilentlyContinue
+            if (-not $folder -or -not $folder.PSIsContainer -or $folder.LinkType) { return }
+            if (@(Get-ChildItem -LiteralPath $dir -Force -ErrorAction SilentlyContinue).Count) { return }
+            # $false: not recursive -- a folder that filled meanwhile fails here instead of losing its content.
+            try { [System.IO.Directory]::Delete($dir, $false) } catch { Warn "could not remove the empty folder $(Pretty $dir): $($_.Exception.Message)"; return }
+        }
     } elseif ($entry.LinkType) {
         Warn "$CodexLink points at $to -- not ours, left alone"
     } else {
