@@ -37,8 +37,9 @@ message with Cyrillic in it and names the line (its `--selftest` runs in CI).
 - **A minor, a major or a skipped version goes out by the release train** (hub #245, `RELEASE-CHANNEL.md`
   §11.6): the user's «релізь» in `hub/bin/role release`, and the tag lands on the LAST candidate's commit —
   nothing is committed on release day. So that candidate carries the release's bookkeeping: `## [vX.Y.Z]`,
-  `plugin.json` at X.Y.Z, `install.cmd`'s PS1URL at the tag, `commands/install-tcc.md` at the paired TCC,
-  the pool closed. The README/FAQ/ADVANCED install lines stay on the release before — they must never name
+  `plugin.json` at X.Y.Z, `install.cmd`'s PS1URL at the tag, the pool closed. `commands/install-tcc.md` names
+  no TCC version: it installs TCC's newest release, read when it runs — TCC pins the skill, never the reverse,
+  which is why the skill goes first (the user, W-11; `installer-consistency` refuses a pin there). The README/FAQ/ADVANCED install lines stay on the release before — they must never name
   a tag that does not exist yet — and the train moves them, with the catalog, in one commit after the tag.
   The train runs `scripts/tag-check.sh --at <commit> vX.Y.Z` as this repo's half. **An ordinary patch is
   the session's own, as before**: its bookkeeping commit moves the front-page lines too, and

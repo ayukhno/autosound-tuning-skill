@@ -82,7 +82,7 @@ real the other seat missed), fix rounds and red CI runs, per group. Times are UT
 | Bookkeeping (rc2) | 1 | haiku · high | the version bumps (plugin.json, the installer version, install.cmd's PS1URL, install.ps1's one-liner) — exact, 5 lines, its check's FAIL was the brief's (the CHANGELOG heading not yet there) |
 | Bookkeeping (rc2) | 1 | sonnet · medium | `install-tcc` on TCC v1.2.0 with `--constraints` — exact |
 | Bookkeeping (rc2) | 1 + 1 | opus · high; Advisor (gemini-3.8-flash-medium) | one seat on the bookkeeping (3 minor, 2 taken); Gemini on the CHANGELOG's new parts (4, all taken) — `26439cb` |
-| Bookkeeping (rc2) | 0 | session | the Arbiter: the skill names no TCC version («навпаки … тому ми скіл і випускаємо першим»), his pick «найновіший реліз»: `install-tcc` installs `<tag>`, TCC's newest release read with `git ls-remote`; IC refuses a named TCC version (red at rc1's v1.1.2 and b93dce1's v1.2.0) |
+| Bookkeeping (rc2) | 0 | session | the Arbiter: the skill names no TCC version («навпаки … тому ми скіл і випускаємо першим»), his pick «найновіший реліз»: `install-tcc` installs `<tag>`, TCC's newest release read with `git ls-remote`; IC refuses a named TCC version (red at rc1's v1.1.2 and b93dce1's v1.2.0); one Opus seat: 3 (1 medium — the repo's CLAUDE.md still asked for the pin —, 2 low), all taken |
 
 ## The Arbiter's VM run on rc1
 
