@@ -190,6 +190,7 @@ def verdict(name, measurements=None, f_low=20, f_high=20000):
         # because nothing here was validated -- reading it as "bad" is what `applicable` exists
         # to prevent, and a caller that ignores the field sees exactly what it saw before.
         out["applicable"] = False
+        out["why"] = "not_a_sweep"         # which not-applicable it is, for the summary's words (#184)
         out["issues"].append(f"this check is for swept captures; REW says this one is "
                              f"{out['kind']} — nothing here was checked")
         return out
@@ -205,6 +206,7 @@ def verdict(name, measurements=None, f_low=20, f_high=20000):
         # No fault of the capture: the band asked for is one it was never swept over. Not applicable, like an RTA --
         # counted apart and never unusable; `valid` stays False because nothing was checked.
         out["applicable"] = False
+        out["why"] = "outside_band"        # ...not "not a sweep", which the summary called it (#184)
         out["issues"].append(f"its own range in REW, {own[0]:g}-{own[1]:g} Hz, lies outside the band asked for, "
                              f"{f_low:g}-{f_high:g} Hz — nothing checked")
         return out
@@ -448,6 +450,8 @@ def session_report(verdicts, processing_rate_hz=None, ir_of=_rew_ir_of):
                "capture_rate_hz": st.get("capture_rate_hz"),
                "applicable": v.get("applicable", True) is not False,
                "issues": list(v.get("issues") or [])}
+        if v.get("why"):
+            row["why"] = v["why"]                      # why it was not checked (#184): the header reads it back
         if v.get("ambiguous"):
             row["ambiguous"] = v["ambiguous"]          # REW holds it more than once (H I-8)
         rows.append(row)
@@ -542,8 +546,7 @@ def render_session(report):
     lines = [f"  session probe -- {counts['total']} titles, {counts['ok']} usable, "
              f"{counts['missing']} missing, {counts['invalid']} unusable"
              + (f", {counts['ambiguous']} ambiguous" if counts.get("ambiguous") else "")
-             + (f", {counts['not_applicable']} not checked (not a sweep)"
-                if counts.get("not_applicable") else "")
+             + _not_checked_said(counts)
              + (f", {counts['unreachable']} unreachable" if counts.get("unreachable") else "")
              + (f", {counts['not_asked']} not asked (REW's address is none)" if counts.get("not_asked") else ""), ""]
     lines.append(f"  {'title':24}{'live dB':>9}{'IR peak':>9}{'pre-ring':>10}{'arrival ms':>12}{'rate':>7}  ")
@@ -628,12 +631,41 @@ def summary(verdicts):
     REW holds more than once is `ambiguous` (H I-8): neither missing nor merely unusable. A title
     REW was never asked about -- its address being none (`reachable` null, `config`) -- is
     `not_asked`, never `invalid` (batch 3's re-review M5): it is no verdict on the capture.
+
+    `not_applicable` is the total of the two reasons a capture is not checked (#184): `not_applicable_sweep`, an RTA
+    (`why` "not_a_sweep"), and `not_applicable_band`, a sweep whose own range lies outside the band asked for (`why`
+    "outside_band"). Counted inside the total, never beside it, so the counts still add up; a verdict that names no
+    `why` (one written before it existed) is in neither.
     """
     counts = {"total": len(verdicts), "missing": 0, "invalid": 0, "not_applicable": 0, "ok": 0, "unreachable": 0,
-              "ambiguous": 0, "not_asked": 0}
+              "ambiguous": 0, "not_asked": 0, "not_applicable_sweep": 0, "not_applicable_band": 0}
     for v in verdicts:
-        counts[_counted_as(v)] += 1
+        counted = _counted_as(v)
+        counts[counted] += 1
+        if counted == "not_applicable" and v.get("why") in _WHY_COUNT:
+            counts[_WHY_COUNT[v["why"]]] += 1
     return counts
+
+
+# A not-applicable verdict's `why` -> its count in `summary` and its words in the summary line (#184).
+_WHY_COUNT = {"not_a_sweep": "not_applicable_sweep", "outside_band": "not_applicable_band"}
+_WHY_SAID = (("not_applicable_sweep", "not a sweep"), ("not_applicable_band", "outside the band"))
+
+
+def _not_checked_said(counts):
+    """The summary's not-checked part, ", N not checked (<why>)" per reason (#184), for `render_session` and `_main`
+    alike. It said "(not a sweep)" for every not-applicable, a sweep outside the band too. What no reason was given for
+    -- a verdict from before `why` -- is ", N not checked", no reason claimed. Empty when nothing was left unchecked."""
+    total = counts.get("not_applicable") or 0
+    parts, said = [], 0
+    for key, words in _WHY_SAID:
+        n = counts.get(key) or 0
+        if n:
+            parts.append(f", {n} not checked ({words})")
+            said += n
+    if total > said:
+        parts.append(f", {total - said} not checked")
+    return "".join(parts)
 
 
 _USAGE = """usage: verify.py <title> [title ...] [--json] [--band LOW HIGH] [--session]
@@ -716,7 +748,7 @@ def _main(argv):
         print(f"{counts['ok']}/{counts['total']} usable, "
               f"{counts['missing']} missing, {counts['invalid']} unusable"
               + (f", {counts['ambiguous']} ambiguous" if counts["ambiguous"] else "")
-              + (f", {counts['not_applicable']} not checked (not a sweep)" if counts["not_applicable"] else "")
+              + _not_checked_said(counts)
               + (f", {counts['unreachable']} unreachable" if counts["unreachable"] else ""))
     if any(v.get("reachable", True) is False for v in verdicts):
         return EXIT_REW_UNAVAILABLE       # REW did not answer: no verdict on those titles, so neither 0 nor 1
@@ -1034,6 +1066,16 @@ def _check_counts_add_up():
            {"exists": True, "valid": False, "applicable": False}, {"exists": True, "valid": False}]
     s = summary(old)
     assert (s["ok"], s["missing"], s["invalid"], s["not_applicable"], s["unreachable"]) == (1, 1, 1, 1, 0), s
+    # ...and says no reason it was not given (#184): "not checked", neither "not a sweep" nor "outside the band".
+    assert (s["not_applicable_band"], s["not_applicable_sweep"]) == (0, 0), s
+    assert _not_checked_said(s) == ", 1 not checked", _not_checked_said(s)
+    # The two reasons apart (#184): `not_applicable` stays the total, each reason counted inside it.
+    why = [dict(v(True, applicable=False), why="not_a_sweep"), dict(v(True, applicable=False), why="outside_band"),
+           dict(v(True, applicable=False), why="outside_band"), v(True, applicable=False)]
+    s = summary(why)
+    assert (s["not_applicable"], s["not_applicable_sweep"], s["not_applicable_band"]) == (4, 1, 2), s
+    assert _not_checked_said(s) == (", 1 not checked (not a sweep), 2 not checked (outside the band), "
+                                    "1 not checked"), _not_checked_said(s)
     unread = dict(v(None, reachable=False), name="w-L_00 (sw)", stats={"pre_ringing_dB": -80.0})
     pair = [dict(v(True, valid=True), name="w-L_01 (sw)", stats={"pre_ringing_dB": -42.0}),
             dict(v(True, valid=True), name="w-L_02 (sw)", stats={"pre_ringing_dB": -18.0})]
@@ -1190,8 +1232,13 @@ def _check_own_band():
         # ...and it is no fault of the capture: not applicable to that band, counted apart, never unusable.
         want("...not applicable, never invalid", v["applicable"] is False and _counted_as(v) == "not_applicable",
              (v["applicable"], _counted_as(v)))
+        # ...and the verdict says which of the two not-applicables it is (#184): the summary called it "not a sweep".
+        want("...why: outside the band", v.get("why") == "outside_band", v.get("why"))
+        want("...counted outside the band", summary([v])["not_applicable_band"] == 1, summary([v]))
         rc, out = _run_main(["verify.py", "sw_1 (sw)", "--band", "1000", "20000"])
         want("...and the command line does not fail on it", rc == 0 and "N/A " in out, (rc, out))
+        want("...and its summary says outside the band, not 'not a sweep'",
+             "1 not checked (outside the band)" in out and "not a sweep" not in out, out)
         rc, out = _run_main(["verify.py", "tw-L_1 (sw)", "--band", "100", "1000", "--json"])
         doc = json.loads(out)
         want("the CLI's --band clamps", rc == 0 and doc["measurements"][0]["stats"]["band_hz"] == [100.0, 1000.0],
@@ -1315,6 +1362,9 @@ def _selftest():
         probe = session_report([v_rta, v_sw])
         assert [r["applicable"] for r in probe["rows"]] == [False, True], probe["rows"]
         assert "0 unusable, 1 not checked (not a sweep)" in render_session(probe).splitlines()[0]
+        # #184: the reason is the verdict's own, and it travels with the session rows.
+        assert v_rta.get("why") == "not_a_sweep" and "why" not in v_sw, (v_rta, v_sw)
+        assert [r.get("why") for r in probe["rows"]] == ["not_a_sweep", None], probe["rows"]
     finally:
         _api.get_measurements, _api.get_fr, _api.get_impulse_response = _orig_gm, _orig_fr, _orig_ir
 

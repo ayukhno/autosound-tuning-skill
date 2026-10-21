@@ -7796,6 +7796,53 @@ def _check_listing_never_read_as_rew():
         shutil.rmtree(top, ignore_errors=True)
 
 
+def _check_not_checked_says_why():
+    """`capture-check --session`'s header says why each capture was not checked (#184), through the real `verify`: an
+    RTA "not a sweep", a sweep whose own range lies outside the band "outside the band" -- the header called both "not
+    a sweep". The reason is the verdict's `why`, carried on the session rows and read back from them; a row written
+    before `why` existed is "not checked", no reason claimed."""
+    import shutil
+    import tempfile
+    verifier = _load_sibling("verify.py")
+    api = verifier._api
+    real, loader = api.get_measurements, Process._load_verifier
+    top = tempfile.mkdtemp(prefix="autosound_process_not_checked_")
+    try:
+        # An infrasonic sweep, 2-15 Hz: wholly below the default 20-20000, so `verify` reads it outside the band.
+        api.get_measurements = lambda: {
+            "1": {"title": "ALL_1 (rta)", "uuid": "u1",
+                  "notes": "65536-point 1/48 octave RTA using Hann window, no smoothing and 150 averages"},
+            "2": {"title": "sw_1 (sw)", "uuid": "u2", "notes": "DELAY 1 ms", "startFreq": 2.0, "endFreq": 15.0}}
+        d = os.path.join(top, "process")
+        p = Process(d)
+        p.enter_phase("-1")
+        p.start_capture("1", expected=["ALL_1 (rta)", "sw_1 (sw)"])
+        rc, out, err = _run_main(["process.py", d, "capture-check", "--session"])
+        header = next((line for line in out.splitlines() if "session probe" in line), "")
+        assert rc == EXIT_OK and "1 not checked (not a sweep), 1 not checked (outside the band)" in header, \
+            (rc, out, err)
+        rows = Process(d).load()["capture"]["session"]["rows"]
+        assert {r["name"]: r.get("why") for r in rows} == {"ALL_1 (rta)": "not_a_sweep", "sw_1 (sw)": "outside_band"}, \
+            rows
+        # A legacy verdict -- a `verify` from before `why` -- claims no reason: "not checked", never "not a sweep".
+        class Legacy:
+            def __getattr__(self, name):
+                return getattr(verifier, name)
+
+            def verify(self, titles, measurements=None):
+                return [{k: x for k, x in v.items() if k != "why"}
+                        for v in verifier.verify(titles, measurements=measurements)]
+
+        Process._load_verifier = lambda self: Legacy()
+        rc, out, err = _run_main(["process.py", d, "capture-check", "--session"])
+        header = next((line for line in out.splitlines() if "session probe" in line), "")
+        assert rc == EXIT_OK and header.endswith(", 2 not checked") and "(" not in header.split("unusable")[1], \
+            (rc, out, err)
+    finally:
+        api.get_measurements, Process._load_verifier = real, loader
+        shutil.rmtree(top, ignore_errors=True)
+
+
 def _check_ambiguous_capture():
     """A title REW holds twice is its own verdict in the round too (#134, H I-8, T m4), through the real `verify`:
     REW holds it, so the check takes it -- a `taken` row, `exists` true -- where it was left outstanding as nobody's
@@ -9316,7 +9363,7 @@ def _selftest():
                   _check_a_check_asks_rew_by_key, _check_a_check_judges_one_snapshot_of_rew,
                   _check_close_stops_on_a_moved_snapshot, _check_retakes_and_superseded_rows,
                   _check_close_says_what_rew_did,
-                  _check_listing_never_read_as_rew, _check_ambiguous_capture, _check_close_swallows_only_rew,
+                  _check_listing_never_read_as_rew, _check_ambiguous_capture, _check_not_checked_says_why, _check_close_swallows_only_rew,
                   _check_intake_gate_names_an_unreadable_project_json, _check_close_checks_stage_refusals,
                   _check_naming_load_error_named, _check_round_lookups_read_the_state_strictly,
                   _check_intake_gate_names_an_unreadable_glossary, _check_plan_names_the_naming_load_error,
@@ -10451,10 +10498,11 @@ def _main(argv):
             if session and round_.get("session"):
                 verifier = p._load_verifier()
                 # `reachable` kept (#134): a row REW did not answer for is counted unreachable, never unusable; and
-                # `ambiguous`, a title REW holds more than once, counted apart (H I-8).
+                # `ambiguous`, a title REW holds more than once, counted apart (H I-8); and `why`, which of the two
+                # not-checked it is (#184) -- a row without one is "not checked", no reason claimed.
                 probe = dict(round_["session"], counts=verifier.summary(
                     [{"exists": r["exists"], "valid": r["valid"], "applicable": r.get("applicable", True),
-                      "reachable": r.get("reachable", True), "ambiguous": r.get("ambiguous")}
+                      "reachable": r.get("reachable", True), "ambiguous": r.get("ambiguous"), "why": r.get("why")}
                      for r in round_["session"]["rows"]]),
                     processing_rate_hz=None, rate_note=None)
                 print(verifier.render_session(probe))
