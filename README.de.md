@@ -49,12 +49,12 @@ Die App lässt sich mit einem einzigen Befehl installieren. An Hardware und Abon
 
 **macOS** — öffne das Terminal (⌘-Leertaste, „terminal“ eintippen, Enter) und füge Folgendes ein:
 ```sh
-curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.1.4/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.2.0/install.sh | bash
 ```
 
 **Windows** — öffne die PowerShell (Start, „powershell“ eintippen, Enter) und füge Folgendes ein:
 ```powershell
-irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.1.4/install.ps1 | iex
+irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.2.0/install.ps1 | iex
 ```
 *(Die Version in der Adresse fixiert den Installer selbst; er installiert immer das neueste Release.)*
 
@@ -69,11 +69,11 @@ irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.1.4/inst
 
 Mit Optionen – zum Beispiel `omp` und dem GitHub-Backup – unter macOS:
 ```sh
-curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.1.4/install.sh | bash -s -- --with-omp --github
+curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.2.0/install.sh | bash -s -- --with-omp --github
 ```
 und unter Windows als zwei Zeilen:
 ```powershell
-$i = irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.1.4/install.ps1
+$i = irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.2.0/install.ps1
 & ([scriptblock]::Create($i)) -WithOmp -GitHub
 ```
 **Wie es endete**, steht im Exit-Code des Installers: `0` bereit · `1` gestoppt vor dem Ende — eine Ablehnung, ein Fehler oder eine Unterbrechung; was davor getan wurde, bleibt, und die letzten Zeilen sagen, was (ein Stopp vor dem Schritt der Methode lässt die Methode so, wie sie war) · `2` eine falsche Option für `install.sh` oder ein ungültiges `-Channel` oder `-Plugin` für `install.ps1` (PowerShell selbst lehnt eine Option, die sie nicht kennt, mit `1` ab) · `3` installiert, aber nicht bereit, seine letzten Zeilen nennen, was fehlt und was zu tun ist.

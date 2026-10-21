@@ -49,12 +49,12 @@
 
 **macOS** — відкрий Terminal (⌘-Пробіл, введи «terminal», Enter) і встав:
 ```sh
-curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.1.4/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.2.0/install.sh | bash
 ```
 
 **Windows** — відкрий PowerShell (Пуск, введи «powershell», Enter) і встав:
 ```powershell
-irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.1.4/install.ps1 | iex
+irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.2.0/install.ps1 | iex
 ```
 *(Версія в адресі фіксує сам інсталятор; він завжди встановлює найновіший реліз.)*
 
@@ -69,11 +69,11 @@ irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.1.4/inst
 
 З опціями — наприклад, `omp` та резервне копіювання на GitHub — на macOS:
 ```sh
-curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.1.4/install.sh | bash -s -- --with-omp --github
+curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.2.0/install.sh | bash -s -- --with-omp --github
 ```
 і на Windows двома рядками:
 ```powershell
-$i = irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.1.4/install.ps1
+$i = irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.2.0/install.ps1
 & ([scriptblock]::Create($i)) -WithOmp -GitHub
 ```
 **Чим усе завершилося**, зазначено в коді виходу інсталятора: `0` готово · `1` зупинено до завершення — відмова, помилка чи переривання; те, що було зроблено до цього, залишається, а останні рядки вказують, що саме (зупинка перед кроком методу залишає метод таким, як він був) · `2` неправильна опція для `install.sh` або некоректний `-Channel` чи `-Plugin` для `install.ps1` (сама PowerShell відхиляє опцію, якої не знає, з `1`) · `3` встановлено, але не готово, його останні рядки вказують, чого бракує та що робити.
