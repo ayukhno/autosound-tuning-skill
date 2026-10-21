@@ -117,7 +117,7 @@ How the run ended is in its exit code: `0` ready · `1` stopped before the end �
 4. **Pick the models** at the bottom of TCC's window: **AI main** — Claude Opus, **Effort** — x-high (the default), **AI critic** — Gemini Pro (High), or Gemini Flash (High) if Pro is not offered to you. For fine tuning in the car later, switch **AI main** there to the most capable model (today Claude Fable).
 5. **Type** in TCC's chat: **"tune a new car from scratch"**. The AI asks about your system and your goals, then plans the measurements.
 6. **In the car** (the first of two visits), TCC lists each measurement by name under *In focus now*. Take it in REW under that name, then press **⬇** to read it in. When all are in, press **Done**.
-7. **At the desk** the AI designs the tune; **back in the car** (the second visit) you enter the numbers into the DSP, check them and fine-tune by ear. Two visits give the first result; after it the tune improves round by round, by ear, as far as you want to take it.
+7. **At the desk** the AI designs the tune; **back in the car** (the second visit) you enter the numbers into the DSP, check them and fine-tune by ear. Two visits give the first result; after it you improve the tune round by round, by ear, as far as you want to take it.
 
 ### Updating
 
