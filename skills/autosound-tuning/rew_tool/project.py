@@ -2370,10 +2370,10 @@ def _run_cli(main, argv, **env):
 
 
 #: One of the two writers of `_check_two_writers_lose_nothing`, in a python of its own: this file loaded by path, and
-#: one channel added in one `update`. Writer `a` stops inside its update, its facts loaded and not saved -- the
-#: change `set_channel` hands `Project.update` is wrapped here, in the child, to say `loaded-a` and wait for `go-a`
-#: before it runs. Writer `b` first
-#: asks the lock, without waiting, whether it is free, and writes the answer to `probed-b` before its own update.
+#: one channel added in one `update`. Writer `a` stops twice inside its update -- once its first `Project.load` has
+#: returned (`loaded-a`, until `go-loaded-a`) and again as `Project.save` begins (`saving-a`, until `go-saving-a`) --
+#: the two wrapped here, in the child, so that the parent can ask the lock at each. Writer `b` first asks the lock,
+#: without waiting, whether it is free, and writes the answer to `probed-b` before its own update.
 _CHANNEL_WRITER = r"""
 import importlib.util, os, sys, time
 spec = importlib.util.spec_from_file_location("autosound_project_writer", sys.argv[1])
@@ -2388,20 +2388,31 @@ def signal(what, text=""):
     os.replace(os.path.join(signals, what + ".tmp"), os.path.join(signals, what))   # whole, or not there
 
 
-if name == "a":
-    update = project.Project.update
+def pause(what):
+    signal(what)
+    deadline = time.monotonic() + 120
+    while not os.path.exists(os.path.join(signals, "go-" + what)):
+        if time.monotonic() > deadline:
+            sys.exit(f"writer a: the parent never said go at {what}")
+        time.sleep(0.005)
 
-    def wait_then(fn):
-        def change(data):                    # the facts loaded, nothing saved yet: stop here
-            signal("loaded-a")
-            deadline = time.monotonic() + 120
-            while not os.path.exists(os.path.join(signals, "go-a")):
-                if time.monotonic() > deadline:
-                    sys.exit("writer a: the parent never said go")
-                time.sleep(0.005)
-            return fn(data)
-        return change
-    project.Project.update = lambda self, fn: update(self, wait_then(fn))
+
+if name == "a":
+    load, save, done = project.Project.load, project.Project.save, set()
+
+    def load_then_wait(self):
+        data = load(self)
+        if "loaded" not in done:             # the update's own load; the save's count of the revision goes on
+            done.add("loaded")
+            pause("loaded-a")
+        return data
+
+    def wait_then_save(self, data):
+        if "saving" not in done:
+            done.add("saving")
+            pause("saving-a")
+        return save(self, data)
+    project.Project.load, project.Project.save = load_then_wait, wait_then_save
 else:
     signal("probed-b", project._write_lock().probe(folder)[0])
 try:
@@ -2413,12 +2424,14 @@ except Exception as exc:                     # the last line, which the check's 
 
 def _check_two_writers_lose_nothing():
     """Two writers of one `project.json` lose nothing (#141, J2b), as a handoff between two processes (#185): writer A
-    stops inside its `update`, its facts loaded and not yet saved; writer B, started then, finds the lock held -- its
-    own probe, without waiting -- and goes into its update; A saves and lets go, and B's update lands on A's: both
-    channels in the file, `project_rev` 2. An update that let go between its load and its save would show B a free
-    lock, and A's save would write over B's channel. It was two writers racing 40 writes each against the lock's
-    50 ms poll, which is not fair: on Windows CI one starved and was Busy (#185). Nothing here is timed -- the
-    deadlines only end a deadlock."""
+    stops inside its `update` twice -- its facts just loaded, and its save just begun -- and the lock is held at both,
+    as this process's probe finds it; writer B, started at the first stop, finds it held too, by its own probe, and
+    goes into its update; A saves and lets go, and B's update lands on A's: both channels in the file, `project_rev`
+    2. An update that loads before it takes the lock, lets go between its load and its save, or saves under a hold of
+    its own shows a free lock at one of the stops -- and a free lock there is how B's channel was written over. It was
+    two writers racing 40 writes each against the lock's 50 ms poll, which is not fair: on Windows CI one starved and
+    was Busy (#185); and a race catches a lock let go for a moment only when the other writer happens to look then.
+    Nothing here is timed -- the deadlines only end a deadlock."""
     import shutil
     import subprocess
     import tempfile
@@ -2433,40 +2446,59 @@ def _check_two_writers_lose_nothing():
         children.append(subprocess.Popen(
             [sys.executable, "-c", _CHANNEL_WRITER, os.path.realpath(__file__), folder, name, signals],
             stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
-            env={**os.environ, "AUTOSOUND_LOCK_TIMEOUT_S": "120"}))
+            env={**os.environ, "AUTOSOUND_LOCK_TIMEOUT_S": "60"}))
+
+    def tail(c):
+        return c.stderr.read().decode("utf-8", "replace").strip()[-300:]
 
     def wait_for(what):
         deadline = time.monotonic() + 120
         while not os.path.exists(os.path.join(signals, what)):
+            assert children[0].poll() != 0, f"no {what}: writer a finished without entering Project.update"
             assert time.monotonic() < deadline and all(c.poll() is None for c in children), \
-                f"no {what}: exits {[c.poll() for c in children]}, " \
-                f"{[c.stderr.read().decode('utf-8', 'replace').strip()[-300:] for c in children if c.poll()]}"
+                f"no {what}: exits {[c.poll() for c in children]}, {[tail(c) for c in children if c.poll()]}"
             time.sleep(0.005)
         with open(os.path.join(signals, what), encoding="utf-8") as f:
             return f.read()
 
+    def go(what):
+        with open(os.path.join(signals, "go-" + what), "w", encoding="utf-8"):
+            pass
+
     try:
+        probes = {}
         start("a")
         wait_for("loaded-a")
+        probes["A just loaded"] = _write_lock().probe(folder)[0]
         start("b")
-        probed = wait_for("probed-b")
-        with open(os.path.join(signals, "go-a"), "w", encoding="utf-8"):
-            pass
-        for c in children:
-            err = c.communicate(timeout=120)[1].decode("utf-8", "replace")
-            assert c.returncode == 0, f"a writer failed, exit {c.returncode}: {err.strip()[-300:]}"
+        probes["B before its update"] = wait_for("probed-b")
+        go("loaded-a")
+        wait_for("saving-a")
+        probes["A beginning its save"] = _write_lock().probe(folder)[0]
+        go("saving-a")
+        for name, c in zip("ab", children):
+            try:
+                err = c.communicate(timeout=120)[1].decode("utf-8", "replace")
+            except subprocess.TimeoutExpired:
+                c.kill()
+                err = c.communicate()[1].decode("utf-8", "replace")
+                raise AssertionError(f"writer {name} never finished: {err.strip()[-300:]}") from None
+            assert c.returncode == 0, f"writer {name} failed, exit {c.returncode}: {err.strip()[-300:]}"
         data = Project(folder).load()
         got = sorted(row.get("code") for row in data["channels"])
-        assert probed == "held", \
-            f"B found the lock {probed!r} while A was between its load and its save (channels {got}, " \
-            f"project_rev {data['project_rev']})"
+        free = [at for at, answer in probes.items() if answer != "held"]
+        assert not free, f"the lock was not held at {free} ({probes}; channels {got}, project_rev " \
+                         f"{data['project_rev']})"
         assert got == ["a0", "b0"], f"channels {got} after A's write and B's"
         assert data["project_rev"] == 2, f"project_rev {data['project_rev']} after two writes"
     finally:
         for c in children:
             if c.poll() is None:
                 c.kill()
-                c.wait(10)
+                try:
+                    c.wait(10)
+                except subprocess.TimeoutExpired:
+                    pass                     # a slow runner: the assertion above is the news, and the folder goes
             if not c.stderr.closed:
                 c.stderr.close()
         shutil.rmtree(top, ignore_errors=True)
