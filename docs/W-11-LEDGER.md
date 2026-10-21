@@ -104,3 +104,4 @@ real the other seat missed), fix rounds and red CI runs, per group. Times are UT
 | T1 third fix re-review | Opus | 6 (2 high, 2 medium) | both highs hid a real chain change | — |
 | T16 review | Opus | 4 (1 high, 1 medium) | the high was the session's brief (outside #191), reverted | — |
 | Installers group | Opus | 6 (1 important, 5 minor) | test gaps, no defect | — |
+| #193 review (rc2, built by the session) | Opus | 6 (3 important, 3 minor) | all real; 5 taken in d2bcb5e — the line's own wait, its time off the package's (TCC's 600 s), honest advice with agy's list unread; a cached list not taken | — |
