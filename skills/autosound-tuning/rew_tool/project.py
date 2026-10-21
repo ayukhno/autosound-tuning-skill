@@ -2369,36 +2369,56 @@ def _run_cli(main, argv, **env):
     return rc, out.getvalue(), err.getvalue()
 
 
-#: One of the two writers of `_check_two_writers_lose_nothing`, in a python of its own: this file loaded by path, its
-#: own channels added one write each once the parent says `go` -- a barrier, so that the two write at once.
+#: One of the two writers of `_check_two_writers_lose_nothing`, in a python of its own: this file loaded by path, and
+#: one channel added in one `update`. Writer `a` stops inside its update, its facts loaded and not saved -- the
+#: change `set_channel` hands `Project.update` is wrapped here, in the child, to say `loaded-a` and wait for `go-a`
+#: before it runs. Writer `b` first
+#: asks the lock, without waiting, whether it is free, and writes the answer to `probed-b` before its own update.
 _CHANNEL_WRITER = r"""
 import importlib.util, os, sys, time
 spec = importlib.util.spec_from_file_location("autosound_project_writer", sys.argv[1])
 project = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(project)
-folder, prefix, count, signals = sys.argv[2], sys.argv[3], int(sys.argv[4]), sys.argv[5]
-open(os.path.join(signals, "ready-" + prefix), "w").close()
-deadline = time.monotonic() + 60
-while not os.path.exists(os.path.join(signals, "go")):
-    if time.monotonic() > deadline:
-        sys.exit("the parent never said go")
-    time.sleep(0.001)
-went = time.monotonic()
-for i in range(count):
-    try:
-        project.Project(folder).set_channel(prefix + str(i), order=i)
-    except Exception as exc:                 # the last line, which the check's tail of stderr keeps: when and which
-        sys.exit(f"writer {prefix}: write {i} failed {time.monotonic() - went:.1f} s after go: "
-                 f"{type(exc).__name__}: {exc}")
+folder, name, signals = sys.argv[2], sys.argv[3], sys.argv[4]
+
+
+def signal(what, text=""):
+    with open(os.path.join(signals, what + ".tmp"), "w", encoding="utf-8") as f:
+        f.write(text)
+    os.replace(os.path.join(signals, what + ".tmp"), os.path.join(signals, what))   # whole, or not there
+
+
+if name == "a":
+    update = project.Project.update
+
+    def wait_then(fn):
+        def change(data):                    # the facts loaded, nothing saved yet: stop here
+            signal("loaded-a")
+            deadline = time.monotonic() + 120
+            while not os.path.exists(os.path.join(signals, "go-a")):
+                if time.monotonic() > deadline:
+                    sys.exit("writer a: the parent never said go")
+                time.sleep(0.005)
+            return fn(data)
+        return change
+    project.Project.update = lambda self, fn: update(self, wait_then(fn))
+else:
+    signal("probed-b", project._write_lock().probe(folder)[0])
+try:
+    project.Project(folder).set_channel(name + "0", order=0)
+except Exception as exc:                     # the last line, which the check's tail of stderr keeps
+    sys.exit(f"writer {name}: {type(exc).__name__}: {exc}")
 """
 
 
 def _check_two_writers_lose_nothing():
-    """Two writers of one `project.json` at once lose nothing (#141, J2b): two processes add 40 channels each, one
-    write per channel, and every channel of both is in the file, `project_rev` 80 -- one per write. Each loaded,
-    changed and saved on its own, so a write that landed between another's load and its save was written over:
-    channels gone, and the revision short of the writes. The two wait up to 60 s for each other, whatever wait the
-    shell that runs the check has set (R25): a short one there made them busy, and the check red for no fault."""
+    """Two writers of one `project.json` lose nothing (#141, J2b), as a handoff between two processes (#185): writer A
+    stops inside its `update`, its facts loaded and not yet saved; writer B, started then, finds the lock held -- its
+    own probe, without waiting -- and goes into its update; A saves and lets go, and B's update lands on A's: both
+    channels in the file, `project_rev` 2. An update that let go between its load and its save would show B a free
+    lock, and A's save would write over B's channel. It was two writers racing 40 writes each against the lock's
+    50 ms poll, which is not fair: on Windows CI one starved and was Busy (#185). Nothing here is timed -- the
+    deadlines only end a deadlock."""
     import shutil
     import subprocess
     import tempfile
@@ -2408,27 +2428,40 @@ def _check_two_writers_lose_nothing():
     os.makedirs(signals)
     os.makedirs(folder)
     children = []
-    try:
-        for prefix in ("a", "b"):
-            children.append(subprocess.Popen(
-                [sys.executable, "-c", _CHANNEL_WRITER, os.path.realpath(__file__), folder, prefix, "40", signals],
-                stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
-                env={**os.environ, "AUTOSOUND_LOCK_TIMEOUT_S": "60"}))
-        deadline = time.monotonic() + 60
-        while not all(os.path.exists(os.path.join(signals, f"ready-{p}")) for p in ("a", "b")):
+
+    def start(name):
+        children.append(subprocess.Popen(
+            [sys.executable, "-c", _CHANNEL_WRITER, os.path.realpath(__file__), folder, name, signals],
+            stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+            env={**os.environ, "AUTOSOUND_LOCK_TIMEOUT_S": "120"}))
+
+    def wait_for(what):
+        deadline = time.monotonic() + 120
+        while not os.path.exists(os.path.join(signals, what)):
             assert time.monotonic() < deadline and all(c.poll() is None for c in children), \
-                f"the two writers never got ready: exits {[c.poll() for c in children]}"
-            time.sleep(0.002)
-        with open(os.path.join(signals, "go"), "w", encoding="utf-8"):
+                f"no {what}: exits {[c.poll() for c in children]}, " \
+                f"{[c.stderr.read().decode('utf-8', 'replace').strip()[-300:] for c in children if c.poll()]}"
+            time.sleep(0.005)
+        with open(os.path.join(signals, what), encoding="utf-8") as f:
+            return f.read()
+
+    try:
+        start("a")
+        wait_for("loaded-a")
+        start("b")
+        probed = wait_for("probed-b")
+        with open(os.path.join(signals, "go-a"), "w", encoding="utf-8"):
             pass
         for c in children:
             err = c.communicate(timeout=120)[1].decode("utf-8", "replace")
             assert c.returncode == 0, f"a writer failed, exit {c.returncode}: {err.strip()[-300:]}"
         data = Project(folder).load()
-        want = {f"{p}{i}" for p in ("a", "b") for i in range(40)}
-        got = {row.get("code") for row in data["channels"]}
-        assert got == want, f"{len(want - got)} of 80 channels lost: {sorted(want - got)[:10]}"
-        assert data["project_rev"] == 80, f"project_rev {data['project_rev']} after 80 writes"
+        got = sorted(row.get("code") for row in data["channels"])
+        assert probed == "held", \
+            f"B found the lock {probed!r} while A was between its load and its save (channels {got}, " \
+            f"project_rev {data['project_rev']})"
+        assert got == ["a0", "b0"], f"channels {got} after A's write and B's"
+        assert data["project_rev"] == 2, f"project_rev {data['project_rev']} after two writes"
     finally:
         for c in children:
             if c.poll() is None:
@@ -3782,8 +3815,8 @@ def _selftest():
           f"refused, a rename kept the channel's id and resolved its old captures (SCR-039), "
           f"hardware.controls recorded ONCE not per-preset (SCR-017), open_questions "
           f"found a bare null + an unfilled fact() wrapper, record_change landed in the project's "
-          f"own process journal; under the project's writer lock (#141) two writers at once lost none of their 80 "
-          f"channels (project_rev 80), save counts the revision from the disk (stale 3 over 7 -> 8; an unreadable "
+          f"own process journal; under the project's writer lock (#141) a second writer found the lock held "
+          f"through the first's update and landed on it (two channels, project_rev 2; #185), save counts the revision from the disk (stale 3 over 7 -> 8; an unreadable "
           f"file refused), update loads-changes-saves as one step (UNCHANGED writes nothing), every writing verb "
           f"answers 75 with one busy line under another's lock while the reads wait for nobody, catch-up holds it "
           f"once over its three fills (no writer between two; busy before the first, nothing filled), a bad "
