@@ -250,14 +250,19 @@ appended line is fsynced (and the folder, when the append made the file), so it 
 - **A check judges one REW** (#183). `capture-check` looks its titles up in one listing of REW's, and
   `verify` pulls the curves by that same listing (`verify(names, f_low, f_high, measurements=…)`); after
   the pulls REW's index is read once more -- two index reads for a check that lands -- and what it holds
-  under each title looked up (title -> uuid -> ordinal, by `title_key`) is held against the listing
-  the pulls used. An ordinal moved with the uuids unchanged, a title gone, a title held under a second
-  spelling now, a uuid replaced or a title appeared is REW changed while it was read: nothing is
+  under each title looked up (title -> uuid -> ordinal, and the record's `date`, by `title_key`) is
+  held against the listing the pulls used. An ordinal moved with the uuids unchanged, a title gone, a
+  title held under a second spelling now, a uuid replaced, a take replaced in place (its `date` moved,
+  for a record REW lists with no uuid) or a title appeared is REW changed while it was read: nothing is
   recorded, exit 69, `error: REW changed while it was read — run capture-check again (<what>; nothing
-  was recorded)`, no "start REW" -- REW answered. It read REW's index twice before the pulls, once for
-  the titles and once inside `verify`, and a take landing between the two was judged by the older one.
-  REW not answering that last read is 69 as REW down; another of REW's states there is 1, nothing
-  recorded.
+  was recorded)`, no "start REW" -- REW answered. A rename inside one `title_key` (`w-L_1 (sw)` to
+  `w-L_01 (sw)`) is refused the same way: a re-run is cheap, and the `as_in_rew` it would store is
+  stale. It read REW's index twice before the pulls, once for the titles and once inside `verify`,
+  and a take landing between the two was judged by the older one. Either read stopped by one of
+  REW's states is the check's refusal, nothing recorded: REW down 69 (`REW did not answer (<why>)`,
+  with "start REW"), any other state 1 (`REW's measurement list was not read (<why>)`) -- never
+  `verify`'s own read of the index standing in for the first. The error class names its own
+  `rew_state`, `changed`, and `rew_changed` on its class.
 - **Nothing is cleared over work that is only in the chat** (S-044). `handoff` answers one question — is everything the
   NEXT session needs on disk — and REFUSES while it is not: no phase recorded, an open capture round, a plan step left
   `todo`/`in_progress`, a done step whose evidence resolves to nothing, no ledger snapshot, a `tuning-changelog` with no
@@ -486,7 +491,9 @@ usage on stdout, exit 0.
   what landed is said instead. REW that changed while the checks read it (#183) stops the close the same way, exit
   69, the round open and its checks as they were: `error: REW changed while it was read (<what>) -- the reconcile of
   <id> landed; the checks and the close did not; run capture-close again` -- read as "checks not run", the round
-  closed over a check that may have judged an old take. REW down at the checks is the offline close it was.
+  closed over a check that may have judged an old take. REW down at the checks is the offline close it was. A bug
+  in the checks' read after the pulls is a bug, 70 with its traceback, the round open; a bug in `verify` still
+  closes unchecked, said with its type.
 - **`capture-start` says its plan file** (#141, S-101). Once the round is recorded, its list goes to
   `docs/plans/<_N|v_NNN>-capture.md`, and the verb says which: `plan: <the file, its absolute path>`, the last line on
   stdout; or, when the file could not be written, one line on stderr, `note: the round is open, but its plan <path>
