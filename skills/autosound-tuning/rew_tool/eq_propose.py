@@ -933,6 +933,12 @@ def load_part2_rew(codes, ver, f, api=None):
             continue
         except P.PredictError as exc:
             raise ProposeError(str(exc)) from exc
+        except Exception as exc:  # noqa: BLE001 -- REW's own states only; anything else is raised as it is
+            # An answer REW cannot have read -- no magnitude, `RewProtocolError` since #176 -- or REW down: a refusal
+            # naming the title, never a traceback. It was a KeyError, caught above as "missing".
+            if getattr(type(exc), "rew_state", None) is None:
+                raise
+            raise ProposeError(f"{rta_t!r}: REW's answer could not be read -- {exc}") from exc
         loaded[code] = (10.0 ** (np.asarray(mag, float) / 20.0) + 0j, info)
         try:
             _H, sinfo = P.load_solo_rew(sw_t, f, api=api, keep_ir=True)
@@ -1613,6 +1619,18 @@ def _selftest():
         raise AssertionError("a sweep under an (rta) title was read as the MMM")
     except ProposeError as e:
         assert "tw-L_51 (rta)" in str(e) and "impulse" in str(e), e
+    # An (rta) whose answer REW cannot have read -- no magnitude: `rew_api.RewProtocolError`, rew_state "protocol"
+    # since #176 -- is a refusal naming the title, never a traceback (it was a KeyError the "missing" branch caught).
+    class _Protocol(ValueError):
+        rew_state = "protocol"
+
+    def no_magnitude(mid, smoothing=None):
+        raise _Protocol("REW's frequency response for measurement m-L_51 (rta) carries no magnitude")
+    try:
+        load_part2_rew(["m-L"], "51", f, api=types.SimpleNamespace(**dict(vars(fake), get_fr=no_magnitude)))
+        raise AssertionError("an answer with no magnitude was read")
+    except ProposeError as e:
+        assert "m-L_51 (rta)" in str(e) and "no magnitude" in str(e), e
     # 12. Part 2 is never a baseline (#56 item 8): an unmarked channel of an as-configured series is
     #     used as measured, not refused at de-embed; parts 1 / all stay baselines unless the round's
     #     own phase says otherwise.
