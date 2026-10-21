@@ -167,10 +167,11 @@ engine (hub H-022), the ledger is `docs/W-11-LEDGER.md`.
 
 - **Rounds are compared on one level base** (#176, hub #285, PAS-015). On 08.10 REW reset its SPL calibration between
   two rounds (`splOffsetdB` 103.35 → 120.0) and every level of the new round read 16.65 dB high, while the round
-  check said nothing. Now each capture's `splOffsetdB` is recorded, and wherever rounds stand side by side —
-  `capture-check`, `compare`, `verify_prediction`'s FR and RTA path, the session table — readings are brought to one
-  base round (the project's first with a calibration, or one named: `capture-start --level-base <round id>`), and
-  the shift is said. Only SPL-calibrated readings move: an impulse read as a fraction of full scale carries no
+  check said nothing. Now each capture's `splOffsetdB` is recorded. `capture-check` and `verify_prediction`'s FR
+  and RTA path bring readings to one base round (the project's first with a calibration, or one named:
+  `capture-start --level-base <round id>`); `compare` brings the curves it shows side by side to the first title's
+  calibration, and the session table brings a round whose captures disagree to its first calibrated row. Each says
+  the shift. Only SPL-calibrated readings move: an impulse read as a fraction of full scale carries no
   calibration and is never shifted. `capture-check` prints one `LEVEL` line when there is news — REW's calibration
   moved against the previous round, a capture with no calibration, a mixed round, a doubt about the chain — and
   TCC reads the same in `capture.level_base`. The method mirrors the bench's `levelbase.py` as `rew_tool/levelbase.py`.
