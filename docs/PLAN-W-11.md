@@ -281,6 +281,14 @@ is kept, and a void or timed-out run is rerun, not counted. The runs go when no 
 idle), since earlier runs timed out under agent load (`SK/evals/README.md:234`). Gemini reads the new description.
 The bench queries that fire 0/7 whatever the wording are not chased (`SK/evals/README.md`, «does NOT ask for»).
 
+## #191 — an optional capture not taken is no gap, lane A (the Arbiter, 2026-10-21: «S-107 бери в W-11»)
+
+**T16 · #191.** XS–S, `Risk: high`, opus · high. `unusable_captures` skips an optional capture NOT taken (#80: «not a
+gap when not»): out of the totals' denominator and the exit code, its line saying optional, not taken; an optional
+capture TAKEN and unusable gates as today. capture-close and the phase gates follow the same rule. Test first: a round
+with one planned sweep taken and good and one optional not taken → exit 0, the optional's line, `1/1`; the optional
+taken and bad → exit 1. After T1's fix round (both in `P`). One seat: `silent-failure-hunter`.
+
 ## #190 — the test audit, lane C
 
 **T15 · #190.** XS + a report. `band_target` retired (the session; `target_bands.py --selftest`), and the sweep

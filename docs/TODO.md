@@ -1637,7 +1637,7 @@ holds `tcc-tag-*` and, since #179, `tcc-pins-*`) nor `install-receipt.json`, so 
 
 ## S-107 · An optional capture not taken makes `capture-check` exit 1
 
-**Status**: open 2026-10-21 · found by T1's implementer (#176) while it kept the round's control out of the gaps; recorded, not diagnosed; not on W-11's milestone — it joins the wave only on the Arbiter's word
+**Status**: open 2026-10-21 · on W-11's milestone as #191 with `ok` (the Arbiter: «S-107 бери в W-11»), T16 of `docs/PLAN-W-11.md` · was: found by T1's implementer (#176) while it kept the round's control out of the gaps; recorded, not diagnosed
 
 `unusable_captures` does not skip the round's `optional` list, so a capture listed «if there is time» (skill #80) and
 not taken counts as unusable and `capture-check` exits 1 while the round lacks nothing it needs. T1 exempted only the
