@@ -82,6 +82,8 @@ panel had nothing real to render and every resume re-derived the phase by re-rea
                    "band_source": "rew",            //   these spellings of it, #153). #154: the band
                                                     //   judged over; "asked" = REW listed no range,
                                                     //   truncation not checked
+                   "spl_offset_db": 120.0,          // #176: REW's `splOffsetdB` off the listing (an
+                                                    //   RTA's too); absent when REW lists none
                    "at": "…", "issues": []}}},      //   REW's own id — the title is NOT identity
     "checks": {"tw-L_1 (sw)": {"ok": true, "exists": true, "applicable": true,   // #134 (T-1): the last
                                "uuid": "9ff4deb9-…", "at": "…", "issues": []},   //   check of EVERY title,
@@ -96,7 +98,20 @@ panel had nothing real to render and every resume re-derived the phase by re-rea
                    "matched": 4, "extra": ["sw_1 (sw)"],   //   list before closing -- taken is what REW
                    "renames": {"Ms_01 (rta)": "Ms_1 (rta)"},  // holds (`as_in_rew` on a row spelled
                    "missing": ["tw-L_1 (sw)"], "missing_optional": []},  // differently there)
-    "closed_against": {"rew": true, "missing": [...], "extra": [...], "renames": {...}}  // or {"rew": false}
+    "closed_against": {"rew": true, "missing": [...], "extra": [...], "renames": {...}},  // or {"rew": false}
+    "level_base_named": "cap_003",                  // #176: `capture-start --level-base`; null = not named
+    "level_base": {                                 // #176 (hub #285, SKL-080): written by every check,
+      "status": "ok",                               //   beside `session`. ok | no_base (no earlier round
+                                                    //   recorded a level: this one is the base) | missing
+                                                    //   (no calibration here or at the base) | mixed (the
+                                                    //   round's captures disagree)
+      "base_round": "cap_003", "previous_round": "cap_003",   // the base: named, else the one last named,
+                                                    //   else the project's first round with offsets
+      "base_offset_db": 103.35, "previous_offset_db": 103.35,
+      "offset_db": 120.0,                           // only when every capture of the round agrees
+      "titles": {"w-L_4 (sw)": {"offset_db": 120.0,
+                                "to_base_db": 16.65,     // the shift that brings it to the base (subtracted)
+                                "to_previous_db": 16.65}}}  // the jump against the previous round; null with none
   }
 }
 ```
@@ -112,7 +127,9 @@ One JSON object per line, oldest first: `{"at": …, "type": …, …}`. Types:
 `capture_taken` carries `as_in_rew` and `capture_skipped` carries `as_typed` when the title typed was another
 spelling of a listed one (#153): `title` is then the list's, the round's own, and the field is the spelling typed.
 `capture_verified` carries `bands` -- `{title: {"band_hz": [lo, hi], "band_source": "rew"|"asked"}}` -- the band each
-sweep was judged over (#154).
+sweep was judged over (#154), and `spl_offsets_db` -- `{title: splOffsetdB or null}` for every title REW holds (#176):
+the one record of a round's level that outlives it; `capture_rounds()` replays it, the latest check per title.
+`capture_task_issued` carries `level_base` when the round named one (`--level-base <round id>`, #176).
 
 `critic_called` carries its `phase`. One review is one record (#166) -- `record_reviewer` sorts each record, under
 the writer lock, by five rules:

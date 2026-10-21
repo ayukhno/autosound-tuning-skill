@@ -1966,7 +1966,7 @@ class Process:
     # -- capture rounds (SCR-034) --
     @_locked
     def start_capture(self, version, expected=(), phase=None, note=None, step=None, origin=None, under=None,
-                      level=None, level_read_as=None, plan=False, optional=(), start_method=None):
+                      level=None, level_read_as=None, plan=False, optional=(), start_method=None, level_base=None):
         """Open a capture round: what was asked for, at which `_N`, in which phase.
 
         **The list comes from the plan, not from a message** (skill #77, #75): with `plan=True` the round's
@@ -1998,6 +1998,13 @@ class Process:
         A ROUND, not a version: two rounds on the same DSP state are two passes, and what the
         Arbiter asks about is "this session's task". Opening a second round while one is open
         closes the first -- a round nobody closed is a round that ended when the next one began.
+
+        `level_base` names the round this one and the rounds after it are brought to on REW's SPL calibration (#176,
+        hub #285): a round id as `capture_rounds()` gives it (`cap_002`), one whose checks recorded offsets. A ledger
+        version or a series number is refused as ambiguous -- they are different counters from the round's id
+        (`naming-and-structure.md` §1a/§5) -- with the round ids listed. Recorded on the round and in
+        `capture_task_issued`, so it survives the close. Not given, the base is the one last named, else the project's
+        first round that recorded offsets (`_level_base_of`).
         """
         kind = version_kind(version)
         origin = _clean_origin(origin)
@@ -2042,6 +2049,8 @@ class Process:
                                    "how it is read off the device goes in --level-read-as")
             level_rec = {"value": None if level is None else str(level).strip(),
                          "read_as": None if level_read_as is None else str(level_read_as).strip()}
+        if level_base is not None:
+            level_base = self._refuse_level_base(level_base)
         state = self.load(strict=True)
         previous = state.get("capture")
         number = int(previous.get("n", 0)) + 1 if previous else 1
@@ -2143,6 +2152,9 @@ class Process:
             "under": None if under is None else str(under).strip(),
             "under_note": under_note,
             "level": level_rec,
+            # The round the level base is, as named here (#176), or None -- `_level_base_of` then finds it. Not
+            # `level_base`: that is the check's own record, the round on the base (`capture.level_base`).
+            "level_base_named": level_base,
             "issued": _now(),
             "closed": None,
             "expected": expected,
@@ -2178,7 +2190,8 @@ class Process:
         self._write(state)
         issued = dict(capture=round_["id"], phase=round_["phase"], version=round_["version"], version_kind=kind,
                       origin=origin, under=round_["under"], level=level_rec, expected=expected, groups=groups,
-                      optional=optional, setup=setup, step=step, note=note)
+                      optional=optional, setup=setup, step=step, note=note,
+                      **({"level_base": level_base} if level_base else {}))
         if closed is not None:
             # Two lines owed to the one write, the close's first: refused, it names the round's own too (F M-7).
             self._owed_after = [(EV_CAPTURE_ISSUED, issued)]
@@ -2190,6 +2203,26 @@ class Process:
         self._append(EV_CAPTURE_ISSUED, **issued)
         self._plan_written = self._write_capture_plan(round_)
         return round_
+
+    def _refuse_level_base(self, given):
+        """`given` as the round id a level base names (#176), or `ProcessError`: a ledger version or a series number is
+        ambiguous -- not a round's id, which is a third counter -- an id no round has is unknown, and a round whose
+        checks recorded no calibration is no base. Each refusal lists the round ids there are."""
+        name = str(given).strip()
+        rounds = self.capture_rounds()
+        ids = [r["id"] for r in rounds]
+        listed = ", ".join(ids) if ids else "none yet"
+        if name not in ids:
+            if _LEDGER_RE.fullmatch(name) or re.fullmatch(r"_?\d+|final", name):
+                raise ProcessError(f"--level-base {name!r} is ambiguous: a level base is a ROUND, named by its id, and "
+                                   f"{name!r} reads as a ledger version or a series number -- different counters "
+                                   f"(naming-and-structure.md §1a/§5). The rounds: {listed}")
+            raise ProcessError(f"--level-base {name!r}: there is no round {name} -- the rounds: {listed}")
+        offsets = next(r for r in rounds if r["id"] == name).get("spl_offsets_db") or {}
+        if not any(isinstance(v, (int, float)) and not isinstance(v, bool) for v in offsets.values()):
+            raise ProcessError(f"--level-base {name}: no check of that round recorded REW's SPL calibration "
+                               f"(splOffsetdB) -- there is no level to bring rounds to. The rounds: {listed}")
+        return name
 
     @staticmethod
     def _capture_plan_label(round_):
@@ -2747,14 +2780,28 @@ class Process:
 
     def capture_rounds(self):
         """Every round ever opened, oldest first: id, the version it was keyed by, its phase, and
-        the `_N` versions of the titles it expected or took. What a lookup failure lists."""
+        the `_N` versions of the titles it expected or took. What a lookup failure lists.
+
+        And its level record (#176, hub #285): `spl_offsets_db`, REW's `splOffsetdB` per title as its checks recorded
+        it in `capture_verified` -- per title the latest check wins, a partial check adds what it checked, a repeated
+        one replaces, a title checked with no calibration listed is None -- the one record of a round's level that
+        survives its close; `level_base`, the base round named at its start (`capture-start --level-base`), or None;
+        `control`, its level control's title, or None; `under` and `version_kind`, which say the ledger version it was
+        taken under -- what the control's changed bands are read from."""
         rounds, order = {}, []
-        for event in self._events(kinds=(EV_CAPTURE_ISSUED, EV_CAPTURE_TAKEN)):
+        for event in self._events(kinds=(EV_CAPTURE_ISSUED, EV_CAPTURE_TAKEN, EV_CAPTURE_VERIFIED)):
             cid = event.get("capture")
             if event.get("type") == EV_CAPTURE_ISSUED:
                 rounds[cid] = {"id": cid, "version": str(event.get("version")),
-                               "phase": event.get("phase"), "titles": list(event.get("expected") or [])}
+                               "phase": event.get("phase"), "titles": list(event.get("expected") or []),
+                               "version_kind": event.get("version_kind"), "under": event.get("under"),
+                               "level_base": event.get("level_base"), "control": event.get("control"),
+                               "spl_offsets_db": {}}
                 order.append(cid)
+            elif cid in rounds and event.get("type") == EV_CAPTURE_VERIFIED:
+                offsets = event.get("spl_offsets_db")
+                if isinstance(offsets, dict):
+                    rounds[cid]["spl_offsets_db"].update(offsets)
             elif cid in rounds and event.get("title"):
                 rounds[cid]["titles"].append(event["title"])
         out = []
@@ -3165,7 +3212,8 @@ class Process:
                 verified["ambiguous_titles"] = list(verdict["ambiguous_titles"])   # ...under each of these (#153)
             # The band it was judged over, and whether REW's own range set it (#154, the group round's SF-1): a
             # truncation check skipped for want of a range is told apart from one passed.
-            for field in ("band_hz", "band_source"):
+            # And REW's SPL calibration for it (#176, hub #285): what brings this round to the level base, below.
+            for field in ("band_hz", "band_source", "spl_offset_db"):
                 if (verdict.get("stats") or {}).get(field) is not None:
                     verified[field] = verdict["stats"][field]
             checked.append((title, verified))
@@ -3251,6 +3299,9 @@ class Process:
                     taken[title] = entry
             if session_probe is not None:
                 live["session"] = session_probe
+            # The round on the project's level base (#176, hub #285 TCC-060): beside `session`, from every check of
+            # this round in `checks` and every earlier round's record in the journal.
+            live["level_base"] = self._level_base_of(live)
             self._write(state)
             self._append(
                 EV_CAPTURE_VERIFIED,
@@ -3264,6 +3315,9 @@ class Process:
                 # The band each sweep was judged over (#154, the group round's SF-1).
                 bands={t: {"band_hz": v["band_hz"], "band_source": v.get("band_source")}
                        for t, v in checked if v.get("band_hz") is not None},
+                # REW's SPL calibration of every capture REW holds, None where it lists none (#176): the one record of
+                # the round's level that outlives it -- `capture_rounds` replays it, the latest check per title.
+                spl_offsets_db={t: v.get("spl_offset_db") for t, v in checked if v.get("exists") is True},
             )
         # Told AFTER the record is on disk, never before -- issue #21. This print used to sit
         # where `rate_note` is computed, and on a cp1252 console the warning glyph raised
@@ -3275,6 +3329,61 @@ class Process:
         if rate_note:
             print(f"  ⚠ {rate_note}")
         return live
+
+    def _level_base_of(self, live):
+        """`capture.level_base` for the open round `live` (#176, hub #285 TCC-060, PAS-015; SKL-080's shape).
+
+        The round's offsets are its `checks` -- the latest check per title, REW holding it, a calibration listed. The
+        base is the round named at its start (`--level-base`), else the one last named by an earlier round, else the
+        project's first round that recorded offsets -- this one, when none did: then `no_base`, and it is the base from
+        here. The previous round is the last earlier one that recorded offsets. Each title carries its `offset_db`,
+        `to_base_db` -- the shift that brings it to the base -- and `to_previous_db`, the jump against the previous
+        round (16.65 on 08.10), None with no previous. `status`: `missing` when this round or its base carries no
+        calibration, `mixed` when this round's captures disagree (no one `offset_db` then), `no_base`, else `ok`.
+        Pure arithmetic over records; REW is not read here."""
+        lb = _load_sibling("levelbase.py")
+        if lb is None:
+            return {"status": "missing", "base_round": None, "previous_round": None, "titles": {},
+                    "why": f"levelbase.py could not be loaded{_load_failure('levelbase.py')}"}
+        checks = live.get("checks") or {}
+        mine = {t: c["spl_offset_db"] for t, c in checks.items()
+                if isinstance(c, dict) and c.get("exists") is True and lb._number(c.get("spl_offset_db")) is not None}
+        rounds = self.capture_rounds()
+        ids = [r["id"] for r in rounds]
+        earlier = rounds[:ids.index(live["id"])] if live["id"] in ids else [r for r in rounds if r["id"] != live["id"]]
+
+        def recorded(r):
+            return {t: v for t, v in (r.get("spl_offsets_db") or {}).items() if lb._number(v) is not None}
+        named = live.get("level_base_named") or next((r["level_base"] for r in reversed(earlier) if r.get("level_base")),
+                                               None)
+        by_id = {r["id"]: r for r in rounds}
+        if named:
+            base_id, base_offsets = named, (mine if named == live["id"] else recorded(by_id.get(named) or {}))
+        else:
+            first = next((r for r in earlier if recorded(r)), None)
+            base_id, base_offsets = (first["id"], recorded(first)) if first else (live["id"], mine)
+        prev = next((r for r in reversed(earlier) if recorded(r)), None)
+        own, agree = lb.round_offset(mine)
+        base_off = lb.round_offset(base_offsets)[0]
+        prev_off = lb.round_offset(recorded(prev))[0] if prev else None
+        if not mine or base_off is None:
+            status = "missing"
+        elif not agree:
+            status = "mixed"
+        elif base_id == live["id"]:
+            status = "no_base"
+        else:
+            status = "ok"
+        out = {"status": status, "base_round": base_id, "previous_round": prev["id"] if prev else None,
+               "base_offset_db": base_off, "previous_offset_db": prev_off, "titles": {}}
+        if mine and agree:
+            out["offset_db"] = own
+        for title, off in mine.items():
+            out["titles"][title] = {
+                "offset_db": off,
+                "to_base_db": None if base_off is None else round(lb.spl_shift(off, base_off), 2),
+                "to_previous_db": None if prev_off is None else round(lb.spl_shift(off, prev_off), 2)}
+        return out
 
     def unusable_captures(self, state=None):
         """Expected captures of the open round that are missing, unchecked, or checked and bad.
@@ -3876,7 +3985,7 @@ _USAGE = """usage: process.py <process-dir> <command> [args]
   decision <question> <answer> [step] [--invalidates X]   what the Arbiter ruled, as itself
   capture-start <version> [title ...] [--plan] [--phase N] [--start sw|rta] [--optional <title>]...
       [--step ID] [--origin <project>:<their _N>]
-      [--under v_NNN] [--level "-25 dB rel. max"] [--level-read-as "7 lamps"]
+      [--under v_NNN] [--level "-25 dB rel. max"] [--level-read-as "7 lamps"] [--level-base <round id>]
                                         --plan: the list from the method's plan for the phase (skill #77),
                                         titles beside it added in their place; --start: the setup the car is
                                         in (else the last capture's, skill #78); --optional: on the list,
@@ -3884,7 +3993,9 @@ _USAGE = """usage: process.py <process-dir> <command> [args]
                                         then `plan: <path>`, its file in docs/plans/ (one not written:
                                         a `note:` on stderr, why -- the round is open either way)
                                         --under: the ledger version the series is taken under (#57 P0;
-                                        recorded only when given); --level: the level as a quantity (S-026)
+                                        recorded only when given); --level: the level as a quantity (S-026);
+                                        --level-base: the round (cap_NNN) levels are brought to on REW's
+                                        SPL calibration, from here on (#176; default: the first on record)
                                         open a capture round; titles = what was
                                          asked for, --step binds it to the plan step it satisfies
   capture-check [title ...] [--session]  run the verdict over the round and record it (SCR-040);
@@ -3976,7 +4087,7 @@ VERB_FLAGS = {
     "session-close": ("--check",),
     "session-reopen": (),
     "capture-start": ("--origin", "--step", "--under", "--level", "--level-read-as", "--start", "--phase",
-                      "--optional", "--plan"),
+                      "--optional", "--plan", "--level-base"),
     "capture-check": ("--session",),
     "capture-taken": (),
     "capture-import": ("--bind", "--late", "--knob"),
@@ -4003,7 +4114,7 @@ _FLAG_TAKES_VALUE = {
     "--bind": True, "--late": True, "--knob": True, "--measured": False, "--amends": True, "--note": True,
     "--amend": True, "--reason": True, "--source": True, "--hp": True, "--lp": True, "--pair": True, "--text": True,
     "--route": True, "--ledger-version": True, "--track": True, "--characteristic": True, "--bank": False,
-    "--json": False, "--no-rew": False,
+    "--json": False, "--no-rew": False, "--level-base": True,
 }
 
 #: The flags that take no value, read off `_FLAG_TAKES_VALUE`. `--flag=value` is read as `--flag value`, and for one of
@@ -4056,6 +4167,30 @@ _VERB_ARGS = {
     "capture-close": (),
     "check": (),
 }
+
+
+def _level_line(level_base):
+    """The one `capture-check` line for `capture.level_base` (#176, hub #285 TCC-060), or None: said when any capture's
+    `to_previous_db` is not 0 -- REW's SPL calibration moved against the previous round, as on 08.10 (103.35 ->
+    120.00) -- in English, as the verdict lines around it, and with a prefix that is none of OK/SKIP/N/A/UNUSABLE, so
+    no reader of those lines takes it for a verdict."""
+    lb = level_base if isinstance(level_base, dict) else {}
+    titles = lb.get("titles") or {}
+    moved = {t: r for t, r in titles.items() if isinstance(r, dict) and r.get("to_previous_db") not in (None, 0, 0.0)}
+    if not moved:
+        return None
+    prev, base = lb.get("previous_round"), lb.get("base_round")
+    if lb.get("status") == "mixed":
+        jumps = ", ".join(f"{t} {r['to_previous_db']:+.2f} dB" for t, r in moved.items())
+        return (f"LEVEL   REW's SPL calibration differs inside this round (mixed): {jumps} against {prev}; each "
+                f"capture is brought to the base {base} by its own shift (capture.level_base)")
+    jump = next(iter(moved.values()))
+    was, now, shift = lb.get("previous_offset_db"), lb.get("offset_db"), jump.get("to_base_db")
+    return (f"LEVEL   REW's SPL calibration moved {jump['to_previous_db']:+.2f} dB against {prev}"
+            + (f" (splOffsetdB {was:.2f} -> {now:.2f})" if isinstance(was, (int, float)) and
+               isinstance(now, (int, float)) else "")
+            + (f": this round's levels are brought to the base {base} by {-shift:+.2f} dB"
+               if isinstance(shift, (int, float)) else ""))
 
 
 def _flag_shaped(token, known=()):
@@ -7551,6 +7686,161 @@ def _check_a_check_asks_rew_by_key():
         shutil.rmtree(top, ignore_errors=True)
 
 
+class _LevelRew:
+    """REW behind the real `verify` for #176: a listing whose records carry `splOffsetdB` as REW lists it, swapped by
+    the test between rounds, the curves and the impulse stood in -- what `capture-check` reads to record each capture's
+    calibration and bring the round to the base."""
+
+    NOTES = "DELAY 22.6504 ms (7.769 m, 25 ft 5.9 in)"
+
+    def __init__(self):
+        self.verify_mod = _load_sibling("verify.py")
+        self.api = self.verify_mod._api
+        self.listing = {}
+
+    def hold(self, offsets):
+        """REW holding `{title: splOffsetdB or None}`, a sweep each."""
+        self.listing = {}
+        for i, (title, off) in enumerate(offsets.items(), 1):
+            rec = {"title": title, "uuid": f"u{i}-{title}", "notes": self.NOTES, "startFreq": 20.0,
+                   "endFreq": 20000.0}
+            if off is not None:
+                rec["splOffsetdB"] = off
+            self.listing[str(i)] = rec
+
+    @staticmethod
+    def curve(mid, smoothing=None):
+        fs, f = [], 20.0
+        while f <= 20000.0 * 1.0001:
+            fs.append(f)
+            f *= 2 ** (1 / 48)
+        return fs, [70.0 + 10 * (k % 7) for k in range(len(fs))], None
+
+    def __enter__(self):
+        self.saved = {n: getattr(self.api, n) for n in ("get_measurements", "get_fr", "get_impulse_response")}
+        self.real = Process._load_verifier
+        self.api.get_measurements = lambda: {k: dict(v) for k, v in self.listing.items()}
+        self.api.get_fr = self.curve
+        self.api.get_impulse_response = lambda mid, normalised=True: ([0.0, 1 / 48000, 2 / 48000], [0.0, 1.0, 0.0])
+        Process._load_verifier = lambda _self: self.verify_mod
+        return self
+
+    def __exit__(self, *exc):
+        for n, f in self.saved.items():
+            setattr(self.api, n, f)
+        Process._load_verifier = self.real
+        return False
+
+
+def _check_rounds_on_one_level_base():
+    """#176 (hub #285 TCC-060, PAS-015): REW 5.40 beta 135 reset its SPL calibration between two rounds, 103.35 ->
+    120.0, and `capture-check` passed the new round without a word. Now each capture's `splOffsetdB` is recorded --
+    on its `verified` and `checks`, and in the journal's `capture_verified` (`spl_offsets_db`), the record that
+    survives the round -- and the check writes `capture.level_base` beside `capture.session`: the base round, the
+    previous one, and per title the shift to the base and the jump against the previous round, said on one stdout
+    line that is none of OK/SKIP/N/A/UNUSABLE; the exit code is the verdicts' as before. Round two is checked by a
+    fresh `Process`, so what it knows of round one is what the journal kept. A round whose captures disagree is
+    `mixed`, with no one offset; a base named by its round id (`--level-base`) is recorded in `capture_task_issued`,
+    survives the close and stands for the rounds after it; a ledger version or a series number given for it is refused
+    as ambiguous, the round ids listed."""
+    import shutil
+    import tempfile
+    base_off, reset = 103.34649658203125, 120.0
+    top = tempfile.mkdtemp(prefix="autosound_process_level_base_")
+    try:
+        with _LevelRew() as rew:
+            d = os.path.join(top, "process")
+            p = Process(d)
+            p.enter_phase("-1")
+            # Round one, beta 134: the project's first round on record, so it becomes the base -- said so.
+            p.start_capture("1", expected=["w-L_1 (sw)", "w-R_1 (sw)"])
+            rew.hold({"w-L_1 (sw)": base_off, "w-R_1 (sw)": base_off})
+            rc, out, err = _run_main(["process.py", d, "capture-check"])
+            assert rc == 0 and not [x for x in out.splitlines() if x.startswith("LEVEL")], (rc, out, err)
+            round_ = p.load()["capture"]
+            assert round_["taken"]["w-L_1 (sw)"]["verified"]["spl_offset_db"] == base_off, round_["taken"]
+            assert round_["checks"]["w-R_1 (sw)"]["spl_offset_db"] == base_off, round_["checks"]
+            lb = round_["level_base"]
+            assert (lb["status"], lb["base_round"], lb["previous_round"], lb["offset_db"]) == \
+                ("no_base", "cap_001", None, base_off), lb
+            assert lb["titles"]["w-L_1 (sw)"] == {"offset_db": base_off, "to_base_db": 0.0, "to_previous_db": None}, lb
+            ev = [e for e in p.events() if e.get("type") == EV_CAPTURE_VERIFIED][-1]
+            assert ev["spl_offsets_db"] == {"w-L_1 (sw)": base_off, "w-R_1 (sw)": base_off}, ev
+            assert _run_main(["process.py", d, "capture-close", "--no-rew"])[0] == 0
+            # Round two, beta 135, in a fresh Process: 16.65 dB against round one, named on stdout and in the field.
+            p2 = Process(d)
+            p2.start_capture("2", expected=["w-L_2 (sw)", "w-R_2 (sw)"])
+            rew.hold({"w-L_2 (sw)": reset, "w-R_2 (sw)": reset})
+            rc, out, err = _run_main(["process.py", d, "capture-check"])
+            said = [x for x in out.splitlines() if x.startswith("LEVEL")]
+            assert rc == 0 and len(said) == 1 and "+16.65 dB" in said[0] and "cap_001" in said[0] \
+                and "103.35 -> 120.00" in said[0], (rc, out, err)
+            assert out.splitlines()[-1] == "2/2 придатні", out
+            lb = p2.load()["capture"]["level_base"]
+            assert (lb["status"], lb["base_round"], lb["previous_round"], lb["offset_db"]) == \
+                ("ok", "cap_001", "cap_001", reset), lb
+            assert lb["titles"]["w-R_2 (sw)"] == {"offset_db": reset, "to_base_db": 16.65, "to_previous_db": 16.65}, lb
+            assert [e for e in p2.events() if e.get("type") == EV_CAPTURE_VERIFIED][-1]["spl_offsets_db"] == \
+                {"w-L_2 (sw)": reset, "w-R_2 (sw)": reset}
+            rounds = {r["id"]: r for r in p2.capture_rounds()}
+            assert rounds["cap_001"]["spl_offsets_db"] == {"w-L_1 (sw)": base_off, "w-R_1 (sw)": base_off}, rounds
+            # A partial check adds what it checked; a repeated one replaces: the latest check per title wins.
+            rew.hold({"w-L_2 (sw)": reset, "w-R_2 (sw)": 121.0})
+            p2.check_captures(["w-R_2 (sw)"])
+            rounds = {r["id"]: r for r in Process(d).capture_rounds()}
+            assert rounds["cap_002"]["spl_offsets_db"] == {"w-L_2 (sw)": reset, "w-R_2 (sw)": 121.0}, rounds
+            # ...and the round now disagrees with itself: `mixed`, no one offset, each title its own jump.
+            lb = p2.load()["capture"]["level_base"]
+            assert lb["status"] == "mixed" and "offset_db" not in lb, lb
+            assert lb["titles"]["w-R_2 (sw)"]["to_previous_db"] == 17.65 \
+                and lb["titles"]["w-L_2 (sw)"]["to_previous_db"] == 16.65, lb
+            rc, out, err = _run_main(["process.py", d, "capture-check"])
+            said = [x for x in out.splitlines() if x.startswith("LEVEL")]
+            assert rc == 0 and len(said) == 1 and "mixed" in said[0], (rc, out, err)
+            rew.hold({"w-L_2 (sw)": reset, "w-R_2 (sw)": reset})
+            p2.check_captures()
+            assert _run_main(["process.py", d, "capture-close", "--no-rew"])[0] == 0
+            # A base named by a ledger version or a series number is refused as ambiguous, the round ids listed; an
+            # id no round has is refused as unknown. Nothing is opened.
+            for given in ("v_001", "2", "_2", "final"):
+                rc, out, err = _run_main(["process.py", d, "capture-start", "3", "w-L_3 (sw)", "--level-base", given])
+                assert rc == EXIT_NO and "ambiguous" in err and "cap_001, cap_002" in err, (given, rc, out, err)
+            rc, out, err = _run_main(["process.py", d, "capture-start", "3", "w-L_3 (sw)", "--level-base", "cap_009"])
+            assert rc == EXIT_NO and "no round cap_009" in err and "cap_001, cap_002" in err, (rc, out, err)
+            assert p2.load()["capture"]["id"] == "cap_002", "a refused base opens no round"
+            # Named: recorded in the round and in `capture_task_issued`, so it survives the close.
+            rc, out, err = _run_main(["process.py", d, "capture-start", "3", "w-L_3 (sw)", "--level-base", "cap_002"])
+            assert rc == 0 and "level base cap_002" in out, (rc, out, err)
+            issued = [e for e in p2.events() if e.get("type") == EV_CAPTURE_ISSUED][-1]
+            assert issued["level_base"] == "cap_002", issued
+            rew.hold({"w-L_3 (sw)": reset})
+            rc, out, err = _run_main(["process.py", d, "capture-check"])
+            lb = p2.load()["capture"]["level_base"]
+            assert (lb["status"], lb["base_round"], lb["previous_round"]) == ("ok", "cap_002", "cap_002"), lb
+            assert lb["titles"]["w-L_3 (sw)"]["to_base_db"] == 0.0 and not \
+                [x for x in out.splitlines() if x.startswith("LEVEL")], (lb, out)
+            assert _run_main(["process.py", d, "capture-close", "--no-rew"])[0] == 0
+            assert {r["id"]: r for r in Process(d).capture_rounds()}["cap_003"]["level_base"] == "cap_002"
+            # ...and stands for the round after it, which names none: the base is the one last named.
+            p3 = Process(d)
+            p3.start_capture("4", expected=["w-L_4 (sw)"])
+            rew.hold({"w-L_4 (sw)": base_off})
+            rc, out, err = _run_main(["process.py", d, "capture-check"])
+            lb = p3.load()["capture"]["level_base"]
+            assert (lb["base_round"], lb["previous_round"]) == ("cap_002", "cap_003"), lb
+            assert lb["titles"]["w-L_4 (sw)"] == {"offset_db": base_off, "to_base_db": -16.65,
+                                                   "to_previous_db": -16.65}, lb
+            said = [x for x in out.splitlines() if x.startswith("LEVEL")]
+            assert rc == 0 and len(said) == 1 and "-16.65 dB" in said[0], (rc, out)
+            # A round REW lists no calibration for: `missing`, and nothing is said.
+            rew.hold({"w-L_4 (sw)": None})
+            p3.check_captures()
+            lb = p3.load()["capture"]["level_base"]
+            assert lb["status"] == "missing" and lb["titles"] == {}, lb
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
 class _SnapshotRew:
     """REW behind the real `verify`, for #183: `get_measurements` answers `listings` in turn (the last one again once
     they run out; `_SnapshotRew.DOWN` there raises REW down, `_SnapshotRew.ERROR` REW answering an HTTP 500), and every
@@ -9501,7 +9791,7 @@ def _selftest():
                   _check_route_line_over_a_project_json_no_object, _check_plan_over_a_word_says_neither,
                   _check_handoff_names_a_changelog_copy_that_differs, _check_superseded_not_taken,
                   _check_check_never_invents_taken, _check_a_round_matches_titles_by_name_key,
-                  _check_a_check_asks_rew_by_key, _check_a_check_judges_one_snapshot_of_rew,
+                  _check_a_check_asks_rew_by_key, _check_a_check_judges_one_snapshot_of_rew, _check_rounds_on_one_level_base,
                   _check_close_stops_on_a_moved_snapshot, _check_a_check_holds_its_snapshot_whole,
                   _check_retakes_and_superseded_rows,
                   _check_close_says_what_rew_did,
@@ -10606,7 +10896,7 @@ def _main(argv):
                 step = rest[i + 1] if len(rest) > i + 1 else None
                 rest = rest[:i] + rest[i + 2:]
             flags = {}
-            for flag in ("--under", "--level", "--level-read-as", "--start", "--phase"):
+            for flag in ("--under", "--level", "--level-read-as", "--start", "--phase", "--level-base"):
                 if flag in rest:
                     i = rest.index(flag)
                     flags[flag] = rest[i + 1] if len(rest) > i + 1 else None
@@ -10622,7 +10912,8 @@ def _main(argv):
             round_ = p.start_capture(rest[0], expected=rest[1:], step=step, origin=origin,
                                      under=flags.get("--under"), level=flags.get("--level"),
                                      level_read_as=flags.get("--level-read-as"), phase=flags.get("--phase"),
-                                     plan=plan, optional=optional, start_method=flags.get("--start"))
+                                     plan=plan, optional=optional, start_method=flags.get("--start"),
+                                     level_base=flags.get("--level-base"))
             print(
                 f"{round_['id']} open at {round_['version']}, "
                 f"{len(round_['expected'])} capture(s) expected"
@@ -10630,6 +10921,7 @@ def _main(argv):
                 + (f", under {round_['under']}" + (f" ({round_['under_note']})" if round_.get("under_note") else "")
                    if round_.get("under") else "")
                 + (f", level {round_['level']['value'] or '?'}" if round_.get("level") else "")
+                + (f", level base {round_['level_base_named']}" if round_.get("level_base_named") else "")
                 + (f" — taken in {round_['origin']['project']} as _{round_['origin']['series']}, "
                    "not this project's own series"
                    if round_.get("origin") else "")
@@ -10695,6 +10987,11 @@ def _main(argv):
                 else:
                     reason = "; ".join(verdict.get("issues") or ["не перевірено"])
                     print(f"UNUSABLE {title} — {reason}")
+            # The round on the level base (#176, hub #285): one line when REW's calibration moved against the previous
+            # round, in a form that is none of the verdict lines; the exit code stays the verdicts'.
+            level_said = _level_line(round_.get("level_base"))
+            if level_said:
+                print(level_said)
             left = p.unusable_captures(p.load(strict=True))   # the exit code is a verdict (#136)
             print(f"{len(round_.get('expected', [])) - len(left)}/"
                   f"{len(round_.get('expected', []))} придатні")
