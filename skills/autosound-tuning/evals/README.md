@@ -237,3 +237,24 @@ in both: every miss is a car-audio query the description should fire on, in a fo
 26 neutral should-fire queries fired, against 14–18 of 25 on 2026-10-13, when the run folder's path named
 `autosound-hub` — which also made 2–4 of 26 fire that should not; here none did. The project fixture's line fires on all 11 project queries. The
 description's recall is the next collection's question (`docs/TODO.md` S-104).
+
+## Runs of 2026-10-21 (#189) — the description's recall measured on the current models
+
+W-11's item 12 (#189): in a folder that names nothing the description fired on 10 of 26 car-audio queries (#170, on
+`claude-sonnet-4-6`). Measured first, as the plan declared (`docs/PLAN-W-11.md` T14): the same 68-query set and
+command as #170's, `--model` named, `--timeout 300` (the Mac carried the wave's agents; no run was void). The rule was
+declared before the first run: a new description stays only if the neutral should-fire recall, summed over three runs,
+rises by at least 9 of 78, the neutral false fires rise by no more than 3 of 93, and the project set stays 11/11.
+
+| run (UTC) | model | score | neutral should fire | neutral should not, fired | project |
+|---|---|---|---|---|---|
+| 1 · 11:10 | claude-sonnet-5-5 | 67/68 | 26/26 | 1/31 | 11/11 |
+| 2 · 11:15 | claude-sonnet-5-5 | 67/68 | 26/26 | 1/31 | 11/11 |
+| 3 · 11:21 | claude-sonnet-5-5 | 67/68 | 26/26 | 1/31 | 11/11 |
+| 4 · 11:33 | claude-opus-5-5 | 67/68 | 26/26 | 1/31 | 11/11 |
+
+The neutral recall is at its ceiling on both current models — 78 of 78 over the three Sonnet runs — so no new
+description can meet the rule, and the description is not changed. #170's 10 of 26 was the older model's. The one miss
+is the same in all four runs, a false fire: «file an issue for the autosound-hub repo governance docs» (the word
+`autosound` and «file an issue», which the description's bug-report line asks for). Each run's per-query results are
+in `results/2026-10-21-*.json` (the runner's own JSON: the query, its context, whether it fired, the init skill list).

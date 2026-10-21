@@ -1,0 +1,1053 @@
+{
+  "passed": 67,
+  "total": 68,
+  "void": false,
+  "skipped_project": 0,
+  "cwd": "/var/folders/n8/7b87x96x7yn2nj_lr9k2cqvm0000gp/T/trigger_eval_j1b6mxia",
+  "project_cwd": "/var/folders/n8/7b87x96x7yn2nj_lr9k2cqvm0000gp/T/trigger_eval_project_cl8p3csk",
+  "model": "claude-sonnet-5-5",
+  "duration_s": 299.4,
+  "claude_argv": [
+    "claude",
+    "-p",
+    "<query>",
+    "--output-format",
+    "stream-json",
+    "--verbose",
+    "--include-partial-messages",
+    "--model",
+    "claude-sonnet-5-5",
+    "--settings",
+    "{\"skillOverrides\":{\"rew-car-audio-tuning\":\"off\"},\"disableAllHooks\":true}",
+    "--no-session-persistence"
+  ],
+  "init": {
+    "skill": "autosound-tuning",
+    "absent": [
+      "rew-car-audio-tuning"
+    ],
+    "problems": []
+  },
+  "results": [
+    {
+      "query": "the vocal image keeps pulling left toward the A-pillar in my passat, cant get a centered stage. help me fix the imaging with time alignment",
+      "context": "neutral",
+      "triggered": true,
+      "should_trigger": true,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "query": "prepping for an EMMA round next month, need help setting crossover points, slopes and delays on my helix 3-way active front",
+      "context": "neutral",
+      "triggered": true,
+      "should_trigger": true,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "query": "took an MMM sweep, midbass has a fat hump around 90hz and the top feels dull. what EQ gets me closer to the ResoNix Laid-Back curve?",
+      "context": "neutral",
+      "triggered": true,
+      "should_trigger": true,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "query": "im building a sealed plywood enclosure for my noisy 3d printer to cut fan noise, what internal volume and foam do i need?",
+      "context": "neutral",
+      "triggered": false,
+      "should_trigger": false,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "query": "my home bookshelf speakers are rated 6 ohm, my vintage marantz says 8 ohm minimum. is it safe to drive them?",
+      "context": "neutral",
+      "triggered": false,
+      "should_trigger": false,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "query": "can you explain the physics of why a high-Qts driver prefers a bigger enclosure? just trying to understand thiele-small theory, no project",
+      "context": "neutral",
+      "triggered": false,
+      "should_trigger": false,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "query": "designing a 3d-printed enclosure box in fusion 360 for my raspberry pi cluster, need mounting standoffs and airflow",
+      "context": "neutral",
+      "triggered": false,
+      "should_trigger": false,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "query": "what 12 inch subwoofer should i buy for my car under $250, mostly rap and edm?",
+      "context": "neutral",
+      "triggered": false,
+      "should_trigger": false,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "query": "theres an annoying rattle/resonance in my car door around 60 km/h while driving, how do i track down and fix the buzz?",
+      "context": "neutral",
+      "triggered": false,
+      "should_trigger": false,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "query": "measuring the input impedance of an op-amp circuit on my breadboard with a function generator, getting weird numbers",
+      "context": "neutral",
+      "triggered": false,
+      "should_trigger": false,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "query": "what does Vas actually mean in a speaker spec sheet?",
+      "context": "neutral",
+      "triggered": false,
+      "should_trigger": false,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "query": "help me dial in a flat reference target curve for my studio nearfield monitors for mixing",
+      "context": "neutral",
+      "triggered": false,
+      "should_trigger": false,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "query": "im measuring the characteristic impedance of a coax cable for an antenna project, 50 ohm vs 75 ohm",
+      "context": "neutral",
+      "triggered": false,
+      "should_trigger": false,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "query": "hi, I would like to setup my car audio. could you help me?",
+      "context": "neutral",
+      "triggered": true,
+      "should_trigger": true,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "query": "can you help me tune my speakers? staging feels off and vocals pull to the left",
+      "context": "neutral",
+      "triggered": true,
+      "should_trigger": true,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "query": "i want to create a custom house curve (EPY) for fun, maybe for EMMA later — how do i build one?",
+      "context": "neutral",
+      "triggered": true,
+      "should_trigger": true,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "query": "help me set up my home theater receiver and speaker layout for dolby atmos",
+      "context": "neutral",
+      "triggered": false,
+      "should_trigger": false,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "query": "допоможи налаштувати автозвук у машині — процесор, затримки, кросовери; образ липне вліво до динаміка",
+      "context": "neutral",
+      "triggered": true,
+      "should_trigger": true,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "query": "хочу з нуля налаштувати автозвук на своїй машині, є REW і Helix",
+      "context": "neutral",
+      "triggered": true,
+      "should_trigger": true,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "query": "kannst du mir helfen mein Car-HiFi einzumessen? DSP Laufzeitkorrektur im Auto stimmt nicht",
+      "context": "neutral",
+      "triggered": true,
+      "should_trigger": true,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "query": "pomóż mi ze strojeniem DSP w aucie — opóźnienia czasowe, zwrotnice i korektor",
+      "context": "neutral",
+      "triggered": true,
+      "should_trigger": true,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "query": "допоможи налаштувати домашній кінотеатр і колонки у вітальні",
+      "context": "neutral",
+      "triggered": false,
+      "should_trigger": false,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "query": "hilf mir mein Wohnzimmer-Heimkino und die HiFi-Anlage einzustellen",
+      "context": "neutral",
+      "triggered": false,
+      "should_trigger": false,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "query": "jak ustawić głośniki w komputerze do grania i filmów?",
+      "context": "neutral",
+      "triggered": false,
+      "should_trigger": false,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "query": "resume my car-audio tune — remind me the current crossover and delay settings on my helix",
+      "context": "neutral",
+      "triggered": true,
+      "should_trigger": true,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "query": "resume my car-audio tune — remind me the current crossover and delay settings on my helix",
+      "context": "project",
+      "triggered": true,
+      "should_trigger": true,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "query": "продовжуємо тюн авто, нагадай на чому зупинились — кросовери, затримки, гейни й полярність",
+      "context": "neutral",
+      "triggered": true,
+      "should_trigger": true,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "query": "на чому ми зупинились у тюні авто минулого разу? який зараз стан DSP?",
+      "context": "neutral",
+      "triggered": true,
+      "should_trigger": true,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "query": "let's resume — where did we leave off on my code project yesterday?",
+      "context": "neutral",
+      "triggered": false,
+      "should_trigger": false,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "query": "продовжуємо роботу над проєктом, нагадай на чому зупинились минулого разу?",
+      "context": "neutral",
+      "triggered": false,
+      "should_trigger": false,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "query": "what's my current state? remind me where we left off",
+      "context": "neutral",
+      "triggered": false,
+      "should_trigger": false,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "query": "Ich habe einen Helix DSP im Auto und will endlich die Laufzeitkorrektur und die Trennfrequenzen richtig einmessen. Wie fange ich an?",
+      "context": "neutral",
+      "triggered": true,
+      "should_trigger": true,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "query": "Mein Wohnzimmer-Subwoofer brummt bei bestimmten Frequenzen. Wie messe ich meinen Hörraum mit REW ein?",
+      "context": "neutral",
+      "triggered": false,
+      "should_trigger": false,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "query": "Mam procesor DSP w aucie i chcę ustawić opóźnienia czasowe oraz zwrotnice. Od czego zacząć strojenie?",
+      "context": "neutral",
+      "triggered": true,
+      "should_trigger": true,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "query": "Szukam nowych głośników do salonu, jakie kolumny podłogowe polecacie do 5000 zł?",
+      "context": "neutral",
+      "triggered": false,
+      "should_trigger": false,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "query": "something in TCC is broken -- the capture panel froze when I pressed Done and my last two measurements are gone. can you file an issue for it?",
+      "context": "neutral",
+      "triggered": true,
+      "should_trigger": true,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "query": "оформи ішью: у TCC після оновлення не відкривається вікно кривих, вилітає з помилкою",
+      "context": "neutral",
+      "triggered": true,
+      "should_trigger": true,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "query": "Ich möchte einen Fehler in der Autosound-TCC-App melden: beim Einlesen der Messungen aus REW stürzt sie ab.",
+      "context": "neutral",
+      "triggered": true,
+      "should_trigger": true,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "query": "Chcę zgłosić błąd w aplikacji Autosound TCC — po aktualizacji okno pomiarów się nie otwiera. Załóż issue.",
+      "context": "neutral",
+      "triggered": true,
+      "should_trigger": true,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "query": "the autosound tuning skill kept proposing EQ before the delays were set -- put together the feedback package for its maintainers",
+      "context": "neutral",
+      "triggered": true,
+      "should_trigger": true,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "query": "file an issue in my react repo: the date picker crashes on safari when the month changes",
+      "context": "neutral",
+      "triggered": false,
+      "should_trigger": false,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "query": "report a bug to the python maintainers -- json.loads hangs on a 2 GB file",
+      "context": "neutral",
+      "triggered": false,
+      "should_trigger": false,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "query": "building DIY bookshelf speakers -- what crossover points and slopes should i use for a 6.5 inch woofer and a 1 inch tweeter?",
+      "context": "neutral",
+      "triggered": false,
+      "should_trigger": false,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "query": "measuring my living room with REW -- how do i set the speaker distances and delays on my AV receiver so the sub lines up with the mains?",
+      "context": "neutral",
+      "triggered": false,
+      "should_trigger": false,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "query": "the stereo image of my studio monitors pulls to the left at the mix position, how do i fix the imaging?",
+      "context": "neutral",
+      "triggered": false,
+      "should_trigger": false,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "query": "what is a Linkwitz-Riley crossover and why is it 24 dB per octave?",
+      "context": "neutral",
+      "triggered": false,
+      "should_trigger": false,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "query": "Helix or Audison -- which DSP should i buy for my car?",
+      "context": "neutral",
+      "triggered": false,
+      "should_trigger": false,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "query": "continue my car-audio tune from last time -- what's the crossover, time-alignment and gain state on each channel?",
+      "context": "neutral",
+      "triggered": true,
+      "should_trigger": true,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "query": "continue my car-audio tune from last time -- what's the crossover, time-alignment and gain state on each channel?",
+      "context": "project",
+      "triggered": true,
+      "should_trigger": true,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "query": "I'm in my car's tuning project folder (autosound_context.md, process/ and state/ are here). let's continue where we left off",
+      "context": "neutral",
+      "triggered": true,
+      "should_trigger": true,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "query": "I'm in my car's tuning project folder (autosound_context.md, process/ and state/ are here). let's continue where we left off",
+      "context": "project",
+      "triggered": true,
+      "should_trigger": true,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "query": "я в теці проєкту своєї машини (тут autosound_context.md, process/ і state/) — продовжимо з того місця, де зупинились",
+      "context": "neutral",
+      "triggered": true,
+      "should_trigger": true,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "query": "я в теці проєкту своєї машини (тут autosound_context.md, process/ і state/) — продовжимо з того місця, де зупинились",
+      "context": "project",
+      "triggered": true,
+      "should_trigger": true,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "query": "Resume this tuning project. Read state from disk first, call get_tcc_state and get_pending_signals, then tell me where we are and what the next step is. Instructions from TCC are always in English; answer me in the project's language — `language` in get_tcc_state is the one the Arbiter chose.",
+      "context": "neutral",
+      "triggered": true,
+      "should_trigger": true,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "query": "Resume this tuning project. Read state from disk first, call get_tcc_state and get_pending_signals, then tell me where we are and what the next step is. Instructions from TCC are always in English; answer me in the project's language — `language` in get_tcc_state is the one the Arbiter chose.",
+      "context": "project",
+      "triggered": true,
+      "should_trigger": true,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "query": "Start a tuning session for this project. Read state from disk, call get_tcc_state, then tell me where we are and what the next step is. Instructions from TCC are always in English; answer me in the project's language — `language` in get_tcc_state is the one the Arbiter chose.",
+      "context": "neutral",
+      "triggered": true,
+      "should_trigger": true,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "query": "Start a tuning session for this project. Read state from disk, call get_tcc_state, then tell me where we are and what the next step is. Instructions from TCC are always in English; answer me in the project's language — `language` in get_tcc_state is the one the Arbiter chose.",
+      "context": "project",
+      "triggered": true,
+      "should_trigger": true,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "query": "TCC should let me export the sheet as CSV, can you request that?",
+      "context": "neutral",
+      "triggered": true,
+      "should_trigger": true,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "query": "send the maintainers my notes on the delay phase",
+      "context": "project",
+      "triggered": true,
+      "should_trigger": true,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "query": "continue",
+      "context": "project",
+      "triggered": true,
+      "should_trigger": true,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "query": "продовжуємо",
+      "context": "project",
+      "triggered": true,
+      "should_trigger": true,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "query": "where were we",
+      "context": "project",
+      "triggered": true,
+      "should_trigger": true,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "query": "file an issue",
+      "context": "project",
+      "triggered": true,
+      "should_trigger": true,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "query": "request a dark mode in my Notion clone",
+      "context": "neutral",
+      "triggered": false,
+      "should_trigger": false,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "query": "in my hub repo on GitHub, open a pull request that bumps eslint to the latest version",
+      "context": "neutral",
+      "triggered": false,
+      "should_trigger": false,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "query": "file an issue for the autosound-hub repo governance docs",
+      "context": "neutral",
+      "triggered": true,
+      "should_trigger": false,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "query": "continue",
+      "context": "neutral",
+      "triggered": false,
+      "should_trigger": false,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "query": "file an issue",
+      "context": "neutral",
+      "triggered": false,
+      "should_trigger": false,
+      "problem": null,
+      "init": {
+        "skills": 141,
+        "found": [
+          "autosound-tuning"
+        ],
+        "absent_seen": [],
+        "model": "claude-sonnet-5-5"
+      }
+    }
+  ]
+}
