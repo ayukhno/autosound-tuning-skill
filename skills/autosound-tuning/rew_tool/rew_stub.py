@@ -72,7 +72,7 @@ class Measurement:
 
     def __init__(self, title, ir=None, sample_rate=96000, start_time_s=0.0, *, rta=None,
                  timing_reference="Loopback", timing_offset_s=0.0, notes="", uid=None,
-                 start_freq=F_LOW, end_freq=F_HIGH, spl_offset_db=None):
+                 start_freq=F_LOW, end_freq=F_HIGH, spl_offset_db=None, broken_fr=False):
         self.title = title
         self.ir = None if ir is None else np.asarray(ir, dtype=float)
         self.fs = int(sample_rate)
@@ -90,6 +90,9 @@ class Measurement:
         # an impulse's spectrum is served with the offset added, the impulse itself as stored; an RTA's curve is served
         # as given, the caller handing it in dB SPL already.
         self.spl_offset_db = spl_offset_db
+        # A frequency-response answer with no `magnitude` (#176): what REW never should send, served so a reader's
+        # handling of it is run through `rew_api.get_fr` itself, not a stand-in.
+        self.broken_fr = bool(broken_fr)
         self._fr = None
 
     def record(self, mid):
@@ -110,6 +113,8 @@ class Measurement:
         return rec
 
     def frequency_response(self):
+        if self.broken_fr:
+            return {"startFreq": F_LOW, "ppo": PPO, "smoothing": "None"}
         if self.rta is not None:
             f, mag = self.rta
             f = np.asarray(f, float)

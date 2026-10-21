@@ -2940,7 +2940,7 @@ class Process:
         `control`, its level control's title, or None; `under` and `version_kind`, which say the ledger version it was
         taken under -- what the control's changed bands are read from; `expected`, its list as issued (#177)."""
         rounds, order = {}, []
-        for event in self._events(kinds=(EV_CAPTURE_ISSUED, EV_CAPTURE_TAKEN, EV_CAPTURE_VERIFIED)):
+        for event in self._events(kinds=(EV_CAPTURE_ISSUED, EV_CAPTURE_TAKEN, EV_CAPTURE_VERIFIED, EV_CAPTURE_CLOSED)):
             cid = event.get("capture")
             if event.get("type") == EV_CAPTURE_ISSUED:
                 rounds[cid] = {"id": cid, "version": str(event.get("version")),
@@ -2952,6 +2952,9 @@ class Process:
                                "level": event.get("level"),
                                "spl_offsets_db": {}}
                 order.append(cid)
+            elif cid in rounds and event.get("type") == EV_CAPTURE_CLOSED:
+                # What the round took, as it closed (#176): whether its level control was ever taken.
+                rounds[cid]["taken_at_close"] = list(event.get("taken") or [])
             elif cid in rounds and event.get("type") == EV_CAPTURE_VERIFIED:
                 offsets = event.get("spl_offsets_db")
                 if isinstance(offsets, dict):
@@ -3649,8 +3652,21 @@ class Process:
         ids = [r["id"] for r in rounds]
         earlier = rounds[:ids.index(round_["id"])] if round_["id"] in ids else [r for r in rounds
                                                                                if r["id"] != round_["id"]]
-        against = next((r for r in reversed(earlier) if r.get("control")), None)
+        # The last earlier round whose control was TAKEN (the re-review, #176) -- one issued and never measured is no
+        # reference -- and never one under this round's own title: a re-taken series read its control against
+        # itself, a +1.2 dB change came out the same chain.
+        key = title_key(title)
+
+        def taken_control(r):
+            return r.get("control") and _row_for(r.get("taken_at_close") or [], r["control"]) is not None
+        same = [r for r in earlier if r.get("control") and title_key(r["control"]) == key]
+        against = next((r for r in reversed(earlier) if taken_control(r) and title_key(r["control"]) != key), None)
         if against is None:
+            if same:
+                out["why"] = (f"the series is re-taken: {', '.join(r['id'] for r in same)} took {title} too, and no "
+                              "other earlier control was taken -- nothing to read this one against")
+                out["reason"] = "retaken"
+                return out
             out["is_base"] = True
             return out
         out["against_round"], out["against_title"] = against["id"], against["control"]
@@ -3660,14 +3676,14 @@ class Process:
         out["levels"] = (against.get("level"), round_.get("level"))
         reader = getattr(verifier, "read_fr", None)
         if reader is None:
-            out["why"], out["reason"] = "the verifier reads no curves", "not_read"
+            out["why"], out["reason"] = "the verifier reads no curves", "no_reader"
         else:
             cur, ref = reader(title, measurements=records), reader(against["control"], measurements=records)
             if cur.get("why"):
                 out["why"], out["reason"] = f"{title} could not be read: {cur['why']}", "not_read"
             elif ref.get("why"):
                 out["why"] = f"{against['control']}, the previous round's control, could not be read: {ref['why']}"
-                out["reason"] = "not_read"
+                out["reason"] = "previous_not_read"
             else:
                 out["cur"], out["ref"] = cur, ref
         return out
@@ -3678,8 +3694,9 @@ class Process:
         `changed_bands` and, on a chain change, `align_db`. Each curve is brought to the base on its own `splOffsetdB`
         (`levelbase.spl_shift`), the bands the round changed are read off the ledger's diff previous -> this round,
         and `levelbase.chain_change` names the verdict; not taken, `not_taken` -- chain change not checked. `reason`
-        codes an unattributed verdict: `changes_unread`, `too_few_bands`, `not_read`, `volume` (structural: the record
-        says them) or `disagree`, `spread_wide`, `no_calibration` (real doubts: the LEVEL line says them)."""
+        codes an unattributed verdict: `changes_unread`, `too_few_bands`, `previous_not_read`, `no_reader`, `volume`
+        (structural: the record says them) or `disagree`, `spread_wide`, `no_calibration`, `not_read` (this round's
+        own control), `retaken`, `other_lineage` (real doubts: the LEVEL line says them)."""
         out = {"title": read["title"], "taken": read["taken"], "verdict": "not_taken", "common_db": None, "bands": {},
                "why": "not taken: chain change not checked", "reason": None}
         if not read["taken"]:
@@ -3707,10 +3724,10 @@ class Process:
             return out
         shift = lb.spl_shift(cur.get("spl_offset_db"), ref.get("spl_offset_db"))
         offsets = lb.band_offsets(cur["freqs"], lb.to_base(cur["mag"], shift), ref["freqs"], ref["mag"])
-        changed, why = self._changed_bands(*read["versions"])
+        changed, why, reason = self._changed_bands(*read["versions"])
         verdict = lb.chain_change(offsets, changed)
         out.update(verdict=verdict["verdict"], common_db=verdict["common_db"], bands=verdict["bands"],
-                   why=why or verdict["why"], reason=verdict.get("reason"),
+                   why=why or verdict["why"], reason=reason or verdict.get("reason"),
                    changed_bands=None if changed is None else sorted(changed))
         if "align_db" in verdict:
             out["align_db"] = verdict["align_db"]
@@ -3728,31 +3745,41 @@ class Process:
         return out
 
     def _changed_bands(self, base_version, version):
-        """`(the control bands the ledger changed between two versions, None)`, or `(None, why)` when that cannot be
-        read: a round with no ledger version on record (a series round opened without `--under`), a version not on
-        disk or held twice, a snapshot that cannot be read (#176). The same version both sides changed nothing."""
+        """`(the control bands the ledger changed between two versions, None, None)`, or `(None, why, reason)` when
+        that cannot be read: a round with no ledger version on record (a series round opened without `--under`), a
+        version not on disk or held twice, a snapshot that cannot be read (#176) -- `changes_unread`; or the two are of
+        different presets (`other_lineage`): a previous control of another lineage is no previous one. Both versions
+        are resolved on disk FIRST (the re-review): two old-layout presets sharing a version name compared as "the
+        same version, nothing changed"."""
         if not base_version or not version:
             which = "the previous control's round" if not base_version else "this round"
             return None, (f"the ledger version {which} was taken under is not on record (capture-start --under) -- "
-                          "which bands the round changed cannot be read")
-        if base_version == version:
-            return set(), None
+                          "which bands the round changed cannot be read"), "changes_unread"
         lb, state_mod = _levelbase(), _load_sibling("state/state.py")
         if state_mod is None:
-            return None, "the ledger cannot be read: state.py did not load" + _load_failure("state/state.py")
+            return (None, "the ledger cannot be read: state.py did not load" + _load_failure("state/state.py"),
+                    "changes_unread")
         snaps = []
         for v in (base_version, version):
             snap, why = _ledger_snapshot(state_mod, self.project_dir, v)
             if snap is None:
-                return None, why
+                return None, why, "changes_unread"
             snaps.append(snap)
+        if (snaps[0].get("preset") or None) != (snaps[1].get("preset") or None):
+            return None, (f"the previous control was taken under {base_version} of preset {snaps[0].get('preset')!r}, "
+                          f"this round under {version} of preset {snaps[1].get('preset')!r} -- another lineage, no "
+                          "previous control to read this one against"), "other_lineage"
+        if base_version == version:
+            return set(), None, None
         try:
             diff = state_mod.diff_states(snaps[0], snaps[1])
         except Exception as exc:  # noqa: BLE001 -- a snapshot of a shape the diff cannot read: no bands, said
-            return None, f"the ledger's diff {base_version} -> {version} could not be read ({type(exc).__name__}: {exc})"
+            return (None, f"the ledger's diff {base_version} -> {version} could not be read ({type(exc).__name__}: "
+                          f"{exc})", "changes_unread")
         changed = lb.changed_bands(diff, snaps[0], snaps[1])
         return changed, (None if changed is not None else
-                         f"the ledger's diff {base_version} -> {version} names a change with no frequency")
+                         f"the ledger's diff {base_version} -> {version} names a change with no frequency"), \
+            (None if changed is not None else "changes_unread")
 
     def unusable_captures(self, state=None):
         """Expected captures of the open round that are missing, unchecked, or checked and bad.
@@ -4542,9 +4569,11 @@ _VERB_ARGS = {
 
 
 #: The control's unattributed reasons that are a doubt about the reading, said on the LEVEL line (the re-review,
-#: #176); the structural ones -- no ledger version, too few bands left, a curve not read, another volume -- are the
-#: record's alone: said on every round, the line would be noise.
-_LEVEL_DOUBTS = ("disagree", "spread_wide", "no_calibration")
+#: #176): bands that disagree, a spread too wide, a control with no calibration, THIS round's control not read, a
+#: re-taken series with nothing else to read against, a previous control of another preset. The structural ones --
+#: no ledger version, too few bands left, the previous control not read, another volume -- are the record's alone:
+#: said on every round, the line would be noise.
+_LEVEL_DOUBTS = ("disagree", "spread_wide", "no_calibration", "not_read", "retaken", "other_lineage")
 
 
 def _level_line(level_base, round_id=None):
@@ -8525,9 +8554,9 @@ def _check_the_round_control_names_a_chain_change():
             assert lb["control"]["verdict"] == "unattributed" and lb["control"]["reason"] == "changes_unread" \
                 and "ledger" in lb["control"]["why"], lb["control"]
             assert not [x for x in out.splitlines() if x.startswith("LEVEL")], ("structural: the record's alone", out)
-            # The previous round's control no longer in REW: unattributed, `not_read`, named.
+            # The previous round's control no longer in REW: unattributed, `previous_not_read`, named.
             rc, out, err, lb = round_two("5", 1.3, prev_held=False)
-            assert lb["control"]["verdict"] == "unattributed" and lb["control"]["reason"] == "not_read" \
+            assert lb["control"]["verdict"] == "unattributed" and lb["control"]["reason"] == "previous_not_read" \
                 and "ALL+C_4 (rta)" in lb["control"]["why"], lb
     finally:
         shutil.rmtree(top, ignore_errors=True)
@@ -8616,6 +8645,10 @@ def _check_level_base_review_fixes():
             # (2), (10), (12): the control's verdict from what was read.
             f = [20.0 * 2 ** (k / 48) for k in range(480)]
             m = [80.0 + 3.0 * math.sin(k / 9.0) for k in range(480)]
+            # A banked version for the read's own `versions`: both are resolved on disk now (#176's narrow re-review).
+            os.makedirs(os.path.join(p.project_dir, "state", "main"), exist_ok=True)
+            with open(os.path.join(p.project_dir, "state", "main", "v_001.json"), "w", encoding="utf-8") as fh:
+                json.dump({"version": "v_001", "preset": "main", "sample_rate": 48000, "channels": {}}, fh)
             read = {"title": "ALL_2 (rta)", "taken": True, "against_title": "ALL_1 (rta)", "versions": ("v_001", "v_001"),
                     "cur": {"freqs": f, "mag": [x + 16.65 for x in m], "spl_offset_db": reset},
                     "ref": {"freqs": f, "mag": m, "spl_offset_db": None}}
@@ -8924,6 +8957,10 @@ def _check_level_lines_and_the_bench_chain():
             want("8 the reference", ref and "control ALL_1 (rta): the reference" in ref and "same chain" not in ref, ref)
             f = [20.0 * 2 ** (k / 48) for k in range(480)]
             m = [80.0 + 3.0 * math.sin(k / 9.0) for k in range(480)]
+            # A banked version for the read's own `versions`: both are resolved on disk now (#176's narrow re-review).
+            os.makedirs(os.path.join(p.project_dir, "state", "main"), exist_ok=True)
+            with open(os.path.join(p.project_dir, "state", "main", "v_001.json"), "w", encoding="utf-8") as fh:
+                json.dump({"version": "v_001", "preset": "main", "sample_rate": 48000, "channels": {}}, fh)
             read = {"title": "ALL_2 (rta)", "taken": True, "against_round": "cap_001", "against_title": "ALL_1 (rta)",
                     "versions": ("v_001", "v_001"), "levels": (None, {"value": "-25 dB rel. max", "read_as": None}),
                     "cur": {"freqs": f, "mag": [x + 16.65 for x in m], "spl_offset_db": reset},
@@ -8997,6 +9034,147 @@ def _check_level_lines_and_the_bench_chain():
     finally:
         shutil.rmtree(top, ignore_errors=True)
     assert not failures, "\n  ".join(["#176's group fixes:"] + failures)
+
+
+def _check_control_against_the_right_round():
+    """#176's narrow re-review: which earlier control the round's is read against. (1) A re-taken series reads the
+    same title twice: it is skipped, so a +1.2 dB change against the round before it is a chain change; with no other
+    control left it is unattributed (`retaken`), said. (2) A previous round whose control was never taken is no
+    reference: the last earlier round whose control WAS taken is. (4) Two old-layout presets sharing a version name
+    are refused as held twice, never read as "nothing changed"; a previous control under another preset is another
+    lineage (`other_lineage`), said. (6) This round's control REW answers with no magnitude -- served by rew_stub
+    through the real `rew_api.get_fr` -- leaves the check standing, `not_read`, said."""
+    import shutil
+    import tempfile
+    failures = []
+
+    def want(label, ok, detail=None):
+        if not ok:
+            failures.append(f"{label}: {detail!r}")
+    base_off, reset = 103.34649658203125, 120.0
+    notes = "65536-point 1/48 octave RTA using Hann window, no smoothing and 150 averages"
+    top = tempfile.mkdtemp(prefix="autosound_process_control_round_")
+
+    def rta(lift):
+        fs, f = [], 20.0
+        while f <= 20000.0 * 1.0001:
+            fs.append(f)
+            f *= 2 ** (1 / 48)
+        return fs, [80.0 + 3.0 * math.sin(k / 9.0) + lift for k in range(len(fs))], None
+    try:
+        with _LevelRew() as rew:
+            def project(name, presets=("main",), versions=("v_001",)):
+                proj = os.path.join(top, name)
+                os.makedirs(proj)
+                with open(os.path.join(proj, "glossary.json"), "w", encoding="utf-8") as fh:
+                    json.dump({"channels": [{"code": c} for c in ("w-L", "c")], "combos": {"ALL+C": ["w-L", "c"]}}, fh)
+                row = {"hp": {"f": 300, "type": "LR", "slope": 24}, "lp": {"f": 3000, "type": "LR", "slope": 24},
+                       "gain_db": 0, "ta_ms": 0, "polarity": "NORM", "eq": []}
+                for preset in presets:
+                    os.makedirs(os.path.join(proj, "state", preset))
+                    for v in versions:
+                        with open(os.path.join(proj, "state", preset, v + ".json"), "w", encoding="utf-8") as fh:
+                            json.dump({"version": v, "preset": preset, "sample_rate": 48000,
+                                       "channels": {"c": dict(row)}}, fh)
+                p = Process(os.path.join(proj, "process"))
+                p.enter_phase("-1")
+                return p, os.path.join(proj, "process")
+            curves = {}
+            rew.api.get_fr = lambda mid, smoothing=None: curves.get(rew.listing[mid]["title"]) or rew.curve(mid)
+
+            def take(p, d, series, under, held, lifts):
+                p.start_capture(series, expected=[f"w-L_{series} (sw)"], under=under)
+                rew.hold(held)
+                for rec in rew.listing.values():
+                    if rec["title"].endswith("(rta)"):
+                        rec["notes"] = notes
+                curves.update({t: rta(l) for t, l in lifts.items()})
+                rc, out, err = _run_main(["process.py", d, "capture-check"])
+                lb = p.load()["capture"]["level_base"]
+                _run_main(["process.py", d, "capture-close", "--no-rew"])
+                return rc, out, lb.get("control") or {}
+            levels = lambda out: [x for x in out.splitlines() if x.startswith("LEVEL   ")]  # noqa: E731
+            # (1) series 2 taken again, +1.2 dB on the chain: read against cap_001, not against itself.
+            p, d = project("retake")
+            take(p, d, "1", "v_001", {"w-L_1 (sw)": base_off, "ALL+C_1 (rta)": base_off}, {"ALL+C_1 (rta)": base_off})
+            take(p, d, "2", "v_001", {"w-L_2 (sw)": reset, "ALL+C_2 (rta)": reset, "ALL+C_1 (rta)": base_off},
+                 {"ALL+C_2 (rta)": reset})
+            rc, out, ctl = take(p, d, "2", "v_001", {"w-L_2 (sw)": reset, "ALL+C_2 (rta)": reset,
+                                                     "ALL+C_1 (rta)": base_off}, {"ALL+C_2 (rta)": reset + 1.2})
+            want("1 not against itself", ctl.get("against_round") == "cap_001" and ctl.get("verdict") == "chain_change"
+                 and abs((ctl.get("common_db") or 0) - 1.2) < 0.02, ctl)
+            want("1 said", len(levels(out)) == 1 and "chain change +1.20 dB" in levels(out)[0], out)
+            p, d = project("retake-alone")
+            take(p, d, "1", "v_001", {"w-L_1 (sw)": base_off, "ALL+C_1 (rta)": base_off}, {"ALL+C_1 (rta)": base_off})
+            rc, out, ctl = take(p, d, "1", "v_001", {"w-L_1 (sw)": base_off, "ALL+C_1 (rta)": base_off},
+                                {"ALL+C_1 (rta)": base_off + 1.2})
+            want("1 no other control: retaken", ctl.get("verdict") == "unattributed" and ctl.get("reason") == "retaken",
+                 ctl)
+            want("1 retaken said", len(levels(out)) == 1 and "re-taken" in levels(out)[0], out)
+            # (2) round 2's control never taken: round 3 reads round 1's, still in REW.
+            p, d = project("not-taken")
+            take(p, d, "1", "v_001", {"w-L_1 (sw)": base_off, "ALL+C_1 (rta)": base_off}, {"ALL+C_1 (rta)": base_off})
+            take(p, d, "2", "v_001", {"w-L_2 (sw)": reset, "ALL+C_1 (rta)": base_off}, {})
+            rc, out, ctl = take(p, d, "3", "v_001", {"w-L_3 (sw)": reset, "ALL+C_3 (rta)": reset,
+                                                     "ALL+C_1 (rta)": base_off}, {"ALL+C_3 (rta)": reset + 1.2})
+            want("2 against the last control taken", ctl.get("against_round") == "cap_001"
+                 and ctl.get("verdict") == "chain_change", ctl)
+            # (4) two presets sharing v_001: held twice, refused -- never "nothing changed".
+            p, d = project("twice", presets=("A", "B"))
+            take(p, d, "1", "v_001", {"w-L_1 (sw)": base_off, "ALL+C_1 (rta)": base_off}, {"ALL+C_1 (rta)": base_off})
+            rc, out, ctl = take(p, d, "2", "v_001", {"w-L_2 (sw)": reset, "ALL+C_2 (rta)": reset,
+                                                     "ALL+C_1 (rta)": base_off}, {"ALL+C_2 (rta)": reset + 1.2})
+            want("4 held twice is no 'nothing changed'", ctl.get("verdict") == "unattributed"
+                 and ctl.get("changed_bands") is None and "2 times" in (ctl.get("why") or ""), ctl)
+            # ...and the previous control under another preset is another lineage, said.
+            p, d = project("lineage", presets=("A", "B"), versions=())
+            for preset, v in (("A", "v_001"), ("B", "v_002")):
+                with open(os.path.join(os.path.dirname(d), "state", preset, v + ".json"), "w", encoding="utf-8") as fh:
+                    json.dump({"version": v, "preset": preset, "sample_rate": 48000, "channels": {"c": {}}}, fh)
+            take(p, d, "1", "v_001", {"w-L_1 (sw)": base_off, "ALL+C_1 (rta)": base_off}, {"ALL+C_1 (rta)": base_off})
+            rc, out, ctl = take(p, d, "2", "v_002", {"w-L_2 (sw)": reset, "ALL+C_2 (rta)": reset,
+                                                     "ALL+C_1 (rta)": base_off}, {"ALL+C_2 (rta)": reset})
+            want("4 another lineage", ctl.get("verdict") == "unattributed" and ctl.get("reason") == "other_lineage",
+                 ctl)
+            want("4 lineage said", any("preset" in x for x in levels(out)), out)
+        # (6) this round's control, no magnitude, through rew_stub and the real get_fr.
+        import numpy as np
+        stub, verify_mod = _load_sibling("rew_stub.py"), _load_sibling("verify.py")
+        api = verify_mod._api
+        fs_ = 48000
+        fb = np.fft.rfftfreq(4096, 1.0 / fs_)
+        ir = np.fft.irfft(0.3 * stub.np.exp(-2j * np.pi * fb * 40 / fs_) * (1 + 0.5 * np.sin(fb / 300.0)), n=4096)
+        f_lin = np.arange(20.0, 20000.0, 10.0)
+        p, d = project("stub")
+        real_verifier, real_base = Process._load_verifier, api.BASE_URL
+        try:
+            Process._load_verifier = lambda _self: verify_mod
+            for series, held in (("1", [stub.Measurement("w-L_1 (sw)", ir, fs_, spl_offset_db=base_off),
+                                        stub.Measurement("ALL+C_1 (rta)", rta=(f_lin, 80.0 + 0 * f_lin), notes=notes,
+                                                         spl_offset_db=base_off)]),
+                                 ("2", [stub.Measurement("w-L_2 (sw)", ir, fs_, spl_offset_db=reset),
+                                        stub.Measurement("ALL+C_1 (rta)", rta=(f_lin, 80.0 + 0 * f_lin), notes=notes,
+                                                         spl_offset_db=base_off),
+                                        stub.Measurement("ALL+C_2 (rta)", rta=(f_lin, 96.65 + 0 * f_lin), notes=notes,
+                                                         spl_offset_db=reset, broken_fr=True)])):
+                p.start_capture(series, expected=[f"w-L_{series} (sw)"], under="v_001")
+                url, server = stub.serve(held)
+                api.BASE_URL = url
+                try:
+                    rc, out, err = _run_main(["process.py", d, "capture-check"])
+                finally:
+                    server.shutdown()
+                ctl = p.load()["capture"]["level_base"].get("control") or {}
+                if series == "1":
+                    _run_main(["process.py", d, "capture-close", "--no-rew"])
+            want("6 the check stands", rc in (0, EXIT_NO) and "Traceback" not in err, (rc, err[-400:]))
+            want("6 not read, said", ctl.get("reason") == "not_read" and "magnitude" in (ctl.get("why") or "")
+                 and any("not read" in x or "could not be read" in x for x in levels(out)), (ctl, out))
+        finally:
+            Process._load_verifier, api.BASE_URL = real_verifier, real_base
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["#176's control rounds:"] + failures)
 
 
 class _SnapshotRew:
@@ -11008,6 +11186,7 @@ def _selftest():
                   _check_a_check_asks_rew_by_key, _check_a_check_judges_one_snapshot_of_rew, _check_rounds_on_one_level_base,
                   _check_the_round_control_names_a_chain_change, _check_level_base_review_fixes,
                   _check_level_base_second_fixes, _check_level_lines_and_the_bench_chain,
+                  _check_control_against_the_right_round,
                   _check_an_optional_not_taken_is_no_gap,
                   _check_close_stops_on_a_moved_snapshot, _check_a_check_holds_its_snapshot_whole,
                   _check_a_session_drift_reads_the_one_listing,

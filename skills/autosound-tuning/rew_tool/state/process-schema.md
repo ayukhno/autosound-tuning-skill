@@ -126,15 +126,18 @@ panel had nothing real to render and every resume re-derived the phase by re-rea
                                 "to_base_db": 16.65,     // the shift that brings it to the base (subtracted)
                                 "to_previous_db": 16.65}},  // the jump against the previous round; null with none
       "control": {"title": "ALL+C_4 (rta)", "taken": true,     // the round's control against the PREVIOUS
-                  "against_round": "cap_003",       //   control (the last earlier round with one), both
+                  "against_round": "cap_003",       //   control (the last earlier round whose control was
+                                                    //   TAKEN, under another title, same preset), both
                   "against_title": "ALL+C_3 (rta)", //   brought to the base on their own offset, over the
                   "verdict": "chain_change",        //   bands the ledger's diff previous -> this round
                                                     //   (`--under`) did not change; a delay alike on every
                                                     //   channel is no change: same_chain | chain_change |
                                                     //   unattributed | not_taken (chain change not checked)
                   "reason": null,                   //   unattributed: changes_unread | too_few_bands |
-                                                    //   not_read | volume (the record's) | disagree |
-                                                    //   spread_wide | no_calibration (on the LEVEL line)
+                                                    //   previous_not_read | no_reader | volume (the
+                                                    //   record's) | disagree | spread_wide | no_calibration |
+                                                    //   not_read (this round's control) | retaken |
+                                                    //   other_lineage (on the LEVEL line)
                   "common_db": 1.2, "align_db": -1.2,   // align_db: offered on a chain change only
                   "changed_bands": ["mid"],         //   null when the diff could not be read
                   "bands": {"low": {"mean_db": 1.21, "spread_db": 0.3, "used": true},
