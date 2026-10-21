@@ -42,8 +42,12 @@ _TIMEOUT = 3.0
 #: The second ask's limit, after a first that ran out (#187, hub #289). A slow Windows machine missed the three seconds
 #: once in a run and wrote `""` where its sha belonged; one more ask, with room, answers most of those. Asked once and
 #: only after a timeout -- an answer that came in time, `""` and all, is not asked again -- so a wedged git holds a
-#: write up for these two limits at most, once per process (`_CACHE`).
-_RETRY_TIMEOUT = 10.0
+#: write up for these two limits at most, once per process (`_CACHE`). Two seconds, not more: every write TCC makes
+#: is a process of its own, TCC's window waits 5 s for its own lock before it says Busy (tcc `method_cli.py`,
+#: `GUI_LOCK_WAIT_S`) and gives a child 20 s in all (`process_writer.py`, `DEFAULT_TIMEOUT_S`), so the two asks
+#: together stay inside the five (the #187 re-review). A git slower than that still writes `""` -- and no header, a
+#: timeout's `""` being no change of writer (`Process._stamp`).
+_RETRY_TIMEOUT = 2.0
 
 #: `(skill_sha(), sha_unknown_because(), skill_sha_timed_out())` for the life of the process, once asked. `None` means
 #: "not asked yet"; a sha of `""` is an answer. A stamp that changed halfway through a run would put two writers in one
@@ -275,8 +279,9 @@ def _check_a_slow_git_is_asked_again():
     (#187, hub #289): a slow Windows machine's one miss wrote `""` into every artifact that call stamped. Git here is a
     stand-in that decides who answers -- the first ask runs out, the second answers -- so the case holds whatever the
     clock says. Only a timeout is asked again: an answer that came in time is the answer, `""` and all."""
+    global _CACHE
     import tempfile
-    real_run, asked = subprocess.run, []
+    real_run, asked, cached = subprocess.run, [], _CACHE
     head = "c" * 40
 
     def git(answers):
@@ -305,8 +310,17 @@ def _check_a_slow_git_is_asked_again():
             got = _ask_at(root)
             assert got == ("", "git: fatal: not a git repository", False), f"a git that said no in time: {got!r}"
             assert len(asked) == 1, f"a git that answered in time was asked {len(asked)} times"
+
+            # Through the cache, as `Process._stamp` reads it: the flag is the one public reader of the third half.
+            asked.clear()
+            _CACHE = None
+            subprocess.run = git([None, None])
+            assert (skill_sha(), skill_sha_timed_out()) == ("", True), \
+                f"the cache after two timeouts: {(skill_sha(), skill_sha_timed_out())!r}"
+            assert len(asked) == 2, f"the cache asked {len(asked)} time(s), not twice, and then not again"
         finally:
             subprocess.run = real_run
+            _CACHE = cached
 
 
 def _selftest():

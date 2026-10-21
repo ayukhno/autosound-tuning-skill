@@ -158,8 +158,9 @@ whether two runs came from the same method. It is written before the first event
 when the sha differs from the last one recorded* — a car tuned over a weekend on one version carries
 one header, not one line per event. `""` means the writer was asked and could not be told (no
 repository, no git); a journal with no header at all predates anyone asking. One `""` is skipped
-(#187): each CLI call asks git anew — once more with a longer limit when the first runs out
-(`provenance._RETRY_TIMEOUT`) — and a git that still did not answer in time is no move, so after a
+(#187): each CLI call asks git anew — 3 s, and once more for 2 s when the first runs out
+(`provenance._RETRY_TIMEOUT`; five seconds in all, inside TCC's 5 s wait for its own lock) — and a
+git that still did not answer in time is no move, so after a
 real sha that `""` writes no header. Only that cause, carried as a flag
 (`provenance.skill_sha_timed_out`), never read from the words: a `""` for no checkout, no git, a
 repository around the copy or no commit is written as before, so a journal taken to a copy with no

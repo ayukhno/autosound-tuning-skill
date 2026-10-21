@@ -9017,7 +9017,7 @@ def _check_the_sha_is_asked_before_the_hold():
     import tempfile
     lock = _write_lock()
     prov = _load_rew_tool_module("provenance")
-    real_sha, real_event = prov.skill_sha, Process._append_event
+    real_sha, real_flag, real_event = prov.skill_sha, prov.skill_sha_timed_out, Process._append_event
     top = tempfile.mkdtemp(prefix="autosound_process_sha_first_")
     project, asked, written, failures = [None], [], [], []
 
@@ -9043,6 +9043,12 @@ def _check_the_sha_is_asked_before_the_hold():
         asked.append(lock.held_here(project[0]))
         return "c" * 40
 
+    def flag():
+        # Its half of the answer (#187) is asked in the same `_writer_sha` call, so it is watched too: a read moved
+        # into `_stamp`, under the hold, shows here -- `asked` is then [False, False], the sha and its flag, both free.
+        asked.append(lock.held_here(project[0]))
+        return False
+
     def event(self, event_type, payload):
         written.append(lock.held_here(self.project_dir))
         return real_event(self, event_type, payload)
@@ -9054,18 +9060,18 @@ def _check_the_sha_is_asked_before_the_hold():
             ("enter_phase", bare, lambda d: Process(d).enter_phase("-1")),
             ("check_captures", round_open, lambda d: Process(d).check_captures(verifier=Verifier())),
             ("session-close", at_minus_one, lambda d: _run_main(["process.py", d, "session-close"])))]
-        prov.skill_sha, Process._append_event = sha, event
+        prov.skill_sha, prov.skill_sha_timed_out, Process._append_event = sha, flag, event
         for label, d, first in made:
             project[0] = os.path.dirname(os.path.abspath(d))
             del asked[:], written[:]
             with contextlib.redirect_stdout(_io.StringIO()):
                 caught = _raised(lambda: first(d))
             heads = [e.get("skill_sha") for e in Process(d).events() if e.get("type") == EV_WRITTEN_BY]
-            if caught is not None or asked != [False] or not written or not all(written) or heads[-1:] != ["c" * 40]:
+            if caught is not None or asked != [False, False] or not written or not all(written) or heads[-1:] != ["c" * 40]:
                 failures.append(f"{label}: the sha asked {asked} (True: under the lock), its lines written under the "
                                 f"lock {written}, the last header {heads[-1:]}, raised {caught!r}")
     finally:
-        prov.skill_sha, Process._append_event = real_sha, real_event
+        prov.skill_sha, prov.skill_sha_timed_out, Process._append_event = real_sha, real_flag, real_event
         shutil.rmtree(top, ignore_errors=True)
     assert not failures, "\n  ".join(["the sha and the lock:"] + failures)
 
