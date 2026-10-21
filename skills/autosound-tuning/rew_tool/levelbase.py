@@ -46,6 +46,10 @@ CELL_OCT = 1.0 / 6.0
 #: The day-to-day spread of one control taken twice, dB: the bench measured 0.5-0.7, and this is its upper end. Over
 #: it, a common remainder is the chain; under it, the same chain.
 DAILY_SPREAD_DB = 0.7
+#: How far one band's own 1/6-octave cells may scatter about its mean and still be read as one number, dB -- a
+#: spread INSIDE a band, not the spread of band means `DAILY_SPREAD_DB` is (the re-review, #176). From the bench: the
+#: 08.10 controls, read at 1/48, scattered 0.66-0.74 dB inside the bands the round did not change; about twice that.
+IN_BAND_SPREAD_LIMIT_DB = 1.5
 #: Two offsets closer than this are one offset (REW writes a float32: 103.34649658203125 is 103.35).
 SAME_OFFSET_DB = 0.005
 
@@ -156,28 +160,33 @@ def chain_change(offsets, changed=(), spread_db=DAILY_SPREAD_DB):
         used = changed is not None and name not in changed and mean is not None
         bands[name] = {"mean_db": None if mean is None else round(mean, 2),
                        "spread_db": None if spread is None else round(spread, 2), "used": used}
-    out = {"verdict": UNATTRIBUTED, "common_db": None, "bands": bands, "why": None}
+    # `reason`: why it is unattributed, as a code -- `changes_unread`, `too_few_bands` (structural: the record says
+    # them), `disagree`, `spread_wide` (a real doubt about the reading: said) -- None on a verdict.
+    out = {"verdict": UNATTRIBUTED, "common_db": None, "bands": bands, "why": None, "reason": None}
     if changed is None:
-        out["why"] = "which bands the round changed could not be read off the ledger"
+        out["why"], out["reason"] = "which bands the round changed could not be read off the ledger", "changes_unread"
         return out
     means = [_number((offsets[n] if isinstance(offsets[n], (tuple, list)) else (offsets[n],))[0])
              for n in bands if bands[n]["used"]]
     if len(means) < 2:
         out["why"] = (f"{len(means)} band(s) left outside what the round changed -- the rule needs two")
+        out["reason"] = "too_few_bands"
         return out
     common = sum(means) / len(means)
     out["common_db"] = round(common, 2)
     far = max(abs(m - common) for m in means)
-    # A used band whose own cells scatter over twice the daily spread is no number to name a chain on (the group
+    # A used band whose own cells scatter over `IN_BAND_SPREAD_LIMIT_DB` is no number to name a chain on (the group
     # seats, #176): its mean is read, and the verdict is not.
-    wide = [n for n in bands if bands[n]["used"] and (bands[n]["spread_db"] or 0.0) > 2 * spread_db]
+    wide = [n for n in bands if bands[n]["used"] and (bands[n]["spread_db"] or 0.0) > IN_BAND_SPREAD_LIMIT_DB]
     if wide:
-        out["why"] = (f"{', '.join(wide)} scatter(s) over twice the daily spread ({2 * spread_db:g} dB) within the "
-                      "band -- no common remainder to read")
+        out["why"] = (f"the spread within {', '.join(wide)} is over {IN_BAND_SPREAD_LIMIT_DB:g} dB -- no common "
+                      "remainder to read")
+        out["reason"] = "spread_wide"
         return out
     if far > spread_db:
         out["why"] = (f"the bands outside the round's change disagree: one sits {far:.2f} dB from their common mean, "
                       f"over the daily spread of {spread_db:g} dB")
+        out["reason"] = "disagree"
         return out
     if abs(common) > spread_db:
         out.update(verdict=CHAIN_CHANGE, align_db=round(-common, 2),
@@ -304,6 +313,27 @@ def _corner_move(leg, was, now):
     return min(was, now) / 2 ** _CORNER_OCT, max(was, now) * 2 ** _CORNER_OCT
 
 
+def _uniform_delay(tier, rows, before, after):
+    """Whether the diff shifts EVERY channel of `tier` by one and the same delay (the re-review, #176): the whole
+    system later by the same time changes nothing a microphone hears -- no sum moves -- so it is no change. Every row
+    the tier has on both sides must carry a delay on both and move by the same amount (to a microsecond)."""
+    was = (before or {}).get(tier) or {}
+    now = (after or {}).get(tier) or {}
+    both = [ch for ch in was if ch in now]
+    if not both:
+        return False
+    deltas = []
+    for ch in both:
+        pair = (rows.get(ch) or {}).get("ta_ms") if isinstance(rows.get(ch), dict) else None
+        if not isinstance(pair, (list, tuple)) or len(pair) != 2:
+            return False                              # a channel whose delay did not move: not alike
+        a, b = _number(pair[0]), _number(pair[1])
+        if a is None or b is None:
+            return False
+        deltas.append(b - a)
+    return max(deltas) - min(deltas) <= 1e-3 and abs(deltas[0]) > 0
+
+
 def changed_ranges(diff, before, after):
     """`[(lo, hi)]` Hz the change between two ledger snapshots reaches, from `state.diff_states(before, after)`; None
     when the diff cannot be read (not a diff, or a band with no frequency). What counts (#176, the plan's T1: "the
@@ -312,7 +342,9 @@ def changed_ranges(diff, before, after):
     open on its side. A band bypassed on both sides changes nothing. Beside them, so that no change of the DSP is read
     back as the chain: a channel's level (gain, mute, off), its delay or its `eq_ptr` reaches its passband, as does a
     channel added or removed; its polarity or phase reaches either side of each corner as far as that leg sums with its
-    neighbour (`_leg_reach`: ~12 dB down by its own slope), a channel with no corner its passband. A preset's rate or virtual EQ file reaches everything."""
+    neighbour (`_leg_reach`: ~12 dB down by its own slope), a channel with no corner its passband. A delay
+    that moves every channel of a tier by the same amount is no change (`_uniform_delay`). A preset's rate or virtual
+    EQ file reaches everything."""
     if not isinstance(diff, dict) or not isinstance(diff.get("preset", {}), dict):
         return None
     if any(k in (diff.get("preset") or {}) for k in _WHOLE_PRESET):
@@ -323,9 +355,12 @@ def changed_ranges(diff, before, after):
             continue
         if not isinstance(rows, dict):
             return None
+        uniform = _uniform_delay(tier, rows, before, after)
         for ch, fields in rows.items():
             if not isinstance(fields, dict):
                 return None
+            if uniform and "ta_ms" in fields:
+                fields = {k: v for k, v in fields.items() if k != "ta_ms"}   # every channel alike: no change
             was = ((before or {}).get(tier) or {}).get(ch)
             now = ((after or {}).get(tier) or {}).get(ch)
             if fields.get("__added__") or fields.get("__removed__"):
@@ -513,12 +548,33 @@ def _selftest():
     v8, v12 = ledger["v_008"], ledger["v_012"]
     bench_changed = changed_bands(_state.diff_states(v8, v12), v8, v12)
     e2e = chain_change(got, changed=bench_changed)
-    # What the rule gives (the group seats' fix, #176): v_012 moved the centre's delay 1.8 -> 2.5 ms, and a delay moves
-    # the sum over the channel's whole passband (HP 560 .. LP 1000, an octave past each: 280-2000 Hz) -- low, mid and
-    # presence. One band is left, top (-0.32); the rule needs two, so the verdict is unattributed -- the conservative
-    # answer when a change reaches that far, against the bench's own same chain by hand. Not tuned to agree.
+    # What the rule gives (the group seats' fix, #176): v_012 moved the centre's delay 1.8 -> 2.5 ms -- a delay moves
+    # the sum over the channel's whole passband (HP 560 .. LP 1000, an octave past each: 280-2000 Hz), low, mid and
+    # presence -- and flipped its polarity INV -> NORM, which alone reaches its corners' overlap, low and mid. One band
+    # is left, top (-0.32); the rule needs two, so the verdict is unattributed -- the conservative answer when a change
+    # reaches that far, against the bench's own same chain by hand. Not tuned to agree.
     assert bench_changed == {"low", "mid", "presence"}, bench_changed
-    assert e2e["verdict"] == UNATTRIBUTED and "1 band(s)" in e2e["why"], (bench_changed, e2e)
+    assert e2e["verdict"] == UNATTRIBUTED and e2e["reason"] == "too_few_bands" and "1 band(s)" in e2e["why"], e2e
+    # 13. A delay shift by the same amount on every channel changes nothing acoustically (the re-review, #176): read
+    #     as no change. Band counts left on the bench's own layout (v_012), +0.1 ms: one tweeter, the sub, all
+    #     channels alike, one mid.
+    def plus(chs):
+        return {"preset": {}, "channels": {c: {"ta_ms": [v12["channels"][c].get("ta_ms") or 0.0,
+                                                        (v12["channels"][c].get("ta_ms") or 0.0) + 0.1]}
+                                           for c in chs}}
+    left = {what: len(set(CONTROL_BANDS) - changed_bands(plus(chs), v12, v12))
+            for what, chs in (("tweeter", ["tw-L"]), ("sub", ["sw"]), ("all", list(v12["channels"])),
+                              ("mid", ["m-L"]))}
+    assert left == {"tweeter": 2, "sub": 3, "all": 4, "mid": 0}, left
+    uneven = plus(list(v12["channels"]))
+    uneven["channels"]["sw"]["ta_ms"][1] += 0.05
+    assert changed_bands(uneven, v12, v12) == set(CONTROL_BANDS), "not alike: every channel's passband"
+    # 14. Each unattributed verdict names its reason, a code a reader can sort the real doubts by.
+    assert chain_change(uniform, changed=None)["reason"] == "changes_unread"
+    assert mixed["reason"] == "disagree" and cc["reason"] is None and chain_change(
+        {"low": (1.2, 1.6), "top": (1.2, 0.3)}, changed=set())["reason"] == "spread_wide"
+    assert IN_BAND_SPREAD_LIMIT_DB == 1.5 and chain_change({"low": (1.2, 1.5), "top": (1.2, 0.3)},
+                                                           changed=set())["verdict"] == CHAIN_CHANGE
     # 10. Every branch of `changed_ranges`, the bands worked out by hand (the group test seat, #176). Rows: `w` a woofer
     #     HP 92 / LP 250 LR24 (passband 46-500: low); `t` a tweeter HP 5000 LR24, no LP (2500-inf: presence, top); `f`
     #     full range, both legs OFF (everything).
@@ -554,7 +610,7 @@ def _selftest():
     assert edge["verdict"] == SAME_CHAIN and edge["common_db"] == 0.7, edge
     over = chain_change({"low": (1.41, 0.2), "top": (0.0, 0.2)}, changed=set())
     assert over["verdict"] == UNATTRIBUTED and "disagree" in over["why"], over
-    wide = chain_change({"low": (1.2, 1.5), "presence": (1.2, 0.3), "top": (1.2, 0.3)}, changed=set())
+    wide = chain_change({"low": (1.2, 1.6), "presence": (1.2, 0.3), "top": (1.2, 0.3)}, changed=set())
     assert wide["verdict"] == UNATTRIBUTED and "spread" in wide["why"], wide
     assert chain_change({"low": (1.2, 1.4), "presence": (1.2, 0.3)}, changed=set())["verdict"] == CHAIN_CHANGE
     assert round_offset({"a": 120.0, "b": 103.35}) == (120.0, False), "a tie goes to the first title"
