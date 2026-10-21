@@ -25,8 +25,8 @@ Two steps, as the bench takes them:
    measured. Which bands a round changed is read off the ledger (`changed_bands`, the diff between the two rounds'
    versions); a diff that cannot be read leaves the verdict unattributed, never a chain change.
 
-The offset arithmetic is stdlib; numpy is imported where the curves are read (`band_offset`), so a reader of offsets
-alone (`process.py capture-check`'s `level_base`) needs nothing more than the method's own code.
+Standard library only (the final review, #176): `process.py capture-check` reaches every function here, and it ran
+on the standard library alone before this module -- CI holds it to that on a Python with no numpy.
 
     python3 rew_tool/levelbase.py --selftest
 """
@@ -100,13 +100,25 @@ def round_offset(offsets):
     return best[0], len(groups) == 1
 
 
-def _band_db(f, m, fc, oct_):
-    """Power mean of `m` (dB) over fc·2^(±oct_/2), or None with no bin there."""
-    import numpy as np
-    sel = (f >= fc * 2 ** (-oct_ / 2)) & (f <= fc * 2 ** (oct_ / 2)) & np.isfinite(m)
-    if not sel.any():
+def _band_db(points, fc, oct_):
+    """Power mean of the dB values among `points` (`[(f, dB)]`, finite) within fc·2^(±oct_/2), or None with no bin
+    there -- the bench's `_band_db`, in the standard library: `capture-check` reaches it, and it runs where numpy is
+    not installed (the final review, #176: CI's Python 3.11 job has none)."""
+    lo, hi = fc * 2 ** (-oct_ / 2), fc * 2 ** (oct_ / 2)
+    powers = [10 ** (m / 10) for f, m in points if lo <= f <= hi]
+    if not powers:
         return None
-    return 10 * math.log10(float(np.mean(10 ** (m[sel] / 10))))
+    return 10 * math.log10(sum(powers) / len(powers))
+
+
+def _points(freqs, mags):
+    """`[(f, dB)]` of the finite pairs of a curve -- lists or numpy arrays, read as plain floats."""
+    out = []
+    for f, m in zip(freqs, mags):
+        f, m = _number(f), _number(m)
+        if f is not None and m is not None:
+            out.append((f, m))
+    return out
 
 
 def _centres(lo, hi, oct_):
@@ -120,18 +132,17 @@ def _centres(lo, hi, oct_):
 def band_offset(f_cur, m_cur, f_ref, m_ref, lo, hi, oct_=CELL_OCT):
     """`(mean, spread)` of the cell-by-cell differences cur - ref over `lo`..`hi`: 1/6-octave cells, each a power mean
     in ±1/12 octave, the spread their rms about the mean (the bench's `band_offset`). `(None, None)` when no cell has
-    bins on both curves -- a band nobody measured is no number."""
-    import numpy as np
-    fc_, mc_ = np.asarray(f_cur, float), np.asarray(m_cur, float)
-    fr_, mr_ = np.asarray(f_ref, float), np.asarray(m_ref, float)
+    bins on both curves -- a band nobody measured is no number. Standard library only: `capture-check` calls it."""
+    cur, ref = _points(f_cur, m_cur), _points(f_ref, m_ref)
     d = []
     for c in _centres(lo, hi, oct_):
-        a, b = _band_db(fc_, mc_, c, oct_), _band_db(fr_, mr_, c, oct_)
+        a, b = _band_db(cur, c, oct_), _band_db(ref, c, oct_)
         if a is not None and b is not None:
             d.append(a - b)
     if not d:
         return None, None
-    return float(np.mean(d)), float(np.std(d))
+    mean = sum(d) / len(d)
+    return mean, math.sqrt(sum((x - mean) ** 2 for x in d) / len(d))     # numpy's std: the population's
 
 
 def band_offsets(f_cur, m_cur, f_ref, m_ref, bands=None):
@@ -423,8 +434,6 @@ def _selftest():
     spl-reset-controls.json`), the shift +16.65 dB, the band numbers `cap004_check.py` printed, and the verdict on
     them; then the rule's edges, and which bands a ledger diff changes."""
     import json
-
-    import numpy as np
     here = os.path.dirname(os.path.abspath(__file__))
     with open(os.path.join(here, "testdata", "rew", "spl-reset-controls.json"), encoding="utf-8") as fh:
         recorded = json.load(fh)
@@ -435,11 +444,16 @@ def _selftest():
     assert round(shift, 2) == 16.65, shift
     assert spl_shift(None, 103.35) == 0.0 and spl_shift(120.0, None) == 0.0 and spl_shift(True, 1.0) == 0.0
     assert to_base([100.0, 116.65], shift)[1] - 100.0 < 1e-9 and isinstance(to_base([1.0], 0), list)
-    assert round(float(to_base(np.asarray([116.65]), shift)[0]), 2) == 100.0
+    try:
+        import numpy as np                           # optional: a numpy array comes back an array
+    except ImportError:
+        np = None
+    if np is not None:
+        assert round(float(to_base(np.asarray([116.65]), shift)[0]), 2) == 100.0
     # 2. The control after the shift, band by band -- cap004_check.py's section E printed these (mean/spread):
     #    low +0.45/0.74 · mid -0.89/1.50 · presence +0.26/0.66 · top -0.32/0.73.
-    f3, m3 = np.asarray(c3["fr"][0]), np.asarray(c3["fr"][1])
-    f4, m4 = np.asarray(c4["fr"][0]), to_base(np.asarray(c4["fr"][1]), shift)
+    f3, m3 = c3["fr"][0], c3["fr"][1]
+    f4, m4 = c4["fr"][0], to_base(c4["fr"][1], shift)
     got = band_offsets(f4, m4, f3, m3)
     bench = {"low": (0.45, 0.74), "mid": (-0.89, 1.50), "presence": (0.26, 0.66), "top": (-0.32, 0.73)}
     for band, (mean, spread) in bench.items():
@@ -451,7 +465,9 @@ def _selftest():
     assert [b for b, r in v["bands"].items() if r["used"]] == ["low", "presence", "top"] and "align_db" not in v, v
     # Unshifted, the same two controls read 16.65 dB apart everywhere: a chain change the size of REW's reset -- the
     # number the round check let through without a word (PAS-015).
-    raw = chain_change(band_offsets(f4, np.asarray(c4["fr"][1]), f3, m3), changed={"mid"})
+    raw = chain_change(band_offsets(f4, c4["fr"][1], f3, m3), changed={"mid"})
+    if np is not None:                               # arrays read the same numbers as lists
+        assert band_offsets(np.asarray(f4), np.asarray(m4), np.asarray(f3), np.asarray(m3)) == got
     assert raw["verdict"] == CHAIN_CHANGE and abs(raw["common_db"] - 16.78) < 0.02, raw
     # 3. The rule's edges. A uniform +1.2 dB is a chain change, the alignment offered on the bands that carry it.
     uniform = {b: (1.2, 0.3) for b in CONTROL_BANDS}

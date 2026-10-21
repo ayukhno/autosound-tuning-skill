@@ -9137,41 +9137,47 @@ def _check_control_against_the_right_round():
             want("4 another lineage", ctl.get("verdict") == "unattributed" and ctl.get("reason") == "other_lineage",
                  ctl)
             want("4 lineage said", any("preset" in x for x in levels(out)), out)
-        # (6) this round's control, no magnitude, through rew_stub and the real get_fr.
-        import numpy as np
-        stub, verify_mod = _load_sibling("rew_stub.py"), _load_sibling("verify.py")
-        api = verify_mod._api
-        fs_ = 48000
-        fb = np.fft.rfftfreq(4096, 1.0 / fs_)
-        ir = np.fft.irfft(0.3 * stub.np.exp(-2j * np.pi * fb * 40 / fs_) * (1 + 0.5 * np.sin(fb / 300.0)), n=4096)
-        f_lin = np.arange(20.0, 20000.0, 10.0)
-        p, d = project("stub")
-        real_verifier, real_base = Process._load_verifier, api.BASE_URL
+        # (6) this round's control, no magnitude, through rew_stub and the real get_fr. rew_stub serves from numpy
+        # arrays: the case runs where numpy is -- the method's own jobs -- and is left out on CI's Python 3.11, which
+        # holds capture-check itself to the standard library (the final review, #176).
         try:
-            Process._load_verifier = lambda _self: verify_mod
-            for series, held in (("1", [stub.Measurement("w-L_1 (sw)", ir, fs_, spl_offset_db=base_off),
-                                        stub.Measurement("ALL+C_1 (rta)", rta=(f_lin, 80.0 + 0 * f_lin), notes=notes,
-                                                         spl_offset_db=base_off)]),
-                                 ("2", [stub.Measurement("w-L_2 (sw)", ir, fs_, spl_offset_db=reset),
-                                        stub.Measurement("ALL+C_1 (rta)", rta=(f_lin, 80.0 + 0 * f_lin), notes=notes,
-                                                         spl_offset_db=base_off),
-                                        stub.Measurement("ALL+C_2 (rta)", rta=(f_lin, 96.65 + 0 * f_lin), notes=notes,
-                                                         spl_offset_db=reset, broken_fr=True)])):
-                p.start_capture(series, expected=[f"w-L_{series} (sw)"], under="v_001")
-                url, server = stub.serve(held)
-                api.BASE_URL = url
-                try:
-                    rc, out, err = _run_main(["process.py", d, "capture-check"])
-                finally:
-                    server.shutdown()
-                ctl = p.load()["capture"]["level_base"].get("control") or {}
-                if series == "1":
-                    _run_main(["process.py", d, "capture-close", "--no-rew"])
-            want("6 the check stands", rc in (0, EXIT_NO) and "Traceback" not in err, (rc, err[-400:]))
-            want("6 not read, said", ctl.get("reason") == "not_read" and "magnitude" in (ctl.get("why") or "")
-                 and any("not read" in x or "could not be read" in x for x in levels(out)), (ctl, out))
-        finally:
-            Process._load_verifier, api.BASE_URL = real_verifier, real_base
+            import numpy as np
+        except ImportError:
+            np = None
+        if np is not None:
+            stub, verify_mod = _load_sibling("rew_stub.py"), _load_sibling("verify.py")
+            api = verify_mod._api
+            fs_ = 48000
+            fb = np.fft.rfftfreq(4096, 1.0 / fs_)
+            ir = np.fft.irfft(0.3 * stub.np.exp(-2j * np.pi * fb * 40 / fs_) * (1 + 0.5 * np.sin(fb / 300.0)), n=4096)
+            f_lin = np.arange(20.0, 20000.0, 10.0)
+            p, d = project("stub")
+            real_verifier, real_base = Process._load_verifier, api.BASE_URL
+            try:
+                Process._load_verifier = lambda _self: verify_mod
+                for series, held in (("1", [stub.Measurement("w-L_1 (sw)", ir, fs_, spl_offset_db=base_off),
+                                            stub.Measurement("ALL+C_1 (rta)", rta=(f_lin, 80.0 + 0 * f_lin), notes=notes,
+                                                             spl_offset_db=base_off)]),
+                                     ("2", [stub.Measurement("w-L_2 (sw)", ir, fs_, spl_offset_db=reset),
+                                            stub.Measurement("ALL+C_1 (rta)", rta=(f_lin, 80.0 + 0 * f_lin), notes=notes,
+                                                             spl_offset_db=base_off),
+                                            stub.Measurement("ALL+C_2 (rta)", rta=(f_lin, 96.65 + 0 * f_lin), notes=notes,
+                                                             spl_offset_db=reset, broken_fr=True)])):
+                    p.start_capture(series, expected=[f"w-L_{series} (sw)"], under="v_001")
+                    url, server = stub.serve(held)
+                    api.BASE_URL = url
+                    try:
+                        rc, out, err = _run_main(["process.py", d, "capture-check"])
+                    finally:
+                        server.shutdown()
+                    ctl = p.load()["capture"]["level_base"].get("control") or {}
+                    if series == "1":
+                        _run_main(["process.py", d, "capture-close", "--no-rew"])
+                want("6 the check stands", rc in (0, EXIT_NO) and "Traceback" not in err, (rc, err[-400:]))
+                want("6 not read, said", ctl.get("reason") == "not_read" and "magnitude" in (ctl.get("why") or "")
+                     and any("not read" in x or "could not be read" in x for x in levels(out)), (ctl, out))
+            finally:
+                Process._load_verifier, api.BASE_URL = real_verifier, real_base
     finally:
         shutil.rmtree(top, ignore_errors=True)
     assert not failures, "\n  ".join(["#176's control rounds:"] + failures)
@@ -9311,6 +9317,10 @@ def _check_a_session_drift_reads_the_one_listing():
     written -- no `session` on the round."""
     import shutil
     import tempfile
+    try:
+        import numpy  # noqa: F401 -- the drift's cross-correlation (`verify.drift_samples_xcorr`) reads with it
+    except ImportError:
+        return        # CI's Python 3.11 has no numpy (#176's final review): the drift record is numpy's, as before
     rec = _SnapshotRew.rec
     names = ["m-L-ctl1_1 (sw)", "m-L-ctl3_1 (sw)"]
     first = {"1": rec(names[0], "u1"), "2": rec(names[1], "u2")}
