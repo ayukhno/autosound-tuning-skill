@@ -195,6 +195,26 @@ engine (hub H-022), the ledger is `docs/W-11-LEDGER.md`.
   all, inside TCC's wait for its own lock), and a `""` that is a timeout after a real commit writes no header. Every
   other `""` — no checkout, no git, a repository around the copy — is still written, so a journal carried to a copy
   with no git says so.
+- **A fresh TCC install keeps to the versions TCC was tested with** (#179, hub #280). From v1.1.4 a TCC tag carries
+  `constraints.txt` (its lock file's export); TCC's own updater passed it to uv, the skill's installers did not, so a
+  fresh install resolved TCC's dependencies afresh (PySide6 6.12.0 against the lock's 6.11.2 on a Windows VM). Both
+  installers now read that file from the tag they already fetched and verified — no extra download — and pass it to
+  `uv tool install --constraints`. A tag without it installs as before; a tag from v1.1.4 on without it says
+  «nopins» and installs plain; a uv too old for the option, or one that gave no answer to `--help`, installs plain and
+  says so. Never a retry after a pinned install fails, and never a refused install over the file. Under the
+  developer's `AUTOSOUND_SKIP_TAG_VERIFY=1` the tag is still fetched for the file, as TCC does (tcc #227).
+- **`install.ps1`'s receipt tells the truth when a download fails** (#180). It marked the run «changed» right before
+  winget's Git, Claude Code's installer, uv's installer and `uv python install`, so a download that failed with
+  nothing changed wrote `stopped` over a good receipt. Now the receipt is saved before each of these steps and put back
+  when the step failed and left nothing new — a leftover from an earlier run does not count — while a stop during the
+  download still says `stopped`. On the way: a failed winget counted as a success, because its output became part of
+  the step's answer; when winget fails, its own reason is now shown (`winget ended <code> (0x…)`), its progress frames
+  are not.
+- **Uninstall removes the empty `~/.agents/skills` and `~/.agents` it made for the Codex link** (#181) — only when
+  empty, never a linked folder, never on a dry run.
+- **README and FAQ: two visits give the first result** (#188). The method said «two visits make the tune». Two visits
+  give the first result; after it the tune improves round by round, as far as you want to take it — in all four
+  languages.
 - `target_bands.band_target`, which only its selftest called, is gone; use `band_targets([f], …)[0]` (#190).
 - For maintainers: `project.py`'s two-writers selftest no longer races 2 × 40 writes against the clock (it starved
   once on Windows CI). Two processes hand off: writer A stops after its load and again as its save begins, the lock
