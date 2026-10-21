@@ -39,6 +39,7 @@ import urllib.error
 import urllib.request
 import shutil
 import tempfile
+import time
 from datetime import datetime
 
 
@@ -1649,8 +1650,15 @@ PROBE_PROMPT = "Reply with exactly: channel works"
 PROBE_WAIT_S = 60
 
 
+def probe_wait():
+    """Seconds for agy's one line: `AUTOSOUND_PROBE_TIMEOUT` when set (0 sends no line), else `PROBE_WAIT_S`. A slow
+    start -- a cold ADC sign-in, the Windows VM -- needs a way past the minute that is not «pick another model»."""
+    set_by_env = os.environ.get("AUTOSOUND_PROBE_TIMEOUT", "").strip()
+    return int(set_by_env) if set_by_env else PROBE_WAIT_S
+
+
 def wants_probe(provider, cli_bin):
-    return provider == "google" and bool(cli_bin) and cli_flavor(cli_bin) == "agy"
+    return provider == "google" and bool(cli_bin) and cli_flavor(cli_bin) == "agy" and probe_wait() > 0
 
 
 def next_tier(model, known):
@@ -1668,12 +1676,19 @@ def next_tier(model, known):
 def hang_advice(model, one_line):
     """What agy's timeout means, and the next rung (#193). After the one-line call it is the model and not the
     package's size, so a longer wait is no cure; after a package the line let through, it can be either."""
-    lower = next_tier(model, list_cli_models())
-    offer = (f"наступна сходинка — нижчий рівень тієї ж моделі: `--model {lower}` для цього запуску "
-             f"(або AUTOSOUND_CRITIC_MODEL={lower} у critic-env)" if lower
-             else "нижчого рівня цієї лінії agy не пропонує — вибери іншу модель зі списку `agy models`")
+    known = list_cli_models()
+    lower = next_tier(model, known)
+    if lower:
+        offer = (f"наступна сходинка — нижчий рівень тієї ж моделі: `--model {lower}` для цього запуску "
+                 f"(або AUTOSOUND_CRITIC_MODEL={lower} у critic-env)")
+    elif known:
+        offer = "нижчого рівня цієї лінії agy не пропонує — вибери іншу модель зі списку `agy models`"
+    else:
+        # The list is asked of an `agy` on PATH, and it can come back empty (`list_cli_models`): no claim either way.
+        offer = "список моделей agy не прочитано — нижчий рівень цієї моделі подивись у `agy models`"
     if one_line:
-        return f"модель `{model}` не відповіла на один рядок за {PROBE_WAIT_S} с — висить модель, а не розмір пакета; {offer}"
+        return (f"модель `{model}` не відповіла на один рядок за {probe_wait()} с — схоже, висить модель, а не розмір "
+                f"пакета (повільний старт — довший AUTOSOUND_PROBE_TIMEOUT, секунди); {offer}")
     return f"{FAILURE_ADVICE['timeout']}; {offer}"
 
 
@@ -3745,7 +3760,7 @@ def _check_a_hanging_model_is_named_in_a_minute():
     assert isinstance(wait, int) and 0 < wait <= 60, f"no short wait for the probe: PROBE_WAIT_S={wait!r}"
     names = ("AUTOSOUND_PROJECT_DIR", "AUTOSOUND_REVIEW_RAW_DIR", "AUTOSOUND_CRITIC_MODEL", "AUTOSOUND_CRITIC_BIN",
              "GEMINI_BIN", "GEMINI_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "AUTOSOUND_CLI_TIMEOUT",
-             "AUTOSOUND_ALLOW_NESTED_CLI")
+             "AUTOSOUND_ALLOW_NESTED_CLI", "AUTOSOUND_PROBE_TIMEOUT")
     saved = {k: os.environ.pop(k) for k in list(os.environ) if k in names or _is_marker(k)}
     real = {k: globals()[k] for k in ("_run_child", "list_cli_models", "copy_to_clipboard")}
     real_run, real_argv = subprocess.run, sys.argv
@@ -3763,6 +3778,8 @@ def _check_a_hanging_model_is_named_in_a_minute():
             return subprocess.CompletedProcess(cmd, 0, "", "")
         kind = "probe" if said == "Reply with exactly: channel works" else "package"
         calls.append((kind, kw.get("timeout")))
+        if kind == "probe" and "slow" in hang:
+            time.sleep(1.1)
         if kind in hang:
             raise subprocess.TimeoutExpired(cmd, kw.get("timeout"), output='{"event":"init"}\n',
                                             stderr="thinking about " + kind)
@@ -3803,12 +3820,22 @@ def _check_a_hanging_model_is_named_in_a_minute():
             kept = [n for n in os.listdir(raw) if n.endswith("-received.txt")]
             assert kept and any('{"event":"init"}' in open(os.path.join(raw, n), encoding="utf-8").read()
                                 for n in kept), kept
-            # (2) The probe answers: the package goes, once, with its own wait.
+            # (2) The probe answers: the package goes, once, with what is left of the wait announced -- the line's
+            # time comes off it, so a caller that gives the run that wait (TCC's 600 s) does not cut it first.
             hang.clear()
+            hang.add("slow")
             del calls[:]
             code, out, err = run_main("ask", pkg)
             assert code == 0 and [k for k, _ in calls] == ["probe", "package"] and "a review" in out, (code, calls)
-            assert calls[1][1] >= CLI_WAIT_MIN_S, calls
+            assert 0 < calls[1][1] <= CLI_WAIT_MIN_S - 1 and f"чекаю до {CLI_WAIT_MIN_S} с" in err, (calls, err)
+            # A slow start has its own way past the minute; 0 sends no line.
+            hang.clear()
+            for set_to, want in (("90", [("probe", 90), ("package", None)]), ("0", [("package", None)])):
+                os.environ["AUTOSOUND_PROBE_TIMEOUT"] = set_to
+                del calls[:]
+                code, out, err = run_main("ask", pkg)
+                assert code == 0 and [(k, t if k == "probe" else None) for k, t in calls] == want, (set_to, calls)
+            del os.environ["AUTOSOUND_PROBE_TIMEOUT"]
             # (3) The package hangs after a probe that answered: what agy printed is shown, the next tier offered.
             hang.add("package")
             del calls[:]
@@ -3821,6 +3848,13 @@ def _check_a_hanging_model_is_named_in_a_minute():
             del calls[:]
             code, out, err = run_main("ask", pkg)
             assert code == 4 and calls == [("probe", wait)] and "--model gemini" not in err, (code, calls, err)
+            assert "не пропонує" in err, err
+            # (4b) agy's list could not be read: no claim that the line has no lower tier.
+            globals()["list_cli_models"] = lambda: []
+            os.environ["AUTOSOUND_CRITIC_MODEL"] = "gemini-3.8-flash-high"
+            code, out, err = run_main("ask", pkg)
+            assert code == 4 and "не прочитано" in err and "не пропонує" not in err, err
+            globals()["list_cli_models"] = lambda: list(line)
             # (5) doctor's live call on agy is the probe, and says the same.
             os.environ["AUTOSOUND_CRITIC_MODEL"] = "gemini-3.8-flash-high"
             del calls[:]
@@ -5335,7 +5369,7 @@ def run_doctor(smoke=True, via=None):
     if model and smoke:
         prompt = PROBE_PROMPT
         # On agy the check is the round's own one-line call, with its wait (#193): a model that hangs is named as one.
-        short = PROBE_WAIT_S if wants_probe(provider, cli_bin) else 120
+        short = probe_wait() if wants_probe(provider, cli_bin) else 120
         text = kind = error = via = None
         if api_provider:
             try:
@@ -5375,7 +5409,7 @@ def run_doctor(smoke=True, via=None):
             else:
                 advice = (hang_advice(model, True) if kind == "timeout" and wants_probe(provider, cli_bin)
                           else FAILURE_ADVICE.get(kind, ""))
-                print(f"✗ Живий виклик не вдався: {failure_reason(error, 200)}" + (f" → {advice}" if advice else ""))
+                print(f"✗ Живий виклик не вдався: {failure_reason(error, 400)}" + (f" → {advice}" if advice else ""))
                 ok = False
 
     # Рекомендація -- after a live call, what ANSWERED; without one, what is configured.
@@ -6210,10 +6244,14 @@ def main():
                 # One line first (#193): a model that hangs is found within a minute, not after the package's wait.
                 print(f">> Спершу один рядок моделі `{model}` (до {PROBE_WAIT_S} с): чи вона відповідає",
                       file=sys.stderr)
-                text, kind, error = call_cli(provider, cli_bin, model, PROBE_PROMPT, timeout=PROBE_WAIT_S)
+                started = time.monotonic()
+                text, kind, error = call_cli(provider, cli_bin, model, PROBE_PROMPT, timeout=probe_wait())
                 # Only silence stops the package: any other refusal of the line is the package's to meet, in its
                 # own words, as before -- the line exists to find a hang, not to stand in for the round.
                 line_failed = text is None and kind == "timeout"
+                # The wait announced is the whole of it: the line's time comes off the package's, so a caller that
+                # gives the run that wait (TCC's 600 s) is not cut before the run's own timeout and its advice.
+                wait = max(1, int(wait - (time.monotonic() - started)))
             if not line_failed:
                 text, kind, error = call_cli(provider, cli_bin, model, compiled_prompt, timeout=wait)
         except Exception as e:  # noqa: BLE001

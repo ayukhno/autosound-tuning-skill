@@ -211,9 +211,10 @@ engine (hub H-022), the ledger is `docs/W-11-LEDGER.md`.
 - **A reviewer model that hangs is found within a minute** (#193). Under Google Cloud's ADC, `gemini-3.8-flash-high` —
   the model the method named there — stayed silent 90–180 s and more even on a one-line prompt, so a package waited
   its whole wait (600 s and up) and was then told to wait longer. Now doctor's one-line call goes to agy first, waited
-  for 60 s: with no answer the package is not sent, the run names the model as the cause, shows what agy printed by
-  then (kept in the raw exchange too) and offers the same line's next lower tier as `--model …` — offered, never
-  taken. `doctor`'s live call on agy is that one line, with the same advice. The guides now name
+  for 60 s (`AUTOSOUND_PROBE_TIMEOUT`, seconds, for a slow start; 0 sends no line) and taken off the package's wait, so
+  the wait announced is the whole of it: with no answer the package is not sent, the run says the model looks hung,
+  shows what agy printed by then (kept in the raw exchange too) and offers the same line's next lower tier as
+  `--model …` — offered, never taken. `doctor`'s live call on agy is that one line, with the same advice. The guides now name
   `gemini-3.8-flash-medium` for ADC (it answered in 9 s); a critic-env that pins `-high` keeps it until you change it.
 - **An AMBIGUOUS capture says how to fix it** (#182): the issue stored for a capture REW holds under two spellings
   now ends «keep one: rename or delete the other in REW» — TCC's card shows that stored issue.
