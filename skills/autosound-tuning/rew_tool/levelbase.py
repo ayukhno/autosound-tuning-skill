@@ -168,6 +168,13 @@ def chain_change(offsets, changed=(), spread_db=DAILY_SPREAD_DB):
     common = sum(means) / len(means)
     out["common_db"] = round(common, 2)
     far = max(abs(m - common) for m in means)
+    # A used band whose own cells scatter over twice the daily spread is no number to name a chain on (the group
+    # seats, #176): its mean is read, and the verdict is not.
+    wide = [n for n in bands if bands[n]["used"] and (bands[n]["spread_db"] or 0.0) > 2 * spread_db]
+    if wide:
+        out["why"] = (f"{', '.join(wide)} scatter(s) over twice the daily spread ({2 * spread_db:g} dB) within the "
+                      "band -- no common remainder to read")
+        return out
     if far > spread_db:
         out["why"] = (f"the bands outside the round's change disagree: one sits {far:.2f} dB from their common mean, "
                       f"over the daily spread of {spread_db:g} dB")
@@ -193,11 +200,13 @@ _APF_OCT = 1.0
 #: The fields of a channel row whose change moves its whole passband: its level and whether it plays at all -- a
 #: DSP gain left out of the changed bands would be read back as the chain changing, the one verdict that must not be
 #: wrong -- and `eq_ptr`, the pointer to an EQ file whose bands the ledger does not carry.
-_WHOLE_ROW = ("mute", "off", "gain_db", "eq_ptr")
-#: The fields whose change moves the summation with the neighbours: the channel's time and polarity, read where it
-#: overlaps them -- each leg out to where it is ~12 dB below its passband (`_leg_reach`). `tag` (which hardware
+_WHOLE_ROW = ("mute", "off", "gain_db", "eq_ptr", "ta_ms")
+#: A delay (`ta_ms`) is with them (the group seats, #176): one side delayed moves the L/R comb across the whole shared
+#: passband, not only where the channel meets its neighbour. The fields whose change moves the summation with the
+#: neighbours only -- polarity and phase -- read where it overlaps them: each leg out to where it is ~12 dB below its
+#: passband (`_leg_reach`); a channel with no corner at all (full range) is its whole passband. `tag` (which hardware
 #: control moves it) and `status` (bookkeeping) move nothing.
-_CORNER_ROW = ("ta_ms", "polarity", "phase_deg")
+_CORNER_ROW = ("polarity", "phase_deg")
 #: How far down a leg must be before a change of its channel's time no longer moves the sum with a neighbour, dB.
 _SUM_FLOOR_DB = 12.0
 #: The least reach a leg is given, octaves; and the slope read for a leg whose slope the ledger does not give -- the
@@ -217,14 +226,22 @@ def _leg_reach(leg):
         slope = float(digits) if digits else None
     if slope is None or slope <= 0:
         slope = _SHALLOWEST_DB_OCT
-    return max(_MIN_REACH_OCT, math.ceil(_SUM_FLOOR_DB / slope * 2 - 1e-9) / 2)
+    reach = max(_MIN_REACH_OCT, math.ceil(_SUM_FLOOR_DB / slope * 2 - 1e-9) / 2)
+    # A Bessel leg rolls off slower near its corner (a BE12 is ~10 dB down an octave out): half an octave wider.
+    if str(leg.get("type") if isinstance(leg, dict) else "").strip().upper().startswith("BE"):
+        reach += 0.5
+    return reach
 #: Preset-level fields whose change moves every band: the rate reshapes every filter, the virtual tier's EQ file is
 #: bands nobody listed.
 _WHOLE_PRESET = ("sample_rate", "virtual_eq_ptr")
 
 
 def _leg_f(leg):
-    return _number(leg.get("f")) if isinstance(leg, dict) else None
+    """A crossover leg's corner, Hz, or None: OFF, missing, or a dict typed OFF (`{"f": 80, "type": "OFF"}`, the
+    group seats' finding) -- a corner nobody switched on is no corner."""
+    if not isinstance(leg, dict) or str(leg.get("type") or "").strip().upper() == "OFF":
+        return None
+    return _number(leg.get("f"))
 
 
 def _passband(row):
@@ -293,9 +310,9 @@ def changed_ranges(diff, before, after):
     bands under changed EQ filters and crossovers"): an EQ band added, removed or changed reaches its own span; a
     crossover leg moved reaches from the lower corner to the higher, an octave past each, and switched on or off it runs
     open on its side. A band bypassed on both sides changes nothing. Beside them, so that no change of the DSP is read
-    back as the chain: a channel's level (gain, mute, off) or its `eq_ptr` reaches its passband, as does a channel
-    added or removed; its delay, polarity or phase reaches either side of each corner as far as that leg sums with its
-    neighbour (`_leg_reach`: ~12 dB down by its own slope). A preset's rate or virtual EQ file reaches everything."""
+    back as the chain: a channel's level (gain, mute, off), its delay or its `eq_ptr` reaches its passband, as does a
+    channel added or removed; its polarity or phase reaches either side of each corner as far as that leg sums with its
+    neighbour (`_leg_reach`: ~12 dB down by its own slope), a channel with no corner its passband. A preset's rate or virtual EQ file reaches everything."""
     if not isinstance(diff, dict) or not isinstance(diff.get("preset", {}), dict):
         return None
     if any(k in (diff.get("preset") or {}) for k in _WHOLE_PRESET):
@@ -320,12 +337,13 @@ def changed_ranges(diff, before, after):
                 out.append((min(lo1, lo2), max(hi1, hi2)))
             if any(k in fields for k in _CORNER_ROW):
                 for row in (was, now):
-                    for leg in ("hp", "lp"):
-                        side = (row or {}).get(leg) if isinstance(row, dict) else None
-                        f = _leg_f(side)
-                        if f is not None:
-                            reach = _leg_reach(side)
-                            out.append((f / 2 ** reach, f * 2 ** reach))
+                    corners = [(row or {}).get(leg) for leg in ("hp", "lp")] if isinstance(row, dict) else []
+                    corners = [side for side in corners if _leg_f(side) is not None]
+                    if not corners:
+                        out.append(_passband(row))     # full range: no corner to sum at but everywhere it plays
+                    for side in corners:
+                        f, reach = _leg_f(side), _leg_reach(side)
+                        out.append((f / 2 ** reach, f * 2 ** reach))
             for leg in ("hp", "lp"):
                 if leg in fields:
                     pair = fields[leg] if isinstance(fields[leg], (list, tuple)) and len(fields[leg]) == 2 else None
@@ -469,7 +487,7 @@ def _selftest():
                                  ([byp], [on], {"presence", "top"})):
         got_b = changed_bands({"preset": {}, "channels": {"c": {"eq": [old_eq, new_eq]}}}, before, after)
         assert got_b == must, (old_eq, new_eq, got_b)
-    # 9. A delay, polarity or phase change reaches as far as the channel's own legs sum with their neighbours: the
+    # 9. A polarity or phase change reaches as far as the channel's own legs sum with their neighbours: the
     #    octave distance at which each leg is ~12 dB down -- 1/2 oct for 24 dB/oct, 1 for 12, 2 for 6 or a slope not
     #    given (the re-review, #176). The bench's rear: HP 460 BW12, LP 4000 LR12 -- 230-920 Hz and 2-8 kHz.
     assert _leg_reach({"f": 560, "type": "LR", "slope": 24}) == 0.5 and _leg_reach({"f": 460, "type": "BW",
@@ -478,10 +496,10 @@ def _selftest():
     assert _leg_reach({"f": 460, "type": "LR24"}) == 0.5 and _leg_reach({"f": 460, "slope": 6}) == 2.0
     rear = {"channels": {"r-L": {"hp": {"f": 460, "type": "BW", "slope": 12},
                                  "lp": {"f": 4000, "type": "LR", "slope": 12}, "ta_ms": 1.0}}}
-    rear_ta = {"preset": {}, "channels": {"r-L": {"ta_ms": [1.0, 1.4]}}}
+    rear_ta = {"preset": {}, "channels": {"r-L": {"polarity": ["NORM", "INV"]}}}
     assert changed_bands(rear_ta, rear, rear) == {"low", "mid", "presence", "top"}, changed_bands(rear_ta, rear, rear)
     lr24 = {"channels": {"c": {"hp": {"f": 1414, "type": "LR", "slope": 24}, "lp": None, "ta_ms": 1.0}}}
-    c_ta = {"preset": {}, "channels": {"c": {"ta_ms": [1.0, 1.5]}}}
+    c_ta = {"preset": {}, "channels": {"c": {"polarity": ["NORM", "INV"]}}}
     reach_c = changed_ranges(c_ta, lr24, lr24)
     assert all(abs(lo - 1414 / 2 ** 0.5) < 1e-6 and abs(hi - 1414 * 2 ** 0.5) < 1e-6 for lo, hi in reach_c), reach_c
     assert changed_bands(c_ta, lr24, lr24) == {"mid", "presence"}, changed_bands(c_ta, lr24, lr24)
@@ -495,14 +513,60 @@ def _selftest():
     v8, v12 = ledger["v_008"], ledger["v_012"]
     bench_changed = changed_bands(_state.diff_states(v8, v12), v8, v12)
     e2e = chain_change(got, changed=bench_changed)
-    assert bench_changed == {"low", "mid"}, bench_changed
-    assert e2e["verdict"] == SAME_CHAIN, (bench_changed, e2e)
+    # What the rule gives (the group seats' fix, #176): v_012 moved the centre's delay 1.8 -> 2.5 ms, and a delay moves
+    # the sum over the channel's whole passband (HP 560 .. LP 1000, an octave past each: 280-2000 Hz) -- low, mid and
+    # presence. One band is left, top (-0.32); the rule needs two, so the verdict is unattributed -- the conservative
+    # answer when a change reaches that far, against the bench's own same chain by hand. Not tuned to agree.
+    assert bench_changed == {"low", "mid", "presence"}, bench_changed
+    assert e2e["verdict"] == UNATTRIBUTED and "1 band(s)" in e2e["why"], (bench_changed, e2e)
+    # 10. Every branch of `changed_ranges`, the bands worked out by hand (the group test seat, #176). Rows: `w` a woofer
+    #     HP 92 / LP 250 LR24 (passband 46-500: low); `t` a tweeter HP 5000 LR24, no LP (2500-inf: presence, top); `f`
+    #     full range, both legs OFF (everything).
+    rows = {"channels": {"w": {"hp": {"f": 92, "type": "LR", "slope": 24}, "lp": {"f": 250, "type": "LR", "slope": 24}},
+                         "t": {"hp": {"f": 5000, "type": "LR", "slope": 24}, "lp": None},
+                         "f": {"hp": "OFF", "lp": None}}}
+    no_t = {"channels": {k: v for k, v in rows["channels"].items() if k != "t"}}
+    no_w = {"channels": {k: v for k, v in rows["channels"].items() if k != "w"}}
+    table = (  # (what, diff fields, before, after, the bands)
+        ("t added", {"t": {"__added__": True}}, no_t, rows, {"presence", "top"}),
+        ("w removed", {"w": {"__removed__": True}}, rows, no_w, {"low"}),
+        ("w muted", {"w": {"mute": [False, True]}}, rows, rows, {"low"}),
+        ("t off", {"t": {"off": [False, True]}}, rows, rows, {"presence", "top"}),
+        ("w eq_ptr", {"w": {"eq_ptr": [None, "w.txt"]}}, rows, rows, {"low"}),
+        ("LSH 200", {"w": {"eq": [[], [{"type": "LSH", "f": 200, "gain_db": 2}]]}}, rows, rows, {"low"}),
+        ("HSH 6000", {"t": {"eq": [[], [{"type": "HSH", "f": 6000, "gain_db": 2}]]}}, rows, rows, {"presence", "top"}),
+        ("APF1 700", {"w": {"eq": [[], [{"type": "APF1", "f": 700}]]}}, rows, rows, {"low", "mid"}),
+        ("t phase", {"t": {"phase_deg": [0, 90]}}, rows, rows, {"top"}),
+        ("t delay", {"t": {"ta_ms": [0.0, 0.3]}}, rows, rows, {"presence", "top"}),
+        ("f polarity", {"f": {"polarity": ["NORM", "INV"]}}, rows, rows, set(CONTROL_BANDS)),
+    )
+    for what, fields, was, now, want in table:
+        got_t = changed_bands({"preset": {}, "channels": fields}, was, now)
+        assert got_t == want, (what, got_t, want)
+    assert changed_bands({"preset": {"virtual_eq_ptr": [None, "v.txt"]}, "channels": {}}, rows, rows) == \
+        set(CONTROL_BANDS)
+    # 11. A leg typed OFF is no corner; a Bessel leg rolls off slower and reaches half an octave further.
+    assert _leg_f({"f": 80, "type": "OFF"}) is None and _leg_f({"f": 80, "type": "LR"}) == 80.0
+    assert _leg_reach({"f": 500, "type": "BE", "slope": 12}) == 1.5 and _leg_reach({"type": "BE24"}) == 1.0
+    # 12. The boundaries: exactly the daily spread is still agreement, and a common mean of exactly it is the same
+    #     chain; a used band whose own spread is over twice the daily spread is no number to name a chain on.
+    edge = chain_change({"low": (1.4, 0.2), "top": (0.0, 0.2)}, changed=set())
+    assert edge["verdict"] == SAME_CHAIN and edge["common_db"] == 0.7, edge
+    over = chain_change({"low": (1.41, 0.2), "top": (0.0, 0.2)}, changed=set())
+    assert over["verdict"] == UNATTRIBUTED and "disagree" in over["why"], over
+    wide = chain_change({"low": (1.2, 1.5), "presence": (1.2, 0.3), "top": (1.2, 0.3)}, changed=set())
+    assert wide["verdict"] == UNATTRIBUTED and "spread" in wide["why"], wide
+    assert chain_change({"low": (1.2, 1.4), "presence": (1.2, 0.3)}, changed=set())["verdict"] == CHAIN_CHANGE
+    assert round_offset({"a": 120.0, "b": 103.35}) == (120.0, False), "a tie goes to the first title"
     print("selftest[levelbase] OK -- the bench's 08.10 case: cap_004 at 120.0 against cap_003 at 103.35 is shifted "
           "16.65 dB; its judge control after the shift reads the bench's own band numbers (low +0.45, mid -0.89, "
           "presence +0.26, top -0.32) and, the centre's band left out, the same chain at +0.13 -- unshifted, a chain "
           "change of 16.78 dB; a uniform +1.2 dB is a chain change with -1.2 offered, fewer than two bands left, an "
           "unreadable change and bands that disagree are unattributed; a round's one offset or its most common; and "
-          "the bands an EQ band, a crossover, a channel's gain and the rate change, a band with no frequency unread")
+          "the bands an EQ band, a crossover, a channel's gain and the rate change, a band with no frequency unread; the "
+          "bench's own ledger end to end: the centre's delay reaches low, mid and presence, one band left -- "
+          "unattributed; every branch of the diff, the reach by slope (Bessel wider, a leg typed OFF none), and the "
+          "boundaries at exactly the daily spread")
     return 0
 
 
