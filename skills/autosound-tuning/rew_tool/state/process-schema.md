@@ -157,7 +157,10 @@ it was born would only say which method STARTED it, while the question that has 
 whether two runs came from the same method. It is written before the first event of a run *and only
 when the sha differs from the last one recorded* — a car tuned over a weekend on one version carries
 one header, not one line per event. `""` means the writer was asked and could not be told (no
-repository, no git); a journal with no header at all predates anyone asking. The whole forty
+repository, no git); a journal with no header at all predates anyone asking. A `""` is written only
+on a journal whose last header is not a real sha (#187): each CLI call asks git anew within a limit,
+and a git that misses it once is not a move — so after a real sha, `""` writes no header, and a move
+to a copy with no git after a real sha is no longer recorded. The whole forty
 characters, the same spelling `dsp_profile.json` carries and the same number the companion app shows
 for that checkout — see `rew_tool/provenance.py` for why it is the sha and not the version string.
 

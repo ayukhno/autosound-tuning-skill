@@ -3682,7 +3682,9 @@ class Process:
 
         None is not `""`: a journal that has never recorded a writer must get a header even when
         the writer cannot be told, otherwise "asked, could not be told" and "never asked" are the
-        same silence. Read strictly (`_events`): a header lost to a skipped line would be written twice.
+        same silence. A real sha here is what `_stamp` keeps against a later `""` (#187): a git that
+        missed its limit once is not a move. Read strictly (`_events`): a header lost to a skipped line
+        would be written twice.
         """
         seen = self._events(kinds=(EV_WRITTEN_BY,))
         return seen[-1].get("skill_sha", "") if seen else None
@@ -3700,6 +3702,13 @@ class Process:
         A `provenance` that will not load stamps `""`, the same as a machine with no git: the
         journal records that the question was asked and had no answer, rather than losing the
         event it was riding on.
+
+        Except after a real sha (#187, hub #289): `provenance` caches the sha per process, every CLI
+        call is a new process that asks git within its limit, and a slow git answers `""` for one call
+        in the middle of a run -- real -> "" -> real wrote two headers where the checkout never moved.
+        So a `""` writes no header when the last one carries a real sha. The cost is said: a move to a
+        copy with no git after a real sha is no longer recorded. On a fresh journal (no header yet)
+        `""` still gets its header, and a repeated `""` adds none.
         """
         if self._stamped:
             return
@@ -3710,6 +3719,8 @@ class Process:
         last = self._last_written_by()     # strict: a journal that cannot be read refuses here, and is asked again
         self._stamped = True  # decided once read: one attempt per run, whatever it finds
         if sha == last:
+            return
+        if not sha and last:                # a missed git after a real sha: no move to record (#187)
             return
         self._append(EV_WRITTEN_BY, skill_sha=sha)
 
@@ -9828,6 +9839,17 @@ def _selftest():
         assert first["type"] == EV_WRITTEN_BY and first["skill_sha"] == "", first
         Process(blind).record_session("selftest", "-")
         assert [e["type"] for e in Process(blind).events()].count(EV_WRITTEN_BY) == 1, "'' repeated"
+
+        # ...but a git that missed its limit ONCE is not a move (#187, hub #289). `provenance` caches per process and
+        # every CLI call is a new one, so a slow git answers `""` for one call in the middle of a run: real -> "" ->
+        # real wrote two false headers into one checkout's slice. A `""` after a real sha says nothing new and is not
+        # written; the real sha that follows matches the last header and adds nothing either.
+        slow = _made(os.path.join(tempfile.mkdtemp(prefix="autosound_slowgit_"), "process"))
+        for sha in ("a" * 40, "", "a" * 40):
+            globals()["_writer_sha"] = lambda sha=sha: sha
+            Process(slow).record_session("selftest", "-")
+        heads = [e["skill_sha"] for e in Process(slow).events() if e["type"] == EV_WRITTEN_BY]
+        assert heads == ["a" * 40], f"a missed git re-headed one checkout's run: {heads}"
     finally:
         globals()["_writer_sha"] = real_sha
 
