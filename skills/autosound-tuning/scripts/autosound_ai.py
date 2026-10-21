@@ -1560,11 +1560,23 @@ def failure_reason(text, limit=400):
     omp is a bun binary, and bun prints the source lines around a throw BEFORE its `error:` line, so the
     first 400 characters were source and the reason came last and cut (skill #93). When there is an
     `error:` line, the reason is that line and what continues it, up to the first stack frame (`at …`)
-    or blank line; otherwise the text as it came, cut as before."""
+    or blank line; otherwise the text as it came, cut as before.
+
+    Codex prints `ERROR: {"type":"error",…,"error":{"message":"…"}}` last, upper-case and twice, after its
+    banner and the echoed prompt (#178). So the prefix is matched in either case and the last such line
+    is taken; when the rest of it is a JSON object whose `error.message` is a string, the reason is that
+    message — as TCC's `_codex_refusal` reads it (tcc#182). Anything else after the prefix stays the block."""
     text = (text or "").strip()
     lines = text.splitlines()
-    starts = [i for i, line in enumerate(lines) if line.lstrip().startswith("error:")]
+    starts = [i for i, line in enumerate(lines) if line.lstrip()[:6].lower() == "error:"]
     if starts:
+        try:
+            payload = json.loads(lines[starts[-1]].lstrip()[6:])
+        except ValueError:
+            payload = None
+        error = payload.get("error") if isinstance(payload, dict) else None
+        if isinstance(error, dict) and isinstance(error.get("message"), str):
+            return error["message"].strip()[:limit]
         kept = []
         for line in lines[starts[-1]:]:
             if kept and (not line.strip() or line.lstrip().startswith("at ")):
@@ -4154,6 +4166,23 @@ def _selftest():
             assert code == 4 and "No API key found for openai-codex. Use /login, set an API key environment " \
                 "variable, or pick a model you are logged in for." in err, err
             assert "743607 |" not in err and "getApiKey" not in err and FAILURE_ADVICE["no_login"][:30] in err, err
+            # Codex prints `ERROR: {json}` last, upper-case and twice, after its banner and the echoed prompt, so
+            # the lower-case match missed it and the banner was the reason (#178; codex 0.162.1, tcc's fixture).
+            refused = "The 'gpt-0-nonexistent-tcc' model is not supported when using Codex with a ChatGPT account."
+            codex_line = ('ERROR: {"type":"error","status":400,"error":{"type":"invalid_request_error","message":"'
+                          + refused + '"}}\n')
+            codex_out = ("OpenAI Codex v0.162.1\n--------\nworkdir: /tmp/project\nmodel: gpt-0-nonexistent-tcc\n"
+                         "provider: openai\napproval: never\nsandbox: read-only\nreasoning effort: medium\n"
+                         "reasoning summaries: none\nsession id: 0\n--------\nuser\nSay OK.\n\n"
+                         "warning: Model metadata for `gpt-0-nonexistent-tcc` not found. Defaulting to fallback "
+                         "metadata; this can degrade performance and cause issues.\n" + codex_line + codex_line)
+            assert failure_reason(codex_out) == refused, failure_reason(codex_out)
+            # Not JSON: the block as before — the line and its continuation, up to a blank line or a frame.
+            block = "OpenAI Codex v0.162.1\nworkdir: /tmp/p\nERROR: stream disconnected\n  before completion\n\nmore\n"
+            assert failure_reason(block) == "ERROR: stream disconnected before completion", failure_reason(block)
+            for rest in ('{"error": {"message": "cut', '[{"error": {"message": "x"}}]', '{"error": {"message": 5}}'):
+                said = "OpenAI Codex v0.162.1\nworkdir: /tmp/p\nERROR: " + rest + "\n"
+                assert failure_reason(said) == "ERROR: " + rest, (rest, failure_reason(said))
             # A selector omp does not know is the Arbiter's choice from omp's own list (text models only).
             omp_reply[0] = (1, "", 'Model "google-antigravity/gemini-9" not found\n')
             code, out, err = run_main("ask", pkg)
