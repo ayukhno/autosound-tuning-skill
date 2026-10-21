@@ -3016,7 +3016,8 @@ class Process:
         for title, held in ambiguous.items():
             verdicts.append({"name": title, "exists": True, "reachable": True, "applicable": True, "valid": False,
                              "ambiguous": len(held), "ambiguous_titles": held, "stats": {},
-                             "issues": [f"ambiguous: REW holds {' and '.join(held)} for {title}"]})
+                             "issues": [f"ambiguous: REW holds {' and '.join(held)} for {title} -- "
+                                        f"keep one: rename or delete the other in REW"]})
         # REW not answering is no verdict on any title (#134): refused before anything is written, so the round and
         # the journal stay as they were and the check is run again once REW is up. What to do next is the caller's to
         # say: `capture-check` says "run it again", `capture-close` closes the round, unchecked.
@@ -7385,6 +7386,9 @@ def _check_a_check_asks_rew_by_key():
             ("a stale as_in_rew is refreshed from what REW holds", taken["tw-L_1 (sw)"])
         amb = taken["m-L_1 (sw)"]["verified"]
         assert amb["ok"] is False and sorted(amb["ambiguous_titles"]) == ["m-L_01 (sw)", "m-L_1 (sw)"], amb
+        # #182: the stored issue is what TCC's card shows (never stdout), so it carries the fix, not only the spellings.
+        assert "m-L_01 (sw)" in amb["issues"][0] and "keep one: rename or delete the other in REW" in amb["issues"][0], \
+            amb["issues"]
         assert "m-L_1 (sw)" in p.unusable_captures(), p.unusable_captures()
         ev = [e for e in p.events() if e.get("type") == EV_CAPTURE_VERIFIED][-1]
         assert ev["bands"]["sw_1 (sw)"] == {"band_hz": [20.0, 200.0], "band_source": "rew"} \
