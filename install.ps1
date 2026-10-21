@@ -179,7 +179,8 @@ function Write-Receipt {
 }
 # The run's first real change on disk is next (#160): from here the receipt says `stopped` until the end writes how
 # the run ended, so a terminating error, Ctrl-C or a closed window leaves no earlier run's `ready` standing -- install.sh's
-# `changing`. Called before each step that may be the first to change something; once is enough.
+# `changing`. Called where a step has changed something -- right before a write, or after a download that may fail with
+# nothing changed, once it ran or left its binary (#180); once is enough.
 function Enter-Change {
     if ($script:ReceiptArmed) { return }
     $script:ReceiptArmed = $true
@@ -1070,10 +1071,12 @@ $env:Path = "$LocalBin;$env:Path"
 if (-not $HaveGit) {
     Step "Git for Windows"
     Say "Windows will ask for permission (a dialog: click Yes). Nothing else here asks for anything."
-    Enter-Change
+    # Armed once Git's installer has run or git is there (#180), not before: winget or a download that failed and left
+    # nothing changed nothing, and the stop below then keeps the last real receipt -- install.sh's Claude Code step.
+    # winget's own lines go to Out-Null inside the block, so Run's answer is its exit code alone.
     if (Have winget) {
         Say "through winget..."
-        Run { winget install --id Git.Git -e --source winget --accept-package-agreements --accept-source-agreements --silent } "winget install --id Git.Git" | Out-Null
+        if (Run { winget install --id Git.Git -e --source winget --accept-package-agreements --accept-source-agreements --silent | Out-Null } "winget install --id Git.Git") { Enter-Change }
     } else {
         # No winget (older Windows 10, or a Store-less build): the official installer, silently.
         $g = Get-LatestAsset "git-for-windows/git" ("^Git-.*-" + $(if ($Arch -eq "arm64") { "arm64" } else { "64-bit" }) + "\.exe$")
@@ -1102,6 +1105,7 @@ if (-not $HaveGit) {
                     } else {
                         Say "  signature OK ($(($who -split ',')[0]))"
                         Start-Process -FilePath $tmp -ArgumentList "/VERYSILENT", "/NORESTART" -Wait
+                        Enter-Change   # the installer ran (#180)
                     }
                 } catch { Warn "the Git installer did not run: $($_.Exception.Message)" }
                 Remove-Item $tmp -Force -ErrorAction SilentlyContinue
@@ -1111,7 +1115,7 @@ if (-not $HaveGit) {
         }
     }
     Sync-ProcessPath
-    if (Have git) { Say "OK   $(& git --version)" }
+    if (Have git) { Enter-Change; Say "OK   $(& git --version)" }
     elseif (-not $DryRun) {
         Warn "git is still not found. Install Git for Windows from git-scm.com/download/win, open a NEW"
         Warn "window, and run this again. Nothing below works without it."
@@ -1126,8 +1130,10 @@ if ($ClaudeBin) {
     Say "OK   $(& $ClaudeBin --version 2>$null)"
 } else {
     # Invoke-Upstream says whose script runs, so the step does not say it first (skill #96: it read twice).
-    Enter-Change
-    if (Invoke-Upstream "https://claude.ai/install.ps1" "Claude Code") {
+    # Armed once it has run or left its binary (#180): a download that failed and left nothing changed nothing.
+    $claudeRan = Invoke-Upstream "https://claude.ai/install.ps1" "Claude Code"
+    if ($claudeRan -or (Test-Path (Join-Path $LocalBin "claude.exe"))) { Enter-Change }
+    if ($claudeRan) {
         Sync-ProcessPath
         if (Test-Path (Join-Path $LocalBin "claude.exe")) { Add-ManifestEntry "claude" }
     }
@@ -1151,8 +1157,10 @@ if ($Uv) {
 } else {
     # PINNED -- see the same note in install.sh; the two versions must match, and
     # installer-consistency.py fails when they drift. The URL Invoke-Upstream prints carries the pin.
-    Enter-Change
-    if (Invoke-Upstream "https://astral.sh/uv/$UvVersion/install.ps1" "uv") {
+    # Armed once it has run or left its binary (#180), as Claude Code's.
+    $uvRan = Invoke-Upstream "https://astral.sh/uv/$UvVersion/install.ps1" "uv"
+    if ($uvRan -or (Test-Path (Join-Path $LocalBin "uv.exe"))) { Enter-Change }
+    if ($uvRan) {
         Sync-ProcessPath
         if (Test-Path (Join-Path $LocalBin "uv.exe")) { Add-ManifestEntry "uv" }
     }
@@ -1167,8 +1175,9 @@ if ($Uv) {
         Say "OK   $(& $Py3 -V 2>&1) at $(Pretty $Py3)"
     } else {
         Say "Python 3.12, as this profile's python, python3 and python3.12..."
-        Enter-Change
-        Run { & $Uv python install 3.12 --default --quiet } "uv python install 3.12 --default" | Out-Null
+        # Armed once it has run or left python3.exe (#180), as uv's; its own lines to Out-Null, as winget's.
+        $pyRan = Run { & $Uv python install 3.12 --default --quiet | Out-Null } "uv python install 3.12 --default"
+        if ($pyRan -or (Test-Path $Py3)) { Enter-Change }
         if (Test-Path $Py3) { Say "OK   $(& $Py3 -V 2>&1) at $(Pretty $Py3)" }
         elseif (-not $DryRun) { Warn "python3.exe did not appear in $(Pretty $LocalBin); the method's tools will not run until it does." }
     }
