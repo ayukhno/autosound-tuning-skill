@@ -309,7 +309,8 @@ def read_fr(title, measurements=None, smoothing=None):
         ms = _api.get_measurements() if measurements is None else measurements
         mid = _api.find_measurement_id(title, ms, exact=True)
         freqs, mag, _phase = _api.get_fr(mid, smoothing=smoothing or _api.FINEST_SMOOTHING)
-    except KeyError as exc:
+    except (_api.MeasurementNotFound, _api.AmbiguousTitle) as exc:
+        # REW's own "no such title" and "held twice" -- any other KeyError is a malformed answer, a bug (#176).
         return {"why": str(exc.args[0] if exc.args else exc).split(" (have:")[0].strip('"')}
     except Exception as exc:  # noqa: BLE001 -- REW's own answers are a reason; anything else is raised as it is
         if not _from_rew(exc):
@@ -1399,6 +1400,17 @@ def _check_spl_offset_recorded():
         gone = read_fr("gone_4 (rta)", measurements=listing)
     assert got["spl_offset_db"] == 120.0 and len(got["freqs"]) == len(got["mag"]) == 301 and asked[0] == "1/48", got
     assert bare["spl_offset_db"] is None and "No measurement titled 'gone_4 (rta)'" in gone["why"], (bare, gone)
+    # Only REW's own "no such title" and "held twice" are reasons (the group seats, #176): a KeyError out of a malformed
+    # answer is a bug, raised -- it read as `why: 'magnitude'` and the control went unattributed without a word.
+    with _rew_as(get_fr=_raising(KeyError("magnitude"))):
+        try:
+            got = read_fr("ALL+C+FX_4 (rta)", measurements=listing)
+        except KeyError:
+            pass
+        else:
+            raise AssertionError(f"a malformed answer was made a reason: {got}")
+    twice = dict(listing, **{"9": dict(rta)})
+    assert "Ambiguous" in read_fr("ALL+C+FX_4 (rta)", measurements=twice)["why"]
 
 
 def _selftest():

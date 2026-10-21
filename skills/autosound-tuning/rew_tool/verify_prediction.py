@@ -838,15 +838,21 @@ def main(argv=None):
         level_base_db = None
         if args.project:
             sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "state"))
+            from process import Process, ProcessError
             try:
-                from process import Process
                 based = Process(os.path.join(args.project, "process")).level_base_offset()
+            except (ProcessError, OSError) as exc:      # the project's own refusals; a bug is raised (#176)
+                based = None
+                print(f"  level base not read: {exc} -- the reads are brought to the first title's calibration",
+                      file=sys.stderr)
+            else:
                 if based:
                     level_base_db = based["offset_db"]
                     print(f"  levels read off REW's frequency response are brought to the base round "
                           f"{based['base_round']} (splOffsetdB {level_base_db:.2f})", file=sys.stderr)
-            except Exception as exc:                    # noqa: BLE001
-                print(f"  level base not read: {exc}", file=sys.stderr)
+                else:
+                    print("  no level base on record -- the reads are brought to the first title's calibration",
+                          file=sys.stderr)
         measured = measured_from_rew(titles, api=api, allow_rta=args.allow_rta,
                                      freqs=predicted["freqs_hz"], window=window, level_base_db=level_base_db,
                                      shifts=rew_shifts)
@@ -1096,6 +1102,57 @@ def _selftest():
     got_none = measured_from_rew(["w-L_2 (rta)", "m-L_2 (rta)"], api=_NoCal(), allow_rta=True, shifts=none_cal)
     assert none_cal == {"w-L_2 (rta)": 0.0, "m-L_2 (rta)": 0.0}, none_cal
     assert "not brought" not in render(verify(pred, got_none, **rta_names, rew_calibration=none_cal))
+    # `--project` end to end (the group test seat, #176): `main` on a project whose base round is NAMED -- cap_002 at
+    # 103.35, not the first round on record at 110.0 -- brings an RTA REW calibrated at 120.0 to it: 16.65 on its row.
+    # With no round on record it says so and brings the reads to the first title.
+    import contextlib
+    import io
+    import shutil
+    import tempfile
+    import rew_api
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "state"))
+    from process import Process
+
+    class _Checker:
+        def __init__(self, offset):
+            self.offset = offset
+
+        def verify(self, titles, measurements=None):
+            return [{"name": t, "exists": True, "valid": True, "reachable": True, "applicable": True, "issues": [],
+                     "stats": {"spl_offset_db": self.offset, "uuid": f"u-{t}"}} for t in titles]
+    top = tempfile.mkdtemp(prefix="autosound_vp_project_")
+    saved = {n: getattr(rew_api, n) for n in ("get_measurements", "find_measurement_id", "get_timing", "get_fr")}
+    try:
+        proj = os.path.join(top, "proj")
+        os.makedirs(proj)
+        pr = Process(os.path.join(proj, "process"))
+        pr.enter_phase("-1")
+        for n, off in (("1", 110.0), ("2", 103.34649658203125)):
+            pr.start_capture(n, expected=[f"w-L_{n} (sw)"])
+            pr.check_captures(verifier=_Checker(off))
+        pr.start_capture("3", expected=["w-L_3 (sw)"], level_base="cap_002")
+        path = os.path.join(top, "predicted.json")
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(pred, fh)
+        listing = {"1": {"title": "w-L_2 (rta)", "splOffsetdB": 120.0}}
+        rew_api.get_measurements = lambda: listing
+        rew_api.find_measurement_id = lambda title, measurements=None, exact=True: next(
+            k for k, v in (measurements or listing).items() if v["title"] == title)
+        rew_api.get_timing = lambda mid: {"has_ir": False}
+        rew_api.get_fr = lambda mid, smoothing=None: (list(f), list(_db(A) + 120.0), None)
+        argv = ["--predicted", path, "--rew", "--allow-rta", "--solo", "w-L=w-L_2 (rta)", "--json"]
+        for project, want_cal, said in ((proj, 16.65, "base round cap_002 (splOffsetdB 103.35)"),
+                                        (os.path.join(top, "empty"), 0.0, "no level base on record")):
+            os.makedirs(project, exist_ok=True)
+            out, err = io.StringIO(), io.StringIO()
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                main(argv + ["--project", project])
+            row = next(c for c in json.loads(out.getvalue())["channels"] if c["channel"] == "w-L")
+            assert row["rew_calibration_db"] == want_cal and said in err.getvalue(), (row, err.getvalue())
+    finally:
+        for n, fn in saved.items():
+            setattr(rew_api, n, fn)
+        shutil.rmtree(top, ignore_errors=True)
     print("selftest[verify_prediction] OK -- exact car → TRUSTED with zero deltas; +7.3 dB → still "
           "TRUSTED and the offsets say 7.3; an extra 0.6 ms → NOT trusted at the named junction; "
           "missing pair → UNVERIFIED; an RTA base is said in the verdict; entry control: the exact "
