@@ -125,16 +125,22 @@ panel had nothing real to render and every resume re-derived the phase by re-rea
                                                     //   calibration -- the round is then `missing`
                                 "to_base_db": 16.65,     // the shift that brings it to the base (subtracted)
                                 "to_previous_db": 16.65}},  // the jump against the previous round; null with none
-      "control": {"title": "ALL+C_4 (rta)", "taken": true,     // the round's control against the base round's,
-                  "base_title": "ALL+C_3 (rta)",   //   each brought to the base on its own offset, over
-                  "verdict": "chain_change",        //   the bands the ledger's diff (`--under` of both
-                                                    //   rounds) did not change: same_chain | chain_change |
+      "control": {"title": "ALL+C_4 (rta)", "taken": true,     // the round's control against the PREVIOUS
+                  "against_round": "cap_003",       //   control (the last earlier round with one), both
+                  "against_title": "ALL+C_3 (rta)", //   brought to the base on their own offset, over the
+                  "verdict": "chain_change",        //   bands the ledger's diff previous -> this round
+                                                    //   (`--under`) did not change; a delay alike on every
+                                                    //   channel is no change: same_chain | chain_change |
                                                     //   unattributed | not_taken (chain change not checked)
+                  "reason": null,                   //   unattributed: changes_unread | too_few_bands |
+                                                    //   not_read | volume (the record's) | disagree |
+                                                    //   spread_wide | no_calibration (on the LEVEL line)
                   "common_db": 1.2, "align_db": -1.2,   // align_db: offered on a chain change only
                   "changed_bands": ["mid"],         //   null when the diff could not be read
                   "bands": {"low": {"mean_db": 1.21, "spread_db": 0.3, "used": true},
                             "mid": {"mean_db": -0.9, "spread_db": 1.5, "used": false}},
-                  "reference": true,                //   only on the base round's own: compared with nothing
+                  "reference": true,                //   only on the first round with a control: compared
+                                                    //   with nothing
                   "why": "…"}}                      //   no control: {title: null, verdict: "none", why};
                                                     //   `not_taken` is a control that exists, not measured
   }
