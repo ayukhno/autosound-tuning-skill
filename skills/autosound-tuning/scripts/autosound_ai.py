@@ -1563,26 +1563,34 @@ def failure_reason(text, limit=400):
     or blank line; otherwise the text as it came, cut as before.
 
     Codex prints `ERROR: {"type":"error",…,"error":{"message":"…"}}` last, upper-case and twice, after its
-    banner and the echoed prompt (#178). So the prefix is matched in either case and the last such line
-    is taken; when the rest of it is a JSON object whose `error.message` is a string, the reason is that
-    message — as TCC's `_codex_refusal` reads it (tcc#182). Anything else after the prefix stays the block."""
+    banner and the echoed prompt (#178). So the prefix is `error:` (bun) or `ERROR:` (Codex) -- not prose's
+    `Error:` -- and the last such line is taken; when the rest of it is a JSON object whose `error.message`
+    is a non-blank string, that message is the reason. After Codex's banner the reason is the banner's
+    first line and `ERROR: <reason>`: TCC reads Codex's reason only from a detail that carries the banner
+    (tcc#182, `_codex_refusal`), so the banner stays and the prompt goes."""
     text = (text or "").strip()
     lines = text.splitlines()
-    starts = [i for i, line in enumerate(lines) if line.lstrip()[:6].lower() == "error:"]
+    starts = [i for i, line in enumerate(lines) if line.lstrip().startswith(("error:", "ERROR:"))]
     if starts:
         try:
             payload = json.loads(lines[starts[-1]].lstrip()[6:])
-        except ValueError:
+        except (ValueError, RecursionError):
             payload = None
         error = payload.get("error") if isinstance(payload, dict) else None
-        if isinstance(error, dict) and isinstance(error.get("message"), str):
-            return error["message"].strip()[:limit]
-        kept = []
-        for line in lines[starts[-1]:]:
-            if kept and (not line.strip() or line.lstrip().startswith("at ")):
-                break
-            kept.append(line.strip())
-        text = " ".join(kept)
+        message = error.get("message") if isinstance(error, dict) else None
+        unwrapped = isinstance(message, str) and bool(message.strip())
+        if unwrapped:
+            text = message.strip()
+        else:
+            kept = []
+            for line in lines[starts[-1]:]:
+                if kept and (not line.strip() or line.lstrip().startswith("at ")):
+                    break
+                kept.append(line.strip())
+            text = " ".join(kept)
+        banner = next((line.strip() for line in lines if re.search(r"OpenAI Codex v\d", line)), None)
+        if banner:
+            text = banner + "\n" + ("ERROR: " + text if unwrapped else text)
     return text[:limit]
 
 
@@ -4186,13 +4194,34 @@ def _selftest():
                          "reasoning summaries: none\nsession id: 0\n--------\nuser\nSay OK.\n\n"
                          "warning: Model metadata for `gpt-0-nonexistent-tcc` not found. Defaulting to fallback "
                          "metadata; this can degrade performance and cause issues.\n" + codex_line + codex_line)
-            assert failure_reason(codex_out) == refused, failure_reason(codex_out)
-            # Not JSON: the block as before — the line and its continuation, up to a blank line or a frame.
-            block = "OpenAI Codex v0.162.1\nworkdir: /tmp/p\nERROR: stream disconnected\n  before completion\n\nmore\n"
-            assert failure_reason(block) == "ERROR: stream disconnected before completion", failure_reason(block)
-            for rest in ('{"error": {"message": "cut', '[{"error": {"message": "x"}}]', '{"error": {"message": 5}}'):
-                said = "OpenAI Codex v0.162.1\nworkdir: /tmp/p\nERROR: " + rest + "\n"
-                assert failure_reason(said) == "ERROR: " + rest, (rest, failure_reason(said))
+            # The reason keeps the banner's first line: TCC reads Codex's reason only from a detail that carries the
+            # banner, and its remedy («Pick another Codex model…») hangs on it (tcc critic.py `_codex_refusal`).
+            assert failure_reason(codex_out) == "OpenAI Codex v0.162.1\nERROR: " + refused, failure_reason(codex_out)
+            # The seam, pinned: TCC's two patterns, copied from tcc src/autosound_tcc/core/critic.py
+            # (`_CODEX_BANNER`, `_CODEX_ERROR`), find the banner and the message in the reason — a change on either
+            # side shows here. Doctor's 200 characters keep both.
+            tcc_banner, tcc_error = re.compile(r"OpenAI Codex v\d"), re.compile(r"^\s*error:\s*(.+)$", re.M | re.I)
+            for cut in (400, 200):
+                said = failure_reason(codex_out, cut)
+                assert tcc_banner.search(said) and tcc_error.findall(said) == [refused], (cut, said)
+            # Not JSON: the block as before — the line and its continuation, up to a blank line or a frame; after
+            # Codex's banner, the banner's first line and the block.
+            for head, want in (("", ""), ("OpenAI Codex v0.162.1\nworkdir: /tmp/p\n", "OpenAI Codex v0.162.1\n")):
+                block = head + "ERROR: stream disconnected\n  before completion\n\nmore\n"
+                assert failure_reason(block) == want + "ERROR: stream disconnected before completion", failure_reason(block)
+                for rest in ('{"error": {"message": "cut', '[{"error": {"message": "x"}}]', '{"error": {"message": 5}}',
+                             '{"error": {"message": "   "}}'):
+                    said = head + "ERROR: " + rest + "\n"
+                    assert failure_reason(said) == want + "ERROR: " + rest, (rest, failure_reason(said))
+            # The prefix is `error:` (bun, omp) or `ERROR:` (Codex), not prose: a later `Error:` is not the reason,
+            # and an `Error:` in the echoed prompt alone leaves the text as it came.
+            bun = "error: No API key found for openai-codex.\n      at getApiKey (omp:1:1)\nError: process exited\n"
+            assert failure_reason(bun) == "error: No API key found for openai-codex.", failure_reason(bun)
+            prose = "user\nError: mic not calibrated\nexit 1"
+            assert failure_reason(prose) == prose, failure_reason(prose)
+            # A message longer than the limit is cut to it.
+            long = 'ERROR: {"error": {"message": "' + "x" * 500 + '"}}'
+            assert failure_reason(long, 200) == "x" * 200, len(failure_reason(long, 200))
             # A selector omp does not know is the Arbiter's choice from omp's own list (text models only).
             omp_reply[0] = (1, "", 'Model "google-antigravity/gemini-9" not found\n')
             code, out, err = run_main("ask", pkg)
@@ -4208,6 +4237,19 @@ def _selftest():
             code, out, err = run_main("ask", pkg, "--via", "omp")
             assert code == 0 and "REVIEW_ROUTE: omp" in err, (code, err)
             assert os.path.basename(omp_runs[-1][0][0]).startswith("omp") and omp_runs[-1][0][1] == "-p", omp_runs[-1]
+            # #178 through a real caller: Codex refuses the model; the reason in the refusal is the banner's first
+            # line and the model's message, not the echoed prompt.
+            os.environ["AUTOSOUND_CRITIC_BIN"] = os.path.join(project, "bin", "codex")
+            os.environ["AUTOSOUND_CRITIC_MODEL"] = "gpt-0-nonexistent-tcc"
+            had_openai_key = os.environ.pop("OPENAI_API_KEY", None)
+            subprocess.run = globals()["_run_child"] = lambda cmd, **kw: subprocess.CompletedProcess(cmd, 1, "", codex_out)
+            try:
+                code, out, err = run_main("ask", pkg)
+            finally:
+                if had_openai_key is not None:
+                    os.environ["OPENAI_API_KEY"] = had_openai_key
+            assert code == 4 and "OpenAI Codex v0.162.1\nERROR: " + refused in err, (code, err)
+            assert "Say OK." not in err and "workdir:" not in err, err
             subprocess.run = globals()["_run_child"] = lambda cmd, **kw: subprocess.CompletedProcess(cmd, 0, ok_out, "")
             os.environ["AUTOSOUND_CRITIC_MODEL"] = "gemini-3.8-flash-low"
             globals()["call_gemini_api"] = real_api
