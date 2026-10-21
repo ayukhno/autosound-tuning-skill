@@ -3317,7 +3317,9 @@ class Process:
         if session and hasattr(verifier, "session_report"):
             probe = verifier.session_report(verdicts, processing_rate_hz=proc_rate if capture_rates else None)
             session_probe = {"at": _now(), "spread": probe["spread"], "drift": probe["drift"],
-                             "capture_rates_hz": probe["capture_rates_hz"], "rows": probe["rows"]}
+                             "capture_rates_hz": probe["capture_rates_hz"], "rows": probe["rows"],
+                             # The rows brought to one SPL calibration when REW's differ inside the round (#176).
+                             "level_base": probe.get("level_base")}
         # The round's level control and the base round's, read off REW here, before the index is read again (#176):
         # judged under the hold, below, once this check's offsets are merged.
         control_read = self._read_control(round_, verifier, records, verdicts)
@@ -3458,6 +3460,20 @@ class Process:
             first = next((r for r in earlier if _recorded_offsets(r)), None)
             base_id = first["id"] if first else live["id"]
         return base_id, by_id, next((r for r in reversed(earlier) if _recorded_offsets(r)), None)
+
+    def level_base_offset(self):
+        """`{"base_round", "offset_db"}` of the project's level base as it stands (#176), or None with no round on
+        record: the round last named (`--level-base`), else the first that recorded offsets -- what a reader of REW's
+        frequency response outside `capture-check` (`verify_prediction --project`) brings its reads to."""
+        lb = _load_sibling("levelbase.py")
+        rounds = self.capture_rounds()
+        named = next((r["level_base"] for r in reversed(rounds) if r.get("level_base")), None)
+        base = next((r for r in rounds if r["id"] == named), None) if named else \
+            next((r for r in rounds if _recorded_offsets(r)), None)
+        if base is None or lb is None:
+            return None
+        offset = lb.round_offset(_recorded_offsets(base))[0]
+        return None if offset is None else {"base_round": base["id"], "offset_db": offset}
 
     def _read_control(self, round_, verifier, records, verdicts):
         """What REW holds of the round's level control and the base round's (#176 ask 2), read before the hold: None
@@ -7943,6 +7959,7 @@ def _check_rounds_on_one_level_base():
             d = os.path.join(top, "process")
             p = Process(d)
             p.enter_phase("-1")
+            assert p.level_base_offset() is None, "no round on record: no base"
             # Round one, beta 134: the project's first round on record, so it becomes the base -- said so.
             p.start_capture("1", expected=["w-L_1 (sw)", "w-R_1 (sw)"])
             rew.hold({"w-L_1 (sw)": base_off, "w-R_1 (sw)": base_off})
@@ -8012,6 +8029,9 @@ def _check_rounds_on_one_level_base():
                 [x for x in out.splitlines() if x.startswith("LEVEL")], (lb, out)
             assert _run_main(["process.py", d, "capture-close", "--no-rew"])[0] == 0
             assert {r["id"]: r for r in Process(d).capture_rounds()}["cap_003"]["level_base"] == "cap_002"
+            # What a reader outside the check brings REW's FR to (`verify_prediction --project`): the base as it stands.
+            assert Process(d).level_base_offset() == {"base_round": "cap_002", "offset_db": reset}, \
+                Process(d).level_base_offset()
             # ...and stands for the round after it, which names none: the base is the one last named.
             p3 = Process(d)
             p3.start_capture("4", expected=["w-L_4 (sw)"])

@@ -78,8 +78,45 @@ def compare(curves, at=(), band=None, target=None):
     return {"rows": rows, "bands": bands}
 
 
-def render(result, titles, smoothing, band=None, target_name=None):
+class MissingTitle(KeyError):
+    """REW holds no measurement under the title asked for (`read_curves`)."""
+
+
+def read_curves(titles, smoothing, api=None):
+    """`(curves, shifts, base_offset)`: `{title: (freqs, mag)}` as REW's frequency response gives them -- dB SPL, on
+    each measurement's own SPL calibration -- each brought to the FIRST title's calibration (#176, hub #285 TCC-060):
+    REW 5.40 beta 135 reset `splOffsetdB` 103.35 -> 120.0 between two rounds, and two rounds side by side then read
+    16.65 dB apart for no reason in the car. `shifts` is `{title: dB subtracted}` (0 for a title REW lists no offset
+    for, or when the first has none); `base_offset` the first title's `splOffsetdB`, or None. Raises `MissingTitle`."""
+    if api is None:
+        import rew_api as api  # noqa: F811
+    import levelbase
+    listing = api.get_measurements()
+    curves, shifts, base = {}, {}, None
+    for i, title in enumerate(titles):
+        try:
+            mid = api.find_measurement_id(title, listing)
+        except KeyError:
+            mid = None
+        if mid is None:
+            raise MissingTitle(title)
+        freqs, mag, _phase = api.get_fr(mid, smoothing=smoothing)
+        offset = (listing.get(mid) or {}).get("splOffsetdB")
+        if i == 0:
+            base = levelbase._number(offset)
+        shifts[title] = levelbase.spl_shift(offset, base)
+        curves[title] = (list(freqs), levelbase.to_base(list(mag), shifts[title]))
+    return curves, shifts, base
+
+
+def render(result, titles, smoothing, band=None, target_name=None, shifts=None, base_offset=None):
     lines = [f"  read at {smoothing} smoothing (computed by REW on the way out; the view is untouched)"]
+    moved = [(t, d) for t, d in (shifts or {}).items() if t in titles and round(d, 2) != 0]
+    if moved:
+        # The shift applied, said (#176): the levels are on the first title's SPL calibration, not REW's.
+        lines.append(f"  levels brought to {titles[0]}'s REW SPL calibration"
+                     + (f" (splOffsetdB {base_offset:.2f})" if base_offset is not None else "") + ": "
+                     + ", ".join(f"{t} {-d:+.2f} dB" for t, d in moved))
     if result["rows"]:
         lines.append("  " + f"{'Hz':>8}  " + "  ".join(f"{t[:22]:>22}" for t in titles)
                      + ("  " + f"{'2nd - 1st':>10}" if len(titles) == 2 else ""))
@@ -114,8 +151,31 @@ def _selftest():
     assert "+3.0 dB" in shown and "level removed" in shown and "1/6" in shown, shown
     flat = compare({"a": (f, a)}, band=(40.0, 16000.0), target=[(20.0, 5.0), (20000.0, 5.0)])
     assert abs(flat["bands"]["a"]["rms_vs"]) < 1e-9, "a target is a shape: a level offset is not an error"
+    # #176 (hub #285): two titles REW calibrated apart -- the 08.10 reset, 103.35 then 120.0 -- are one curve 16.65 dB
+    # apart as read; brought to the first one's calibration they read the same, and the table says the shift.
+    class _Rew:
+        FINEST_SMOOTHING = "1/48"
+        listing = {"1": {"title": "ALL_3 (rta)", "splOffsetdB": 103.34649658203125},
+                   "2": {"title": "ALL_4 (rta)", "splOffsetdB": 120.0}, "3": {"title": "ALL_5 (rta)"}}
+
+        def get_measurements(self):
+            return self.listing
+
+        def find_measurement_id(self, title, measurements=None, exact=True):
+            return next((k for k, v in self.listing.items() if v["title"] == title), None)
+
+        def get_fr(self, mid, smoothing=None):
+            return f, [m + (self.listing[mid].get("splOffsetdB") or 0.0) for m in a], None
+    curves, shifts, base = read_curves(["ALL_3 (rta)", "ALL_4 (rta)", "ALL_5 (rta)"], "1/6", api=_Rew())
+    assert round(shifts["ALL_4 (rta)"], 2) == 16.65 and shifts["ALL_3 (rta)"] == 0.0 and shifts["ALL_5 (rta)"] == 0.0
+    res = compare(curves, at=(300.0,))
+    assert abs(res["rows"][0]["db"]["ALL_4 (rta)"] - res["rows"][0]["db"]["ALL_3 (rta)"]) < 1e-6, res
+    shown = render(res, ["ALL_3 (rta)", "ALL_4 (rta)"], "1/6", shifts=shifts, base_offset=base)
+    assert "brought to ALL_3 (rta)'s REW SPL calibration (splOffsetdB 103.35): ALL_4 (rta) -16.65 dB" in shown, shown
+    assert "brought to" not in render(res, ["ALL_3 (rta)"], "1/6", shifts={"ALL_3 (rta)": 0.0})
     print("selftest[compare] OK -- values at named frequencies with the difference, a band's log-weighted mean, "
-          "the RMS against a target or the first curve with the level removed, and the smoothing named")
+          "the RMS against a target or the first curve with the level removed, and the smoothing named; titles REW "
+          "calibrated apart brought to the first one's splOffsetdB, the shift said (#176)")
     return 0
 
 
@@ -132,21 +192,18 @@ def main(argv=None):
         return _selftest()
     if not args.titles:
         ap.error("--titles is required")
-    import rew_api
     import variant_front
-    curves = {}
-    for title in args.titles:
-        mid = rew_api.find_measurement_id(title)
-        if mid is None:
-            print(f"refusing: REW holds no measurement titled {title!r}", file=sys.stderr)
-            return 3
-        freqs, mag, _phase = rew_api.get_fr(mid, smoothing=args.smoothing)
-        curves[title] = (list(freqs), list(mag))
+    try:
+        curves, shifts, base_offset = read_curves(args.titles, args.smoothing)
+    except MissingTitle as exc:
+        print(f"refusing: REW holds no measurement titled {exc.args[0]!r}", file=sys.stderr)
+        return 3
     at = [float(x) for x in args.at.split(",") if x.strip()]
     band = tuple(float(x) for x in args.band.split("-")) if args.band else None
     target = variant_front.read_target(args.target) if args.target else None
     print(render(compare(curves, at=at, band=band, target=target), args.titles, args.smoothing, band=band,
-                 target_name=os.path.basename(args.target) if args.target else None))
+                 target_name=os.path.basename(args.target) if args.target else None, shifts=shifts,
+                 base_offset=base_offset))
     return 0
 
 

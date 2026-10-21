@@ -102,7 +102,7 @@ def _on_grid(f_src, y_src, f):
 
 
 # ---------------------------------------------------------------- measured sources
-def measured_from_rew(titles, api=None, allow_rta=False, freqs=None, window=None):
+def measured_from_rew(titles, api=None, allow_rta=False, freqs=None, window=None, level_base_db=None, shifts=None):
     """{title: (freqs, mag_db, base[, H])} from a live REW. `base` is 'sw' for a sweep on the
     loopback base with no offset, 'rta' for a moving-mic measurement (refused unless allowed), or
     says the offset otherwise.
@@ -110,10 +110,23 @@ def measured_from_rew(titles, api=None, allow_rta=False, freqs=None, window=None
     With `freqs` (the prediction's grid) a sweep is read through `predict.load_solo_rew` -- the
     impulse response on the same grid with the same treatment as the predicted solos, and the
     complex response beside the magnitude so the entry control can read the ARRIVAL too. An RTA
-    has no impulse and stays magnitude-only from REW's frequency response."""
+    has no impulse and stays magnitude-only from REW's frequency response.
+
+    **Only the frequency-response reads are brought to a level base** (#176, hub #285 TCC-060): REW's FR is dB SPL on
+    the measurement's own `splOffsetdB`, and REW 5.40 beta 135 reset it 103.35 -> 120.0 between two rounds. Each FR
+    read is shifted to `level_base_db` -- the project's base round's offset, `Process.level_base_offset` -- or, not
+    given, to the first FR-read title's; the dB subtracted goes into `shifts` (`{title: dB}`, when a dict is handed
+    in), for the rows to say. The sweep path with `freqs` reads the IMPULSE, a fraction of full scale with no
+    calibration in it, and is never shifted: shifting it would invent a residual (Codex's plan review)."""
     if api is None:
         import rew_api as api  # noqa: F811
+    import levelbase
     out = {}
+    try:
+        listing = api.get_measurements() if hasattr(api, "get_measurements") else {}
+    except Exception:  # noqa: BLE001 -- no listing, no calibration read: the FR reads are left as REW gives them
+        listing = {}
+    to_level = levelbase._number(level_base_db)       # not `base`: that names a row's point-sweep base below
     fg = np.asarray(freqs, float) if freqs is not None else None
     for title in titles:
         mid = api.find_measurement_id(title)
@@ -134,6 +147,13 @@ def measured_from_rew(titles, api=None, allow_rta=False, freqs=None, window=None
             out[title] = (fg, _db(H), "sw", H, gated)
             continue
         f, mag, phase = api.get_fr(mid, smoothing=READ_SMOOTHING)
+        offset = levelbase._number(((listing or {}).get(str(mid)) or {}).get("splOffsetdB"))
+        if to_level is None and level_base_db is None:
+            to_level = offset                          # the first FR-read title's calibration is the base here
+        shift = levelbase.spl_shift(offset, to_level)
+        mag = levelbase.to_base(np.asarray(mag, float), shift)
+        if shifts is not None:
+            shifts[title] = round(shift, 2)
         if not timing.get("has_ir", True) or phase is None:
             if not allow_rta:
                 raise VerifyError(
@@ -351,7 +371,8 @@ def _knob_steps(was, now):
 
 def verify(predicted, measured, *, pair_names=None, solo_names=None, all_name=None,
            all_plus_c_name=None, knobs=None, mapping=None, criterion_db=CRITERION_DB,
-           entry_criterion_db=ENTRY_CRITERION_DB, entry_only=False, entry_delay_ms=ENTRY_DELAY_MS, amp=None):
+           entry_criterion_db=ENTRY_CRITERION_DB, entry_only=False, entry_delay_ms=ENTRY_DELAY_MS, amp=None,
+           rew_calibration=None):
     """`predicted`: the dict `predict.to_json` wrote. `measured`: {name: (freqs, mag_db, base)}.
 
     `pair_names`: {(lo, hi): measured name of the pair}; `solo_names`: {code: measured name of
@@ -366,7 +387,15 @@ def verify(predicted, measured, *, pair_names=None, solo_names=None, all_name=No
     feature nearest to it, so a corner or a band typed wrong in the DSP is caught as an entry
     error and not later as a "bad junction". `entry_only` makes that the verdict (junctions may
     be 'not measured' on purpose then).
+
+    `rew_calibration` is `{measured title: dB}` -- the shift `measured_from_rew(shifts=...)` brought each FR read to
+    the level base by (#176) -- said on its row as `rew_calibration_db`, beside the knob's and the amp's share: what
+    of the offset was REW's calibration, already taken out.
     """
+    rew_calibration = rew_calibration or {}
+
+    def _cal(name):
+        return {"rew_calibration_db": rew_calibration[name]} if name in rew_calibration else {}
     f = np.asarray(predicted["freqs_hz"], float)
     chans = predicted["channels"]
     pred_c = {c: _complex(v["mag_db"], v["phase_deg"]) for c, v in chans.items()}
@@ -481,6 +510,7 @@ def verify(predicted, measured, *, pair_names=None, solo_names=None, all_name=No
                                    **({"knob_db": round(knob_db, 2),
                                        "calibration_db": round(offset - knob_db, 2)}
                                       if knob_db is not None else {}),
+                                   **_cal(name),
                                    "offset_db": round(offset, 2), "shape_rms_db": round(rms, 2),
                                    "band": [round(float(f[live].min()), 1),
                                             round(float(f[live].max()), 1)],
@@ -498,7 +528,7 @@ def verify(predicted, measured, *, pair_names=None, solo_names=None, all_name=No
         offset = float(np.nanmean((meas - pred)[live]))
         resid = (meas - pred - offset)[live]
         report["all_plus_c"] = {
-            "measured": all_plus_c_name, "base": base, "offset_db": round(offset, 2),
+            "measured": all_plus_c_name, "base": base, "offset_db": round(offset, 2), **_cal(all_plus_c_name),
             "rms_db": round(float(np.sqrt(np.nanmean(resid ** 2))), 2),
             "worst_db": round(float(np.nanmax(np.abs(resid))), 2),
             "centres": predicted.get("centres") or [],
@@ -535,7 +565,7 @@ def verify(predicted, measured, *, pair_names=None, solo_names=None, all_name=No
         resid = np.where(live, meas - pred - offset, np.nan)
         _, rms = _band_mean(f, resid, f[live].min(), f[live].max())
         report["all"] = {"measured": all_name, "base": base, "offset_db": round(offset, 2),
-                         "shape_rms_db": round(rms, 2)}
+                         "shape_rms_db": round(rms, 2), **_cal(all_name)}
 
     judged = [j for j in report["junctions"] if j.get("status") in ("trusted", "NOT trusted")]
     if not judged:
@@ -667,6 +697,9 @@ def render(report):
                          f"   {c.get('status', '')}")
             if c.get("delay_error_ms") is not None:
                 lines[-1] += f"   arrival {c['delay_error_ms']:+.2f} ms"
+            if c.get("rew_calibration_db"):
+                # The shift that brought this FR read to the level base (#176): REW's calibration, not the car's.
+                lines[-1] += f"   REW calibration {-c['rew_calibration_db']:+.2f} dB (brought to the base)"
             if c.get("hint"):
                 lines.append(f"    {'':6}      worst {c['worst_db']:+.1f} dB @ {c['worst_hz']:.0f} Hz -- {c['hint']}")
         if report.get("entry"):
@@ -690,7 +723,9 @@ def render(report):
         lines.append(f"    {c['note']}")
     if report["all"]:
         a = report["all"]
-        lines.append(f"  ALL {a['base']:<4} offset {a['offset_db']:+.1f} dB  shape rms {a['shape_rms_db']:.2f} dB")
+        lines.append(f"  ALL {a['base']:<4} offset {a['offset_db']:+.1f} dB  shape rms {a['shape_rms_db']:.2f} dB"
+                     + (f"  REW calibration {-a['rew_calibration_db']:+.2f} dB (brought to the base)"
+                        if a.get("rew_calibration_db") else ""))
     lines.append("")
     lines.append("  " + report["verdict"])
     return "\n".join(lines)
@@ -771,6 +806,7 @@ def main(argv=None):
     if args.all:
         all_name = args.all
     all_plus_c_name = args.all_plus_c
+    rew_shifts = {}
     wanted = set(pairs.values()) | set(solos.values()) | {all_name}
     if all_plus_c_name:
         wanted.add(all_plus_c_name)
@@ -782,8 +818,22 @@ def main(argv=None):
         missing = sorted(wanted - have)
         if missing:
             print("  not in REW: " + ", ".join(missing), file=sys.stderr)
+        # The project's level base (#176): what each FR read is brought to; none on record, the first title's.
+        level_base_db = None
+        if args.project:
+            sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "state"))
+            try:
+                from process import Process
+                based = Process(os.path.join(args.project, "process")).level_base_offset()
+                if based:
+                    level_base_db = based["offset_db"]
+                    print(f"  levels read off REW's frequency response are brought to the base round "
+                          f"{based['base_round']} (splOffsetdB {level_base_db:.2f})", file=sys.stderr)
+            except Exception as exc:                    # noqa: BLE001
+                print(f"  level base not read: {exc}", file=sys.stderr)
         measured = measured_from_rew(titles, api=api, allow_rta=args.allow_rta,
-                                     freqs=predicted["freqs_hz"], window=window)
+                                     freqs=predicted["freqs_hz"], window=window, level_base_db=level_base_db,
+                                     shifts=rew_shifts)
     else:
         measured = measured_from_v7_dir(args.measured, freqs=predicted["freqs_hz"], window=window)
     knobs_here, mapping, amp = None, None, None
@@ -806,7 +856,7 @@ def main(argv=None):
     report = verify(predicted, measured, pair_names=pairs, solo_names=solos, all_name=all_name,
                     all_plus_c_name=all_plus_c_name, knobs=knobs_here, mapping=mapping,
                     criterion_db=args.criterion, entry_criterion_db=args.entry_criterion,
-                    entry_only=args.entry, entry_delay_ms=args.entry_delay, amp=amp)
+                    entry_only=args.entry, entry_delay_ms=args.entry_delay, amp=amp, rew_calibration=rew_shifts)
     if args.json:
         print(json.dumps(report, indent=1))
     else:
@@ -957,6 +1007,38 @@ def _selftest():
     assert abs(row_a["calibration_db"]) < 0.1, row_a
     assert "amplifier gain turned" in render(rep_a)
 
+    # #176 (hub #285): the FR/RTA path reads REW's frequency response, dB SPL, so it carries `splOffsetdB`: two RTAs
+    # of one curve under 103.35 and 120.0 (the 08.10 reset) are brought to one base -- the project's, or the first
+    # title's -- and the shift is said on the row as `rew_calibration_db`, beside the knob's and the amp's share.
+    class _Rew:
+        listing = {"1": {"title": "w-L_2 (rta)", "splOffsetdB": 103.34649658203125},
+                   "2": {"title": "m-L_2 (rta)", "splOffsetdB": 120.0}}
+
+        def get_measurements(self):
+            return self.listing
+
+        def find_measurement_id(self, title):
+            return next(k for k, v in self.listing.items() if v["title"] == title)
+
+        def get_timing(self, mid):
+            return {"has_ir": False}
+
+        def get_fr(self, mid, smoothing=None):
+            curve = _db(A) if mid == "1" else _db(B)
+            return list(f), list(curve + self.listing[mid]["splOffsetdB"]), None
+    shifts = {}
+    got = measured_from_rew(["w-L_2 (rta)", "m-L_2 (rta)"], api=_Rew(), allow_rta=True, shifts=shifts)
+    assert shifts == {"w-L_2 (rta)": 0.0, "m-L_2 (rta)": 16.65}, shifts
+    assert np.max(np.abs(got["m-L_2 (rta)"][1] - (_db(B) + 103.34649658203125))) < 1e-6, "brought to the first"
+    based = {}
+    got_b = measured_from_rew(["m-L_2 (rta)"], api=_Rew(), allow_rta=True, level_base_db=120.0, shifts=based)
+    assert based == {"m-L_2 (rta)": 0.0} and np.max(np.abs(got_b["m-L_2 (rta)"][1] - (_db(B) + 120.0))) < 1e-6
+    rta_names = dict(solo_names={"w-L": "w-L_2 (rta)", "m-L": "m-L_2 (rta)"})
+    rep_c = verify(pred, got, **rta_names, rew_calibration=shifts)
+    row_c = {c["channel"]: c for c in rep_c["channels"]}
+    assert row_c["m-L"]["rew_calibration_db"] == 16.65 and row_c["w-L"]["rew_calibration_db"] == 0.0, row_c
+    assert abs(row_c["m-L"]["offset_db"] - row_c["w-L"]["offset_db"]) < 0.01, "one base: one offset"
+    assert "REW calibration -16.65 dB" in render(rep_c), render(rep_c)
     print("selftest[verify_prediction] OK -- exact car → TRUSTED with zero deltas; +7.3 dB → still "
           "TRUSTED and the offsets say 7.3; an extra 0.6 ms → NOT trusted at the named junction; "
           "missing pair → UNVERIFIED; an RTA base is said in the verdict; entry control: the exact "
@@ -965,7 +1047,8 @@ def _selftest():
           + " · RES-007: the centre summed as ALL+C with its condition named and what it adds "
             "compared per third of an octave (a band where it adds nothing says so instead of "
             "reporting a sign), knobs are a fact of each series -- equal, mapped (the shift on its "
-            "own line and the calibration at zero), or refused as unrecorded/unmapped")
+            "own line and the calibration at zero), or refused as unrecorded/unmapped; the FR/RTA path brought to one "
+            "REW SPL calibration, the shift on its row (#176)")
     return 0
 
 

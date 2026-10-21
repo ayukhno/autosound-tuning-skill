@@ -485,7 +485,23 @@ def session_report(verdicts, processing_rate_hz=None, ir_of=_rew_ir_of):
             row["why"] = v["why"]                      # why it was not checked (#184): the header reads it back
         if v.get("ambiguous"):
             row["ambiguous"] = v["ambiguous"]          # REW holds it more than once (H I-8)
+        if st.get("spl_offset_db") is not None:
+            row["spl_offset_db"] = st["spl_offset_db"]  # REW's SPL calibration of the FR the level was read off (#176)
         rows.append(row)
+    # The levels side by side are REW's frequency response, dB SPL on each capture's own `splOffsetdB` (#176, hub
+    # #285): REW 5.40 beta 135 reset it 103.35 -> 120.0, and a round whose captures straddle the reset read 16.65 dB
+    # apart for nothing in the car. When the calibrations differ within this set, every row that carries one is
+    # brought to the first one's before the spread is read, `level_shift_db` the dB subtracted; on one calibration,
+    # the rows are read as they were. A row with no calibration (not REW's FR) is never moved.
+    level_base = None
+    calibrated = [r for r in rows if r.get("spl_offset_db") is not None]
+    if calibrated and any(abs(r["spl_offset_db"] - calibrated[0]["spl_offset_db"]) > 0.005 for r in calibrated):
+        level_base = {"title": calibrated[0]["name"], "offset_db": calibrated[0]["spl_offset_db"]}
+        for r in calibrated:
+            shift = r["spl_offset_db"] - level_base["offset_db"]
+            r["level_shift_db"] = round(shift, 2)
+            if r["mean_dB"] is not None:
+                r["mean_dB"] = round(r["mean_dB"] - shift, 2)
     _p = {r["name"]: _naming.parse_name(r["name"]) for r in rows}
     sweeps = [r for r in rows if r["valid"] and r["mean_dB"] is not None
               and (_p[r["name"]] or {}).get("method") == "sw" and not (_p[r["name"]] or {}).get("control")]
@@ -569,7 +585,7 @@ def session_report(verdicts, processing_rate_hz=None, ir_of=_rew_ir_of):
                      f"{processing_rate_hz:g} Hz -- fine, working with it")
     return {"rows": rows, "spread": spread, "drift": drift, "capture_rates_hz": rates,
             "processing_rate_hz": processing_rate_hz, "rate_note": rate_note,
-            "counts": summary(verdicts)}
+            "counts": summary(verdicts), "level_base": level_base}
 
 
 def render_session(report):
@@ -596,6 +612,13 @@ def render_session(report):
                      f"{_f(r['pre_ringing_dB'], '%10.1f')}{_f(r['peak_time_ms'], '%12.3f')}"
                      f"{_f(r['capture_rate_hz'], '%7d')}{mark}")
     lines.append("")
+    based = report.get("level_base")
+    if based:
+        # The shift the table applied, said (#176): the levels are on one SPL calibration, not REW's per capture.
+        moved = [r for r in report["rows"] if r.get("level_shift_db")]
+        lines.append(f"  levels brought to {based['title']}'s REW SPL calibration (splOffsetdB "
+                     f"{based['offset_db']:.2f}): " + ", ".join(f"{r['name']} {-r['level_shift_db']:+.2f} dB"
+                                                         for r in moved))
     sp = report["spread"]
     if sp:
         lines.append(f"  loudest {sp['loudest']} {sp['loudest_dB']:.1f} dB / quietest {sp['quietest']} "
@@ -1495,6 +1518,23 @@ def _selftest():
                            ir_of=lambda t: imp(0.3) if "ctl3" in t else imp(0))
     assert rep_x["drift"]["method"] == "xcorr" and abs(rep_x["drift"]["delta_samples"] - 0.3) < 0.02, rep_x["drift"]
     assert "cross-correlation" in render_session(rep_x)
+    # #176: the levels side by side are REW's FR, dB SPL -- two captures REW calibrated apart inside one round (the
+    # 08.10 reset, 103.35 and 120.0) are brought to the first one's calibration before the spread is read, and the
+    # table says so; a round on one calibration is read as it was.
+    def cal(name, mean, off):
+        v = sw(name, mean, 5.0)
+        v["stats"]["spl_offset_db"] = off
+        return v
+    split = session_report([cal("w-L_4 (sw)", 80.0, 103.34649658203125), cal("w-R_4 (sw)", 96.65, 120.0),
+                            cal("sw_4 (sw)", 84.0, 103.34649658203125)], ir_of=None)
+    rows = {r["name"]: r for r in split["rows"]}
+    assert rows["w-R_4 (sw)"]["mean_dB"] == 80.0 and rows["w-R_4 (sw)"]["level_shift_db"] == 16.65, rows
+    assert rows["w-L_4 (sw)"]["level_shift_db"] == 0.0 and split["spread"]["spread_dB"] == 4.0, split["spread"]
+    assert split["level_base"] == {"title": "w-L_4 (sw)", "offset_db": 103.34649658203125}, split["level_base"]
+    assert "brought to w-L_4 (sw)'s REW SPL calibration (splOffsetdB 103.35): w-R_4 (sw) -16.65 dB" \
+        in render_session(split), render_session(split)
+    one = session_report([cal("w-L_4 (sw)", 80.0, 120.0), cal("w-R_4 (sw)", 82.0, 120.0)], ir_of=None)
+    assert one["level_base"] is None and "level_shift_db" not in one["rows"][0] and one["rows"][1]["mean_dB"] == 82.0
     txt = render_session(rep)
     assert "HELD" in txt and "spread 17.3" in txt and "no drift record" not in txt, txt
     assert "MOVED" in render_session(moved) and "no drift record" in render_session(lost)
