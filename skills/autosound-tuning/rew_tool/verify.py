@@ -182,6 +182,14 @@ def verdict(name, measurements=None, f_low=20, f_high=20000):
     entry = (ms.get(mid) or {})
     out["stats"]["uuid"] = entry.get("uuid")
     out["stats"]["date"] = entry.get("date")
+    # REW's SPL calibration for this capture (#176, hub #285 TCC-060): `splOffsetdB` off the listing record, before
+    # the not-a-sweep return so an RTA carries it too -- the round's level control is one. REW 5.40 beta 135 reset it
+    # 103.35 -> 120.0 between two rounds (PAS-015) and the round check said nothing; `capture-check` records it per
+    # capture and brings rounds to one base (`levelbase.py`). Absent when REW lists none or lists no number -- never 0,
+    # which is a calibration too.
+    spl = entry.get("splOffsetdB")
+    if isinstance(spl, (int, float)) and not isinstance(spl, bool) and spl == spl and abs(spl) != float("inf"):
+        out["stats"]["spl_offset_db"] = float(spl)
     # The kind comes off the LISTING record, which is all a caller has before pulling anything --
     # the same place a front-end reads it when the tuner is still choosing rows at the car.
     out["kind"] = _api.measurement_kind(entry)
@@ -1304,6 +1312,26 @@ def _check_verify_takes_the_listing_given():
     assert own == given, (own, given)
 
 
+def _check_spl_offset_recorded():
+    """#176 (hub #285): REW's SPL calibration, `splOffsetdB` on the listing record, travels on the verdict as
+    `stats["spl_offset_db"]` -- a sweep's and an RTA's alike, so it is read before the not-a-sweep return. The RTA is
+    the bench's own, as REW listed it on 08.10 after beta 135 reset the calibration to 120.0
+    (`testdata/rew/spl-reset-controls.json`); a record REW lists no offset for carries none, never 0."""
+    with open(os.path.join(_HERE, "testdata", "rew", "spl-reset-controls.json"), encoding="utf-8") as f:
+        recorded = json.load(f)
+    rta = {k: v for k, v in recorded["121"].items() if k != "fr"}
+    listing = {"1": rta, "2": dict(_SWEPT_RECORD, splOffsetdB=120.0), "3": dict(_SWEPT_RECORD, title="w-L_60 (sw)"),
+               "4": dict(_SWEPT_RECORD, title="m-L_60 (sw)", splOffsetdB="120")}
+    with _rew_as(get_measurements=lambda: listing, get_fr=_sweep_fr, get_impulse_response=_impulse_48k):
+        v_rta = verdict("ALL+C+FX_4 (rta)", measurements=listing)
+        v_sw = verdict("sw_60 (sw)", measurements=listing)
+        v_none = verdict("w-L_60 (sw)", measurements=listing)
+        v_text = verdict("m-L_60 (sw)", measurements=listing)
+    assert v_rta["applicable"] is False and v_rta["stats"].get("spl_offset_db") == 120.0, v_rta
+    assert v_sw["valid"] is True and v_sw["stats"].get("spl_offset_db") == 120.0, v_sw
+    assert "spl_offset_db" not in v_none["stats"] and "spl_offset_db" not in v_text["stats"], (v_none, v_text)
+
+
 def _selftest():
     """Offline, REW never reached: REW's states through its readers stood in (`_rew_as`), REW's recorded answers
     replayed (`testdata/rew/`), the command line at a dead port, the drift record, the counts and the outlier rule."""
@@ -1312,7 +1340,7 @@ def _selftest():
                   _check_recorded_no_impulse, _check_ambiguous_title, _check_drift_says_why, _check_counts_add_up,
                   _check_command_line_bug_exits_70, _check_drift_says_what_was_not_read,
                   _check_drift_names_every_missing_control, _check_own_band,
-                  _check_recorded_listing_band, _check_verify_takes_the_listing_given):
+                  _check_recorded_listing_band, _check_verify_takes_the_listing_given, _check_spl_offset_recorded):
         try:
             check()
         except Exception as exc:  # noqa: BLE001 -- a check that raises is reported by name, like one that fails

@@ -14,7 +14,10 @@ What is served, and only that (`rew_api.py` is the list of what is read):
 
   GET /measurements                       {id: {title, uuid, date, timingReference, timingOffset,
                                                 timeOfIRStartSeconds, timeOfIRPeakSeconds, sampleRate,
-                                                startFreq, endFreq, notes}}
+                                                startFreq, endFreq, notes[, splOffsetdB]}}
+                                          (`splOffsetdB` when a measurement is given one: REW's SPL
+                                          calibration, in the frequency response, never in the
+                                          impulse -- #176)
   GET /measurements/{id}                  the same record
   GET /measurements/{id}/frequency-response   {startFreq, ppo, magnitude, phase, smoothing: "None"}
                                           (an RTA record: freqStep instead of ppo, no phase)
@@ -69,7 +72,7 @@ class Measurement:
 
     def __init__(self, title, ir=None, sample_rate=96000, start_time_s=0.0, *, rta=None,
                  timing_reference="Loopback", timing_offset_s=0.0, notes="", uid=None,
-                 start_freq=F_LOW, end_freq=F_HIGH):
+                 start_freq=F_LOW, end_freq=F_HIGH, spl_offset_db=None):
         self.title = title
         self.ir = None if ir is None else np.asarray(ir, dtype=float)
         self.fs = int(sample_rate)
@@ -82,6 +85,11 @@ class Measurement:
         # The range REW lists for it (`startFreq`/`endFreq`), which the capture gate judges it over (#154): a sub
         # swept 20-200 Hz says so. The served curve keeps the stub's one grid; only the listing carries the range.
         self.start_freq, self.end_freq = start_freq, end_freq
+        # REW's SPL calibration, `splOffsetdB` on the listing (#176, hub #285): None lists none, as before. REW keeps it
+        # in the frequency response (dB SPL) and not in the impulse (a fraction of full scale), and so does the stub --
+        # an impulse's spectrum is served with the offset added, the impulse itself as stored; an RTA's curve is served
+        # as given, the caller handing it in dB SPL already.
+        self.spl_offset_db = spl_offset_db
         self._fr = None
 
     def record(self, mid):
@@ -89,6 +97,8 @@ class Measurement:
                "notes": self.notes, "sampleRate": self.fs, "startFreq": self.start_freq,
                "endFreq": self.end_freq, "timingReference": self.timing_reference,
                "timingOffset": self.timing_offset_s}
+        if self.spl_offset_db is not None:
+            rec["splOffsetdB"] = float(self.spl_offset_db)
         if self.ir is not None:
             k = int(np.argmax(np.abs(self.ir)))
             rec["timeOfIRStartSeconds"] = self.start_time_s
@@ -118,7 +128,7 @@ class Measurement:
             # Magnitude and UNWRAPPED phase interpolated separately: a pure delay is then exactly
             # flat on the grid (interpolating real/imag between bins of a rotating phasor shaves the
             # magnitude by 1 - cos(half the phase step per bin) -- 0.003 dB on a 250-sample delay).
-            mag_b = 20.0 * np.log10(np.maximum(np.abs(X), 1e-12))
+            mag_b = 20.0 * np.log10(np.maximum(np.abs(X), 1e-12)) + float(self.spl_offset_db or 0.0)
             ph_b = np.unwrap(np.angle(X))
             mag = np.interp(f, fb, mag_b)
             ph = np.degrees(np.interp(f, fb, ph_b))
@@ -348,6 +358,39 @@ def _selftest():
         finally:
             server2.shutdown()
             rew_api.BASE_URL = url
+        # #176 (hub #285): REW's SPL calibration, served as REW keeps it. The same impulse under two listing offsets,
+        # 103.35 and 120.0 (REW 5.40 beta 134 and 135, the bench's 08.10 reset): the listing names each offset, the
+        # frequency response -- dB SPL -- reads 16.65 dB apart, and the impulse, a fraction of full scale, is one and
+        # the same; so are the readers of impulses, `predict --rew` (`load_solo_rew`) and verify_prediction's sweep path:
+        # nothing that reads an impulse is shifted, since its unit carries no calibration to bring to a base.
+        import verify_prediction as _vp
+        old = Measurement("w-L_7 (sw)", ir, fs, 0.0, spl_offset_db=103.34649658203125)
+        new = Measurement("w-L_8 (sw)", ir, fs, 0.0, spl_offset_db=120.0)
+        url3, server3 = serve([old, new, Measurement("w-L_9 (sw)", ir, fs, 0.0)])
+        rew_api.BASE_URL = url3
+        try:
+            listed = rew_api.get_measurements()
+            assert (listed["1"]["splOffsetdB"], listed["2"]["splOffsetdB"]) == (103.34649658203125, 120.0), listed
+            assert "splOffsetdB" not in listed["3"], listed["3"]
+            _, m_old, _ = rew_api.get_fr("1")
+            _, m_new, _ = rew_api.get_fr("2")
+            _, m_bare, _ = rew_api.get_fr("3")
+            gap = np.asarray(m_new) - np.asarray(m_old)
+            assert np.max(np.abs(gap - (120.0 - 103.34649658203125))) < 1e-3, ("FR is dB SPL", gap[:3])
+            assert np.max(np.abs(np.asarray(m_old) - 103.34649658203125 - np.asarray(m_bare))) < 1e-3
+            _, ir_old = rew_api.get_impulse_response("1", normalised=False)
+            _, ir_new = rew_api.get_impulse_response("2", normalised=False)
+            assert ir_old == ir_new, "an impulse carries no SPL calibration"
+            grid = np.asarray([60.0, 250.0, 1000.0, 4000.0])
+            h_old, _ = _predict.load_solo_rew("w-L_7 (sw)", grid)
+            h_new, _ = _predict.load_solo_rew("w-L_8 (sw)", grid)
+            assert np.array_equal(h_old, h_new), ("predict --rew shifted an impulse", h_old, h_new)
+            got = _vp.measured_from_rew(["w-L_7 (sw)", "w-L_8 (sw)"], freqs=grid)
+            assert np.array_equal(got["w-L_7 (sw)"][1], got["w-L_8 (sw)"][1]), \
+                ("verify_prediction's sweep path shifted an impulse", got)
+        finally:
+            server3.shutdown()
+            rew_api.BASE_URL = url
         # something not served fails by name
         try:
             rew_api._get("/measurements/1/filters")
@@ -361,7 +404,9 @@ def _selftest():
           "start time AT ITS LEVEL (raw = stored; REW's default form peaks at 1.0; two channels 20 dB "
           "apart stay 20 dB apart through predict), a linear-axis RTA without phase or impulse (its impulse read "
           "answered 400 in REW's words, which the capture gate lets through), the capture gate's verdict on a "
-          "served sweep, and a 404 by name for what is not served.")
+          "served sweep, REW's SPL calibration listed and in the FR only (one impulse under 103.35 and 120.0 reads 16.65 dB "
+          "apart in the FR and identical through predict --rew and verify_prediction's sweep path, #176), and a 404 by "
+          "name for what is not served.")
     return 0
 
 
