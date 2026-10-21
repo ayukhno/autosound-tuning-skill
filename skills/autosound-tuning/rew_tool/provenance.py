@@ -39,9 +39,15 @@ _SHA = re.compile(r"^[0-9a-f]{40}$")
 #: seconds is already generous, and a wedged git must not hold up the write it is stamping —
 #: provenance is worth less than the artifact it rides on.
 _TIMEOUT = 3.0
+#: The second ask's limit, after a first that ran out (#187, hub #289). A slow Windows machine missed the three seconds
+#: once in a run and wrote `""` where its sha belonged; one more ask, with room, answers most of those. Asked once and
+#: only after a timeout -- an answer that came in time, `""` and all, is not asked again -- so a wedged git holds a
+#: write up for these two limits at most, once per process (`_CACHE`).
+_RETRY_TIMEOUT = 10.0
 
-#: `(skill_sha(), sha_unknown_because())` for the life of the process, once asked. `None` means "not asked yet"; a
-#: sha of `""` is an answer. A stamp that changed halfway through a run would put two writers in one file.
+#: `(skill_sha(), sha_unknown_because(), skill_sha_timed_out())` for the life of the process, once asked. `None` means
+#: "not asked yet"; a sha of `""` is an answer. A stamp that changed halfway through a run would put two writers in one
+#: file.
 _CACHE = None
 
 #: `(case, why)` for each case the selftest could not check on this machine, said one line above its OK line.
@@ -95,7 +101,12 @@ def _same_folder(a, b):
 
 
 def _answer_at(root):
-    """`(sha, why)` for the checkout at `root`: HEAD's forty characters and "", or "" and why it cannot be told --
+    """`(sha, why)` for the checkout at `root` (`_ask_at`, without whether git timed out)."""
+    return _ask_at(root)[:2]
+
+
+def _ask_at(root):
+    """`(sha, why, timed_out)` for the checkout at `root`: HEAD's forty characters and "", or "" and why it cannot be told --
     never an exception, never a traceback.
 
     HEAD, not the state of the working tree: a modified checkout stamps the commit it is based on.
@@ -108,29 +119,39 @@ def _answer_at(root):
     inside, whose HEAD is no commit of the method's. So the repository git finds must be `root` itself. `why` names
     the cause -- no git, git not answering, git's own words, a repository around the copy -- where every one of them
     read as "no git".
+
+    `timed_out` is True for one cause only, a git that did not answer in time, and is carried as a flag beside `why`,
+    never read back out of its words (#187): the journal's header treats that one `""` apart from the others. A git
+    that runs out of the first limit is asked once more with `_RETRY_TIMEOUT` before that `""` is the answer.
     """
-    try:
-        done = subprocess.run(["git", "-C", root, "rev-parse", "--show-toplevel", "HEAD"],
-                              capture_output=True, text=True, timeout=_TIMEOUT, check=False, encoding="utf-8", errors="replace")
-    except FileNotFoundError:
-        return "", "git is not installed here"
-    except subprocess.TimeoutExpired:
-        return "", f"git did not answer in {_TIMEOUT:g} s"
-    except Exception as exc:  # noqa: BLE001 — git that cannot be run is a finding, not a crash
-        return "", f"git could not be run ({type(exc).__name__}: {exc})"
+    done = None
+    for limit in (_TIMEOUT, _RETRY_TIMEOUT):
+        try:
+            done = subprocess.run(["git", "-C", root, "rev-parse", "--show-toplevel", "HEAD"],
+                                  capture_output=True, text=True, timeout=limit, check=False, encoding="utf-8",
+                                  errors="replace")
+            break
+        except FileNotFoundError:
+            return "", "git is not installed here", False
+        except subprocess.TimeoutExpired:
+            continue
+        except Exception as exc:  # noqa: BLE001 — git that cannot be run is a finding, not a crash
+            return "", f"git could not be run ({type(exc).__name__}: {exc})", False
+    if done is None:
+        return "", f"git did not answer in {_TIMEOUT:g} s, nor in {_RETRY_TIMEOUT:g} s asked again", True
     lines = [line.strip() for line in (done.stdout or "").splitlines() if line.strip()]
     if done.returncode != 0 or len(lines) < 2:
         said = [line.strip() for line in (done.stderr or "").splitlines() if line.strip()]
-        return "", (f"git: {said[0]}" if said else f"git rev-parse exited {done.returncode}")
+        return "", (f"git: {said[0]}" if said else f"git rev-parse exited {done.returncode}"), False
     top, first = lines[0], lines[1]
     if not _same_folder(top, root):
-        return "", f"{root} is no checkout of its own: git answers for {top}, a repository around it"
+        return "", f"{root} is no checkout of its own: git answers for {top}, a repository around it", False
     # RECOGNISED, not trusted. git prints its failures as text, and `fatal: not a git repository`
     # standing in the field that identifies the method would be worse than an empty one: it looks
     # like data. Anything that is not forty hex characters is not an answer.
     if not _SHA.match(first):
-        return "", f"git answered {first!r}, which is no commit"
-    return first, ""
+        return "", f"git answered {first!r}, which is no commit", False
+    return first, "", False
 
 
 def _sha_at(root):
@@ -139,12 +160,12 @@ def _sha_at(root):
 
 
 def _answer():
-    """`(sha, why)` for this checkout, asked once per process (`_CACHE`)."""
+    """`(sha, why, timed_out)` for this checkout, asked once per process (`_CACHE`)."""
     global _CACHE
     if _CACHE is None:
         root = repo_root()
         _CACHE = (("", "this copy is in no checkout of the method (no .claude-plugin/plugin.json or .git in the four "
-                       "folders above rew_tool/provenance.py)") if root is None else _answer_at(root))
+                       "folders above rew_tool/provenance.py)", False) if root is None else _ask_at(root))
     return _CACHE
 
 
@@ -164,6 +185,16 @@ def sha_unknown_because():
     """Why `skill_sha()` is "": no checkout around this copy, a repository around the copy that is not its own, no git,
     git not answering, or git's own words -- "" when the sha is told (the final review's M1)."""
     return _answer()[1]
+
+
+def skill_sha_timed_out():
+    """True when `skill_sha()` is "" because git did not answer in time -- and for no other cause (#187, hub #289).
+
+    The one `""` that says nothing about the checkout: the same copy asked again, in the next process, answers its
+    sha. Every other `""` -- no checkout, no git, a repository around the copy, no commit -- is a fact about the copy,
+    and the journal records it as a writer (`process.Process._stamp`). A flag, not the words of `sha_unknown_because`:
+    a cause told by matching its text would move the day the text is reworded."""
+    return _answer()[2]
 
 
 # --------------------------------------------------------------------------- CLI
@@ -239,6 +270,45 @@ def _check_a_checkout_named_in_another_letter_case():
         assert _answer_at(other) == (head, ""), _answer_at(other)
 
 
+def _check_a_slow_git_is_asked_again():
+    """A git that misses the first limit is asked once more with a longer one, and the second answer is the answer
+    (#187, hub #289): a slow Windows machine's one miss wrote `""` into every artifact that call stamped. Git here is a
+    stand-in that decides who answers -- the first ask runs out, the second answers -- so the case holds whatever the
+    clock says. Only a timeout is asked again: an answer that came in time is the answer, `""` and all."""
+    import tempfile
+    real_run, asked = subprocess.run, []
+    head = "c" * 40
+
+    def git(answers):
+        def run(argv, **kw):
+            asked.append(kw.get("timeout"))
+            answer = answers[len(asked) - 1]
+            if answer is None:
+                raise subprocess.TimeoutExpired(argv, kw.get("timeout"))
+            return subprocess.CompletedProcess(argv, answer[0], stdout=answer[1], stderr=answer[2])
+        return run
+    with tempfile.TemporaryDirectory() as root:
+        try:
+            subprocess.run = git([None, (0, f"{root}\n{head}\n", "")])
+            got = _ask_at(root)
+            assert got == (head, "", False), f"a git that answered the second ask: {got!r}"
+            assert asked == [_TIMEOUT, _RETRY_TIMEOUT], f"asked with {asked}"
+
+            asked.clear()
+            subprocess.run = git([None, None])
+            sha, why, timed_out = _ask_at(root)
+            assert (sha, timed_out) == ("", True) and why, f"a git that answered neither ask: {(sha, why, timed_out)!r}"
+            assert len(asked) == 2, f"asked {len(asked)} time(s), not twice"
+
+            asked.clear()
+            subprocess.run = git([(128, "", "fatal: not a git repository")])
+            got = _ask_at(root)
+            assert got == ("", "git: fatal: not a git repository", False), f"a git that said no in time: {got!r}"
+            assert len(asked) == 1, f"a git that answered in time was asked {len(asked)} times"
+        finally:
+            subprocess.run = real_run
+
+
 def _selftest():
     """Both directions on real repositories, because both have been wrong in the neighbouring tree.
 
@@ -248,7 +318,8 @@ def _selftest():
     """
     import tempfile
     failures = []
-    for check in (_check_a_copy_inside_another_repository, _check_a_checkout_named_in_another_letter_case):
+    for check in (_check_a_copy_inside_another_repository, _check_a_checkout_named_in_another_letter_case,
+                  _check_a_slow_git_is_asked_again):
         try:
             check()
         except AssertionError as exc:

@@ -157,10 +157,13 @@ it was born would only say which method STARTED it, while the question that has 
 whether two runs came from the same method. It is written before the first event of a run *and only
 when the sha differs from the last one recorded* — a car tuned over a weekend on one version carries
 one header, not one line per event. `""` means the writer was asked and could not be told (no
-repository, no git); a journal with no header at all predates anyone asking. A `""` is written only
-on a journal whose last header is not a real sha (#187): each CLI call asks git anew within a limit,
-and a git that misses it once is not a move — so after a real sha, `""` writes no header, and a move
-to a copy with no git after a real sha is no longer recorded. The whole forty
+repository, no git); a journal with no header at all predates anyone asking. One `""` is skipped
+(#187): each CLI call asks git anew — once more with a longer limit when the first runs out
+(`provenance._RETRY_TIMEOUT`) — and a git that still did not answer in time is no move, so after a
+real sha that `""` writes no header. Only that cause, carried as a flag
+(`provenance.skill_sha_timed_out`), never read from the words: a `""` for no checkout, no git, a
+repository around the copy or no commit is written as before, so a journal taken to a copy with no
+`.git` still says its runs came from another copy. The whole forty
 characters, the same spelling `dsp_profile.json` carries and the same number the companion app shows
 for that checkout — see `rew_tool/provenance.py` for why it is the sha and not the version string.
 

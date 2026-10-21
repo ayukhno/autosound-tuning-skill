@@ -1321,15 +1321,16 @@ def _now():
 
 
 def _writer_sha():
-    """Which checkout of the method is doing the writing — the one call site (`Process._stamp`).
+    """`(sha, timed_out)`: which checkout of the method is doing the writing, and whether a `""` is a git that did not
+    answer in time (`provenance.skill_sha_timed_out`, #187) -- the one call site (`Process._stamp`).
 
     A function rather than an inline load so the header logic can be exercised against sha values
     a test chooses. `provenance` proves it can read a real checkout on real repositories; what has
     to be proved HERE is when a header is written and when it is not, and that is a different
-    question from what git says.
+    question from what git says. One answer, both halves: the flag is read with the sha it explains.
     """
     prov = _load_rew_tool_module("provenance")
-    return prov.skill_sha() if prov is not None else ""
+    return (prov.skill_sha(), prov.skill_sha_timed_out()) if prov is not None else ("", False)
 
 
 def _empty_state():
@@ -1470,8 +1471,8 @@ class Process:
         # A state change written and its event not yet appended (F M-7): `_write` sets it, `_append` clears it, and
         # says what landed when the append is refused in between.
         self._unjournaled = False
-        # The sha `_stamp` writes, asked of git before this writer's first hold (`_ready_to_hold`, #141): git is never
-        # asked with the project's lock held.
+        # `(sha, timed_out)` `_stamp` writes from (`_writer_sha`, #187), asked of git before this writer's first hold
+        # (`_ready_to_hold`, #141): git is never asked with the project's lock held.
         self._sha = None
         # The events still owed after the one being appended, `[(type, payload)]`, when one state write owes two
         # (`start_capture` superseding a round, #141): a refusal of the first names them too (`_append_refused`).
@@ -3714,8 +3715,8 @@ class Process:
 
         None is not `""`: a journal that has never recorded a writer must get a header even when
         the writer cannot be told, otherwise "asked, could not be told" and "never asked" are the
-        same silence. A real sha here is what `_stamp` keeps against a later `""` (#187): a git that
-        missed its limit once is not a move. Read strictly (`_events`): a header lost to a skipped line
+        same silence. A real sha here is what `_stamp` keeps against a later `""` from a git that did
+        not answer in time (#187): that is no move; every other `""` is. Read strictly (`_events`): a header lost to a skipped line
         would be written twice.
         """
         seen = self._events(kinds=(EV_WRITTEN_BY,))
@@ -3735,24 +3736,26 @@ class Process:
         journal records that the question was asked and had no answer, rather than losing the
         event it was riding on.
 
-        Except after a real sha (#187, hub #289): `provenance` caches the sha per process, every CLI
-        call is a new process that asks git within its limit, and a slow git answers `""` for one call
-        in the middle of a run -- real -> "" -> real wrote two headers where the checkout never moved.
-        So a `""` writes no header when the last one carries a real sha. The cost is said: a move to a
-        copy with no git after a real sha is no longer recorded. On a fresh journal (no header yet)
-        `""` still gets its header, and a repeated `""` adds none.
+        Except one `""` (#187, hub #289): `provenance` caches the sha per process, every CLI call is a
+        new process that asks git within its limits, and a slow git answers `""` for one call in the
+        middle of a run -- real -> "" -> real wrote two headers where the checkout never moved. So a
+        `""` that is a git which did not answer in time -- the flag `_writer_sha` carries beside it,
+        never its words -- writes no header when the last one carries a real sha. Only that one: a `""`
+        for no checkout, no git, a repository around the copy or no commit is a fact about the copy,
+        and a journal taken from a checkout to a copy with no `.git` still says so. On a fresh journal
+        (no header yet) any `""` gets its header, and a repeated `""` adds none.
         """
         if self._stamped:
             return
         # Asked before this writer's first hold (`_ready_to_hold`, #141); a caller that appends with no writer of
         # its own around the append is asked here.
-        sha = getattr(self, "_sha", None)
-        sha = _writer_sha() if sha is None else sha
+        asked = getattr(self, "_sha", None)
+        sha, timed_out = _writer_sha() if asked is None else asked
         last = self._last_written_by()     # strict: a journal that cannot be read refuses here, and is asked again
         self._stamped = True  # decided once read: one attempt per run, whatever it finds
         if sha == last:
             return
-        if not sha and last:                # a missed git after a real sha: no move to record (#187)
+        if not sha and timed_out and last:  # a git that did not answer in time, after a real sha: no move (#187)
             return
         self._append(EV_WRITTEN_BY, skill_sha=sha)
 
@@ -4624,7 +4627,7 @@ def _check_torn_journal_line():
         torn = '{"at": "2026-10-06T00:00:01+00:00", "type": "' + EV_USER_DECISION + '", "question": "q1"'
         with open(journal, "w", encoding="utf-8") as f:
             f.write(head + "\n" + torn)                     # no newline after the last line: torn
-        globals()["_writer_sha"] = lambda: "a" * 40
+        globals()["_writer_sha"] = lambda: ("a" * 40, False)
         with contextlib.redirect_stdout(io.StringIO()):
             assert _main(["process.py", d, "decision", "q2 — лишаємо 45°?", "yes", "-1.1"]) == 0
             assert any(e.get("type") == EV_USER_DECISION and e.get("question") == "q2 — лишаємо 45°?"
@@ -4671,7 +4674,7 @@ def _check_line_torn_inside_a_character():
         before = b"".join((json.dumps(e, ensure_ascii=False) + os.linesep).encode("utf-8") for e in (head, asked))
         with open(journal, "wb") as f:
             f.write(before + cut)
-        globals()["_writer_sha"] = lambda: "a" * 40
+        globals()["_writer_sha"] = lambda: ("a" * 40, False)
         assert survives("events()", lambda: Process(d).events()) == [head, asked], "the events before the cut"
         assert survives("_positions_asked", lambda: _positions_asked(top)) is True, "the decision before the cut"
         with contextlib.redirect_stdout(io.StringIO()):
@@ -9928,7 +9931,7 @@ def _selftest():
     # test that also asked git would be one ruler measuring itself.
     real_sha = _writer_sha
     try:
-        globals()["_writer_sha"] = lambda: "a" * 40
+        globals()["_writer_sha"] = lambda: ("a" * 40, False)
         stamped = _made(os.path.join(tempfile.mkdtemp(prefix="autosound_stamp_"), "process"))
         run = Process(stamped)
         run.record_session("selftest", "-")
@@ -9943,7 +9946,7 @@ def _selftest():
             "a second run from the same checkout re-headed the journal"
 
         # The method moved under the project — which is the whole case the header exists for.
-        globals()["_writer_sha"] = lambda: "b" * 40
+        globals()["_writer_sha"] = lambda: ("b" * 40, False)
         Process(stamped).record_session("selftest", "-")
         kinds = [e["type"] for e in Process(stamped).events()]
         heads = [e["skill_sha"] for e in Process(stamped).events() if e["type"] == EV_WRITTEN_BY]
@@ -9953,7 +9956,7 @@ def _selftest():
 
         # "Asked and could not be told" is recorded, not skipped: a journal with no header at all
         # means nobody ever asked, and the two must not look the same.
-        globals()["_writer_sha"] = lambda: ""
+        globals()["_writer_sha"] = lambda: ("", False)
         blind = _made(os.path.join(tempfile.mkdtemp(prefix="autosound_blind_"), "process"))
         Process(blind).record_session("selftest", "-")
         first = Process(blind).events()[0]
@@ -9961,16 +9964,23 @@ def _selftest():
         Process(blind).record_session("selftest", "-")
         assert [e["type"] for e in Process(blind).events()].count(EV_WRITTEN_BY) == 1, "'' repeated"
 
-        # ...but a git that missed its limit ONCE is not a move (#187, hub #289). `provenance` caches per process and
+        # ...but a git that did not answer in time is not a move (#187, hub #289). `provenance` caches per process and
         # every CLI call is a new one, so a slow git answers `""` for one call in the middle of a run: real -> "" ->
-        # real wrote two false headers into one checkout's slice. A `""` after a real sha says nothing new and is not
-        # written; the real sha that follows matches the last header and adds nothing either.
-        slow = _made(os.path.join(tempfile.mkdtemp(prefix="autosound_slowgit_"), "process"))
-        for sha in ("a" * 40, "", "a" * 40):
-            globals()["_writer_sha"] = lambda sha=sha: sha
-            Process(slow).record_session("selftest", "-")
-        heads = [e["skill_sha"] for e in Process(slow).events() if e["type"] == EV_WRITTEN_BY]
-        assert heads == ["a" * 40], f"a missed git re-headed one checkout's run: {heads}"
+        # real wrote two false headers into one checkout's slice. That `""` -- and only that one, told by the flag
+        # beside it -- writes no header after a real sha. Any other `""` is a fact about the copy: a journal taken
+        # from a checkout to a copy with no `.git` (journals travel between laptops) must not read "same method" for
+        # the runs made there, the way HUB-002 exists to prevent -- and a timeout before a NEW sha hides no move.
+        a, b = "a" * 40, "b" * 40
+        for writers, want, why in (
+                (((a, False), ("", True), (a, False)), [a], "a git that timed out re-headed one checkout's run"),
+                (((a, False), ("", False), (a, False)), [a, "", a], "a copy with no checkout read as the same method"),
+                (((a, False), ("", True), (b, False)), [a, b], "a move after a timed-out git was not recorded")):
+            slow = _made(os.path.join(tempfile.mkdtemp(prefix="autosound_slowgit_"), "process"))
+            for writer in writers:
+                globals()["_writer_sha"] = lambda writer=writer: writer
+                Process(slow).record_session("selftest", "-")
+            heads = [e["skill_sha"] for e in Process(slow).events() if e["type"] == EV_WRITTEN_BY]
+            assert heads == want, f"{why}: {heads}"
     finally:
         globals()["_writer_sha"] = real_sha
 
