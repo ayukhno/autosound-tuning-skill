@@ -1627,6 +1627,16 @@ S-062, S-064 (with TCC's half, hub #217 SKL-056), S-065, S-066. When he says to 
 four assessment lines, and nothing is built before his `ok` on that task. Resume: `hub/bin/role skill --resume
 6b9c70d1-4094-4337-a1fd-23976307dfc2`.
 
+## S-113 · The READMEs still call 3.1 the current release after v3.2.0
+
+**Status**: open 2026-10-25 · W-12's pool; text
+
+The Arbiter, 2026-10-25, on the Polish README. «Proven in Competitions» says «Version 3.1, with a graphical
+interface, is the current release» in all four: `README.md`, `README.uk.md`, `README.de.md`, `README.pl.md`, line 16.
+v3.2.0 is out (`9e08e6f`). A pinned number in prose goes stale with every release.
+The fix (the Arbiter's proposal, the session agreed): name the major only — «Version 3.x … is the current release»,
+in the paragraph's own «2.x»/«3.x» form; the exact version lives on the release page and in the install lines.
+
 ## S-112 · `checks` on main is red since the runner moved to Ubuntu 26.04: one installer case pins GNU's «File exists»
 
 **Status**: done 2026-10-25 · on the Arbiter's «терміново»: the case accepts either wording (branch `fix/s-112-receipt-wording`); proof — its PR's `checks` green on `ubuntu-26.04` · was: open 2026-10-25 · W-12's pool; blocks every PR and a patch's tag-check (`NOT READY … installers`) until fixed or pinned
