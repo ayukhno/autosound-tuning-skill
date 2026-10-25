@@ -27,6 +27,14 @@ With version 2.x of this method, the author's car took four awards in 2026 at **
   <img src="assets/awards/emma-sep26-final-entry-unlimited.jpg" height="120" alt="German EMMA Final 2026, Frankfurt, SQ Entry Unlimited, 3rd place">
 </p>
 
+### Tuned With Us!
+
+**AYA Finale 2026** (17.10.2026), Einsteiger 5000: 1st place and Vereinsmeister.
+
+<p align="left">
+  <img src="assets/awards/tuned-aya-oct26-final-einsteiger5000.jpg" height="108" alt="AYA Finale 2026, Einsteiger 5000, 1st place and Vereinsmeister">
+</p>
+
 *Your system can sound like a champion too!*
 
 > [!CAUTION]

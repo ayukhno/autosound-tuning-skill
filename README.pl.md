@@ -27,6 +27,14 @@ Dzięki wersji 2.x tej metody samochód autora zdobył w 2026 roku cztery nagrod
   <img src="assets/awards/emma-sep26-final-entry-unlimited.jpg" height="120" alt="German EMMA Final 2026, Frankfurt, SQ Entry Unlimited, 3rd place">
 </p>
 
+### Nastrojone z nami!
+
+**AYA Finale 2026** (17.10.2026), Einsteiger 5000: 1. miejsce i Vereinsmeister.
+
+<p align="left">
+  <img src="assets/awards/tuned-aya-oct26-final-einsteiger5000.jpg" height="108" alt="AYA Finale 2026, Einsteiger 5000, 1st place and Vereinsmeister">
+</p>
+
 *Twój system też może brzmieć po mistrzowsku!*
 
 > [!CAUTION]

@@ -27,6 +27,14 @@ Mit Version 2.x dieser Methode holte das Auto des Autors 2026 vier Auszeichnunge
   <img src="assets/awards/emma-sep26-final-entry-unlimited.jpg" height="120" alt="German EMMA Final 2026, Frankfurt, SQ Entry Unlimited, 3rd place">
 </p>
 
+### Mit uns abgestimmt!
+
+**AYA Finale 2026** (17.10.2026), Einsteiger 5000: 1. Platz und Vereinsmeister.
+
+<p align="left">
+  <img src="assets/awards/tuned-aya-oct26-final-einsteiger5000.jpg" height="108" alt="AYA Finale 2026, Einsteiger 5000, 1st place and Vereinsmeister">
+</p>
+
 *Auch deine Anlage kann wie ein Champion klingen!*
 
 > [!CAUTION]
