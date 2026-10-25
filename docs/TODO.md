@@ -1627,6 +1627,16 @@ S-062, S-064 (with TCC's half, hub #217 SKL-056), S-065, S-066. When he says to 
 four assessment lines, and nothing is built before his `ok` on that task. Resume: `hub/bin/role skill --resume
 6b9c70d1-4094-4337-a1fd-23976307dfc2`.
 
+## S-112 · `checks` on main is red since the runner moved to Ubuntu 26.04: one installer case pins GNU's «File exists»
+
+**Status**: open 2026-10-25 · W-12's pool; blocks every PR and a patch's tag-check (`NOT READY … installers`) until fixed or pinned
+
+The last green `checks` is `9e08e6f` (2026-10-21 18:49, `ubuntu-24.04` image); from `20b2307` (a TODO-only commit,
+19:01) every run is on `ubuntu-26.04` and fails `installer-consistency.py`'s `an-unwritable-receipt-folder`: the
+case expects «File exists» in `install.sh`'s warning, and the new image says «Already exists». The product does what
+#142 asks — the receipt is not written, said, and the install goes on; only the OS's wording changed. Fix: the case
+accepts either wording, or the job pins `ubuntu-24.04` as the installers job already does.
+
 ## S-111 · A session asked about ringing or THD does not find the tool from the entry points
 
 **Status**: open 2026-10-25 · W-12's pool (hub #306 PRM-001); text except a non-interactive report, which is a feature and waits for the Arbiter's word under the freeze
