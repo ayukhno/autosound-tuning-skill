@@ -1627,6 +1627,18 @@ S-062, S-064 (with TCC's half, hub #217 SKL-056), S-065, S-066. When he says to 
 four assessment lines, and nothing is built before his `ok` on that task. Resume: `hub/bin/role skill --resume
 6b9c70d1-4094-4337-a1fd-23976307dfc2`.
 
+## S-111 · A session asked about ringing or THD does not find the tool from the entry points
+
+**Status**: open 2026-10-25 · W-12's pool (hub #306 PRM-001); text except a non-interactive report, which is a feature and waits for the Arbiter's word under the freeze
+
+Found on promo's question (which REW quantities the method handles), checked by a blind probe: from SKILL.md a
+session finds group delay and distortion in two steps, but `capabilities.py find` returns nothing for «THD»,
+«waterfall», «decay», «RT60», «coherence», and «ringing» lands on `verify.py`'s pre-ringing. The ring-down figure
+(`ear_suspects.py`) and the single-measurement report (`rew_tool.py` with no arguments) have no row on the board.
+The list, the probe and three fixes: `docs/RESEARCH-2026-10-25-rew-quantities.md` §5 — the board's words with a
+`find` seam check in its selftest; a board row for the single report; SKILL.md row 148 and the playbook's ringing
+row naming what they hold.
+
 ## S-110 · The agy line's announcement names 60 s when `AUTOSOUND_PROBE_TIMEOUT` sets another wait
 
 **Status**: open 2026-10-21 · found by TCC on rc2 (hub #300), cosmetic; waits for a patch, since the freeze takes bug fixes only
