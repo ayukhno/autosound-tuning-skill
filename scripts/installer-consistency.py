@@ -3779,10 +3779,12 @@ def exit_contract_problems(sh, ps1):
              ("a-bad-byte-ref-no-python3", go + "SKILL_REF=$'v\\xff'\nfinish\n", "shell", "0", False, 0,
               ("Installed.",), (), "ready", [], 0),
              # #142 (SFH 8): a receipt that cannot be written stops nothing, and is said once per write: the file, and
-             # why. A file where its folder goes, and a folder where the file goes.
+             # why. A file where its folder goes, and a folder where the file goes. The why is the OS's own word, and
+             # `mkdir` words the first its own way: GNU's «File exists», Ubuntu 26.04's «Already exists» (S-112) --
+             # a tuple in `words` is either of them.
              ("an-unwritable-receipt-folder", go + "finish\n", "python3", "0", False, 0,
               ("Installed.", "the receipt was not written", "install-receipt.json")
-              + (("File exists",) if os.name != "nt" else ()), (), None, None, 0,
+              + ((("File exists", "Already exists"),) if os.name != "nt" else ()), (), None, None, 0,
               lambda data: (data.mkdir(parents=True), (data / "autosound").write_text("a file\n"))),
              ("an-unwritable-receipt", go + 'missing scipy\nfinish\n', "shell", "0", False, 3,
               ("Installed, NOT ready: scipy", "the receipt was not written", "install-receipt.json")
@@ -3812,7 +3814,8 @@ def exit_contract_problems(sh, ps1):
             wrong = []
             if rc != want_rc:
                 wrong.append(f"exit {rc}, want {want_rc}")
-            wrong += [f"never says {w!r}" for w in words if w not in said]
+            wrong += [f"never says {w!r}" for w in words
+                      if not any(x in said for x in (w if isinstance(w, tuple) else (w,)))]
             wrong += [f"says {w!r}" for w in never if w in said]
             if calls != want_calls:
                 wrong.append(f"plugin-ready asked for {calls} time(s), want {want_calls}")

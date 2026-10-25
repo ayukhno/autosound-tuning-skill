@@ -1629,7 +1629,7 @@ four assessment lines, and nothing is built before his `ok` on that task. Resume
 
 ## S-112 · `checks` on main is red since the runner moved to Ubuntu 26.04: one installer case pins GNU's «File exists»
 
-**Status**: open 2026-10-25 · W-12's pool; blocks every PR and a patch's tag-check (`NOT READY … installers`) until fixed or pinned
+**Status**: done 2026-10-25 · on the Arbiter's «терміново»: the case accepts either wording (branch `fix/s-112-receipt-wording`); proof — its PR's `checks` green on `ubuntu-26.04` · was: open 2026-10-25 · W-12's pool; blocks every PR and a patch's tag-check (`NOT READY … installers`) until fixed or pinned
 
 The last green `checks` is `9e08e6f` (2026-10-21 18:49, `ubuntu-24.04` image); from `20b2307` (a TODO-only commit,
 19:01) every run is on `ubuntu-26.04` and fails `installer-consistency.py`'s `an-unwritable-receipt-folder`: the
