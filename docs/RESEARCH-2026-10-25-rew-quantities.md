@@ -73,15 +73,18 @@ The rest reaches the person as text, through the method's files or the terminal:
 | REW's filters/EQ | written by the model's `write_rew_filters` (behind a confirm bar), not displayed |
 | waterfall/CSD, spectrogram, RT60, coherence | nowhere |
 
-**For public text:** «TCC draws frequency response, phase and impulse from REW, and predicts the sum of the
-drivers on them; group delay, distortion, excess phase and impedance are read by the method and come back as
+**By design** (the Arbiter, 2026-10-25): «TCC doesn't have to show everything — only FR and phase; everything
+else is in the skill's math». So this split is the intended one, not a gap. The curve window also offers the
+impulse (its default view, the base for the arrival marker).
+
+**For public text:** «TCC draws the frequency and phase response from REW and predicts the sum of the drivers on
+them; group delay, distortion, excess phase, impedance and the rest are the method's math and come back as
 findings and verdicts».
 
-Two things in TCC's zone, named for its owner, not acted on here: the flaw kinds `ringing`, `energy_lag`,
-`decay_asymmetry` have no `flawKind_*` label in `ui/tcc/i18n.py`, so a row without its own text shows the raw key in
-its hover; `core/rew_bridge.py`'s docstring advertises «curves (FR, group delay, impulse response, distortion)»,
-while `group_delay`, `distortion`, `filters`, `equaliser` have no caller (`docs/audit/unreachable.md` lists five
-others, not these four).
+Two things in TCC's zone went to its owner as hub #307 (SKL-084): the flaw kinds `ringing`, `energy_lag`,
+`decay_asymmetry` have no `flawKind_*` label in `ui/tcc/i18n.py`, so their hover shows the raw key;
+`core/rew_bridge.py`'s docstring advertises «curves (FR, group delay, impulse response, distortion)», while
+`group_delay`, `distortion`, `filters`, `equaliser` have no caller.
 
 ## 4. Does a tuning session find it? A blind probe
 
