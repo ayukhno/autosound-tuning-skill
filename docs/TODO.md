@@ -1627,6 +1627,16 @@ S-062, S-064 (with TCC's half, hub #217 SKL-056), S-065, S-066. When he says to 
 four assessment lines, and nothing is built before his `ok` on that task. Resume: `hub/bin/role skill --resume
 6b9c70d1-4094-4337-a1fd-23976307dfc2`.
 
+## S-114 · After an update TCC would not start on macOS: a hung old copy kept running
+
+**Status**: open 2026-10-28 · W-12's pool; installer
+
+The Arbiter, 2026-10-28, on his second Mac, after updating the skill and TCC: Finder said «You can't open the
+application "Autosound TCC.app" because it is not responding». `pkill -f autosound-tcc` fixed it and TCC opened.
+The likely cause: a TCC copy that was running during the update hung, and Finder took it for the app.
+Not diagnosed; recorded only. The idea for the review: the installer stops a running TCC before the upgrade,
+or tells the user to close it.
+
 ## S-113 · The READMEs still call 3.1 the current release after v3.2.0
 
 **Status**: open 2026-10-25 · W-12's pool; text
