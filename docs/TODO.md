@@ -1634,6 +1634,10 @@ four assessment lines, and nothing is built before his `ok` on that task. Resume
 The Arbiter, 2026-10-28, on his second Mac, after updating the skill and TCC: Finder said «You can't open the
 application "Autosound TCC.app" because it is not responding». `pkill -f autosound-tcc` fixed it and TCC opened.
 The likely cause: a TCC copy that was running during the update hung, and Finder took it for the app.
+His `tail -50 ~/Library/Logs/autosound-tcc/tcc.log`, sent after the fix: a launch at 09:43:24 (`TCC 1.2.1 · skill
+3.2.0`, both signatures good), the Codex 0.162.1 install, the last line at 09:44:05 `upkeep tools: exit 0` with
+omp 18.8.0 → 18.13.2 and gh 2.102.0 → 2.103.3 offered. No error and no traceback. It does not say which launch this
+was, the hung one or the one after `pkill`. If it happens again: the log tail BEFORE `pkill`.
 Not diagnosed; recorded only. The idea for the review: the installer stops a running TCC before the upgrade,
 or tells the user to close it.
 
