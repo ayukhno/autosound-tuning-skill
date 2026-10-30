@@ -1627,6 +1627,32 @@ S-062, S-064 (with TCC's half, hub #217 SKL-056), S-065, S-066. When he says to 
 four assessment lines, and nothing is built before his `ok` on that task. Resume: `hub/bin/role skill --resume
 6b9c70d1-4094-4337-a1fd-23976307dfc2`.
 
+## S-124 · Saving the project to GitHub: a `save` verb and a fuller `status` in `project_repo.py` (hub #326 TCC-068)
+
+**Status**: open 2026-10-30 · W-12's pool; feature, `Risk: high` (commits and pushes the user's project), waits for the Arbiter's word under the freeze
+
+The method's half of hub #320 (SKL-087) and tcc#235. 30.10, live: TCC's panel said «Незбережені зміни 1 · Ще не
+відправлено 1» while the session had made and pushed five commits; the one file was `.sessions.log`. The Arbiter asks
+for a «Відправити» button. TCC runs the project's git through `rew_tool/project_repo.py`, which has `init` and `status`
+only. Asks: 1) `save <project>` — commit the tuning files with the method's message, push, refuse with a reason
+(nothing to send, no remote, pull first), `--dry-run`; 2) `status --json` splits uncommitted files into tuning and
+housekeeping, lists commits not on the remote, and the remote's last commit with its time; 3) a field saying who sends
+(the session after every step, or the person), if the method has the rule; 4) `.claude/skills/autosound-tuning` is never
+in a save (hub #319 SKL-086).
+
+## S-123 · «In the DSP now»: the ledger has no fact for which version a slot holds (hub #325 TCC-067)
+
+**Status**: open 2026-10-30 · W-12's pool; a method decision first (AD-1), then maybe a field; the Arbiter called the mark «супер ідея» (hub #317 PAS-024)
+
+Slot `1.N-NOV26_from0`, 27.10: TCC's list ticked HEAD v_012 and the Arbiter read it as «loaded»; the DSP held v_009,
+the ear had heard v_008 from a re-saved file; finding it out took a decode and the journal. `rew_tool/state/schema.md`
+AD-1: the file is «the truth for intent + attested-applied, NOT a device mirror — device-truth = the latest
+measurement». Asks: decide whether and how the method records the version in the DSP now, per slot (an event when a
+preset is loaded or a `.pct6` verified, a field, or a derivation rule) and name the field — or say it will not, and TCC
+shows only «checked in the DSP» and the file; and say what HEAD means for a slot with proposed versions after the
+applied one (hub #315 PAS-022 reads HEAD as «in the DSP»). Related: S-119's source-file provenance, S-118 (HEAD vs
+candidate).
+
 ## S-122 · A plan step carries a note: what to do, what is expected, what to change if not (hub #313 PAS-020)
 
 **Status**: open 2026-10-30 · W-12's pool; feature, waits for the Arbiter's word under the freeze; the data side only — TCC's half is hub #312 (PAS-019, `to:tcc`), so no ticket from here
@@ -1675,8 +1701,9 @@ tier with defaults for missing fields (no migration), never asked for while at t
 reviewer), `attest` filling it from a decoded `.pct6` once the decoder is in the skill, and the source file's
 provenance (name, md5, save time, PC-Tool version, device, when read, the comparison). Naming, the tuner's: «FX» in
 every old record means RealCenter; Dynamic Bass and SubXpander have no legacy alias (unknown, not off).
-TCC's half — a «Пресет» tab and a DSP-tree section with the same comparison — is hub #324 (SKL-090). The issue cites
-autosound-tcc #317 for the «checked in the DSP» mark; no such issue exists in autosound-tcc (2026-10-30).
+TCC's half — a «Пресет» tab and a DSP-tree section with the same comparison — is hub #324 (SKL-090). The issue's «autosound-tcc
+#317» for the «checked in the DSP» mark is hub #317 (PAS-024, `to:tcc`). Related: S-123 (hub #325), which DSP slot holds
+which version now.
 
 ## S-118 · `propose` after an unplaced candidate builds on HEAD and says nothing (skill #199)
 
