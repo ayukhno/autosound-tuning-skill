@@ -1629,7 +1629,7 @@ four assessment lines, and nothing is built before his `ok` on that task. Resume
 
 ## S-124 · Saving the project to GitHub: a `save` verb and a fuller `status` in `project_repo.py` (hub #326 TCC-068)
 
-**Status**: open 2026-10-30 · W-12's pool; feature, `Risk: high` (commits and pushes the user's project), waits for the Arbiter's word under the freeze
+**Status**: open 2026-10-30 · on milestone `W-12 · v3.2.1` as #204, assessed; waits for the Arbiter's `ok` · was: open 2026-10-30 · W-12's pool; feature, `Risk: high` (commits and pushes the user's project), waits for the Arbiter's word under the freeze
 
 The method's half of hub #320 (SKL-087) and tcc#235. 30.10, live: TCC's panel said «Незбережені зміни 1 · Ще не
 відправлено 1» while the session had made and pushed five commits; the one file was `.sessions.log`. The Arbiter asks
@@ -1642,7 +1642,7 @@ in a save (hub #319 SKL-086).
 
 ## S-123 · «In the DSP now»: the ledger has no fact for which version a slot holds (hub #325 TCC-067)
 
-**Status**: open 2026-10-30 · W-12's pool; a method decision first (AD-1), then maybe a field; the Arbiter called the mark «супер ідея» (hub #317 PAS-024)
+**Status**: open 2026-10-30 · on milestone `W-12 · v3.2.1` as #201, assessed; waits for the Arbiter's `ok` · was: open 2026-10-30 · W-12's pool; a method decision first (AD-1), then maybe a field; the Arbiter called the mark «супер ідея» (hub #317 PAS-024)
 
 Slot `1.N-NOV26_from0`, 27.10: TCC's list ticked HEAD v_012 and the Arbiter read it as «loaded»; the DSP held v_009,
 the ear had heard v_008 from a re-saved file; finding it out took a decode and the journal. `rew_tool/state/schema.md`
@@ -1655,7 +1655,7 @@ candidate).
 
 ## S-122 · A plan step carries a note: what to do, what is expected, what to change if not (hub #313 PAS-020)
 
-**Status**: open 2026-10-30 · W-12's pool; feature, waits for the Arbiter's word under the freeze; the data side only — TCC's half is hub #312 (PAS-019, `to:tcc`), so no ticket from here
+**Status**: open 2026-10-30 · on milestone `W-12 · v3.2.1` as #202, assessed; waits for the Arbiter's `ok` · was: open 2026-10-30 · W-12's pool; feature, waits for the Arbiter's word under the freeze; the data side only — TCC's half is hub #312 (PAS-019, `to:tcc`), so no ticket from here
 
 From the Passat project (after AYA final). A step has only a name; a listening or check step needs the model's
 prediction kept («voice 5–10 cm left of centre», «upper bass right slightly thinner, −61° at 210 Hz») and what to do
@@ -1666,7 +1666,7 @@ steps with an `expect` and no answer. Area: `rew_tool/state/process.py`. Related
 
 ## S-121 · The installer's ending advises Gemini Flash (High), and relayed output runs together (hub #303 TCC-066)
 
-**Status**: open 2026-10-30 · W-12's pool; installer, text; part 1 waits for a re-check first (the Arbiter, 2026-10-21)
+**Status**: open 2026-10-30 · on milestone `W-12 · v3.2.1` as #205, assessed; waits for the Arbiter's `ok` · was: open 2026-10-30 · W-12's pool; installer, text; part 1 waits for a re-check first (the Arbiter, 2026-10-21)
 
 From TCC's clean install walk on Windows (tcc#228). 1) `install.ps1:2558` and `install.sh:2477` (at `main`) still say
 «pick a Gemini Flash (High) line instead», while v3.2.0 moved ADC to Flash Medium (S-109, #193). The Arbiter: check
@@ -1677,7 +1677,7 @@ Cosmetic.
 
 ## S-120 · Four small guarantees for TCC's lock and REW states, not taken in W-11 (hub #297 TCC-064)
 
-**Status**: open 2026-10-30 · W-12's pool; contract, `Risk: high` for ask 1 (the lock); TCC runs on a fallback for each, so nothing is blocked
+**Status**: open 2026-10-30 · on milestone `W-12 · v3.2.1` as #203, assessed; waits for the Arbiter's `ok` · was: open 2026-10-30 · W-12's pool; contract, `Risk: high` for ask 1 (the lock); TCC runs on a fallback for each, so nothing is blocked
 
 TCC asked on 2026-10-21 for W-11; W-11 closed without them. Still open at `main` (checked 2026-10-30): no `--round`
 on the capture verbs (`process.py` `VERB_FLAGS`; `--round` exists only in `ear_suspects.py`), and `CONTRACT.md` §3
@@ -1692,7 +1692,7 @@ on the capture verbs (`process.py` `VERB_FLAGS`; `--round` exists only in `ear_s
 
 ## S-119 · A preset tier in the version: input levels, the FX group, RTC, the Conductor, the source file (skill #200)
 
-**Status**: open 2026-10-30 · W-12's pool; feature, `Risk: high` (the version schema, `attest`), waits for the Arbiter's word under the freeze; absorbs S-116 (#197); TCC's half sent as hub #324 (SKL-090)
+**Status**: open 2026-10-30 · on milestone `W-12 · v3.2.1` as #200, assessed; waits for the Arbiter's `ok` · was: open 2026-10-30 · W-12's pool; feature, `Risk: high` (the version schema, `attest`), waits for the Arbiter's word under the freeze; absorbs S-116 (#197); TCC's half sent as hub #324 (SKL-090)
 
 From the Passat project. A version holds `channels` and `virtual_channels` only; a Helix preset also carries settings
 for the whole preset that change what is heard (source levels, RealCenter / Dynamic Bass / SubXpander, RTC, BT,
@@ -1707,7 +1707,7 @@ which version now.
 
 ## S-118 · `propose` after an unplaced candidate builds on HEAD and says nothing (skill #199)
 
-**Status**: open 2026-10-30 · W-12's pool; bug, `Risk: high` (ledger writes); skill only
+**Status**: open 2026-10-30 · on milestone `W-12 · v3.2.1` as #199, assessed; waits for the Arbiter's `ok` · was: open 2026-10-30 · W-12's pool; bug, `Risk: high` (ledger writes); skill only
 
 From the Passat project. `v_002` banked as a candidate with `place=False`; the reviewer asked for «v_002 + woofers
 −1 dB»; that delta went through `propose`, which reads HEAD (`v_001`), so `v_003` = v_001 + two gains, v_002's moves
@@ -1718,7 +1718,7 @@ or `promote(candidate, reviewed=…)`; the sheet's header names its base. Area: 
 
 ## S-117 · The p1–p9 points as a capture group of their own (skill #198)
 
-**Status**: open 2026-10-30 · W-12's pool; feature, waits for the Arbiter's word under the freeze; changes skill #79's «four columns at most» on the tuner's request; TCC likely needs nothing — ticket only if its window does
+**Status**: open 2026-10-30 · on milestone `W-12 · v3.2.1` as #198, assessed; waits for the Arbiter's `ok` · was: open 2026-10-30 · W-12's pool; feature, waits for the Arbiter's word under the freeze; changes skill #79's «four columns at most» on the tuner's request; TCC likely needs nothing — ticket only if its window does
 
 From the Passat project. Every capture with a position (`L m+tw p1_3 (sw)` …) lands in «Group (sw)» with the tripod
 sweeps: 11 group sweeps then 36 optional points in one column of 47 lines. The points are taken hand-held, a change of
@@ -1730,7 +1730,7 @@ group should show as a column without TCC code; to be confirmed with TCC once th
 
 ## S-116 · A version keeps its input (master) gain, default 0 dB, never asked for (skill #197)
 
-**Status**: open 2026-10-30 · W-12's pool; one field of S-119's tier (#200 says so), to be decided together
+**Status**: open 2026-10-30 · on milestone `W-12 · v3.2.1` as #197, assessed; waits for the Arbiter's `ok` · was: open 2026-10-30 · W-12's pool; one field of S-119's tier (#200 says so), to be decided together
 
 From the Passat project. For A/B at equal loudness the tuner trims the main input per preset (−0.3 / +0.3 dB, older
 presets carry trims too); schema 3 has no place for it, so no sheet, loudness prediction or `attest` knows it.
@@ -1739,7 +1739,7 @@ ordinary sheet row without a reviewer, included in loudness comparisons.
 
 ## S-115 · A dangling `emma-2024-test-track` reference, and EMMA tracks named without a year (skill #196)
 
-**Status**: open 2026-10-30 · W-12's pool; text (and an optional `docs-check` rule); skill only
+**Status**: open 2026-10-30 · on milestone `W-12 · v3.2.1` as #196, assessed; waits for the Arbiter's `ok` · was: open 2026-10-30 · W-12's pool; text (and an optional `docs-check` rule); skill only
 
 `references/core/project-intake.md:151` sends the reader to `emma-2024-test-track`, which exists nowhere; the EMMA
 positions row in `references/patterns/test-tracks.md:89` is EMMA 2026 tr.2–6. A session then recommended «EMMA №10
@@ -1749,7 +1749,7 @@ missing or contradicting year is said to the user; optionally `docs-check.py` re
 
 ## S-114 · After an update TCC would not start on macOS: a hung old copy kept running
 
-**Status**: open 2026-10-28 · W-12's pool; installer
+**Status**: open 2026-10-30 · on milestone `W-12 · v3.2.1` as #206, assessed; waits for the Arbiter's `ok` · was: open 2026-10-28 · W-12's pool; installer
 
 The Arbiter, 2026-10-28, on his second Mac, after updating the skill and TCC: Finder said «You can't open the
 application "Autosound TCC.app" because it is not responding». `pkill -f autosound-tcc` fixed it and TCC opened.
@@ -1763,7 +1763,7 @@ or tells the user to close it.
 
 ## S-113 · The READMEs still call 3.1 the current release after v3.2.0
 
-**Status**: open 2026-10-25 · W-12's pool; text
+**Status**: open 2026-10-30 · on milestone `W-12 · v3.2.1` as #207, assessed; waits for the Arbiter's `ok` · was: open 2026-10-25 · W-12's pool; text
 
 The Arbiter, 2026-10-25, on the Polish README. «Proven in Competitions» says «Version 3.1, with a graphical
 interface, is the current release» in all four: `README.md`, `README.uk.md`, `README.de.md`, `README.pl.md`, line 16.
@@ -1783,7 +1783,7 @@ accepts either wording, or the job pins `ubuntu-24.04` as the installers job alr
 
 ## S-111 · A session asked about ringing or THD does not find the tool from the entry points
 
-**Status**: open 2026-10-25 · W-12's pool (hub #306 PRM-001); text except a non-interactive report, which is a feature and waits for the Arbiter's word under the freeze
+**Status**: open 2026-10-30 · on milestone `W-12 · v3.2.1` as #208, assessed; waits for the Arbiter's `ok` · was: open 2026-10-25 · W-12's pool (hub #306 PRM-001); text except a non-interactive report, which is a feature and waits for the Arbiter's word under the freeze
 
 Found on promo's question (which REW quantities the method handles), checked by a blind probe: from SKILL.md a
 session finds group delay and distortion in two steps, but `capabilities.py find` returns nothing for «THD»,
@@ -1795,7 +1795,7 @@ row naming what they hold.
 
 ## S-110 · The agy line's announcement names 60 s when `AUTOSOUND_PROBE_TIMEOUT` sets another wait
 
-**Status**: open 2026-10-21 · found by TCC on rc2 (hub #300), cosmetic; waits for a patch, since the freeze takes bug fixes only
+**Status**: open 2026-10-30 · on milestone `W-12 · v3.2.1` as #209, assessed; waits for the Arbiter's `ok` · was: open 2026-10-21 · found by TCC on rc2 (hub #300), cosmetic; waits for a patch, since the freeze takes bug fixes only
 
 `autosound_ai.py:6245` (at v3.2.0) prints `(до {PROBE_WAIT_S} с)`, while the line itself waits `probe_wait()`. With
 `AUTOSOUND_PROBE_TIMEOUT` set, the announcement names 60 s and the wait is another; the line's work is right. The fix:
