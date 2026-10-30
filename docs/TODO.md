@@ -1627,6 +1627,99 @@ S-062, S-064 (with TCC's half, hub #217 SKL-056), S-065, S-066. When he says to 
 four assessment lines, and nothing is built before his `ok` on that task. Resume: `hub/bin/role skill --resume
 6b9c70d1-4094-4337-a1fd-23976307dfc2`.
 
+## S-122 · A plan step carries a note: what to do, what is expected, what to change if not (hub #313 PAS-020)
+
+**Status**: open 2026-10-30 · W-12's pool; feature, waits for the Arbiter's word under the freeze; the data side only — TCC's half is hub #312 (PAS-019, `to:tcc`), so no ticket from here
+
+From the Passat project (after AYA final). A step has only a name; a listening or check step needs the model's
+prediction kept («voice 5–10 cm left of centre», «upper bass right slightly thinner, −61° at 210 Hz») and what to do
+if the ear disagrees. Today it sits in the name (too long for the panel) or in the conversation (lost next session).
+Asks: `add_step` takes an optional `note` {do, expect, if_not}, kept in the step in `process-state.json` and in the
+journal; closing the step (`finish_step` or evidence) keeps the Arbiter's answer beside `expect`; `session-close` lists
+steps with an `expect` and no answer. Area: `rew_tool/state/process.py`. Related: S-031 (a step carries a count).
+
+## S-121 · The installer's ending advises Gemini Flash (High), and relayed output runs together (hub #303 TCC-066)
+
+**Status**: open 2026-10-30 · W-12's pool; installer, text; part 1 waits for a re-check first (the Arbiter, 2026-10-21)
+
+From TCC's clean install walk on Windows (tcc#228). 1) `install.ps1:2558` and `install.sh:2477` (at `main`) still say
+«pick a Gemini Flash (High) line instead», while v3.2.0 moved ADC to Flash Medium (S-109, #193). The Arbiter: check
+again whether `gemini-3.8-flash-high` still stays silent under ADC — 21.10 may have been a provider outage — before
+changing the text. 2) The lines relayed from winget and uv do not end with a line break, so `==> Git for Windows`
+and `==> Claude Code` print on one console line; Claude Code's own «✔» shows as «Γ£ö» (its code page, not ours).
+Cosmetic.
+
+## S-120 · Four small guarantees for TCC's lock and REW states, not taken in W-11 (hub #297 TCC-064)
+
+**Status**: open 2026-10-30 · W-12's pool; contract, `Risk: high` for ask 1 (the lock); TCC runs on a fallback for each, so nothing is blocked
+
+TCC asked on 2026-10-21 for W-11; W-11 closed without them. Still open at `main` (checked 2026-10-30): no `--round`
+on the capture verbs (`process.py` `VERB_FLAGS`; `--round` exists only in `ear_suspects.py`), and `CONTRACT.md` §3
+(`contract.py check`) and §10 are still headed «planned (W-10)». The four asks:
+1. `--round <id>` on `capture-check`, `record-capture`, `set-protective`: the method refuses under its own lock when
+   that round is not the open one, with a refusal TCC can tell apart (exit code or a pinned `error: round …`);
+2. the exit-1 lines for REW answering an error pinned in `CONTRACT.md`, or an exit code of their own;
+3. a recorded capture verdict says REW answered an error on a curve read (a field or a pinned issue code), instead of
+   only «frequency/impulse response unreadable», which TCC shows red as a capture to retake;
+4. `contract.py check --json`'s `cross_checks.rew.state` and `unreadable` out of «planned»; `rew_api.rew_state` in
+   `IMPORTABLE`.
+
+## S-119 · A preset tier in the version: input levels, the FX group, RTC, the Conductor, the source file (skill #200)
+
+**Status**: open 2026-10-30 · W-12's pool; feature, `Risk: high` (the version schema, `attest`), waits for the Arbiter's word under the freeze; absorbs S-116 (#197); TCC's half sent as hub #324 (SKL-090)
+
+From the Passat project. A version holds `channels` and `virtual_channels` only; a Helix preset also carries settings
+for the whole preset that change what is heard (source levels, RealCenter / Dynamic Bass / SubXpander, RTC, BT,
+Conductor), and sessions keep writing them by hand in entry sheets and version notes. The issue proposes a `preset`
+tier with defaults for missing fields (no migration), never asked for while at the defaults, ordinary sheet rows (no
+reviewer), `attest` filling it from a decoded `.pct6` once the decoder is in the skill, and the source file's
+provenance (name, md5, save time, PC-Tool version, device, when read, the comparison). Naming, the tuner's: «FX» in
+every old record means RealCenter; Dynamic Bass and SubXpander have no legacy alias (unknown, not off).
+TCC's half — a «Пресет» tab and a DSP-tree section with the same comparison — is hub #324 (SKL-090). The issue cites
+autosound-tcc #317 for the «checked in the DSP» mark; no such issue exists in autosound-tcc (2026-10-30).
+
+## S-118 · `propose` after an unplaced candidate builds on HEAD and says nothing (skill #199)
+
+**Status**: open 2026-10-30 · W-12's pool; bug, `Risk: high` (ledger writes); skill only
+
+From the Passat project. `v_002` banked as a candidate with `place=False`; the reviewer asked for «v_002 + woofers
+−1 dB»; that delta went through `propose`, which reads HEAD (`v_001`), so `v_003` = v_001 + two gains, v_002's moves
+missing, and the sheet showed only the two rows. The tuner saw it in TCC; `v_003` stays sealed as a wrong version.
+Proposed: refuse (or warn loudly) when the newest version is an unplaced candidate; an explicit `on=<version>`;
+or `promote(candidate, reviewed=…)`; the sheet's header names its base. Area: `rew_tool/state/apply.py`
+(`propose`/`_propose`), `PresetHistory.snapshot(place=False)`.
+
+## S-117 · The p1–p9 points as a capture group of their own (skill #198)
+
+**Status**: open 2026-10-30 · W-12's pool; feature, waits for the Arbiter's word under the freeze; changes skill #79's «four columns at most» on the tuner's request; TCC likely needs nothing — ticket only if its window does
+
+From the Passat project. Every capture with a position (`L m+tw p1_3 (sw)` …) lands in «Group (sw)» with the tripod
+sweeps: 11 group sweeps then 36 optional points in one column of 47 lines. The points are taken hand-held, a change of
+setup like sw ↔ rta, and `order_by_setup` does not show that switch. Proposed: a `points` kind («Points (sw)»), order
+solo → group → points → rta; `method_switches` writes «<- switch: tripod → hand-held». Area: `rew_tool/naming.py`
+(`expected_groups`, `place_in_groups`, `order_by_setup`, `method_switches`). TCC's side: its checklist takes the
+groups from the method (`measurement_view.py:629-631`, the round's `groups` or `naming.expected_groups`), so a new
+group should show as a column without TCC code; to be confirmed with TCC once the shape is built.
+
+## S-116 · A version keeps its input (master) gain, default 0 dB, never asked for (skill #197)
+
+**Status**: open 2026-10-30 · W-12's pool; one field of S-119's tier (#200 says so), to be decided together
+
+From the Passat project. For A/B at equal loudness the tuner trims the main input per preset (−0.3 / +0.3 dB, older
+presets carry trims too); schema 3 has no place for it, so no sheet, loudness prediction or `attest` knows it.
+Proposed: an optional `input_gain_db` (missing = 0.0, no migration), not asked in the intake, not printed at 0, an
+ordinary sheet row without a reviewer, included in loudness comparisons.
+
+## S-115 · A dangling `emma-2024-test-track` reference, and EMMA tracks named without a year (skill #196)
+
+**Status**: open 2026-10-30 · W-12's pool; text (and an optional `docs-check` rule); skill only
+
+`references/core/project-intake.md:151` sends the reader to `emma-2024-test-track`, which exists nowhere; the EMMA
+positions row in `references/patterns/test-tracks.md:89` is EMMA 2026 tr.2–6. A session then recommended «EMMA №10
+choir» from a project profile that merges both discs; there is no choir on either. Proposed: fix the reference; one
+line in `test-tracks.md` — a competition-disc track from a project profile is matched to a row with its year, and a
+missing or contradicting year is said to the user; optionally `docs-check.py` resolves backticked track references.
+
 ## S-114 · After an update TCC would not start on macOS: a hung old copy kept running
 
 **Status**: open 2026-10-28 · W-12's pool; installer
