@@ -1917,7 +1917,15 @@ if [ "$MODE" = "tcc" ]; then
     fi
   fi
 fi
-if [ "$MODE" = "tcc" ]; then
+if [ "$MODE" = "tcc" ] && [ "$DRY_RUN" = 0 ] && on_mac && pgrep -f autosound-tcc >/dev/null 2>&1; then
+  # #206: a copy left running across an update hung, and Finder then said the app "is not responding" until it was
+  # killed by hand. So, as install.ps1 does: a running app is left as it is, with the reason, and this is asked FIRST,
+  # before the size line and the version read as a download that never started. Nothing is ended from here -- a hung
+  # process is the person's to end, and the line says how. A dry run changes nothing, so it stops at nothing.
+  TCC_REFUSED="it is running -- close it and run this line again (if it will not close: pkill -f autosound-tcc)"
+  warn "Autosound TCC is running. Close it and run this line again; the app was left as it is."
+  warn "If it hangs and will not close:  pkill -f autosound-tcc"
+elif [ "$MODE" = "tcc" ]; then
   say "  the app and what it needs, about 700 MB — a few minutes, no output until it is done…"
   # `--python` is not optional here. Without it `uv tool install` used the system interpreter —
   # 3.9.6 on a stock macOS — and refused with "does not satisfy Python>=3.11", which reads as a
@@ -1985,7 +1993,7 @@ if [ "$MODE" = "tcc" ]; then
   # pipefail a grep that stops reading early fails the pipe. Never a retry after a pinned install that failed: a dropped
   # network or a locked file is not an old uv, and a retry without the file would put an untested set on the machine
   # and blame the file for it (TCC's lesson, the re-review of #194). Each way without the file is a warning, never a
-  # refusal: TCC_REFUSED is the signature's and uv's alone.
+  # refusal: from here on TCC_REFUSED is the signature's and uv's alone.
   TCC_HELD=""
   if [ -z "$TCC_REFUSED" ]; then
     if [ -z "$TCC_FETCHED" ]; then

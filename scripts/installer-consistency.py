@@ -1549,6 +1549,31 @@ STUB_UV = (b"#!/bin/sh\n"
 STUB_CURL = (b"#!/bin/sh\n"
              b"[ -z \"${STUB_LOG:-}\" ] || printf 'curl %s\\n' \"$*\" >> \"$STUB_LOG\"\n"
              b"echo 'exit 7'\n")
+#: #206: the app's launcher, which writes down what it is asked (`--install-desktop`, on the macOS cases).
+STUB_TCC = (b"#!/bin/sh\n"
+            b"[ -z \"${STUB_LOG:-}\" ] || printf 'autosound-tcc %s\\n' \"$*\" >> \"$STUB_LOG\"\n"
+            b"exit 0\n")
+#: #206: pgrep and pkill, so that no real process is looked at or signalled: pgrep answers as a running TCC only when
+#: it is asked about the app, and prints a process number as the real one does.
+STUB_PGREP = (b"#!/bin/sh\n"
+              b"[ -z \"${STUB_LOG:-}\" ] || printf 'pgrep %s\\n' \"$*\" >> \"$STUB_LOG\"\n"
+              b"case \"$*\" in *autosound-tcc*) [ \"${STUB_TCC_RUNNING:-}\" = 1 ] || exit 1; echo 4242; exit 0 ;; esac\n"
+              b"exit 1\n")
+STUB_PKILL = (b"#!/bin/sh\n"
+              b"[ -z \"${STUB_LOG:-}\" ] || printf 'pkill %s\\n' \"$*\" >> \"$STUB_LOG\"\n"
+              b"exit 0\n")
+#: #206: the app's block on macOS, an app from before on the machine -- (case, TCC running, dry run, the parts missing
+#: after, `uv tool install` runs, `--install-desktop` runs, words, words never). A running TCC is left as it is and the
+#: line says how to end it; the installer itself never does. A dry run stops nothing, as install.ps1's.
+APP_MAC_CASES = (
+    ("TCC running", True, False, "TCC", 0, 0,
+     ("Autosound TCC is running", "Close it and run this line again", "the app was left as it is",
+      "pkill -f autosound-tcc", "was here before and was not upgraded"),
+     ("about 700 MB", "would run", "the app is not installed:", "4242")),
+    ("TCC not running", False, False, "", 1, 1, ("about 700 MB", "✓ installed"),
+     ("Autosound TCC is running", "pkill", "was not upgraded")),
+    ("a dry run with TCC running", True, True, "", 0, 0, ("about 700 MB", "would run: ", "would build"),
+     ("the app was left as it is", "pkill", "was not upgraded", "4242")))
 
 
 def app_problems(sh, ps1):
@@ -1572,21 +1597,23 @@ def app_problems(sh, ps1):
         return [f"{why} -- install.sh's app block cannot be run, and unrun is not agreed"]
     tmp = tempfile.mkdtemp(prefix="autosound_app_")
 
-    def run_block(i, offered, ls_rc, check, have_uv, uv_rc, before, dry, uv_help="", tcc_ref=""):
+    def run_block(i, offered, ls_rc, check, have_uv, uv_rc, before, dry, uv_help="", tcc_ref="", mac=False,
+                  running=False):
         """The app's block and its line in the checks, run once with `check` in check_tcc_tag's place: (said, the
         stand-ins' calls, the case's folder, the MISSING/MODE line, what is wrong with the run itself)."""
         home = Path(tmp, f"case-{i}")
         stub = home / "stub"
         stub.mkdir(parents=True)
         for name, body, wanted in (("git", NO_NETWORK_GIT, True), ("uv", STUB_UV, have_uv), ("curl", STUB_CURL, True),
-                                   ("autosound-tcc", b"#!/bin/sh\nexit 0\n", before)):
+                                   ("autosound-tcc", STUB_TCC, before), ("pgrep", STUB_PGREP, mac),
+                                   ("pkill", STUB_PKILL, mac)):
             if wanted:
                 (stub / name).write_bytes(body)
                 (stub / name).chmod(0o755)
         tags = home / "tags"
         tags.write_bytes("".join(t + "\n" for t in (offered or ())).encode("utf-8"))
         script = ('set -euo pipefail\n' + functions
-                  + 'step() { printf "==> %s\\n" "$*"; }\non_mac() { return 1; }\n'
+                  + 'step() { printf "==> %s\\n" "$*"; }\non_mac() { return ' + ("0" if mac else "1") + '; }\n'
                   + check.replace("@HOME@", home.as_posix())
                   + 'tcc_tag_still_at() { return 0; }\n'
                   + ('usable() { return 1; }\n' if dry else '')
@@ -1603,7 +1630,7 @@ def app_problems(sh, ps1):
                   + 'printf "MISSING=[%s] MODE=[%s]\\n" "$MISSING" "$MODE"\n')
         env = dict(os.environ, HOME=home.as_posix(), STUB_TAGS=tags.as_posix() if offered else "",
                    STUB_RC=str(ls_rc), STUB_SAYS=SSL_SAYS, STUB_UV_RC=str(uv_rc), STUB_UV_HELP=uv_help,
-                   STUB_LOG=(home / "calls").as_posix())
+                   STUB_LOG=(home / "calls").as_posix(), STUB_TCC_RUNNING="1" if running else "")
         env.pop("UV_TOOL_BIN_DIR", None)
         r = subprocess.run([bash, "-s"], input=script.encode("utf-8"), capture_output=True, env=env)
         said = (r.stdout + r.stderr).decode("utf-8", "replace")
@@ -1676,6 +1703,27 @@ def app_problems(sh, ps1):
                              f"{sorted(p.name for p in (home / 'pins').iterdir())}")
             if wrong:
                 out.append(f"install.sh's app block, {case} (#179): " + "; ".join(wrong)
+                           + f" -- said {said.strip()[-300:]!r}")
+        # #206: on macOS, a TCC that is running (or hung) is left as it is, before anything of the app's is touched.
+        for k, (case, running, dry, want_missing, want_installs, want_desktop, words, never) in enumerate(APP_MAC_CASES):
+            said, calls, home, got, wrong = run_block(
+                f"mac-{k}", ("v1.1.2",), 0, 'check_tcc_tag() { TCC_SHA=""; return 0; }\n', True, 0, True, dry, mac=True,
+                running=running)
+            if not got or got.group(1) != want_missing or got.group(2) != "tcc":
+                wrong.append(f"ends with {got.group(0) if got else 'no MISSING line'}, want MISSING=[{want_missing}] "
+                             f"MODE=[tcc]")
+            wrong += [f"never says {w!r}" for w in words if w not in said]
+            wrong += [f"says {w!r}" for w in never if w in said]
+            installs = [ln for ln in calls.splitlines() if ln.startswith("uv tool install ") and "--help" not in ln]
+            desktop = [ln for ln in calls.splitlines() if ln.startswith("autosound-tcc ") and "--install-desktop" in ln]
+            if len(installs) != want_installs:
+                wrong.append(f"`uv tool install` ran {len(installs)} time(s), want {want_installs}: {installs!r}")
+            if len(desktop) != want_desktop:
+                wrong.append(f"--install-desktop ran {len(desktop)} time(s), want {want_desktop}")
+            if "pkill " in calls:
+                wrong.append(f"the installer ran pkill: {calls!r}")
+            if wrong:
+                out.append(f"install.sh's app block on macOS, {case} (#206): " + "; ".join(wrong)
                            + f" -- said {said.strip()[-300:]!r}")
     except OSError as exc:
         out.append(f"the app block's fixtures could not be made ({exc}) -- unrun is not agreed")
@@ -4236,7 +4284,8 @@ def main():
                        f"counts the same four ways, its arm for an app from before read (#142); and over "
                        f"{len(APP_PIN_CASES)} more, a tag's constraints.txt handed to uv when it takes --constraints, "
                        f"and the plain install said for an old uv, a release without the file and a tag not fetched -- "
-                       f"one install each, never a retry (#179)")
+                       f"one install each, never a retry (#179); and on macOS, over {len(APP_MAC_CASES)} more, a running "
+                       f"TCC left as it is with the line that ends it, neither uv nor --install-desktop run, no pkill (#206)")
     for found, ok_line in ((option_problems(sh), f"install.sh's options that take a value say so and end 2 when given "
                                                  f"none, run over {len(OPTION_CASES)} command lines (#142)"),
                            (plugin_check_problems(sh, ps1), "the plugin's check tells a copy that is not as signed "
