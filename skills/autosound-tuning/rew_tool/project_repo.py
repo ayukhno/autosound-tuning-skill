@@ -362,7 +362,7 @@ def _who_sends(project_dir):
 def _fetch(project_dir):
     """Ask the remote. The reason it did not answer, or None."""
     try:
-        r = _network(project_dir, FETCH_SECONDS, "fetch", "-q", "origin")
+        r = _network(project_dir, FETCH_SECONDS, "fetch", "-q", "--prune", "origin")
     except subprocess.TimeoutExpired:
         return f"the remote did not answer in {FETCH_SECONDS} s"
     return None if r.returncode == 0 else (r.stderr or r.stdout).strip()[-200:] or f"git fetch exited {r.returncode}"
@@ -378,14 +378,22 @@ def status(project_dir, fetch=False):
     if not out["repo"]:
         return out
     failed = []
-    changes = _changes(project_dir)
+    try:
+        changes = _changes(project_dir)
+    except subprocess.TimeoutExpired:                # a report line, not a traceback in TCC's message
+        changes = None
+        failed.append("git did not answer in time")
     if changes is None:
         out["changes"] = None
         failed.append("git could not read this project's changes")
     else:
         out["changes"] = {"tuning": changes["tuning"], "housekeeping": changes["housekeeping"]}
     if out["remote"]:
-        failed += _what_is_not_sent(project_dir, out, fetch)
+        try:
+            failed += _what_is_not_sent(project_dir, out, fetch)
+        except subprocess.TimeoutExpired:
+            out["ahead"] = None
+            failed.append("git did not answer in time")
     out["changes_error"] = "; ".join(failed) or None
     return out
 
@@ -1033,6 +1041,20 @@ def _check_a_waiting_commit_that_adds_the_link_still_goes_out():
         assert "tuning.txt" in sent and not [p for p in sent if p.startswith(".claude/")], sent
 
 
+def _check_status_says_a_read_that_timed_out():
+    with _sandbox() as (proj, bare, _tmp):
+        _connect(proj, bare)
+        keep = globals()["_changes"]
+        def slow(_project_dir):
+            raise subprocess.TimeoutExpired("git", 60)
+        globals()["_changes"] = slow
+        try:
+            st = status(proj)
+        finally:
+            globals()["_changes"] = keep
+        assert st["changes"] is None and "did not answer" in (st["changes_error"] or ""), st
+
+
 def _commit_a_key(proj, rel):
     _write(proj, rel, "GEMINI_API_KEY=AQ.x\n")
     _git(proj, "add", "-f", rel)
@@ -1238,7 +1260,7 @@ def _selftest():
                   _check_a_remote_that_cannot_be_reached, _check_status_keeps_what_tcc_reads_and_adds_the_rest,
                   _check_status_with_no_repository_carries_the_keys_empty, _check_sends_says_who_sends,
                   _check_a_failing_step_stops_before_the_commit, _check_a_remote_on_another_branch_is_refused,
-                  _check_a_tracked_link_leaves_with_waiting_commits, _check_a_waiting_commit_that_adds_the_link_still_goes_out,
+                  _check_a_tracked_link_leaves_with_waiting_commits, _check_a_waiting_commit_that_adds_the_link_still_goes_out, _check_status_says_a_read_that_timed_out,
                   _check_a_tracked_key_is_refused, _check_a_key_in_a_waiting_commit_is_refused,
                   _check_a_commit_that_takes_the_key_out_is_sent, _check_a_tracked_sessions_log_stays_out,
                   _check_init_takes_no_housekeeping, _check_status_says_a_failed_read):

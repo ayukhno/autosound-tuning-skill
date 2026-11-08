@@ -60,7 +60,7 @@ file is written, else one line on stderr, `note: the round is open, but its plan
 | `reviewer` | `--review`, `--mode` |
 | `decision` | `--invalidates` |
 | `session-close` | `--check` |
-| `capture-start` | `--origin`, `--step`, `--under`, `--level`, `--level-read-as`, `--start`, `--phase`, `--optional`, `--plan` |
+| `capture-start` | `--origin`, `--step`, `--under`, `--level`, `--level-read-as`, `--start`, `--phase`, `--optional`, `--plan`, `--level-base` |
 | `capture-check` | `--session`, `--round` |
 | `capture-taken` | `--round` |
 | `capture-import` | `--bind`, `--late`, `--knob` |

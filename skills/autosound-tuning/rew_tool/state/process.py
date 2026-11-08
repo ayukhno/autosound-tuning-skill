@@ -7049,8 +7049,7 @@ def _check_a_verb_held_to_the_round_asked():
             n = next(series)
             p.start_capture(str(n), expected=[f"a_{n} (sw)"])
             opened = p.load()["capture"]["id"]
-            own_record = lambda: [e for e in p.events(kinds=(EV_CAPTURE_TAKEN, EV_CAPTURE_PROTECTIVE))
-                                  if e.get("capture") == opened]
+            own_record = lambda: p.events(kinds=(EV_CAPTURE_TAKEN, EV_CAPTURE_PROTECTIVE))
             record_before = own_record()
 
             def another_writer_first(project_dir):
