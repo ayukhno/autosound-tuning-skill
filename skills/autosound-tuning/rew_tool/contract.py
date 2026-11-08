@@ -125,7 +125,7 @@ IMPORTABLE = {
         "get_impulse_response(mid)", "get_distortion(mid)", "get_filters(mid)", "get_equaliser(mid)",
         "get_equalisers()", "get_crossover_types()", "get_slopes()", "get_target_settings(mid)",
         "get_target_response(mid)", "set_filters(mid, filters)", "is_swept(record)",
-        "duplicate_titles(measurements=None)",
+        "duplicate_titles(measurements=None)", "rew_state(exc)",
     ),
     "state/state.py": (
         "PresetHistory(root, preset, project_dir=None)", "PresetHistory.head()", "PresetHistory.load(version=None)",

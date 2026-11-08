@@ -2525,7 +2525,7 @@ class Process:
         )
 
     @_locked
-    def record_capture(self, title, at=None):
+    def record_capture(self, title, at=None, round_id=None):
         """A measurement was taken. Unplanned ones are recorded too, flagged as such.
 
         `planned` is the whole point of recording rather than re-deriving: a capture that was not
@@ -2535,8 +2535,11 @@ class Process:
         A title typed in another spelling of one on the list (`w-R_01 (sw)` for `w-R_1 (sw)`, #153) is recorded
         under the list's own, planned, with the typed one kept as `as_in_rew` -- on the row and in the journal --
         the form `reconcile_captures` writes. A front-end reads `taken` against `expected` as strings.
+
+        `round_id`, given, is the round the caller read (`--round`, #203, hub #297 TCC-064): held under this method's
+        own lock, another open now, or none, is `_RoundMoved` and nothing is written.
         """
-        state, round_ = self._require_capture()
+        state, round_ = self._require_capture(round_id)
         title, typed = _on_list(round_, title, round_["taken"])
         if not title:
             raise ProcessError("a capture needs its REW title")
@@ -2630,7 +2633,7 @@ class Process:
         return opened
 
     @_locked
-    def set_protective(self, channel, legs, source="user"):
+    def set_protective(self, channel, legs, source="user", round_id=None):
         """Declare what was in the chain for one channel of the OPEN round, and that it was RAW.
 
         Working-by-default is the rule (`protective.py`): a round nobody marks measured the system
@@ -2654,8 +2657,11 @@ class Process:
         `legs` is `{"hp": ..., "lp": ...}` in the ledger's crossover vocabulary, or `"OFF"` to say
         plainly that this channel was swept with nothing in the chain. `"OFF"` is an ANSWER and is
         stored; leaving a channel out is a different thing and stays unanswered.
+
+        `round_id`, given, is the round the caller read (`--round`, #203, hub #297 TCC-064): held under this method's
+        own lock, another open now, or none, is `_RoundMoved` and nothing is written.
         """
-        state, round_ = self._require_capture()
+        state, round_ = self._require_capture(round_id)
         channel = str(channel).strip()
         if not channel:
             raise ProcessError("a protective record needs the channel it applies to")
@@ -2936,7 +2942,8 @@ class Process:
         And its level record (#176, hub #285): `spl_offsets_db`, REW's `splOffsetdB` per title as its checks recorded
         it in `capture_verified` -- per title the latest check wins, a partial check adds what it checked, a repeated
         one replaces, a title checked with no calibration listed is None -- the one record of a round's level that
-        survives its close; `level_base`, the base round named at its start (`capture-start --level-base`), or None;
+        survives its close; `rew`, what REW did on a failed curve read per title (#203), the same latest-check rule;
+        `level_base`, the base round named at its start (`capture-start --level-base`), or None;
         `control`, its level control's title, or None; `under` and `version_kind`, which say the ledger version it was
         taken under -- what the control's changed bands are read from; `expected`, its list as issued (#177)."""
         rounds, order = {}, []
@@ -2950,7 +2957,7 @@ class Process:
                                "version_kind": event.get("version_kind"), "under": event.get("under"),
                                "level_base": event.get("level_base"), "control": event.get("control"),
                                "level": event.get("level"),
-                               "spl_offsets_db": {}}
+                               "spl_offsets_db": {}, "rew": {}}
                 order.append(cid)
             elif cid in rounds and event.get("type") == EV_CAPTURE_CLOSED:
                 # What the round took, as it closed (#176): whether its level control was ever taken.
@@ -2959,6 +2966,9 @@ class Process:
                 offsets = event.get("spl_offsets_db")
                 if isinstance(offsets, dict):
                     rounds[cid]["spl_offsets_db"].update(offsets)
+                rew = event.get("rew")
+                if isinstance(rew, dict):           # absent on a line from before the field (#203)
+                    rounds[cid]["rew"].update(rew)
             elif cid in rounds and event.get("title"):
                 rounds[cid]["titles"].append(event["title"])
         out = []
@@ -3343,7 +3353,7 @@ class Process:
                               else verifier.verify(list(asked.values()), measurements=records))]
         for title, held in ambiguous.items():
             verdicts.append({"name": title, "exists": True, "reachable": True, "applicable": True, "valid": False,
-                             "ambiguous": len(held), "ambiguous_titles": held, "stats": {},
+                             "ambiguous": len(held), "ambiguous_titles": held, "rew": None, "stats": {},
                              "issues": [f"ambiguous: REW holds {' and '.join(held)} for {title} -- "
                                         f"keep one: rename or delete the other in REW"]})
         # REW not answering is no verdict on any title (#134): refused before anything is written, so the round and
@@ -3375,6 +3385,9 @@ class Process:
                 "uuid": (verdict.get("stats") or {}).get("uuid"),
                 "at": _now(),
                 "issues": list(verdict.get("issues") or []),
+                # What REW did on a curve read that failed (#203, hub #297 TCC-064): "error", "unavailable" or null --
+                # `issues` keeps its words, and this tells REW's answer from a capture to retake.
+                "rew": verdict.get("rew"),
             }
             if verdict.get("why"):
                 # Why it was not checked (#184; the Captures group seat): not a sweep, or outside the band -- on the
@@ -3538,6 +3551,9 @@ class Process:
                 spl_offsets_db={} if offsets_unread else
                 {t: (v.get("spl_offset_db") if v.get("exists") is True else None) for t, v in checked
                  if not v.get("ambiguous")},
+                # Per title checked (#203, hub #297 TCC-064), null included so a clean re-check clears an earlier
+                # "error": after the next round the history has only this line (`capture_rounds` replays it).
+                rew={t: v.get("rew") for t, v in checked},
                 **({"spl_offsets_unread": offsets_unread} if offsets_unread else {}),
             )
         # Told AFTER the record is on disk, never before -- issue #21. This print used to sit
@@ -4413,10 +4429,13 @@ _USAGE = """usage: process.py <process-dir> <command> [args]
                                         SPL calibration, from here on (#176; default: the first on record)
                                         open a capture round; titles = what was
                                          asked for, --step binds it to the plan step it satisfies
-  capture-check [title ...] [--session]  run the verdict over the round and record it (SCR-040);
+  capture-check [title ...] [--session] [--round <id>]
+                                         run the verdict over the round and record it (SCR-040);
                                          --session adds the whole-session probe (levels side by
-                                         side, loudest/quietest, ctl1->ctl3 drift) and records it
-  capture-taken <title>                 a measurement came back (unplanned ones are flagged)
+                                         side, loudest/quietest, ctl1->ctl3 drift) and records it;
+                                         --round: refused unless <id> is the open round (#203)
+  capture-taken <title> [--round <id>]  a measurement came back (unplanned ones are flagged);
+                                         --round: refused unless <id> is the open round (#203)
   capture-import <N> [title ...] --bind MOD=v_NNN [--bind =v_NNN] --knob NAME=POS [...] [--late "why"]
                                         register what REW holds as this project's rounds, one per DSP
                                         state; unbound modifiers and missing knobs refuse (#58 P3).
@@ -4433,7 +4452,7 @@ _USAGE = """usage: process.py <process-dir> <command> [args]
                                         (SubRC=4/4 RealCenter=ON): a fact about the SERIES, so two
                                         series taken at different positions can be told apart
                                         instead of the difference landing in a calibration offset
-  capture-protective <ch> OFF [--source user|front_end|default]
+  capture-protective <ch> OFF [--source user|front_end|default] [--round <id>]
                                         this round was RAW for that channel: what was in the
   capture-protective <ch> --hp 100 LR 24    chain and is NOT part of the tune, so it can be taken
       [--lp 4000 BW 36]                 back out before a phase decision. OFF = leave it alone,
@@ -4503,13 +4522,13 @@ VERB_FLAGS = {
     "session-reopen": (),
     "capture-start": ("--origin", "--step", "--under", "--level", "--level-read-as", "--start", "--phase",
                       "--optional", "--plan", "--level-base"),
-    "capture-check": ("--session",),
-    "capture-taken": (),
+    "capture-check": ("--session", "--round"),
+    "capture-taken": ("--round",),
     "capture-import": ("--bind", "--late", "--knob"),
     "amp-gain": ("--measured", "--amends", "--note"),
     "amp-changes": (),
     "capture-knobs": ("--amend", "--reason"),
-    "capture-protective": ("--source", "--amend", "--reason", "--hp", "--lp"),
+    "capture-protective": ("--source", "--amend", "--reason", "--hp", "--lp", "--round"),
     "listening-verdict": ("--pair", "--text", "--route", "--ledger-version", "--note"),
     "listening-verdicts": ("--track", "--characteristic", "--ledger-version", "--bank"),
     "capture-supersede": (),
@@ -4529,7 +4548,7 @@ _FLAG_TAKES_VALUE = {
     "--bind": True, "--late": True, "--knob": True, "--measured": False, "--amends": True, "--note": True,
     "--amend": True, "--reason": True, "--source": True, "--hp": True, "--lp": True, "--pair": True, "--text": True,
     "--route": True, "--ledger-version": True, "--track": True, "--characteristic": True, "--bank": False,
-    "--json": False, "--no-rew": False, "--level-base": True,
+    "--json": False, "--no-rew": False, "--level-base": True, "--round": True,
 }
 
 #: The flags that take no value, read off `_FLAG_TAKES_VALUE`. `--flag=value` is read as `--flag value`, and for one of
@@ -4762,6 +4781,18 @@ def _args_counted(cmd, args):
     if given < len(needs):
         raise UsageError(f"{cmd} needs {' '.join(needs)}: {given} of {len(needs)} given -- process.py <process-dir> "
                          f"{cmd} --help")
+
+
+def _flag_value(args, flag):
+    """`(flag's value, args without flag and value)`; `(None, args)` when `flag` is not given (#203). `args` as
+    `_args_checked` returns them: a value stands after the flag and is none of the verb's flags. Given twice is the
+    verb's refusal, exit 1: the second one's words would be read as arguments -- a title, a channel."""
+    if flag not in args:
+        return None, args
+    if args.count(flag) > 1:
+        raise ProcessError(f"{flag} was given twice")
+    i = args.index(flag)
+    return args[i + 1], args[:i] + args[i + 2:]
 
 
 #: The filter types a protective leg can be (#134, R47b, R48): `dsp_math.MODELLABLE_FAMILIES` (the docs' "types
@@ -6894,6 +6925,196 @@ def _check_catch_all_reads_the_type():
         shutil.rmtree(top, ignore_errors=True)
 
 
+def _check_a_verb_held_to_the_round_asked():
+    """#203 (hub #297, TCC-064): `--round <id>` on `capture-check`, `capture-taken` and `capture-protective`. TCC drops
+    its own lock around a method child that locks itself, so what the child writes into has to be checked under the
+    child's lock. A round that is not the open one any more is refused, exit 1, `error: round <id> was closed or
+    replaced`, nothing written -- in both forms of the flag, wherever it stands, with another round open or none, and
+    with the round moving between the caller's read and the method's own hold. The open round asked for goes through."""
+    import shutil
+    import tempfile
+
+    class Verifier:
+        def __init__(self):
+            self.during = None
+
+        def verify(self, titles):
+            if self.during is not None:
+                self.during()
+            return [{"name": t, "exists": True, "reachable": True, "applicable": True, "valid": True, "issues": [],
+                     "stats": {}} for t in titles]
+
+    top = tempfile.mkdtemp(prefix="autosound_process_round_asked_")
+    real_verifier, real_hold = Process._load_verifier, globals()["_hold"]
+    verifier = Verifier()
+    Process._load_verifier = lambda self: verifier
+    try:
+        d = os.path.join(top, "process")
+        p = Process(d)
+        p.enter_phase("-1")
+        p.start_capture("1", expected=["a_1 (sw)"])
+        old = p.load()["capture"]["id"]
+        p.start_capture("2", expected=["a_2 (sw)"])
+        now = p.load()["capture"]["id"]
+        assert old != now, (old, now)
+
+        def refused(argv, said):
+            before = _project_bytes(d)
+            rc, out, err = _run_main(["process.py", d, *argv])
+            assert rc == EXIT_NO and not out and err.strip() == said, (argv, rc, out, err)
+            assert _project_bytes(d) == before, (argv, "a refused --round wrote something")
+
+        moved = (f"error: round {old} was closed or replaced after it was read ({now} is the open round now) -- "
+                 "nothing was written")
+        for argv in (["capture-taken", "--round", old, "a_2 (sw)"], ["capture-taken", "a_2 (sw)", f"--round={old}"],
+                     ["capture-protective", "--round", old, "a", "OFF"],
+                     ["capture-protective", "a", "--hp", "100", "LR", "24", f"--round={old}"],
+                     ["capture-check", "--round", old], ["capture-check", "a_2 (sw)", "--session", f"--round={old}"]):
+            refused(argv, moved)
+        # The round open now goes through, and is written.
+        assert _run_main(["process.py", d, "capture-taken", "--round", now, "a_2 (sw)"])[0] == EXIT_OK
+        assert "a_2 (sw)" in p.load()["capture"]["taken"], p.load()["capture"]
+        assert _run_main(["process.py", d, "capture-protective", f"--round={now}", "a", "OFF"])[0] == EXIT_OK
+        assert p.load()["capture"]["protective"]["a"], p.load()["capture"]
+        rc, out, err = _run_main(["process.py", d, "capture-check", "--round", now])
+        assert rc == EXIT_OK and p.load()["capture"]["checks"]["a_2 (sw)"]["ok"] is True, (rc, out, err)
+        # The flag is one of the verb's: given twice it is no answer, and a title is never the flag's word.
+        refused(["capture-taken", "--round", now, "--round", old, "a_2 (sw)"], "error: --round was given twice")
+        # A round that moves while REW is read, with --round given: the check's own hold refuses it.
+        verifier.during = lambda: Process(d).start_capture("3", expected=["a_3 (sw)"])
+        rc, out, err = _run_main(["process.py", d, "capture-check", "--round", now])
+        verifier.during = None
+        assert rc == EXIT_NO and err.strip().startswith(f"error: round {now} was closed or replaced"), (rc, out, err)
+        assert "checks" not in p.load()["capture"] or "a_2 (sw)" not in p.load()["capture"]["checks"], p.load()["capture"]
+        # ...and a round that moves between the caller's read and the method's own hold: refused under that hold.
+        series = iter(range(4, 20))
+        for call in (lambda opened: p.record_capture("a_9 (sw)", round_id=opened),
+                     lambda opened: p.set_protective("a", "OFF", round_id=opened)):
+            n = next(series)
+            p.start_capture(str(n), expected=[f"a_{n} (sw)"])
+            opened = p.load()["capture"]["id"]
+
+            def another_writer_first(project_dir):
+                globals()["_hold"] = real_hold
+                m = next(series)
+                Process(d).start_capture(str(m), expected=[f"a_{m} (sw)"])
+                return real_hold(project_dir)
+
+            globals()["_hold"] = another_writer_first
+            before_call = None
+            try:
+                call(opened)
+            except _RoundMoved as exc:
+                before_call = exc
+            finally:
+                globals()["_hold"] = real_hold
+            assert before_call is not None, "a round moved before the method's hold was written into"
+            assert before_call.read == opened and before_call.now == p.load()["capture"]["id"], vars(before_call)
+            assert "a_9 (sw)" not in p.load()["capture"]["taken"], p.load()["capture"]
+        # With no round open, the same refusal, saying so.
+        last = p.load()["capture"]["id"]
+        assert _run_main(["process.py", d, "capture-close", "--no-rew"])[0] == EXIT_OK
+        gone = f"error: round {last} was closed or replaced after it was read (no round is open now) -- nothing was written"
+        for argv in (["capture-taken", "--round", last, "a (sw)"], ["capture-protective", "--round", last, "a", "OFF"],
+                     ["capture-check", "--round", last]):
+            refused(argv, gone)
+        # An amendment names its own, closed, round: --round beside it is refused, never read as agreeing.
+        before = _project_bytes(d)
+        rc, out, err = _run_main(["process.py", d, "capture-protective", "--amend", last, "--reason", "late",
+                                  "--round", last, "a", "OFF"])
+        assert rc == EXIT_NO and "--round" in err and "--amend" in err, (rc, out, err)
+        assert _project_bytes(d) == before, "--round beside --amend wrote something"
+    finally:
+        Process._load_verifier, globals()["_hold"] = real_verifier, real_hold
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_rew_answering_outlives_the_round():
+    """#203 (hub #297, TCC-064): a recorded verdict says REW answered an error on a curve read -- `rew`, beside the
+    issue TCC shows red as a capture to retake -- on the round's `checks`, on the row's `verified` and in the journal's
+    `capture_verified`, the record that outlives the round: check -> close -> open another -> `capture_rounds` still has
+    it, the latest check per title winning. A stand-in verifier that names no `rew` is null, and an event from before
+    the field adds nothing."""
+    import shutil
+    import tempfile
+
+    class Verifier:
+        def __init__(self):
+            self.rew = {}
+
+        def verify(self, titles):
+            out = []
+            for t in titles:
+                said = self.rew.get(t)
+                row = {"name": t, "exists": True, "reachable": True, "applicable": True, "valid": said is None,
+                       "issues": [] if said is None else ["frequency response unreadable: HTTP Error 500: boom"],
+                       "stats": {}}
+                if t in self.rew:
+                    row["rew"] = said
+                out.append(row)
+            return out
+
+    top = tempfile.mkdtemp(prefix="autosound_process_rew_field_")
+    real = Process._load_verifier
+    verifier = Verifier()
+    Process._load_verifier = lambda self: verifier
+    try:
+        d = os.path.join(top, "process")
+        p = Process(d)
+        p.enter_phase("-1")
+        p.start_capture("1", expected=["a_1 (sw)", "b_1 (sw)"])
+        for t in ("a_1 (sw)", "b_1 (sw)"):
+            p.record_capture(t)
+        verifier.rew = {"a_1 (sw)": "error", "b_1 (sw)": "error"}
+        rc, out, err = _run_main(["process.py", d, "capture-check"])
+        assert rc == EXIT_NO, (rc, out, err)
+        round_ = p.load()["capture"]
+        assert round_["checks"]["a_1 (sw)"]["rew"] == "error", round_["checks"]
+        assert round_["taken"]["a_1 (sw)"]["verified"]["rew"] == "error", round_["taken"]
+        assert round_["checks"]["a_1 (sw)"]["issues"] == ["frequency response unreadable: HTTP Error 500: boom"], round_
+        ev = [e for e in p.events() if e.get("type") == EV_CAPTURE_VERIFIED][-1]
+        assert ev["rew"] == {"a_1 (sw)": "error", "b_1 (sw)": "error"} and ev["bad"] == ["a_1 (sw)", "b_1 (sw)"], ev
+        # The next check of one title: the latest check per title wins, and a title it did not ask stands.
+        verifier.rew = {"b_1 (sw)": None}
+        assert _run_main(["process.py", d, "capture-check", "b_1 (sw)"])[0] == EXIT_NO
+        assert p.load()["capture"]["checks"]["b_1 (sw)"]["rew"] is None, p.load()["capture"]["checks"]
+        assert _run_main(["process.py", d, "capture-close", "--no-rew"])[0] == EXIT_OK
+        p2 = Process(d)
+        p2.start_capture("2", expected=["a_2 (sw)"])
+        # A verifier that names no `rew` -- a stand-in, an older copy -- is null, never a claim.
+        verifier.rew = {}
+        p2.record_capture("a_2 (sw)")
+        assert _run_main(["process.py", d, "capture-check"])[0] == EXIT_OK
+        assert p2.load()["capture"]["checks"]["a_2 (sw)"]["rew"] is None, p2.load()["capture"]["checks"]
+        rounds = {r["id"]: r for r in Process(d).capture_rounds()}
+        assert rounds["cap_001"]["rew"] == {"a_1 (sw)": "error", "b_1 (sw)": None}, rounds["cap_001"]
+        assert rounds["cap_002"]["rew"] == {"a_2 (sw)": None}, rounds["cap_002"]
+        # A journal from before the field: no key, nothing replayed, no error.
+        journal = os.path.join(d, "journal.jsonl")
+        with open(journal, encoding="utf-8") as fh:
+            lines = [json.loads(x) for x in fh if x.strip()]
+        kept = [{k: v for k, v in e.items() if k != "rew"} for e in lines]
+        with open(journal, "w", encoding="utf-8", newline="") as fh:
+            fh.write("".join(json.dumps(e, ensure_ascii=False) + "\n" for e in kept))
+        assert Process(d).capture_rounds()[0]["rew"] == {}, Process(d).capture_rounds()[0]
+    finally:
+        Process._load_verifier = real
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_rew_lines_pinned_in_the_contract():
+    """#203 (hub #297, TCC-064): the exit-1 lines that say REW answered, and the one that says a round moved, are fixed
+    prefixes in CONTRACT.md's exit table -- TCC matches them (`core/process_writer.py`, `_REW_ANSWERED`). What the code
+    prints is held by the checks of those lines; this holds the document to the same words."""
+    contract = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "CONTRACT.md")
+    with open(contract, encoding="utf-8") as fh:
+        row = next(line for line in fh if line.startswith("| 1 |"))
+    for prefix in ("`error: REW answered with an error: ", "`error: REW's measurement list was not read (REW answered an error: ",
+                   "`error: REW's measurement list was not read again after the curves (",
+                   "`error: round <id> was closed or replaced"):
+        assert prefix in row, f"not pinned in the exit-1 row: {prefix}"
+
+
 def _check_unknown_flags():
     """N19 (#134): a flag the verb does not take is a usage error -- exit 2, nothing written, and never the words
     TCC reads as "the method is too old". It used to become a title, a reason or evidence. `--flag=value` is read as
@@ -7225,6 +7446,8 @@ _TCC_FLAGS = (
     ("capture-start", "--plan"), ("capture-start", "--optional"), ("capture-start", "--start"),
     ("capture-start", "--step"), ("capture-start", "--origin"),
     ("capture-check", "--session"),
+    # TCC's lock work (#203, hub #297 TCC-064), sent from its W-12 on.
+    ("capture-check", "--round"), ("capture-taken", "--round"), ("capture-protective", "--round"),
     ("handoff", "--json"),
 )
 
@@ -11257,7 +11480,9 @@ def _selftest():
                   _check_exit_table, _check_typed_values_refused, _check_refused_capture_writes_nothing,
                   _check_plan_over_final_says_its_label,
                   _check_import_of_a_whole_series, _check_catch_all_reads_the_type, _check_unknown_flags,
-                  _check_flags_tcc_sends, _check_one_review_round_one_record,
+                  _check_flags_tcc_sends, _check_a_verb_held_to_the_round_asked,
+                  _check_rew_answering_outlives_the_round, _check_rew_lines_pinned_in_the_contract,
+                  _check_one_review_round_one_record,
                   _check_a_reviewer_record_has_one_time,
                   _check_flag_values_as_they_stand, _check_autocorrected_dashes, _check_too_few_arguments,
                   _check_value_flag_last, _check_help_writes_nothing, _check_usage_before_the_read,
@@ -12420,8 +12645,9 @@ def _main(argv):
         elif cmd == "capture-check":
             session = "--session" in args
             args = [a for a in args if a != "--session"]
+            round_id, args = _flag_value(args, "--round")
             try:
-                round_ = p.check_captures(args or None, session=session)
+                round_ = p.check_captures(args or None, session=session, round_id=round_id)
             except RewUnavailableError as exc:
                 # The advice is this verb's (#134): `capture-close` runs the same check and then closes the round, so
                 # "run capture-check again" cannot be followed there. REW that changed while it was read answered
@@ -12502,7 +12728,8 @@ def _main(argv):
             print(f"{len(asked) - len(left)}/{len(asked)} придатні")
             return 1 if left else 0
         elif cmd == "capture-taken":
-            round_ = p.record_capture(args[0])
+            round_id, args = _flag_value(args, "--round")
+            round_ = p.record_capture(args[0], round_id=round_id)
             # Stored under the list's own title when typed in another spelling of it (#153): it raised KeyError here.
             listed = _on_list(round_, args[0], round_["taken"])[0]
             stored = _row_for(round_["taken"], listed) or listed
@@ -12634,7 +12861,7 @@ def _main(argv):
             # write. One implementation of "record a move" beats an in-process copy that drifts.
             if not args:
                 raise ProcessError("capture-protective needs a channel")
-            rest = list(args)
+            round_id, rest = _flag_value(list(args), "--round")
             source, amend, reason = "user", None, None
             for flag, into in (("--source", "source"), ("--amend", "amend"), ("--reason", "reason")):
                 if flag in rest:
@@ -12649,6 +12876,11 @@ def _main(argv):
                         amend = value
                     else:
                         reason = value
+            if amend and round_id is not None:
+                # An amendment names its own round, a closed one (#203): --round says which is OPEN, and they are not
+                # the same question -- read as one, an agreeing --round would pass for a check that was not made.
+                raise ProcessError("capture-protective: --round and --amend do not go together: --amend names its "
+                                   "own, closed, round; --round names the open one")
             if not rest:
                 raise ProcessError("capture-protective needs a channel")
             channel, rest = rest[0], rest[1:]
@@ -12685,7 +12917,7 @@ def _main(argv):
                     f"{k.upper()} {v['f']:g} {v['type']}{v['slope']}" for k, v in sorted(legs.items()))
                 print(f"{amend} {channel}: corrected to {shown_legs} ({source}) — {done['reason']}{cannot}")
                 return 0
-            round_ = p.set_protective(channel, legs, source=source)
+            round_ = p.set_protective(channel, legs, source=source, round_id=round_id)
             shown = "OFF" if legs == "OFF" else ", ".join(
                 f"{k.upper()} {v['f']:g} {v['type']}{v['slope']}" for k, v in sorted(legs.items()))
             print(f"{round_['id']} {channel}: protective {shown} — this round is RAW for that channel"

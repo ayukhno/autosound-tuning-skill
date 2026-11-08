@@ -25,6 +25,10 @@ null` with `reachable: true` is REW answering an error; with `reachable: null`, 
 its address (`REW_API_URL`) being no address. A title REW holds more than once is `exists: true`,
 `valid: false` and `ambiguous: <how many>`: there, and not usable until it is renamed.
 
+`rew` says what REW did on a read that failed (#203, hub #297 TCC-064): "error" when it answered 4xx/5xx,
+"unavailable" when it did not answer, null otherwise -- so a capture that reads "frequency response unreadable" because
+REW answered an error is told from one to retake. The issue's words stay as they were.
+
 stdlib only (plus this package's own `rew_api`/`analysis`), py3.9+.
 """
 from __future__ import annotations
@@ -105,6 +109,16 @@ def _from_rew(exc):
     return _state(exc) is not None or isinstance(exc, urllib.error.HTTPError)
 
 
+def _rew_answered(exc):
+    """What the verdict's `rew` says of a failed read (#203, hub #297 TCC-064): "unavailable" for REW not answering,
+    "error" for REW answering 4xx/5xx -- an `HTTPError`, which carries no `rew_state` (`rew_api.rew_state` is None for
+    one), and None for all else: an answer that cannot be read (`protocol`), an address that is none (`config`), a bug.
+    Those are no word about what REW said of this curve."""
+    if _rew_down(exc):
+        return "unavailable"
+    return "error" if isinstance(exc, urllib.error.HTTPError) else None
+
+
 def _unreached(name, exc):
     """The verdict for a title when REW's measurement list could not be read: whether REW holds the title is not
     known, so `exists` is None -- never False, which is "nobody measured it" (#134, audit T-2). By the state (H I-6):
@@ -118,7 +132,7 @@ def _unreached(name, exc):
     else:
         reachable, issue = True, f"REW answered an error: {exc}"
     return {"name": name, "exists": None, "reachable": reachable, "applicable": True, "kind": _api.UNKNOWN,
-            "valid": False, "issues": [issue], "stats": {}}
+            "valid": False, "issues": [issue], "rew": _rew_answered(exc), "stats": {}}
 
 
 def _no_impulse(exc):
@@ -156,7 +170,7 @@ def verdict(name, measurements=None, f_low=20, f_high=20000):
     # looks at the field keeps the behaviour it had. `reachable` stands beside them all (#134): REW
     # not answering is no fact about the capture, and it is never read as one.
     out = {"name": name, "exists": False, "reachable": True, "applicable": True, "kind": _api.UNKNOWN,
-           "valid": False, "issues": [], "stats": {}}
+           "valid": False, "issues": [], "rew": None, "stats": {}}
     try:
         ms = _api.get_measurements() if measurements is None else measurements
     except Exception as exc:  # noqa: BLE001 — REW down or answering an error is a verdict, not a traceback
@@ -223,6 +237,7 @@ def verdict(name, measurements=None, f_low=20, f_high=20000):
     try:
         freqs, mag, phase = _api.get_fr(mid, smoothing=READ_SMOOTHING)
     except Exception as exc:  # noqa: BLE001
+        out["rew"] = _rew_answered(exc)
         if _rew_down(exc):
             # REW stopped answering after its list: the title is there, the curve was not read -- no word about it.
             out["reachable"] = False
@@ -283,8 +298,10 @@ def verdict(name, measurements=None, f_low=20, f_high=20000):
         times, ir = None, None
         if _rew_down(exc):
             out["reachable"] = False
+            out["rew"] = _rew_answered(exc)
             out["issues"].append(f"REW unavailable while reading the impulse response: {exc}")
         elif not _no_impulse(exc):
+            out["rew"] = _rew_answered(exc)
             out["issues"].append(f"impulse response unreadable: {exc}")
     if times and ir:
         out["stats"].update(_analysis.analyze_impulse(times, ir))
@@ -1413,6 +1430,60 @@ def _check_spl_offset_recorded():
     assert "Ambiguous" in read_fr("ALL+C+FX_4 (rta)", measurements=twice)["why"]
 
 
+def _check_rew_says_what_rew_did():
+    """#203 (hub #297, TCC-064): the verdict's `rew` says REW answered an error on a curve read, beside the issue TCC
+    shows red as a capture to retake, on both reads. An `HTTPError` is "error"; the state `unavailable` is
+    "unavailable"; a malformed answer (`protocol`), an address that is none (`config`) and a programming error stay out
+    of the field, null; so does an impulse REW says it keeps none of. The words of the issue stay as they were."""
+    import urllib.error
+    url = "http://127.0.0.1:1/measurements/2"
+
+    def http(code, msg):          # built without a body, as a test builds one (Python 3.9's `KeyError: 'file'` trap)
+        return urllib.error.HTTPError(url, code, msg, {}, None)
+
+    class Garbled(ValueError):
+        rew_state = "protocol"
+
+    class Misaddressed(ValueError):
+        rew_state = "config"
+
+    no_impulse = "Bad Request -- REW said: sw_60 (sw) at index 2 uuid u2 does not have an impulse response"
+    listing = {"1": dict(_RTA_RECORD), "2": dict(_SWEPT_RECORD)}
+    cases = (  # exception, `rew`
+        (http(500, "Server Error -- REW said: boom"), "error"),
+        (http(404, "Not Found -- REW said: Measurement 2 not found"), "error"),
+        (_Down("refused"), "unavailable"),
+        (_api.RewUnavailable("refused", url), "unavailable"),
+        (Garbled("no curve in it"), None),
+        (Misaddressed("not an address"), None),
+        (RuntimeError("the stream closed early"), None),
+    )
+    for exc, rew in cases:
+        with _rew_as(get_fr=_raising(exc), get_impulse_response=_impulse_48k):
+            v = verdict("sw_60 (sw)", measurements=listing)
+        assert v["rew"] == rew and v["valid"] is False, ("frequency response", repr(exc), v)
+        assert [i for i in v["issues"] if i.startswith(("frequency response unreadable", "REW unavailable while reading"
+                                                        " the frequency response"))], ("words", repr(exc), v["issues"])
+        with _rew_as(get_fr=_sweep_fr, get_impulse_response=_raising(exc)):
+            v = verdict("sw_60 (sw)", measurements=listing)
+        assert v["rew"] == rew and v["valid"] is False, ("impulse response", repr(exc), v)
+        assert [i for i in v["issues"] if i.startswith(("impulse response unreadable", "REW unavailable while reading"
+                                                        " the impulse response"))], ("words", repr(exc), v["issues"])
+    # An impulse REW says it keeps none of counts against nothing, and says nothing of REW.
+    with _rew_as(get_fr=_sweep_fr, get_impulse_response=_raising(http(400, no_impulse))):
+        v = verdict("sw_60 (sw)", measurements=listing)
+    assert v["rew"] is None and v["valid"] is True and v["issues"] == [], v
+    # A read that went through, an RTA, a title REW does not hold: the key is there, and null.
+    with _rew_as(get_fr=_sweep_fr, get_impulse_response=_impulse_48k):
+        for title, why in (("sw_60 (sw)", "read"), ("ALL_60 (rta)", "rta"), ("nope (sw)", "missing")):
+            v = verdict(title, measurements=listing)
+            assert v.get("rew", "absent") is None, (why, v)
+    # And a list REW did not give: the same mapping, for a caller that reads the verdict.
+    for exc, rew in ((http(500, "Server Error"), "error"), (_Down("refused"), "unavailable"), (Garbled("no list"), None)):
+        with _rew_as(get_measurements=_raising(exc)):
+            assert verify(["a (sw)"])[0].get("rew", "absent") == rew, repr(exc)
+
+
 def _selftest():
     """Offline, REW never reached: REW's states through its readers stood in (`_rew_as`), REW's recorded answers
     replayed (`testdata/rew/`), the command line at a dead port, the drift record, the counts and the outlier rule."""
@@ -1421,7 +1492,8 @@ def _selftest():
                   _check_recorded_no_impulse, _check_ambiguous_title, _check_drift_says_why, _check_counts_add_up,
                   _check_command_line_bug_exits_70, _check_drift_says_what_was_not_read,
                   _check_drift_names_every_missing_control, _check_own_band,
-                  _check_recorded_listing_band, _check_verify_takes_the_listing_given, _check_spl_offset_recorded):
+                  _check_recorded_listing_band, _check_verify_takes_the_listing_given, _check_spl_offset_recorded,
+                  _check_rew_says_what_rew_did):
         try:
             check()
         except Exception as exc:  # noqa: BLE001 -- a check that raises is reported by name, like one that fails

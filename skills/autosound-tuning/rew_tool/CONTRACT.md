@@ -30,7 +30,7 @@ too when the path is wrong, with `can't open file` on stderr: the usage line is 
 | exit | means |
 |---|---|
 | 0 | done, or yes |
-| 1 | refused, or no: the reason on stderr, `error: <reason>`; REW answering with an error, `error: REW answered with an error: <REW's words> -- nothing was written`; any other state REW's exceptions name but "unavailable" (`protocol`, `write_mismatch`, `not_found`, `ambiguous`, `config`), read off the class, `error: <its words> -- nothing was written`, except that a `write_mismatch` ends `-- REW may hold part of the write: check REW's EQ before going on` and a filter write REW acknowledged and nobody could read back (`rew_unchecked` on its class) is said in its own words alone; `capture-check` when REW's measurement list was not read and REW did not stay silent -- it answered with an error or with something the method cannot read, or it was not asked, its address being none -- `error: REW's measurement list was not read (<why>) -- nothing was recorded`; the project's writer lock, or the project folder `enter-phase -1` starts, that cannot be made, a process folder that is no project's, a round another writer closed or replaced under `capture-close` or `capture-check`, and a phase another writer entered under `enter-phase` (W-9, #141; item 8) |
+| 1 | refused, or no: the reason on stderr, `error: <reason>`; REW answering with an error, `error: REW answered with an error: <REW's words> -- nothing was written`; any other state REW's exceptions name but "unavailable" (`protocol`, `write_mismatch`, `not_found`, `ambiguous`, `config`), read off the class, `error: <its words> -- nothing was written`, except that a `write_mismatch` ends `-- REW may hold part of the write: check REW's EQ before going on` and a filter write REW acknowledged and nobody could read back (`rew_unchecked` on its class) is said in its own words alone; `capture-check` when REW's measurement list was not read and REW did not stay silent -- it answered with an error or with something the method cannot read, or it was not asked, its address being none -- `error: REW's measurement list was not read (<why>) -- nothing was recorded`; the project's writer lock, or the project folder `enter-phase -1` starts, that cannot be made, a process folder that is no project's, a round another writer closed or replaced under `capture-close` or `capture-check`, a round `--round` names that is not the open one on `capture-check`, `capture-taken` or `capture-protective` (#203), `error: round <id> was closed or replaced after it was read (...) -- nothing was written` -- `capture-check` also says `... while REW was read`, so match the prefix `error: round <id> was closed or replaced` -- and a phase another writer entered under `enter-phase` (W-9, #141; item 8). **Three prefixes are fixed, the lines that say REW answered** (#203, hub #297): `error: REW answered with an error: `, `error: REW's measurement list was not read (REW answered an error: ` and `error: REW's measurement list was not read again after the curves (`, whatever follows them. The same `list was not read (` line with an address's own sentence inside is `config`: REW was not asked |
 | 2 | usage: an unknown verb (the usage on stderr), a flag the verb does not take, a flag's value missing (one of the verb's flags, `-h` or `--help` in its place, or nothing after it: a value flag left last), `=` on a flag that takes no value, one of the verb's flags with its hyphens autocorrected to a dash, `--help` or `-h` after other arguments, too few arguments; an `AUTOSOUND_LOCK_TIMEOUT_S` that is no number of seconds (item 8) |
 | 69 | REW did not answer, and nothing was written -- but a filter write REW acknowledged before it stopped answering (`rew_unchecked` on its class), said in its own words: sent, acknowledged, not checked; and REW that CHANGED while `capture-check` (or `capture-close`'s checks) read it (#183, `rew_changed` on its class, `rew_state` "changed"): REW is running, nothing was recorded, run it again -- the line on stderr begins `error: REW changed while it was read`, which is what tells this 69 from REW down (hub #299, SKL-081) |
 | 70 | an unexpected error, a bug: Python's traceback on stderr, then `error: unexpected <type>: <message>` |
@@ -60,18 +60,19 @@ file is written, else one line on stderr, `note: the round is open, but its plan
 | `decision` | `--invalidates` |
 | `session-close` | `--check` |
 | `capture-start` | `--origin`, `--step`, `--under`, `--level`, `--level-read-as`, `--start`, `--phase`, `--optional`, `--plan` |
-| `capture-check` | `--session` |
+| `capture-check` | `--session`, `--round` |
+| `capture-taken` | `--round` |
 | `capture-import` | `--bind`, `--late`, `--knob` |
 | `amp-gain` | `--measured`, `--amends`, `--note` |
 | `capture-knobs` | `--amend`, `--reason` |
-| `capture-protective` | `--source`, `--amend`, `--reason`, `--hp`, `--lp` |
+| `capture-protective` | `--source`, `--amend`, `--reason`, `--hp`, `--lp`, `--round` |
 | `listening-verdict` | `--pair`, `--text`, `--route`, `--ledger-version`, `--note` |
 | `listening-verdicts` | `--track`, `--characteristic`, `--ledger-version`, `--bank` |
 | `handoff` | `--json` |
 | `capture-close` | `--no-rew` |
 
 `show`, `plan`, `enter-phase`, `start`, `done`, `block`, `target`, `session-start`, `session-reopen`,
-`capture-taken`, `amp-changes`, `capture-supersede`, `capture-skip` and `check` take none. A flag is `--`, an ASCII
+`amp-changes`, `capture-supersede`, `capture-skip` and `check` take none. A flag is `--`, an ASCII
 letter and no whitespace -- after an `=`, whitespace is the value's only when the name before it is one of the verb's
 flags (`--invalidates=w-L_1 (sw)`); any other token is a word -- a bare `--`, a negative number, and text that only
 begins with two dashes (`--бас гуде`, `--bass hums`, `--bass=45 Hz hums?`). A flag the verb does not take is a usage
@@ -102,7 +103,19 @@ next_message}`, with the same keys when the state cannot be read (`ok` false, th
 A state a newer method wrote is answered on stderr alone, `error: <file> is schema v4; ...`, exit 1, nothing on
 stdout: an empty stdout, which a front end reads as "update the method", which is the answer.
 
-## 3. `contract.py check <dir> [--json] [--no-rew] [--gate | --phase0-gate]` — planned (W-10)
+**`--round <id>`** (#203, hub #297 TCC-064) on `capture-check`, `capture-taken` and `capture-protective`, with or without
+`=`: the verb is held, under its own hold of the writer lock, to the round `<id>` -- the open round asked for goes
+through, anything else is the exit-1 refusal above, nothing written. `capture-protective --amend` names its own closed
+round: `--round` beside it is refused, exit 1. Given twice it is refused, exit 1.
+
+**What REW did on a curve read** (#203): `verify.verdict`'s `rew` is `"error"` when REW answered 4xx/5xx, `"unavailable"`
+when it did not answer, null otherwise -- also when the read went through, when REW keeps no impulse for the capture, and
+on a malformed answer, an address that is none, or a bug. It is recorded as `rew` on a round's `checks[<title>]` and
+`taken[<title>].verified`, and in the `capture_verified` event as `rew`, `{<title>: "error" | "unavailable" | null}`, per
+title checked. `Process.capture_rounds()` replays it per round as `rew`, the latest check per title winning, so it
+outlives the round. The issue's words, `frequency response unreadable: ...`, stay as they were.
+
+## 3. `contract.py check <dir> [--json] [--no-rew] [--gate | --phase0-gate]` — guaranteed (W-12, #203)
 
 Exit 0/1/2, every top-level key of `--json`, and a REW block that tells *skipped* from *unreachable* (audit T-2).
 The keys TCC reads today: `ok`, `project_dir`, `files[]`, `cross_checks{rew, continue_head, glossary_vs_ledgers,
@@ -532,7 +545,8 @@ table and its digest edited in one commit pass it (item 12).
 `IMPORTABLE` has grown under contract 1 by two names of `project.py` (W-9, #141): `Project.update(fn)` and
 `UNCHANGED`, what its change returns to write nothing (item 8). They are additions (item 12). The guard holds them to
 the code as it holds every entry of `IMPORTABLE`; the frozen table predates them, so `IMPORTABLE` alone holds them:
-one removed from the code and from `IMPORTABLE` in one commit passes the guard.
+one removed from the code and from `IMPORTABLE` in one commit passes the guard. `rew_api.rew_state(exc)` joined them
+(W-12, #203), the same way.
 
 The guard's probe loads every module below by path, in a fresh python started in an empty folder with `PYTHONPATH`
 unset. For two of them it also calls the function that reaches their lazy sibling loads
@@ -589,7 +603,7 @@ research that teaches the method: a user who researches the Chebyshev mathematic
 DSP in their project sends it as an issue in the skill's repo. LR, BW and BE are taken out as before, bit for bit; a
 type is read in any letter case.
 
-## 10. Environment variables — planned (W-10)
+## 10. Environment variables — guaranteed (W-12, #203)
 
 Each variable listed, with its precedence over an explicit argument written down and left as it is (J1b). Known
 today, every one the code reads:
