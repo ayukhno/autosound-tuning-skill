@@ -15,6 +15,11 @@ Each checked at its main site. **Side by side on T2, T3, T6, T7:** found by both
 
 Minutes per call were not timed, except where noted.
 
+## Backlog, named for the act
+
+- `save`: a file `git rm --cached` by hand, covered by `.gitignore` but not by the housekeeping list, stops `save` at «could not commit» until a manual commit. Rare.
+- A partial re-read of a candidate: the sheet still ends «run `attest`», and `attest` then refuses, naming `propose --on`. Safe, misleading.
+
 ## Probes
 
 - 2026-11-08, T8: `gemini-3.8-flash-high` under ADC, a one-line prompt: 4 of 4 answered, 3.0–7.6 s (agy 1.5.3). A large prompt on High is not tested.
