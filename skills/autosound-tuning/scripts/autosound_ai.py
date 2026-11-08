@@ -3835,6 +3835,8 @@ def _check_a_hanging_model_is_named_in_a_minute():
                 del calls[:]
                 code, out, err = run_main("ask", pkg)
                 assert code == 0 and [(k, t if k == "probe" else None) for k, t in calls] == want, (set_to, calls)
+                # The line says the wait it really has (#209), and with no probe it is not said at all.
+                assert (f"(до {set_to} с)" in err) if set_to != "0" else ("Спершу один рядок" not in err), (set_to, err)
             del os.environ["AUTOSOUND_PROBE_TIMEOUT"]
             # (3) The package hangs after a probe that answered: what agy printed is shown, the next tier offered.
             hang.add("package")
@@ -6242,7 +6244,7 @@ def main():
         try:
             if wants_probe(provider, cli_bin):
                 # One line first (#193): a model that hangs is found within a minute, not after the package's wait.
-                print(f">> Спершу один рядок моделі `{model}` (до {PROBE_WAIT_S} с): чи вона відповідає",
+                print(f">> Спершу один рядок моделі `{model}` (до {probe_wait()} с): чи вона відповідає",
                       file=sys.stderr)
                 started = time.monotonic()
                 text, kind, error = call_cli(provider, cli_bin, model, PROBE_PROMPT, timeout=probe_wait())
