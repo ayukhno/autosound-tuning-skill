@@ -1629,7 +1629,7 @@ four assessment lines, and nothing is built before his `ok` on that task. Resume
 
 ## S-126 · A third approach at the first step: joint-by-joint upward (skill #210)
 
-**Status**: open 2026-11-08 · on milestone `W-12 · v3.2.1` as #210 with `ok` (the Arbiter); feature, `Risk: high`, L; design before the build, `docs/PLAN-W-12.md` lane F
+**Status**: open 2026-11-08 · on milestone `W-12 · v3.2.1` as #210 with `ok` (the Arbiter); feature, `Risk: high`, L; the Arbiter's «го» on the DESIGN only, in a new session (`hub/bin/role skill`, branch `wave-2026-10-30`): `docs/PLAN-W-12.md` lane F, the Passat project's `scripts/` against `rew_tool/`; the result replaces lane F's section; then Codex's plan review, then his «го» on the build
 
 ## S-125 · W-12 · v3.2.1 — #210 and the critical fixes (11 issues, a patch)
 
