@@ -202,8 +202,9 @@ Group review: Gemini reads the changed user-facing lines (README, SKILL.md row, 
 
 ## Group Joint-by-joint approach — `Risk: high`, lane F (#210)
 
-**Design, 2026-11-08** (three code maps, each claim that carries a decision re-checked against the code; not yet reviewed by
-Codex). The build waits for the plan review and the Arbiter's «го».
+**Design, 2026-11-08** (three code maps, each claim that carries a decision re-checked against the code). Codex read it at `95abb06`: 14 findings, each
+checked against the code and taken in, one in part (the caches it found absent exist in the local project, outside git); the report is `hub/scratch/skill/codex-210-report.md`. The build waits for the plan
+review and the Arbiter's «го».
 
 **The Arbiter's answers (2026-11-08).** (1) «це один з двух шляхів (другий через бібліотеки Resonalyze) - користувач може вибрати
 як йти, або зробити два підаходи і вибрати найкращий результат»: two paths, and a third choice of running both. (2) The method
@@ -220,7 +221,7 @@ both ways:
   in `docs/2026-10-29-variant6-analysis.md:11` (−20 dB, 1/3 oct), which is `ear_suspects.ringdown_ms`'s default.
 
 **The shape: one search engine and a joint table, not a port of each script.** The scripts repeat one skeleton (leak test → crossing →
-stage 1 on one point → stage 2 on nine → dip → re-score the joint below) and differ in band, window and metric; `fit_eq` exists in three
+a shortlist → scoring on the points → dip → re-score the joint below) and differ in band, window, pruning and metric; `fit_eq` exists in three
 copies. A port script by script keeps that and the car in the code. Extending `xover_select.select_neighbor_pair` does not fit: it takes
 ready branches, one point, and scores against the house curve.
 
@@ -234,26 +235,50 @@ Two new modules, numpy + scipy, not in `IMPORTABLE`:
 - *The space from the project.* Families `dsp_math.options_for`, corners from `crossover_filters` snapped to its step (a public wrapper over
   `xover_wishes._profile_xo`), gain `dsp_profile.gain_range_db`, delay `predict._profile_limits`, Fs `xover_wishes._fs_of`. A missing Fs or an
   unreadable profile refuses in one line, exit 3. This drops the scripts' LR48, which the Helix does not offer (`swws_xo.py:32-33`).
-- *Method constants, named at the top with their source:* ±30°; dip −3.5 dB; leak −24 dB an octave out (bass −30 over 125–200 Hz); HP floors
-  1.45 × Fs (mid, the run's value) and 2 × Fs (tweeter, `crossover_checks.fs_margin`); the bass re-score −0.1 oct.
-- *Metric by the joint's band.* Crossing window up to 1 kHz: the ±30° band through the crossing, worst then median of the points, then the
-  summation loss (`dsp_math.sum_loss`). Above 1 kHz (mid↔tweeter, or a 2-way's woofer↔tweeter): the power sum over the points, then the
-  worst of the left-ear, right-ear and centre groups must not cancel, then the flattest response to the target. The window follows the band:
-  5/500 ms, or 1/4 ms above 1 kHz. Groups are read from the measured L−R arrival at each point, as the run did; centre stays p1/p5/p9.
-- *Two stages*, as the scripts: all pairs on the reference point (vectorised over delay), then the best per crossing band on every point.
-- *Align first:* `--align` runs one flatten (gain up to the channel limit, ≤ 4 cuts, ≤ 6 dB each, against the target), replacing the three
-  `fit_eq` copies. `dsp_math.greedy_eq_fit` is not it: it fits a residual with a boost budget, this raises the gain and then cuts.
-- *Stage conditions, on by default, each with a flag off:* the L−R arrival held at the centre points' raw difference ± 0.10 ms; the same
-  absolute polarity L and R; the same family and order L and R. Corners may differ per side only with a flag.
-- *Carried upward:* `--fixed <joint.json>` holds the joints below and re-scores them, recovering by the sub's delay when one falls. The
-  mid↔tweeter search re-scores too, which the scripts did not. `--move lower|upper` says whose delay moves (the blend aligned by the woofer).
-- *Decay:* per candidate, `ear_suspects.ringdown_ms` of each driver around the joint and the lower driver's share where it rings ≥ 1.5× longer. Reported, not ranked.
+- *The input.* Solos at the points through `predict.load_solo_*` and `ellipsoid.load_positions_*`; the protective filter comes out once, by
+  `predict.de_embed_solos` from the round's record, and its refusal is passed on as it stands. One capture session is assumed: curves from two sessions
+  refuse unless `--level-step <band>` names the control band, since a session's offset otherwise reads as a driver's imbalance. A front driver without
+  the nine points refuses; `--single-point` runs on the centre point and marks every row. A sub may stay at one point while its crossing is under 100 Hz
+  (λ > 3.4 m, `swws_xo.py:69`), a front sub included; above that it needs the points.
+- *The grid is the joint's, not the hardware's.* The Helix allows 20–20,480 Hz in 1 Hz steps, which is ~121 billion pairs. Corner bounds per joint from a
+  role table, overridable by flags (bass 40–125 Hz, woofer↔mid 150–600, mid↔tweeter LP 1.6–5 kHz and HP 2–5 kHz), in 1/6-oct steps snapped to the
+  profile's, then ±1/12 oct around the shortlist: ~10 × 10 corners × 17² families ≈ 29,000 pairs a joint. The count is printed before the run, and over a
+  ceiling it refuses without a flag. Run time is measured in slice 1 and goes in the ledger.
+- *Method constants, named at the top with their source:* ±30°; dip −3.5 dB; leak −24 dB an octave out (bass: −24 at 100 Hz and −30 over 125–200 Hz,
+  `swws_search2.py:44`); HP floors 1.45 × Fs (mid, the run's value) and 2 × Fs (tweeter, `crossover_checks.fs_margin`); the bass re-score −0.1 oct;
+  the L and R acoustic crossings within 1/3 oct (`stage_lock.py:217`). The run's 4.5 kHz ceiling was its 3–4″ mid: a project bound, `--max-crossing`, off by default.
+- *The metric follows each candidate's acoustic crossing.* Under 1 kHz, on the 5/500 ms window: the ±30° band through the crossing, worst then median of
+  the points, then the summation loss (`dsp_math.sum_loss`). From 1 kHz, on the 1/4 ms window (it reads from 1 kHz up, `mt_search.py:14-15`): the power sum
+  over the points, then the worst of the left-ear, right-ear and centre groups must not cancel, then the flattest response to the target. A joint whose
+  bounds straddle 1 kHz gets two lists, one per class, because their scores do not compare.
+- *The ear groups.* The run's groups were fixed by hand after reading the arrivals (`mt_search.py:264-267`). The rule here: each point's L−R arrival, 1–4 kHz,
+  minus the centre points' mean; below −0.1 ms left, above +0.1 ms right, between unassigned. A group needs two points; otherwise only the nine-point
+  sum applies and the output says so. Centre stays p1/p5/p9.
+- *Shortlists by joint class.* Bass: all pairs on the reference point, vectorised over delay, then the best per crossing band on every point. Woofer↔mid and
+  above: every pair that passes the leak test on both sides is scored on all the points with its delay curve kept (`stage_lock.py:157-159`,
+  `stage_sym.py:88-96`), because the L−R conditions couple the sides and a one-point shortlist can lose the only pair that meets them.
+- *Align first:* `--align` runs one flatten on the points' power mean, replacing the three `fit_eq` copies: gain up ≤ 6 dB and ≤ 4 cuts of ≤ 6 dB against the
+  target, then the channel put back to its own passband level, so only the shape changes (`wm_flat.py:83-90`). A channel left outside the gain range brings every
+  channel down alike (`global_trim_db`, `wm_flat.py:184`), not a cap per channel, which took one side to 0 oct; both ends of the range are checked. Cross-first is
+  compared with the same EQ budget on the sum (`wm_flat.py:115-130`). `dsp_math.greedy_eq_fit` is not it: it fits a residual with a boost budget.
+- *Stage conditions, only on real L/R pairs, on by default, each with a flag off:* the signed rule is (delay L − delay R) = −(raw arrival L − raw arrival R)
+  ± 0.10 ms at the centre points (raw m-L − m-R −1.37 → DSP +1.37, `stage_lock.py:7-12`); the same absolute polarity L and R; the same family and order L and
+  R. Corners may differ per side only with a flag. A single sub is one branch, with no L/R rule.
+- *Carried upward:* `--fixed <joint.json>` holds the joints below and re-scores them, the mid↔tweeter search too, which the scripts did not. Recovery exists for
+  the bass joint only, by the sub's delay and polarity, the knob that leaves the rest in place (`wm_search.py:189-198`); any other joint that falls past its limit
+  rejects the candidate.
+- *The blend:* `--move lower|upper` says which group's delay moves. The group above moves as one: the tweeter keeps its relative delay and flips with the mid
+  (`stage_v6.py:129-138`). A delay outside 0…`max_ms` rejects the candidate.
+- *Decay:* `ear_suspects.ringdown_ms` of each raw driver, once per driver, from the impulse (`keep_ir=True`). Per candidate: the lower driver's share where it rings
+  ≥ 1.5× longer, and the filter's group delay there (`stage_v6.py:193`), both as the issue's explanation of the blend. Reported, not ranked.
 
 **`RT/version_bench.py`.** Compares whole ledger versions, whichever path built them, so the Resonalyze path, the joint path and both in one
-table need nothing more. Subcommands: `table` (every metric of every version side by side, then `variant_front.front`'s picks: it never hands over
-a winner); `loudness` (Zwicker through a lazy `mosqito` import; absent, it prints the install line and gives ISO 226 at 80 phon, labelled as less
-exact when versions differ in the bass); `lr-phase` (L vs R of the whole chain, 250–800 Hz, centre and nine points); `round-check` (each tripod sum
-against the complex sum of its solos, per 1/3 oct, `verify_prediction.CRITERION_DB`).
+table need nothing more. Versions on different point coverage refuse rather than compare. Subcommands: `table` (`predict.predict` per version → `variant_front.terms`
+→ `front`'s picks on its four terms, with no argmax; the joint widths, ear sums, decay, share and L/R phase are shown beside them and take no part in the picks, and
+a term that cannot be computed is named); `loudness` (Zwicker through a lazy `mosqito` import; absent, it prints the install line and gives ISO 226 at 80 phon, labelled as less
+exact when versions differ in the bass); `lr-phase` (L vs R, 250–800 Hz, phase and group-delay difference, acoustic and electrical, centre and nine points, as `lr_tracking.py`);
+`round-check` (each tripod sum against the complex sum of its solos: rms and maximum over 1/3-oct bands, no offset removed, as `s4_6b_vs_model.py:165-168`; over 1 dB rms is
+flagged as a working threshold, not as `verify_prediction`'s validated criterion, which means something else).
 
 **Out of this wave, said in the runbook:** a tool for the five-sum RTA discriminator (not in #210's list; the step is described); the centre's delay
 (the existing steps run after the joints); a preset decoder (#200: the runbook falls back to `screen-read-dsp.md`); a tool for the blend, which is a
@@ -266,28 +291,38 @@ re-run with `--fixed` and `--move`.
 3. Above 1 kHz: the power sum, the ear groups, the short window.
 4. `version_bench.py`.
 
-Tests, red first, each on synthetic curves whose best variant is known by construction (the `xover_select` selftest's form): the search finds a planted
-delay, polarity and corner pair; a family outside the profile is never returned; a missing Fs refuses; a 2-way and a front sub give the right joints;
-the L−R condition rejects the planted best when it breaks the offset; a joint that falls is recovered; a group that cancels is rejected above 1 kHz while
-the nine-point sum still passes; `loudness` without `mosqito` prints the install line and the label. **The replay, a session's check and not CI:** the
-local caches `scripts/results/{swws_raw_0615,joint_wm_raw,mt_raw}.npz` (outside git) through the engine must rank the bass candidates the run banked near
-the top (1.6 / 1.76 oct); the result goes in the ledger.
+Tests, red on behaviour and not on a missing import, each on synthetic curves whose best variant is known by construction (the `xover_select` selftest's form), with a
+score margin or a named equivalence set where flat drivers tie: the search finds a planted delay, polarity and corner pair; a family outside the profile is never returned;
+a missing Fs refuses; a 2-way, a front sub and a single sub give the right joints; the L−R condition rejects the planted best when it breaks the offset; a one-point
+shortlist would lose the pair the coupled search keeps; a bass joint that falls is recovered and one that cannot be is rejected; the upper group survives a `--move`; a delay
+past the ceiling rejects; a group that cancels is rejected from 1 kHz while the nine-point sum passes, with ear groups inferred from planted arrivals and an ambiguous set falling back;
+a straddling joint gives two lists; missing points refuse. Bench: `lr-phase` and `round-check` on planted differences; ISO 226 and, where `mosqito` is present, a Zwicker match on a
+known level step; without it the install line and the label. T16: all three choices, an absent legacy value, save and reload, `_route_line` under both modes.
+
+**The replay, a session's check and not CI, with an adapter in the session's scratch:** the local caches `scripts/results/{swws_raw_0615,joint_wm_raw,mt_raw}.npz` (outside git;
+complex responses on three grids, protective filters still in, two sessions, no impulses, so decay is not replayable from them). Two separate claims, because the conditions
+were added after the first search and exclude its best (`docs/2026-10-26-swws-analysis.md:116-132`). Without the leak and dip conditions, the score of banked candidate B is
+reproduced within 0.05 oct. With them, candidate C (BW36 60 / BE24 90, 0.98 / 1.00 oct) is in the top 10, within 0.1 oct of the run's best. Results in the ledger.
 
 **T15 · the runbook, `SK/references/phases/joint-by-joint.md`,** in the phase files' form (Goal-node, then steps). It holds what the path needs, the capture,
 the order of joints, align-then-cross, the search and metric per joint, the conditions, the tournament and the blend, «both paths», the three lessons from
 the ear. It replaces the desk steps of Phases 1–2 only; 0, 3 and 4 stay. Capture: nine points for every front driver, tweeters included (the sheet's
 ellipsoid is optional and w/m only); the sub may stay at one point. Steps through `add_step`, source `skill`, phase 1; TCC renders an unknown step id
-(`state/process_view.py:610-635`). It stays outside `reading-cost`'s `ORDERED` and is read when the path is chosen. Gemini reads it. English only:
-`i18n-check` does not cover `references/`.
+(`state/process_view.py:610-635`). It stays outside `reading-cost`'s `ORDERED` and is read when the path is chosen, so the budget does not count this path's reading; the runbook
+says so at its head. Gemini reads it. English only: `i18n-check` does not cover `references/`.
 
 **T16 · the offer at the first step.** A new field beside `goal.design_path`, because this is a choice inside the desk half, with the same three
 requirements as virtual-first: `goal.desk_approach`, enum `joint_by_joint | resonalyze_engine | both`, `writes="project:goal.desk_approach"`, `when="now"`
 (it decides the capture), no default: the person picks. Its note says what each needs and gives: several DSP memories, the nine-point capture, reading a
 saved preset back, time for A/B; a ranked set with the reasons, against the engine's front; both = more time, and the best of two. It also states the
-evidence: one car, 3-way + centre + sub. `_route_line` names the choice, an addition. Labels in `intake_i18n/{en,uk,de,pl}.json`, the three through the
-Advisor. `project-intake.md` §4 gets the offer. **`SK/SKILL.md` only a Reference Map row:** before the Map it holds 17,416 of 17,500 bytes
-(`docs-check` rule 17). `reading-cost-baseline.json` is rewritten in that commit, as its own visible diff. The archived way stays unoffered: the
-«no separate iterative path» line of `virtual-first.md:72` stands, and `DESIGN_PATHS` is not touched.
+evidence: one car, 3-way + centre + sub. `_route_line` dispatches on mode × approach instead of its one fixed sentence (`process.py:989-992`): an improved car on the engine keeps
+today's line; with joints it names block X and the runbook; both names both; a new tune names the runbook only for joints or both; an absent value keeps today's behaviour. Labels in
+`intake_i18n/{en,uk,de,pl}.json`, the three through the Advisor. `project-intake.md` §4 gets the offer. **`SK/SKILL.md` only a Reference Map row:** before the Map it holds 17,416 of 17,500 bytes
+(`docs-check` rule 17). `reading-cost-baseline.json` is rewritten in that commit, as its own visible diff. The archived way stays unoffered and `DESIGN_PATHS` is not touched.
+
+**One order of phases, two ways of doing the desk.** The decision of 2026-09-09 that there is one path, which `docs-check` enforces (`ONE_PATH_BANNER` in four phase files, `TWO_PATHS`), stays:
+−1, 0, desk, 3, 4 is one order, and nothing in the new text says «If Phase −1 chose». The Arbiter's two paths are inside the desk. `virtual-first.md`'s desk section (:48-50 and §1.3) gets one
+sentence: the desk runs the engine, the joints or both, per `goal.desk_approach`, and the current tune is a candidate on either.
 
 **TCC:** no code. The form is the skill's page (`core/intake_form.py:71`), and TCC reads neither `goal.mode` nor a route. At T16's close one ticket to TCC says
 so and asks whether its first step should name the two paths.
