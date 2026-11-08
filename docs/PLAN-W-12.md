@@ -90,7 +90,7 @@ At the wave's end the numbers go to the hub as one ticket, for the Arbiter's rev
 | **B** | `P`, `N`, `V`, `C`, `RT/CONTRACT.md`, `RT/rew_api.py` (read) | T4 #203 → T5 #198 |
 | **D** | `install.sh`, `install.ps1`, `IC`, `FAQ*.md` (one line) | T8 #205 → T9 #206 |
 | **E** | `AI`, `README*.md`, `SK/SKILL.md`, `SK/references/**`, `RT/capabilities.py`, `scripts/docs-check.py` | T10–T13 |
-| **F** | `RT/joint_search.py`, `RT/version_bench.py`, `SK/references/phases/joint-by-joint.md`, then `RT/intake.py`, `RT/intake_i18n/*`, `RT/state/process.py` (`_route_line`), `SK/SKILL.md` (Map row), `project-intake.md`, `capabilities.md`, `rew-tool-docs.md` | T14 #210 → T15 → T16, after lane E |
+| **F** | `RT/joint_search.py`, `RT/version_bench.py`, `SK/references/phases/joint-by-joint.md`, then `RT/intake.py`, `RT/intake_i18n/*`, `RT/state/process.py` (`_route_line`), `SK/SKILL.md` (Map row), `project-intake.md`, `capture-session-sheet.md`, `virtual-first.md`, `capabilities.md`, `rew-tool-docs.md` | T14 #210 → T15 → T16, after lane E |
 
 T4 first in lane B: TCC builds against it in its own W-12, and it settles `P`'s exit table. Lane E's `SK/SKILL.md` edit (T12) runs while no other agent edits it.
 
@@ -306,14 +306,17 @@ reproduced within 0.05 oct. With them, candidate C (BW36 60 / BE24 90, 0.98 / 1.
 
 **T15 · the runbook, `SK/references/phases/joint-by-joint.md`,** in the phase files' form (Goal-node, then steps). It holds what the path needs, the capture,
 the order of joints, align-then-cross, the search and metric per joint, the conditions, the tournament and the blend, «both paths», the three lessons from
-the ear. It replaces the desk steps of Phases 1–2 only; 0, 3 and 4 stay. Capture: nine points for every front driver, tweeters included (the sheet's
-ellipsoid is optional and w/m only); the sub may stay at one point. Steps through `add_step`, source `skill`, phase 1; TCC renders an unknown step id
+the ear. It replaces the desk steps of Phases 1–2 only; 0, 3 and 4 stay. **One full raw capture for every project, whichever path** (the Arbiter, 2026-11-08: «знімати все що потрібно щоб мати сиру машину для всіх варіацій
+проекта далі»; the same capture served more than ten desk variants on the Passat). Nothing the engine reads differs: it takes the tripod solos (`resonalyze_engine.py:1446`), and the joints need
+those plus the points. So block B of `capture-session-sheet.md` (and `virtual-first.md:131-132`) lists the nine points for every front driver and the centre, tweeters included, as the
+default; on a 3-way + centre that is 63 sweeps against the sheet's 36. This changes the sheet's «the ellipsoid is the one optional part» of 2026-10-02: it can still be cut for time, and the sheet
+then names the cost: the engine loses nothing, the joints only run with `--single-point`. The sub may stay at one point (above). Steps through `add_step`, source `skill`, phase 1; TCC renders an unknown step id
 (`state/process_view.py:610-635`). It stays outside `reading-cost`'s `ORDERED` and is read when the path is chosen, so the budget does not count this path's reading; the runbook
 says so at its head. Gemini reads it. English only: `i18n-check` does not cover `references/`.
 
 **T16 · the offer at the first step.** A new field beside `goal.design_path`, because this is a choice inside the desk half, with the same three
 requirements as virtual-first: `goal.desk_approach`, enum `joint_by_joint | resonalyze_engine | both`, `writes="project:goal.desk_approach"`, `when="now"`
-(it decides the capture), no default: the person picks. Its note says what each needs and gives: several DSP memories, the nine-point capture, reading a
+(asked at the project's start, at the desk; the capture does not depend on it, so it can still be changed after the capture), no default: the person picks. Its note says what each needs and gives: several DSP memories, reading a
 saved preset back, time for A/B; a ranked set with the reasons, against the engine's front; both = more time, and the best of two. It also states the
 evidence: one car, 3-way + centre + sub. `_route_line` dispatches on mode × approach instead of its one fixed sentence (`process.py:989-992`): an improved car on the engine keeps
 today's line; with joints it names block X and the runbook; both names both; a new tune names the runbook only for joints or both; an absent value keeps today's behaviour. Labels in
