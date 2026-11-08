@@ -217,6 +217,7 @@ Group passes: Codex on lane B's diff; one fix round; the narrow check of fixes (
 ## Group Installers — `Risk: high`, lane D
 
 **T8 · #205 — Flash (High) and run-together lines.** S.
+**Outcome, 2026-11-08: no code.** `gemini-3.8-flash-high` answered 4 of 4 one-line probes under ADC (3.0–7.6 s), so the installer and FAQ text stays. The run-together lines are not built: `Step` starts on a new line itself (`install.ps1:452`), so the cause below cannot produce them, and the Arbiter does not recall whether they were on the screen or in pasted text («не витрачаємо»). If the next VM pass shows them on the screen, record the output then. The text below is what was planned.
 First the Arbiter's re-check: a one-line probe of `gemini-3.8-flash-high` under ADC (`agy`, 3 tries, timed); the
 result in the ledger. Still silent → `install.sh:2475-2477`, `install.ps1:2556-2558` and `FAQ*.md:117` name the tier
 the guides name (`SK/references/tooling/setup-critic-channel.md:66`: Flash Medium) and separate «Pro not offered where

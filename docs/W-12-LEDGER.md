@@ -15,6 +15,11 @@ Each checked at its main site. **Side by side on T2, T3, T6, T7:** found by both
 
 Minutes per call were not timed, except where noted.
 
+## Probes
+
+- 2026-11-08, T8: `gemini-3.8-flash-high` under ADC, a one-line prompt: 4 of 4 answered, 3.0–7.6 s (agy 1.5.3). A large prompt on High is not tested.
+- 2026-11-08: `gemini-4-argon-high` did not answer the one-line probe within 60 s once, after answering earlier the same day; `gemini-4-argon-medium` answered.
+
 ## For the PMO (hub-kit), the Arbiter's word 2026-11-08
 
 To go into the end-of-wave ticket for the hub, and from it to the PMO advice. No write to hub-kit from here.
