@@ -13,7 +13,7 @@
 
 ## Sprawdzone na zawodach
 
-Dzięki wersji 2.x tej metody samochód autora zdobył w 2026 roku cztery nagrody na mistrzostwach **EMMA** i **AYA** (pierwsza nagroda została zdobyta jeszcze przed zebraniem metody w skill, przy użyciu wskazówek AI z tych samych wykresów, co stało się inspiracją dla tego projektu). Wersja 3.1, z interfejsem graficznym, jest wydaniem bieżącym. Piąta nagroda — 3. miejsce na zawodach **German EMMA Final 2026** — została zdobyta z wersją 3.x dzięki dopracowaniu istniejącego strojenia, a nie strojeniu od zera. Linia 2.8.x stojąca za pierwszymi czterema jest nadal dostępna: zobacz FAQ, [ścieżka 3](FAQ.pl.md#four-paths-of-usage).
+Dzięki wersji 2.x tej metody samochód autora zdobył w 2026 roku cztery nagrody na mistrzostwach **EMMA** i **AYA** (pierwsza nagroda została zdobyta jeszcze przed zebraniem metody w skill, przy użyciu wskazówek AI z tych samych wykresów, co stało się inspiracją dla tego projektu). Wersja 3.x, z interfejsem graficznym, jest wydaniem bieżącym. Piąta nagroda — 3. miejsce na zawodach **German EMMA Final 2026** — została zdobyta z wersją 3.x dzięki dopracowaniu istniejącego strojenia, a nie strojeniu od zera. Linia 2.8.x stojąca za pierwszymi czterema jest nadal dostępna: zobacz FAQ, [ścieżka 3](FAQ.pl.md#four-paths-of-usage).
 
 <p align="left">
   <img src="assets/awards/aya-may26-einsteiger5000.jpg" height="120" alt="AYA May 2026, Einsteiger 5000, 1st place">

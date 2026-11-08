@@ -13,7 +13,7 @@
 
 ## Proven in Competitions
 
-With version 2.x of this method, the author's car took four awards in 2026 at **EMMA** and **AYA** championships (the first award was won before it was bundled into a skill, using AI hints from the same graphs, which inspired this project). Version 3.1, with a graphical interface, is the current release. The fifth award — 3rd place at the **German EMMA Final 2026** — came with 3.x, by refining the existing tune rather than tuning from scratch. The 2.8.x line behind the first four is still available: see the FAQ, [path 3](FAQ.md#four-paths-of-usage).
+With version 2.x of this method, the author's car took four awards in 2026 at **EMMA** and **AYA** championships (the first award was won before it was bundled into a skill, using AI hints from the same graphs, which inspired this project). Version 3.x, with a graphical interface, is the current release. The fifth award — 3rd place at the **German EMMA Final 2026** — came with 3.x, by refining the existing tune rather than tuning from scratch. The 2.8.x line behind the first four is still available: see the FAQ, [path 3](FAQ.md#four-paths-of-usage).
 
 <p align="left">
   <img src="assets/awards/aya-may26-einsteiger5000.jpg" height="120" alt="AYA May 2026, Einsteiger 5000, 1st place">

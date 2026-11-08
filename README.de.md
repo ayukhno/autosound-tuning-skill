@@ -13,7 +13,7 @@
 
 ## Im Wettbewerb bewährt
 
-Mit Version 2.x dieser Methode holte das Auto des Autors 2026 vier Auszeichnungen bei Meisterschaften von **EMMA** und **AYA** (die erste Auszeichnung wurde gewonnen, bevor sie in einen Skill gebündelt wurde, mithilfe von KI-Hinweisen aus denselben Diagrammen – was dieses Projekt überhaupt erst inspirierte). Version 3.1 mit grafischer Benutzeroberfläche ist das aktuelle Release. Die fünfte Auszeichnung – 3. Platz beim **German EMMA Final 2026** – kam mit 3.x hinzu, indem das bestehende Setup verfeinert wurde, statt bei null zu beginnen. Die 2.8.x-Linie hinter den ersten vieren ist weiterhin verfügbar: siehe die FAQ, [Pfad 3](FAQ.de.md#four-paths-of-usage).
+Mit Version 2.x dieser Methode holte das Auto des Autors 2026 vier Auszeichnungen bei Meisterschaften von **EMMA** und **AYA** (die erste Auszeichnung wurde gewonnen, bevor sie in einen Skill gebündelt wurde, mithilfe von KI-Hinweisen aus denselben Diagrammen – was dieses Projekt überhaupt erst inspirierte). Version 3.x mit grafischer Benutzeroberfläche ist das aktuelle Release. Die fünfte Auszeichnung – 3. Platz beim **German EMMA Final 2026** – kam mit 3.x hinzu, indem das bestehende Setup verfeinert wurde, statt bei null zu beginnen. Die 2.8.x-Linie hinter den ersten vieren ist weiterhin verfügbar: siehe die FAQ, [Pfad 3](FAQ.de.md#four-paths-of-usage).
 
 <p align="left">
   <img src="assets/awards/aya-may26-einsteiger5000.jpg" height="120" alt="AYA May 2026, Einsteiger 5000, 1st place">
