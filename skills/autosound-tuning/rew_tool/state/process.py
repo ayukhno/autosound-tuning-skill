@@ -1548,6 +1548,20 @@ def validate(state):
 
 COVERS_IN_NAME = 3
 
+#: What a step's note holds when it is added (#202): what to do, what the ear should find, what to do if it does not.
+#: `answer`, the Arbiter's words, is the fourth key and only `finish_step` writes it.
+_NOTE_FIELDS = ("do", "expect", "if_not")
+
+
+def _clean_note(note):
+    """A step's note as it is kept: the fields given, stripped, blanks dropped; None when nothing is left."""
+    if note is None:
+        return None
+    if not isinstance(note, dict) or set(note) - set(_NOTE_FIELDS):
+        raise ProcessError(f"a step's note is a mapping of {', '.join(_NOTE_FIELDS)}; got {note!r}")
+    kept = {key: str(note[key]).strip() for key in _NOTE_FIELDS if note.get(key) is not None}
+    return {key: text for key, text in kept.items() if text} or None
+
 
 def _clean_covers(covers):
     """The covered facts as a list: blanks dropped, order kept, no duplicate."""
@@ -1885,7 +1899,7 @@ class Process:
         return state
 
     @_locked
-    def add_step(self, step_id, name, source=SOURCE_SKILL, phase=None, covers=None):
+    def add_step(self, step_id, name, source=SOURCE_SKILL, phase=None, covers=None, note=None):
         # (skill #72) The name leads with the step's id -- `_named_by_id`, below the class.
         """Add a plan step. Instantiated from the phase template (`skill`) or situational
         (`project`) — the distinction is what lets the UI show which steps this car needed.
@@ -1900,8 +1914,12 @@ class Process:
         The step's NAME is then composed here, not typed: the first `COVERS_IN_NAME` covered facts
         and `+N` for the rest. Generated, because a caller free to write the summary by hand is a
         caller free to write the count again.
+
+        `note` is what a listening or check step predicts, `{do, expect, if_not}` (#202): the name is too short for
+        it and the conversation is gone by the next session. Absent from the step and its event when not given.
         """
         covers = _clean_covers(covers)
+        note = _clean_note(note)
         if covers:
             summary = covers_summary(covers)
             if summary not in name:
@@ -1931,9 +1949,12 @@ class Process:
             "evidence": [],
             "covers": covers,
         }
+        if note:
+            entry["note"] = note
         state["plan"].append(entry)
         self._write(state)
-        self._append(EV_STEP_ADDED, step=step_id, name=name, source=source, covers=covers)
+        self._append(EV_STEP_ADDED, step=step_id, name=name, source=source, covers=covers,
+                     **({"note": note} if note else {}))
         return entry
 
     @_locked
@@ -1946,6 +1967,11 @@ class Process:
             return entry
         if entry["status"] in (STEP_DONE, STEP_SKIPPED):
             entry["attempt"] = int(entry.get("attempt", 1)) + 1
+            # The answer was about the attempt before this one (#202); `step_done` keeps it in the journal.
+            if "note" in entry:
+                entry["note"].pop("answer", None)
+                if not entry["note"]:
+                    del entry["note"]
         entry["status"] = STEP_IN_PROGRESS
         entry["skip"] = False
         self._write(state)
@@ -1953,7 +1979,7 @@ class Process:
         return entry
 
     @_locked
-    def finish_step(self, step_id, evidence):
+    def finish_step(self, step_id, evidence, heard=None):
         """Mark a step done. `evidence` is required, and at least one item must RESOLVE (SCR-035).
 
         Evidence is a list of pointers to something a later session can check — a REW measurement
@@ -1962,7 +1988,12 @@ class Process:
         the reconciler compares each done step against reality, and "done" with nothing checkable
         is indistinguishable from a model that merely said so -- which is exactly what one did,
         for four phases, with an empty project folder.
+
+        `heard` is the Arbiter's answer in his words (#202), kept as `note.answer` beside what the step expected, and
+        on `step_done`; a step with no note gets one. A decision tied to the step does not fill it: a decision's
+        question may be about anything.
         """
+        heard = str(heard).strip() if heard is not None else ""
         if isinstance(evidence, str):
             evidence = [evidence]
         evidence = [e for e in (evidence or []) if str(e).strip()]
@@ -2009,8 +2040,10 @@ class Process:
         entry["status"] = STEP_DONE
         entry["skip"] = False
         entry["evidence"] = sorted(set(entry.get("evidence", [])) | set(map(str, evidence)))
+        if heard:
+            entry.setdefault("note", {})["answer"] = heard
         self._write(state)
-        self._append(EV_STEP_DONE, step=step_id, evidence=entry["evidence"])
+        self._append(EV_STEP_DONE, step=step_id, evidence=entry["evidence"], **({"heard": heard} if heard else {}))
         return entry
 
     @_locked
@@ -4052,6 +4085,12 @@ class Process:
             })
         return out
 
+    def answers_owed(self, state):
+        """The steps begun that predicted something and have no answer beside it (#202): in progress or done, never
+        todo or skipped. Read off the plan, because `open_work` carries only the steps in progress."""
+        return [s for s in state.get("plan", []) if s.get("status") in (STEP_IN_PROGRESS, STEP_DONE)
+                and (s.get("note") or {}).get("expect") and not s["note"].get("answer")]
+
     def handoff(self):
         """Is everything the NEXT session needs on disk — and the line to say when it is (S-044).
 
@@ -4393,16 +4432,18 @@ _USAGE = """usage: process.py <process-dir> <command> [args]
   show                                  print the current state as JSON
   plan [phase]                          print the plan (default: active phase)
   enter-phase <phase>                   make a phase current (-1..5)
-  add-step <id> <name> [--project] [--covers a.b,c.d]
+  add-step <id> <name> [--project] [--covers a.b,c.d] [--note-do T] [--note-expect T] [--note-if-not T]
                                         add a plan step (--project = situational insert).
                                          --covers names the facts it closes (dotted paths, as
                                          `open-questions` prints them); the name then carries the
                                          first three and `+N` — generated, because a count is not
-                                         a subject (S-031)
+                                         a subject (S-031). --note-*: for a listening or check step,
+                                         what to do, what it expects, what to do if it does not
   start <id>                            begin/re-begin a step (a re-begin is attempt N+1)
-  done <id> <evidence> [evidence ...]    mark done; evidence is REQUIRED and must RESOLVE
+  done <id> <evidence> [evidence ...] [--heard T]   mark done; evidence is REQUIRED and must RESOLVE
                                          (a capture name `c_1 (rta)`, a ledger `v_003` that
-                                          exists, or a project file that exists)
+                                          exists, or a project file that exists).
+                                         --heard: the Arbiter's answer, kept beside the note's expect
   skip <id> <reason ...> [--superseded-by ID]   supersede a step (kept visible, never deleted).
                                          The reason is REQUIRED: a skip with no why is
                                          indistinguishable from a step forgotten, and the next
@@ -4419,7 +4460,8 @@ _USAGE = """usage: process.py <process-dir> <command> [args]
                                               Exits non-zero while anything is open, so "we
                                               stopped" cannot be said over an open round.
                                               With nothing open it RECORDS session_closed:
-                                              this is the stop itself, not a look
+                                              this is the stop itself, not a look. A step with a
+                                              prediction and no answer is listed; it holds nothing
   session-close --check                       the same report and exit code, and writes nothing:
                                               the read-only question, for reconciling state
   session-reopen <reason>                     take a mistaken close back: session_reopened with its
@@ -4521,9 +4563,9 @@ VERB_FLAGS = {
     "show": (),
     "plan": (),
     "enter-phase": (),
-    "add-step": ("--project", "--covers"),
+    "add-step": ("--project", "--covers", "--note-do", "--note-expect", "--note-if-not"),
     "start": (),
-    "done": (),
+    "done": ("--heard",),
     "skip": ("--superseded-by",),
     "block": (),
     "reviewer": ("--review", "--mode"),
@@ -4560,7 +4602,8 @@ _FLAG_TAKES_VALUE = {
     "--bind": True, "--late": True, "--knob": True, "--measured": False, "--amends": True, "--note": True,
     "--amend": True, "--reason": True, "--source": True, "--hp": True, "--lp": True, "--pair": True, "--text": True,
     "--route": True, "--ledger-version": True, "--track": True, "--characteristic": True, "--bank": False,
-    "--json": False, "--no-rew": False, "--level-base": True, "--round": True,
+    "--json": False, "--no-rew": False, "--level-base": True, "--round": True, "--note-do": True, "--note-expect": True,
+    "--note-if-not": True, "--heard": True,
 }
 
 #: The flags that take no value, read off `_FLAG_TAKES_VALUE`. `--flag=value` is read as `--flag value`, and for one of
@@ -11473,6 +11516,167 @@ def _own_tempdir(selftest):
     return run
 
 
+def _check_a_steps_note():
+    """#202 (hub #313, PAS-020): a step keeps what the ear is expected to hear and what the Arbiter answered, and
+    `session-close` names a prediction with no answer. Run through the command line, as a session runs it. The close
+    and the redo are also driven off a state written by hand, so that what they do is judged apart from the verbs
+    that write a note. Owed answers never touch the exit code, which TCC reads as the answer to "was it stopped"."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_process_note_")
+    failures = []
+    clean = "nothing open in the process record"
+    heard_flag, evidence = "--heard", "w-L_1 (sw)"
+
+    def check(ok, what):
+        if not ok:
+            failures.append(what)
+
+    def cli(d, *argv):
+        rc, out, err = _run_main(["process.py", d, *argv])
+        return rc, out + err
+
+    def step(d, sid):
+        return next((s for s in Process(d).load()["plan"] if s["id"] == sid), {})
+
+    def last(d, kind):
+        return ([e for e in Process(d).events() if e.get("type") == kind] or [{}])[-1]
+
+    def noted(d, notes):
+        """The notes written straight into the state, as a method that has them would have left them."""
+        state = Process(d).load()
+        for entry in state["plan"]:
+            if entry["id"] in notes:
+                entry["note"] = notes[entry["id"]]
+        with open(Process(d).state_path, "w", encoding="utf-8") as f:
+            json.dump(state, f, ensure_ascii=False)
+
+    def refused(call):
+        try:
+            call()
+        except ProcessError:
+            return True
+        except Exception:  # noqa: BLE001 -- anything else is no refusal of the method's, and is reported as one
+            return False
+        return False
+    try:
+        # What the close lists, by the step's status and its note. Only a prediction with no answer, on a step that
+        # was begun: a todo was not listened to, a skip will not be.
+        d = os.path.join(top, "close", "process")
+        p = Process(d)
+        p.enter_phase("-1")
+        for sid in ("-1.1", "-1.2", "-1.3", "-1.4", "-1.5", "-1.6", "-1.7"):
+            p.add_step(sid, f"step {sid}")
+        for sid in ("-1.1", "-1.2", "-1.5", "-1.6"):
+            p.finish_step(sid, [evidence])
+        p.skip_step("-1.4", reason="not needed")
+        p.block_step("-1.7", "waiting")
+        noted(d, {"-1.1": {"do": "play it", "expect": "OWED-done", "if_not": "IF-NOT-done"},
+                  "-1.2": {"expect": "ANSWERED", "answer": "as predicted"},
+                  "-1.3": {"expect": "STILL-TODO"},
+                  "-1.4": {"expect": "SKIPPED-STEP"},
+                  "-1.5": {"do": "only what to do"},
+                  "-1.7": {"expect": "BLOCKED-STEP"}})
+        not_listed = ("ANSWERED", "STILL-TODO", "SKIPPED-STEP", "only what to do", "BLOCKED-STEP")
+        journal = len(Process(d).events())
+        rc, said = cli(d, "session-close", "--check")
+        check(rc == 0, f"--check: an unanswered prediction changed the exit code: {rc}")
+        check(clean in said, f"--check: the clean stop's own line went: {said[:200]!r}")
+        check("-1.1" in said and "OWED-done" in said, f"--check does not list the done step with no answer: {said[:300]!r}")
+        check("IF-NOT-done" in said, f"--check does not say what to do if the ear disagrees: {said[:300]!r}")
+        check(heard_flag in said, f"--check does not say how an answer is recorded: {said[:300]!r}")
+        for word in not_listed:
+            check(word not in said, f"--check listed {word}: {said[:300]!r}")
+        check(len(Process(d).events()) == journal, "--check wrote to the journal")
+        rc, said = cli(d, "session-close")
+        check(rc == 0 and "recorded: session_closed" in said,
+              f"an unanswered prediction held the stop: rc {rc}, {said[-200:]!r}")
+        check(clean in said and "OWED-done" in said, f"the stop does not list it beside its own line: {said[:300]!r}")
+        cli(d, "session-reopen", "more to do")
+        # A step in progress is begun too: it is owed, apart from the line that says the step is open, and it is that
+        # line alone which makes the exit non-zero.
+        p.start_attempt("-1.3")
+        rc, said = cli(d, "session-close", "--check")
+        check(rc == 1 and "STEP IN PROGRESS" in said and "STILL-TODO" in said,
+              f"a step in progress with a prediction: rc {rc}, {said[:300]!r}")
+        p.finish_step("-1.3", [evidence])
+
+        # A decision tied to the step is about anything: it is no answer to the prediction.
+        check(cli(d, "decision", "keep 45 degrees?", "yes", "-1.1")[0] == 0, "decision refused")
+        check("answer" not in step(d, "-1.1")["note"], f"a decision filled the answer: {step(d, '-1.1')['note']}")
+        # What the close tells a session to run answers a step that is done already.
+        rc, said = cli(d, "done", "-1.1", evidence, heard_flag, "late, and as predicted")
+        check(rc == 0 and step(d, "-1.1")["note"].get("answer") == "late, and as predicted",
+              f"--heard on a step already done: rc {rc}, {said.strip()[-200:]!r}")
+        check("OWED-done" not in cli(d, "session-close", "--check")[1], "the answer given after the close is still owed")
+
+        # A redo: the old answer was about the old attempt. Its record is the journal's.
+        rc, said = cli(d, "start", "-1.2")
+        check(rc == 0 and step(d, "-1.2")["attempt"] == 2, f"redo refused: {said}")
+        check(step(d, "-1.2")["note"] == {"expect": "ANSWERED"}, f"a redo kept the old answer: {step(d, '-1.2')['note']}")
+        check("ANSWERED" in cli(d, "session-close", "--check")[1], "a redone step's prediction is not owed again")
+        noted(d, {"-1.6": {"answer": "only an answer"}})
+        cli(d, "start", "-1.6")
+        check("note" not in step(d, "-1.6"), f"a redo left an empty note: {step(d, '-1.6').get('note')}")
+        # Starting a step that is already open is no redo.
+        noted(d, {"-1.2": {"expect": "ANSWERED", "answer": "kept"}})
+        cli(d, "start", "-1.2")
+        check(step(d, "-1.2")["note"].get("answer") == "kept", "`start` on an open step took its answer")
+
+        # The verbs that write it.
+        d = os.path.join(top, "verbs", "process")
+        p = Process(d)
+        p.enter_phase("-1")
+        words = {"do": "play the track", "expect": "voice 5-10 cm left of centre", "if_not": "check the delay"}
+        rc, said = cli(d, "add-step", "-1.1", "listen", "--project", "--covers", "a.b,c.d", "--note-do", words["do"],
+                       "--note-expect=" + words["expect"], "--note-if-not", words["if_not"])
+        check(rc == 0, f"add-step with a note: rc {rc}, {said.strip()[-200:]!r}")
+        if rc == 0:
+            entry = step(d, "-1.1")
+            check(entry.get("note") == words, f"the step did not keep the note: {entry.get('note')}")
+            check(last(d, EV_STEP_ADDED).get("note") == words, f"step_added: {last(d, EV_STEP_ADDED)}")
+            check(entry["covers"] == ["a.b", "c.d"] and entry["source"] == SOURCE_PROJECT,
+                  f"--project and --covers read beside the note: {entry}")
+            check(set(entry) >= {"id", "name", "status", "source", "skip", "attempt", "covers", "evidence"}, entry)
+        cli(d, "add-step", "-1.2", "no note")
+        check("note" not in step(d, "-1.2") and "note" not in last(d, EV_STEP_ADDED),
+              "a step with no note carries a `note` key: a state and a journal as they were, unless one is given")
+        rc, said = cli(d, "add-step", "-1.3", "blank", "--note-expect", "   ")
+        check(rc == 0 and "note" not in step(d, "-1.3"), f"a blank field is a note: rc {rc}, {step(d, '-1.3')}")
+
+        spoken = "--бас гуде"              # the Arbiter's own words, whatever they look like
+        cli(d, "start", "-1.1")
+        rc, said = cli(d, "done", "-1.1", evidence, heard_flag, spoken)
+        check(rc == 0, f"done --heard: rc {rc}, {said.strip()[-200:]!r}")
+        if rc == 0:
+            entry = step(d, "-1.1")
+            check(entry["note"] == dict(words, answer=spoken), f"the answer is not beside `expect`: {entry['note']}")
+            check(entry["evidence"] == [evidence], f"the words were taken as evidence: {entry['evidence']}")
+            check(last(d, EV_STEP_DONE).get("heard") == spoken, f"step_done: {last(d, EV_STEP_DONE)}")
+            check("voice" not in cli(d, "session-close", "--check")[1], "an answered prediction is still listed")
+        rc, said = cli(d, "done", "-1.2", evidence, f"{heard_flag}=and with an equals sign")
+        check(rc == 0 and step(d, "-1.2").get("note") == {"answer": "and with an equals sign"},
+              f"a step with no note gets one when --heard lands: rc {rc}, {step(d, '-1.2')}")
+        cli(d, "done", "-1.3", evidence)
+        check("heard" not in last(d, EV_STEP_DONE) and "note" not in step(d, "-1.3"),
+              f"a close with no --heard: {last(d, EV_STEP_DONE)}")
+
+        before = _project_bytes(d)
+        rc, said = cli(d, "done", "-1.1", evidence, heard_flag, "one", heard_flag, "two")
+        check(rc == 1 and "twice" in said, f"--heard given twice: rc {rc}, {said.strip()[-200:]!r}")
+        for argv, flag in ((["add-step", "-1.8", "x", heard_flag, "y"], heard_flag),
+                           (["done", "-1.1", evidence, "--note-do", "y"], "--note-do")):
+            rc, said = cli(d, *argv)
+            check(rc == 2 and flag in said, f"{flag} on the wrong verb: rc {rc}, {said.strip()[-200:]!r}")
+        check(_project_bytes(d) == before, "a refused flag wrote something")
+        check(refused(lambda: Process(d).add_step("-1.8", "x", note={"heard": "no"})), "a note with an unknown field")
+        check(refused(lambda: Process(d).add_step("-1.8", "x", note="expect this")), "a note that is no mapping")
+        check(_project_bytes(d) == before, "a refused note wrote something")
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, f"{len(failures)} of a step's note:\n  " + "\n  ".join(failures)
+
+
 @_own_tempdir
 def _selftest():
     """The refusals, exercised. This module is the one with the most of them — evidence must exist
@@ -11529,7 +11733,8 @@ def _selftest():
                   _check_the_sha_is_asked_before_the_hold, _check_a_close_lands_state_first,
                   _check_capture_close_closes_the_round_it_read, _check_a_mistyped_process_folder_starts_nothing,
                   _check_a_new_project_still_starts, _check_session_start_starts_a_project,
-                  _check_the_plan_file_is_said, _check_a_project_folder_that_cannot_be_written):
+                  _check_the_plan_file_is_said, _check_a_project_folder_that_cannot_be_written,
+                  _check_a_steps_note):
         try:
             check()
         except AssertionError as exc:
@@ -12504,6 +12709,10 @@ def _main(argv):
             print(f"phase {args[0]} is current")
         elif cmd == "add-step":
             source = SOURCE_PROJECT if "--project" in args else SOURCE_SKILL
+            note = {}
+            note["do"], args = _flag_value(args, "--note-do")
+            note["expect"], args = _flag_value(args, "--note-expect")
+            note["if_not"], args = _flag_value(args, "--note-if-not")
             rest, covers = [], []
             i = 0
             while i < len(args):
@@ -12515,13 +12724,14 @@ def _main(argv):
                 else:
                     rest.append(args[i])
                     i += 1
-            entry = p.add_step(rest[0], rest[1], source=source, covers=covers)
+            entry = p.add_step(rest[0], rest[1], source=source, covers=covers, note=note)
             print(f"added {rest[0]} {entry['name']}")
         elif cmd == "start":
             entry = p.start_attempt(args[0])
             print(f"{args[0]} in progress (attempt {entry['attempt']})")
         elif cmd == "done":
-            entry = p.finish_step(args[0], args[1:])
+            heard, args = _flag_value(args, "--heard")
+            entry = p.finish_step(args[0], args[1:], heard=heard)
             print(f"{args[0]} done, evidence: {', '.join(entry['evidence'])}")
         elif cmd == "skip":
             rest = list(args[1:])
@@ -12587,7 +12797,9 @@ def _main(argv):
             with contextlib.nullcontext() if check_only else _hold(p.project_dir):
                 # Strict, before anything is written (#136): read as an empty process, an unreadable file had nothing
                 # open, and the plain form recorded a clean stop over a round or a step it could not see.
-                open_ = p.open_work(state=p.load(strict=True))
+                state = p.load(strict=True)
+                open_ = p.open_work(state=state)
+                answers = p.answers_owed(state)
                 lines, owed = [], 0
                 round_ = open_["capture_round"]
                 if round_:
@@ -12616,6 +12828,15 @@ def _main(argv):
                     p._append(EV_SESSION_CLOSED)
             print("\n".join(lines) if lines else
                   "nothing open in the process record — round closed, no step left in progress")
+            if answers:
+                # Printed only, and apart from `lines` (#202): TCC reads this verb's exit code as the answer, and the
+                # clean stop's own line above stays what it says.
+                print('\nA prediction with no answer on record (this holds nothing; his words go in with '
+                      '`done <id> <evidence> --heard "<his words>"`):')
+                for entry in answers:
+                    print(f"NO ANSWER {_named_by_id(entry['id'], entry.get('name'))}"
+                          f"\n    expected: {entry['note']['expect']}"
+                          + (f"\n    if not: {entry['note']['if_not']}" if entry["note"].get("if_not") else ""))
             # Two carriers this module does not own, named rather than checked: saying "also do X"
             # is honest, pretending to have verified it would not be.
             print("\nNot checked here, and still part of stopping:"

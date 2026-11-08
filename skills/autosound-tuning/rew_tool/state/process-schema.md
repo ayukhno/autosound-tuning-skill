@@ -37,7 +37,9 @@ panel had nothing real to render and every resume re-derived the phase by re-rea
      "skip": false,                             // superseded, kept visible
      "phase": "2",
      "evidence": ["m-L_10 (sw)", "v_007"],      // REQUIRED once status is done
-     "covers": ["project.json:amps.front.gain_db"]}   // WHAT the step closes; the name names it
+     "covers": ["project.json:amps.front.gain_db"],   // WHAT the step closes; the name names it
+     "note": {"do": "…", "expect": "…", "if_not": "…",   // #202, absent when none: what the step predicts
+              "answer": "…"}}                   //   and, beside it, the Arbiter's words
   ],
   "reviewer": {"vendor": "Gemini", "model": "Gemini 3.1 Pro (High)",
                "at": "…", "phase": "2", "step": "2.3", "outcome": "apply",
@@ -71,7 +73,8 @@ panel had nothing real to render and every resume re-derived the phase by re-rea
     "as_typed": {"sw_1 (sw) 86dB": "sw_1 86dB (sw)"},   // #155: the list is kept in `canonical_title`'s
                                                     //   form; a title typed otherwise, beside it
     "setup": {"first": "sw", "from": "m-L_0 (sw)",  // skill #78: the method taken first and why;
-              "switches": 1},                       //   at most one switch of tripod/driver
+              "switches": 1},                       //   the times the setup changes along the columns,
+                                                    //   tripod -> hand-held -> RTA: 2 with all three (#198)
     "step": "0.1",                                  // SCR-040: the plan step this round satisfies
     "taken": {"tw-L_1 (sw)": {"at": "…", "planned": true,     // planned=false: not on the list
       "as_in_rew": "tw-L_01 (sw)",                  // #153: typed in another spelling of a listed title
@@ -93,6 +96,9 @@ panel had nothing real to render and every resume re-derived the phase by re-rea
                                                     //   truncation not checked
                    "spl_offset_db": 120.0,          // #176: REW's `splOffsetdB` off the listing (an
                                                     //   RTA's too); absent when REW lists none
+                   "rew": null,                     // #203: what REW did on the curve read: "error"
+                                                    //   (4xx/5xx), "unavailable", null otherwise. On
+                                                    //   each `checks` row too
                    "at": "…", "issues": []}}},      //   REW's own id — the title is NOT identity
     "checks": {"tw-L_1 (sw)": {"ok": true, "exists": true, "applicable": true,   // #134 (T-1): the last
                                "uuid": "9ff4deb9-…", "at": "…", "issues": []},   //   check of EVERY title,
@@ -150,6 +156,15 @@ panel had nothing real to render and every resume re-derived the phase by re-rea
 }
 ```
 
+### A step's note (#202)
+
+`add-step --note-do T --note-expect T --note-if-not T`: what a listening or check step does, what it expects, what to
+do if the ear disagrees. A step with none has no `note`; a blank field is not kept. `done <id> <evidence> --heard T`
+writes the Arbiter's words as `note.answer`, beside `expect` -- on a step with no note too (a note of `answer` alone),
+and on a step already done, for an answer that came late. A redo (`start` on a done or skipped step, attempt N+1)
+removes `answer`; the journal keeps it. A `decision` tied to the step does not fill it: its question may be about
+anything. TCC reads none of these keys.
+
 ## journal.jsonl
 
 One JSON object per line, oldest first: `{"at": …, "type": …, …}`. Types:
@@ -168,6 +183,10 @@ stand; a title REW holds twice is left out, its last offset standing;
 the one record of a round's level that outlives it; `capture_rounds()` replays it, the latest check per title.
 Its `ok`, `bad` and `not_applicable` leave out an optional capture not taken (#191's final review): `bad` is taken and
 failed, never "not a gap".
+`capture_verified` carries `rew` too (#203), `{title: "error"|"unavailable"|null}` per title checked: what REW did on
+its curve read (the round's `checks` and `verified` hold the same); `capture_rounds()` replays it per round, the latest
+check per title. `step_added` carries `note` when the step was given one, and `step_done` carries `heard` when the
+close gave the Arbiter's answer (#202): absent otherwise, and the journal is where each attempt's answer stays.
 `capture_task_issued` carries `level_base` when the round named one (`--level-base <round id>`, #176), and `control`,
 the round's level control's title, when it has one -- what a later round reads the base round's control by.
 
@@ -455,7 +474,7 @@ usage on stdout, exit 0.
 | exit | means |
 |---|---|
 | 0 | done, or yes |
-| 1 | refused, or no: the reason on stderr (`error: …`); REW answering with an error (`error: REW answered with an error: <REW's words> -- nothing was written`), or with any other state but "unavailable" -- something the method cannot read (`protocol`), `write_mismatch`, `not_found`, `ambiguous`, `config` -- (`error: <its words> -- nothing was written`; a `write_mismatch` ends `-- REW may hold part of the write: check REW's EQ before going on`, and a filter write REW acknowledged and nobody could read back, `rew_unchecked` on its class, is said in its own words); `capture-check` with REW's list not read for any reason but REW not answering (`error: REW's measurement list was not read (<why>) -- nothing was recorded`); a typed mistake in a value the verb parses itself (a leg, a series); a process folder that is no project's, the project's writer lock that cannot be made, a round another writer closed or replaced under `capture-close` or `capture-check`, a phase another writer entered under `enter-phase` (#141, below) |
+| 1 | refused, or no: the reason on stderr (`error: …`); REW answering with an error (`error: REW answered with an error: <REW's words> -- nothing was written`), or with any other state but "unavailable" -- something the method cannot read (`protocol`), `write_mismatch`, `not_found`, `ambiguous`, `config` -- (`error: <its words> -- nothing was written`; a `write_mismatch` ends `-- REW may hold part of the write: check REW's EQ before going on`, and a filter write REW acknowledged and nobody could read back, `rew_unchecked` on its class, is said in its own words); `capture-check` with REW's list not read for any reason but REW not answering (`error: REW's measurement list was not read (<why>) -- nothing was recorded`); a typed mistake in a value the verb parses itself (a leg, a series); a process folder that is no project's, the project's writer lock that cannot be made, a round another writer closed or replaced under `capture-close` or `capture-check`, a round `--round` names that is not the open one (#203), a phase another writer entered under `enter-phase` (#141, below) |
 | 2 | usage: an unknown verb, a flag the verb does not take, a flag's value missing (one of the verb's flags, `-h` or `--help` in its place, or nothing after it: a value flag left last), a value on a flag that takes none, one of the verb's flags with its hyphens autocorrected to a dash, `--help` or `-h` after other arguments, too few arguments; an `AUTOSOUND_LOCK_TIMEOUT_S` that is no number of seconds (#141) |
 | 69 | REW did not answer, and nothing was written (sysexits' `EX_UNAVAILABLE`) -- but a filter write REW acknowledged before it stopped answering (`rew_unchecked` on its class), said in its own words: sent, acknowledged, not checked; and REW that changed while `capture-check` (or `capture-close`'s checks) read it (#183, `rew_changed` on its class): nothing recorded, run it again |
 | 70 | an unexpected error, a bug: Python's traceback on stderr, then `error: unexpected <type>: <message>` (`EX_SOFTWARE`) |
@@ -547,7 +566,10 @@ usage on stdout, exit 0.
   `project.py record-change` around its append. What is slow runs first, with the lock free. `capture-check` reads
   REW, then merges its verdicts by title, under the hold, into the state as it is then; a round closed or replaced
   while REW was read is refused, `error: round <id> was closed or replaced while REW was read -- nothing was written;
-  run capture-check again`, exit 1. `enter-phase` runs its gates (git, `gh`), then refuses a phase another writer
+  run capture-check again`, exit 1. `--round <id>` (#203) on `capture-check`, `capture-taken` and `capture-protective`
+  holds the verb, under its own hold, to the round its caller read: another round open, or none, is refused, `error:
+  round <id> was closed or replaced after it was read (...) -- nothing was written`, exit 1 (`CONTRACT.md` §2).
+  `enter-phase` runs its gates (git, `gh`), then refuses a phase another writer
   made active meanwhile, `error: phase N is not entered: phase M is active now, and its gates were checked with phase
   K active -- another writer moved the process meanwhile; nothing was written, run enter-phase N again`, exit 1. The
   sha a run's journal header carries is asked of git before the first hold. `session-close` reads what is open and
@@ -745,6 +767,9 @@ in `issues`, and does not fail.
   report, nothing recorded, while a round or a step stands. The exit code is the answer, not a failure.
 - **`session-close --check`** prints the same report and exits with the same code, and writes nothing (its last
   line says so). The form for a session reconciling state; a front-end stopping a session keeps the plain form.
+- **A prediction with no answer is listed, and holds nothing** (#202). A step in progress or done with `note.expect`
+  and no `note.answer` is printed apart from the report (`NO ANSWER <id> <name>`, `expected:`, `if not:`), both forms;
+  never a todo or a skipped step. It changes neither the exit code nor whether `session_closed` is recorded.
 - **`session-reopen <reason>`** appends `session_reopened` (`{reason, closed_at}`). Exit 0 when the journal's last
   session event is `session_closed`; exit 1 with the reason on stderr when it is not, or when no reason is given.
   The close stays in the journal. A reader deciding whether a session is closed reads the LAST of
