@@ -18,7 +18,7 @@ Paths: `SK` = `skills/autosound-tuning`, `RT` = `SK/rew_tool`, `S` = `RT/state/s
 
 ## Open questions for the Arbiter — before «го»
 
-None. #210's design may raise some: they come with its advice, before its build.
+None. #210's design raised three, answered by the Arbiter 2026-11-08 (lane F's section).
 
 ## The W-12 trial: the PMO method's review weight, and the numbers (the Arbiter, 2026-11-08)
 
@@ -90,7 +90,7 @@ At the wave's end the numbers go to the hub as one ticket, for the Arbiter's rev
 | **B** | `P`, `N`, `V`, `C`, `RT/CONTRACT.md`, `RT/rew_api.py` (read) | T4 #203 → T5 #198 |
 | **D** | `install.sh`, `install.ps1`, `IC`, `FAQ*.md` (one line) | T8 #205 → T9 #206 |
 | **E** | `AI`, `README*.md`, `SK/SKILL.md`, `SK/references/**`, `RT/capabilities.py`, `scripts/docs-check.py` | T10–T13 |
-| **F** | new modules under `RT/`, a new runbook under `SK/references/`, then `SK/SKILL.md`, `project-intake.md` | T14 #210 → T15 → T16, after lane E |
+| **F** | `RT/joint_search.py`, `RT/version_bench.py`, `SK/references/phases/joint-by-joint.md`, then `RT/intake.py`, `RT/intake_i18n/*`, `RT/state/process.py` (`_route_line`), `SK/SKILL.md` (Map row), `project-intake.md`, `capabilities.md`, `rew-tool-docs.md` | T14 #210 → T15 → T16, after lane E |
 
 T4 first in lane B: TCC builds against it in its own W-12, and it settles `P`'s exit table. Lane E's `SK/SKILL.md` edit (T12) runs while no other agent edits it.
 
@@ -202,31 +202,97 @@ Group review: Gemini reads the changed user-facing lines (README, SKILL.md row, 
 
 ## Group Joint-by-joint approach — `Risk: high`, lane F (#210)
 
-The wave's only new feature, and the only part not yet designed. **Before the build:** `feature-dev:feature-dev` — a code
-map of the Passat project's `scripts/` against `RT/`, architects only if there is more than one way; the result replaces
-this section and goes through Codex like the rest of the plan.
+**Design, 2026-11-08** (three code maps, each claim that carries a decision re-checked against the code; not yet reviewed by
+Codex). The build waits for the plan review and the Arbiter's «го».
 
-What is known. The tools exist as 13 scripts, ~2560 lines, numpy and `dsp_math`: `swws_search2`, `swws_xo`, `swws_epy`,
-`swws_flat`, `swws_gd_thd` (sub↔woofer); `wm_search`, `joint_wm`, `wm_flat` (woofer↔mid); `mt_search` (mid↔tweeter);
-`stage_lock`, `loudness_match`, `levelbase`, `gate` (conditions, loudness, the round check). They were written for one car,
-so **the port is a generalisation**: channel names, Fs floors, the DSP's filter families, gain and delay limits come from
-the project's profile, not from the code.
+**The Arbiter's answers (2026-11-08).** (1) «це один з двух шляхів (другий через бібліотеки Resonalyze) - користувач може вибрати
+як йти, або зробити два підаходи і вибрати найкращий результат»: two paths, and a third choice of running both. (2) The method
+holds for any stack: «навіть з переднім сабом можна робити. і 2 смуги вирівнювання спрацює теж». (3) `mosqito` is optional.
 
-**T14 · the tools into `RT/`, in three slices** (bass joint · woofer↔mid with flatten-first and decay · mid↔tweeter on the
-nine-point power sum), each with the stage conditions as options, the L-vs-R phase metric, the loudness match of versions
-and the round-level check of a tripod sum against the complex sum of its solos. Registered in `RT/capabilities.py`.
-Tests: a selftest per slice on a synthetic set of curves whose best variant is known, red first.
+**The source is the project's GitHub head, not the local copy.** The local `car/passat-b8-2026_afterAYAfinal` stands at `dc68111`;
+`rev-list` over `dc68111..4d4f845` (`gh api …/compare`) is 58 commits. The earlier «13 scripts» came from the old copy and is wrong
+both ways:
+- Not part of it: `gate.py` (the aya-merge entry gate) and `levelbase.py` (the round's level base; `RT/levelbase.py` exists).
+- Missing from it: `stage_sym.py` (the symmetric variant), `stage_v6.py` (the blend, the woofer's share), `lr_tracking.py` (L vs R phase,
+  the chain's and the electrical part's), `centre_timing.py` (its `gd_ms`), `s4_6b_vs_model.py:161-168` (a sum against the complex sum of
+  its solos), `rta5_vs_epy.py` (the 1.66 / 1.90 rms 80 Hz–10 kHz).
+- The decay figures of #210 have no script at the head: `stage_v6.py:8` names a `diag` that is not in the file. The definition is
+  in `docs/2026-10-29-variant6-analysis.md:11` (−20 dB, 1/3 oct), which is `ear_suspects.ringdown_ms`'s default.
 
-**T15 · the runbook** under `SK/references/`: the order of joints, align-then-cross, the search space and metric per joint,
-the conditions carried upward, the tournament and the blend, the three lessons from the ear. Gemini reads it; the uk/de/pl
-versions through the Advisor if the route names them.
+**The shape: one search engine and a joint table, not a port of each script.** The scripts repeat one skeleton (leak test → crossing →
+stage 1 on one point → stage 2 on nine → dip → re-score the joint below) and differ in band, window and metric; `fit_eq` exists in three
+copies. A port script by script keeps that and the car in the code. Extending `xover_select.select_neighbor_pair` does not fit: it takes
+ready branches, one point, and scores against the house curve.
 
-**T16 · the offer at the first step**, by name, next to the Resonalyze path, with what it needs and what the user gets
-(`project-intake.md`, `SK/SKILL.md`, within `reading-cost`). The approach archived by the Arbiter is not offered. #210 needs a
-way to read back a saved preset, and the skill has none: the runbook names the need and falls back to reading the screen
-(`screen-read-dsp.md`); a decoder stays with #200. Whether TCC's first step changes is asked on the bus ticket to TCC.
+Two new modules, numpy + scipy, not in `IMPORTABLE`:
 
-Group passes: Codex per slice of T14, one fix round each; the narrow check of fixes (the trial above).
+**`RT/joint_search.py`.** Read-only analysis: prints the table, `--json`, `--out DIR`. It never banks and never picks.
+- *Joints from roles.* The stack is `xover_wishes.ROLE_ORDER` over the channels present; each adjacent pair is one joint. 3-way + sub, 2-way +
+  sub and a front sub are the same code. A sub joins the summed L+R of the next role, with one front delay and the L−R offset held. The delay is
+  searched both ways and reported as which side takes it: `delay.max_ms` bounds it, and «the sub delayed, not the front» was this car's
+  result, not a rule (front sub).
+- *The space from the project.* Families `dsp_math.options_for`, corners from `crossover_filters` snapped to its step (a public wrapper over
+  `xover_wishes._profile_xo`), gain `dsp_profile.gain_range_db`, delay `predict._profile_limits`, Fs `xover_wishes._fs_of`. A missing Fs or an
+  unreadable profile refuses in one line, exit 3. This drops the scripts' LR48, which the Helix does not offer (`swws_xo.py:32-33`).
+- *Method constants, named at the top with their source:* ±30°; dip −3.5 dB; leak −24 dB an octave out (bass −30 over 125–200 Hz); HP floors
+  1.45 × Fs (mid, the run's value) and 2 × Fs (tweeter, `crossover_checks.fs_margin`); the bass re-score −0.1 oct.
+- *Metric by the joint's band.* Crossing window up to 1 kHz: the ±30° band through the crossing, worst then median of the points, then the
+  summation loss (`dsp_math.sum_loss`). Above 1 kHz (mid↔tweeter, or a 2-way's woofer↔tweeter): the power sum over the points, then the
+  worst of the left-ear, right-ear and centre groups must not cancel, then the flattest response to the target. The window follows the band:
+  5/500 ms, or 1/4 ms above 1 kHz. Groups are read from the measured L−R arrival at each point, as the run did; centre stays p1/p5/p9.
+- *Two stages*, as the scripts: all pairs on the reference point (vectorised over delay), then the best per crossing band on every point.
+- *Align first:* `--align` runs one flatten (gain up to the channel limit, ≤ 4 cuts, ≤ 6 dB each, against the target), replacing the three
+  `fit_eq` copies. `dsp_math.greedy_eq_fit` is not it: it fits a residual with a boost budget, this raises the gain and then cuts.
+- *Stage conditions, on by default, each with a flag off:* the L−R arrival held at the centre points' raw difference ± 0.10 ms; the same
+  absolute polarity L and R; the same family and order L and R. Corners may differ per side only with a flag.
+- *Carried upward:* `--fixed <joint.json>` holds the joints below and re-scores them, recovering by the sub's delay when one falls. The
+  mid↔tweeter search re-scores too, which the scripts did not. `--move lower|upper` says whose delay moves (the blend aligned by the woofer).
+- *Decay:* per candidate, `ear_suspects.ringdown_ms` of each driver around the joint and the lower driver's share where it rings ≥ 1.5× longer. Reported, not ranked.
+
+**`RT/version_bench.py`.** Compares whole ledger versions, whichever path built them, so the Resonalyze path, the joint path and both in one
+table need nothing more. Subcommands: `table` (every metric of every version side by side, then `variant_front.front`'s picks: it never hands over
+a winner); `loudness` (Zwicker through a lazy `mosqito` import; absent, it prints the install line and gives ISO 226 at 80 phon, labelled as less
+exact when versions differ in the bass); `lr-phase` (L vs R of the whole chain, 250–800 Hz, centre and nine points); `round-check` (each tripod sum
+against the complex sum of its solos, per 1/3 oct, `verify_prediction.CRITERION_DB`).
+
+**Out of this wave, said in the runbook:** a tool for the five-sum RTA discriminator (not in #210's list; the step is described); the centre's delay
+(the existing steps run after the joints); a preset decoder (#200: the runbook falls back to `screen-read-dsp.md`); a tool for the blend, which is a
+re-run with `--fixed` and `--move`.
+
+**T14 · the tools, in four slices** (the plan had three: the bench is its own). Each adds a line to `scripts/selftests.txt`, a board row in
+`core/capabilities.md` (en/uk) and an entry in `rew-tool-docs.md`.
+1. Engine and the bass joint: roles, the space from the profile, stage conditions.
+2. Woofer↔mid: `--align`, decay, `--fixed`, `--move`.
+3. Above 1 kHz: the power sum, the ear groups, the short window.
+4. `version_bench.py`.
+
+Tests, red first, each on synthetic curves whose best variant is known by construction (the `xover_select` selftest's form): the search finds a planted
+delay, polarity and corner pair; a family outside the profile is never returned; a missing Fs refuses; a 2-way and a front sub give the right joints;
+the L−R condition rejects the planted best when it breaks the offset; a joint that falls is recovered; a group that cancels is rejected above 1 kHz while
+the nine-point sum still passes; `loudness` without `mosqito` prints the install line and the label. **The replay, a session's check and not CI:** the
+local caches `scripts/results/{swws_raw_0615,joint_wm_raw,mt_raw}.npz` (outside git) through the engine must rank the bass candidates the run banked near
+the top (1.6 / 1.76 oct); the result goes in the ledger.
+
+**T15 · the runbook, `SK/references/phases/joint-by-joint.md`,** in the phase files' form (Goal-node, then steps). It holds what the path needs, the capture,
+the order of joints, align-then-cross, the search and metric per joint, the conditions, the tournament and the blend, «both paths», the three lessons from
+the ear. It replaces the desk steps of Phases 1–2 only; 0, 3 and 4 stay. Capture: nine points for every front driver, tweeters included (the sheet's
+ellipsoid is optional and w/m only); the sub may stay at one point. Steps through `add_step`, source `skill`, phase 1; TCC renders an unknown step id
+(`state/process_view.py:610-635`). It stays outside `reading-cost`'s `ORDERED` and is read when the path is chosen. Gemini reads it. English only:
+`i18n-check` does not cover `references/`.
+
+**T16 · the offer at the first step.** A new field beside `goal.design_path`, because this is a choice inside the desk half, with the same three
+requirements as virtual-first: `goal.desk_approach`, enum `joint_by_joint | resonalyze_engine | both`, `writes="project:goal.desk_approach"`, `when="now"`
+(it decides the capture), no default: the person picks. Its note says what each needs and gives: several DSP memories, the nine-point capture, reading a
+saved preset back, time for A/B; a ranked set with the reasons, against the engine's front; both = more time, and the best of two. It also states the
+evidence: one car, 3-way + centre + sub. `_route_line` names the choice, an addition. Labels in `intake_i18n/{en,uk,de,pl}.json`, the three through the
+Advisor. `project-intake.md` §4 gets the offer. **`SK/SKILL.md` only a Reference Map row:** before the Map it holds 17,416 of 17,500 bytes
+(`docs-check` rule 17). `reading-cost-baseline.json` is rewritten in that commit, as its own visible diff. The archived way stays unoffered: the
+«no separate iterative path» line of `virtual-first.md:72` stands, and `DESIGN_PATHS` is not touched.
+
+**TCC:** no code. The form is the skill's page (`core/intake_form.py:71`), and TCC reads neither `goal.mode` nor a route. At T16's close one ticket to TCC says
+so and asks whether its first step should name the two paths.
+
+Group passes: Codex per slice of T14, one fix round each; the narrow check of fixes (the trial above). T15–T16's text: Gemini.
 
 ## The end of the wave
 
@@ -243,9 +309,9 @@ Group passes: Codex per slice of T14, one fix round each; the narrow check of fi
 
 11 issues in 13 tasks, five groups. An estimate under the trial; the ledger measures it.
 
-- **Claude agent runs ~30**: implementers 13 (T10/T11 by the session; T14 is three), #210's design ~3, the group fix rounds
+- **Claude agent runs ~30**: implementers 14 (T10/T11 by the session; T14 is four), #210's design 3 (spent), the group fix rounds
   and narrow checks ~10, the final fix and Fable's check 2, the bookkeeping 1, acceptance 1.
-- **Codex calls ~9**: the plan review, #210's design, three group passes, T14's three slices, the final pass on the head.
+- **Codex calls ~10**: the plan review, #210's design, three group passes, T14's four slices, the final pass on the head.
 - **Advisor (Gemini) calls ~4**: the text group, the CHANGELOG, the FAQ line, translations if the README line needs one.
 
 Time: lane F is the critical path, after lane E. All together ~9 h of machine time, plus the stops.
