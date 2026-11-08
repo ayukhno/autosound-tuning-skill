@@ -1917,14 +1917,14 @@ if [ "$MODE" = "tcc" ]; then
     fi
   fi
 fi
-if [ "$MODE" = "tcc" ] && [ "$DRY_RUN" = 0 ] && on_mac && pgrep -f autosound-tcc >/dev/null 2>&1; then
+if [ "$MODE" = "tcc" ] && [ "$DRY_RUN" = 0 ] && on_mac && pgrep -f bin/autosound-tcc >/dev/null 2>&1; then
   # #206: a copy left running across an update hung, and Finder then said the app "is not responding" until it was
   # killed by hand. So, as install.ps1 does: a running app is left as it is, with the reason, and this is asked FIRST,
   # before the size line and the version read as a download that never started. Nothing is ended from here -- a hung
   # process is the person's to end, and the line says how. A dry run changes nothing, so it stops at nothing.
-  TCC_REFUSED="it is running -- close it and run this line again (if it will not close: pkill -f autosound-tcc)"
+  TCC_REFUSED="it is running -- close it and run this line again (if it will not close: pkill -f bin/autosound-tcc)"
   warn "Autosound TCC is running. Close it and run this line again; the app was left as it is."
-  warn "If it hangs and will not close:  pkill -f autosound-tcc"
+  warn "If it hangs and will not close:  pkill -f bin/autosound-tcc"
 elif [ "$MODE" = "tcc" ]; then
   say "  the app and what it needs, about 700 MB — a few minutes, no output until it is done…"
   # `--python` is not optional here. Without it `uv tool install` used the system interpreter —
@@ -2472,7 +2472,7 @@ if [ "$REW_API" = 0 ]; then
   fi
   n=$((n + 1))
 fi
-if [ "$MODE" = "tcc" ]; then
+if [ "$MODE" = "tcc" ] && [ -z "${TCC_REFUSED:-}" ]; then
   if on_mac; then
     say "  $n. Double-click \"Autosound TCC\" on your Desktop."
   else

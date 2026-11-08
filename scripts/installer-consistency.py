@@ -1559,6 +1559,7 @@ STUB_PGREP = (b"#!/bin/sh\n"
               b"[ -z \"${STUB_LOG:-}\" ] || printf 'pgrep %s\\n' \"$*\" >> \"$STUB_LOG\"\n"
               b"case \"$*\" in *autosound-tcc*) [ \"${STUB_TCC_RUNNING:-}\" = 1 ] || exit 1; echo 4242; exit 0 ;; esac\n"
               b"exit 1\n")
+STUB_XCODE_SELECT = b"#!/bin/sh\necho /Library/Developer/CommandLineTools\nexit 0\n"
 STUB_PKILL = (b"#!/bin/sh\n"
               b"[ -z \"${STUB_LOG:-}\" ] || printf 'pkill %s\\n' \"$*\" >> \"$STUB_LOG\"\n"
               b"exit 0\n")
@@ -1568,7 +1569,7 @@ STUB_PKILL = (b"#!/bin/sh\n"
 APP_MAC_CASES = (
     ("TCC running", True, False, "TCC", 0, 0,
      ("Autosound TCC is running", "Close it and run this line again", "the app was left as it is",
-      "pkill -f autosound-tcc", "was here before and was not upgraded"),
+      "pkill -f bin/autosound-tcc", "was here before and was not upgraded"),
      ("about 700 MB", "would run", "the app is not installed:", "4242")),
     ("TCC not running", False, False, "", 1, 1, ("about 700 MB", "✓ installed"),
      ("Autosound TCC is running", "pkill", "was not upgraded")),
@@ -1605,8 +1606,8 @@ def app_problems(sh, ps1):
         stub = home / "stub"
         stub.mkdir(parents=True)
         for name, body, wanted in (("git", NO_NETWORK_GIT, True), ("uv", STUB_UV, have_uv), ("curl", STUB_CURL, True),
-                                   ("autosound-tcc", STUB_TCC, before), ("pgrep", STUB_PGREP, mac),
-                                   ("pkill", STUB_PKILL, mac)):
+                                   ("autosound-tcc", STUB_TCC, before), ("pgrep", STUB_PGREP, mac or running),
+                                   ("pkill", STUB_PKILL, mac), ("xcode-select", STUB_XCODE_SELECT, mac)):
             if wanted:
                 (stub / name).write_bytes(body)
                 (stub / name).chmod(0o755)
@@ -1725,6 +1726,12 @@ def app_problems(sh, ps1):
             if wrong:
                 out.append(f"install.sh's app block on macOS, {case} (#206): " + "; ".join(wrong)
                            + f" -- said {said.strip()[-300:]!r}")
+        # And only on macOS: elsewhere the same running copy is not this block's question.
+        said, calls, home, got, wrong = run_block(
+            "not-mac-running", ("v1.1.2",), 0, 'check_tcc_tag() { TCC_SHA=""; return 0; }\n', True, 0, True, False, mac=False,
+            running=True)
+        if "Autosound TCC is running" in said:
+            out.append(f"install.sh's app block stopped for a running TCC off macOS (#206): {said.strip()[-300:]!r}")
     except OSError as exc:
         out.append(f"the app block's fixtures could not be made ({exc}) -- unrun is not agreed")
     finally:
