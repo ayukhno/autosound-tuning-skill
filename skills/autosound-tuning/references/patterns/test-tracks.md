@@ -22,7 +22,7 @@ When you (Claude) have a **hypothesis to check by ear**:
 
 ## Which library does the user have? — establish FIRST (project data)
 
-**Propose ONLY tracks the user can actually play.** Ask at intake which they have; store it in the project profile; **every track you name states its Library.** A competition-disc track taken from a project profile is first matched to a row below **with its year**; a profile that gives no year, or contradicts the row, is said to the user, not used as it stands.
+**Propose ONLY tracks the user can actually play.** Ask at intake which they have; store it in the project profile; **every track you name states its Library.** A competition-disc track taken from a project profile is first matched to a row below **with its year**; a profile that gives no year, or contradicts the row, is pointed out to the user, not used as it stands.
 - **A loaded compilation** — CarMus Test&Demo 2026 (`CarMus#NN`) · Chesky Ultimate Demo Disc (`Ch.NN`) · an EMMA / AYA competition disc (`competition.md`) · the mono set — cite the track by number **and** library.
 - **Streaming** (Tidal / Spotify / Apple Music) — you can't cite a disc `#` blindly: give **Artist — Title — the exact version** you need (the **MONO** mix · a specific album / year / remaster), because masters differ and a **stereo copy silently breaks a mono-center test**. Confirm the user opened the right version before trusting the result.
 - **None of the above** — the `own/*` rows: the user's own favourite tracks and a description of the material (deep bass · female vocal · acoustic guitar · dense rock · orchestra). The cheat sheet's words still apply; the cue is whatever the user knows in that track.
