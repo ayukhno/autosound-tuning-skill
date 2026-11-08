@@ -268,6 +268,8 @@ review and the Arbiter's «го».
 як йти, або зробити два підаходи і вибрати найкращий результат»: two paths, and a third choice of running both. (2) The method
 holds for any stack: «навіть з переднім сабом можна робити. і 2 смуги вирівнювання спрацює теж». (3) `mosqito` is optional.
 
+**The principle (the Arbiter, 2026-11-08): «в кожному авто будуть свої рішення … не обмежуємо правилами та детермінованими підходами аналізу, а описуємо правила, підходи і варіанти, а рішення або береться з бібліотечних, а як ні - шукається».** So `joint_search.py` and `version_bench.py` are a library, not the method. Hard refusals only for what the hardware cannot do (families, ranges, steps) and driver safety (Fs floors). Every other threshold in this section (±30°, leak, dip, tolerance, ranking, stage conditions) is a default, named, changeable by a flag, and its effect shown. The runbook gives the rules, the approaches and the variants with what each is for, and says plainly: where no tool fits a car, the session writes its own analysis and keeps the same evidence.
+
 **The source is the project's GitHub head, not the local copy.** The local `car/passat-b8-2026_afterAYAfinal` stands at `dc68111`;
 `rev-list` over `dc68111..4d4f845` (`gh api …/compare`) is 58 commits. The earlier «13 scripts» came from the old copy and is wrong
 both ways:
