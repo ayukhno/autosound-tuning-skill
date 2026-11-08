@@ -34,16 +34,46 @@ Each has the session's advice; the build follows the advice unless he says other
 4. **The version.** Five features in a patch. **Advice:** keep `v3.2.1` while building; the name is settled at the
    release with TCC (a minor `v3.3.0` pairs with a TCC `v1.3.0`, `RELEASE-CHANNEL.md` §3.1; TCC's wave is `W-12 · v1.2.2`).
 
+## The W-12 trial: the PMO method's review weight, and the numbers (the Arbiter, 2026-11-08)
+
+«так пробуємо і збираємо статистику». The skill only: TCC's W-12 keeps the standing weight, so the two halves of one wave
+are the comparison. It decides whether this weight goes into the PMO cube. Where it differs from `hub:seam` «Process
+weight», it holds for W-12. It replaces the full per-task loop on `Risk: high` (the user's word 2026-10-14) by his word,
+and keeps the part of that loop that paid: the check of fixes (9 regressions in ~43 re-reviews, 5 user-facing).
+
+- **Per task:** the implementer; on `Risk: high` a test first, red on the old code. No task review, no per-task re-review.
+- **Per group, at most two passes on its shared diff.** Pass 1: Codex, read-only, fresh context; its brief: no finding
+  without a `file:line` quote, an inventory of every site of each class it finds, a «checked → clean» row per category.
+  One fix round. Pass 2, only when a fix touched `Risk: high` code: a narrow check of the fixes (opus · high), on pass 1's
+  classes only. A third pass is the Arbiter's word.
+- **A silent reviewer:** 20 minutes without a report → the next one at once (code: Codex → the Opus seats, never Gemini),
+  the reason in the ledger. W-11 lost 44 minutes to one.
+- **The end of the wave:** Codex on the branch head after the bookkeeping, one fix round, then Fable on those fixes only.
+- **A finding's place:** W-12 reaches people. Stops the main process → blocks the release; hinders, with a workaround →
+  fixed before the release, or the Arbiter's word; a rare case → the backlog, named in the act.
+- **Acceptance:** a fresh session on the exact PR head. It reads the reviews and CI instead of repeating them, marks each
+  issue's asks done / no / not checked with a quote, installs the candidate into a clean HOME and runs it as a person
+  would, and fills «who found what». It decides nothing for the Arbiter; the session commits its act.
+
+**`docs/W-12-LEDGER.md`, from the first run:**
+
+| what | columns |
+|---|---|
+| per group | Claude runs by model and effort, wall clock, commits, fix commits |
+| per external reviewer (Codex, Gemini) | calls, minutes, silences, findings, real after the check against the code, false, real ones no other seat found, severity |
+| CI | runs by workflow, minutes, each red by cause (product · test · runner), what it found that no local check had |
+| who found what | stage, found, critical, its fate. The alarm: a critical found only in acceptance, or by a person after the tag |
+| the estimate | ~25 runs and ~6–7 h against the standing plan's ~45 and ~9–11 h, and against TCC's W-12 |
+
+At the wave's end the numbers go to the hub as one ticket, for the Arbiter's review between waves.
+
 ## Rules for every task
 
-- **Weight by risk** (`hub:seam` «Process weight»). `Risk: high`: a test first, red on the old code → implementer →
-  task review (opus · high) → one fix round → re-review of the fix. Ordinary code: one test per behaviour the issue
-  asks for, no task review. Text: `docs-check`, no new tests, at most one review. Each group ends with its seats on the
-  shared diff and one fix round. ONE final branch review.
-- **The seats (the Codex trial, W-11's design).** Plan review, group seats, final branch review: Codex (`codex exec -m
-  gpt-6-astra -c model_reasoning_effort=high -s read-only --ephemeral -o <file> -`, the brief on stdin). On the first
-  `Risk: high` group (Versions ledger) the two Opus seats (`pr-review-toolkit:silent-failure-hunter`,
-  `pr-review-toolkit:pr-test-analyzer`, opus · high) run beside it, to compare. Codex out of limits → the Opus seats.
+- **Weight by risk:** the trial above. Ordinary code: one test per behaviour the issue asks for. Text: `docs-check`, no
+  new tests, at most one review.
+- **The seats.** Plan review, group passes, the final pass on the head: Codex (`codex exec -m gpt-6-astra -c
+  model_reasoning_effort=high -s read-only --ephemeral -o <file> -`, the brief on stdin). Codex out of limits or silent →
+  the Opus seats (`pr-review-toolkit:silent-failure-hunter`, `pr-review-toolkit:pr-test-analyzer`, opus · high).
   User-facing text (README, FAQ, the CHANGELOG, the method's text) → Gemini via the Advisor (`AI ask --model
   gemini-3.8-flash-medium`). Every finding is checked against the code before acting.
 - **Models** (`hub:seam` «Models by role»): implementer `Risk: high` opus · high; ordinary opus · medium; T13 is a
@@ -119,7 +149,7 @@ read `{}` on a half-written file); written by `attest` (`A`:610-628, under the s
 claim with its source, neither is a mirror. Answer hub #325 with the field. Tests: `S selftest` (the verb, the attest
 write, a half-written file), `C selftest` if the CONTINUE check reads HEAD (`C`:1010, :3534).
 
-Group seats: Codex and the two Opus seats beside it (the comparison) on the lane's diff; one fix round.
+Group passes: Codex on the lane's diff; one fix round; the narrow check of fixes (the trial above).
 
 ## Group TCC contract — `Risk: high`, lanes B and C
 
@@ -176,7 +206,7 @@ only. `state/process-schema.md` documents the shape. TCC reads none of these key
 additive; hub #312 (PAS-019) gets the shape when T6 closes. Tests: `P selftest` — the note kept, the answer kept, the
 close lines; the flag guards.
 
-Group seats: Codex on lanes B and C's diff; one fix round.
+Group passes: Codex on lanes B and C's diff; one fix round; the narrow check of fixes (the trial above).
 
 ## Group Installers — `Risk: high`, lane D
 
@@ -230,23 +260,24 @@ Group review: Gemini reads the changed user-facing lines (README, SKILL.md row, 
    Upgrading (T1's refusal and `--on`, T2's `preset_settings`, T3's `loaded`, T4's `--round` and `rew` field, T6's
    flags, T7's `save` and status keys), `plugin.json`, `INSTALLER_VERSION`/`$InstallerVersion`; Gemini reads the
    CHANGELOG entry.
-2. The final branch review on `main..wave-2026-10-30`: **Fable** (the wave holds `Risk: high` code), after the
-   bookkeeping; one fix round.
-3. One PR with `Engine: none` → its full CI on every system → `git merge --ff-only` → the candidate `beta-v3.2.1-rc1`
+2. Codex on the head of `main..wave-2026-10-30`, after the bookkeeping; one fix round; **Fable** on those fixes only.
+3. One PR with `Engine: none` → its full CI on every system → acceptance (the trial above) → `git merge --ff-only` →
+   the candidate `beta-v3.2.1-rc1`
    on that commit → a ticket to TCC for its run on the candidate (its W-12 builds against T4/T7) → the release with
    TCC through the train. Receipts on hub #297, #303, #313, #325, #326 name the tag.
 
 ## Cost
 
 14 issues in 13 tasks, four groups. Roughly:
-- **Claude agent runs ~45**: Versions ledger 15 (three `Risk: high` tasks × implementer, review, fix, re-review; the
-  Opus seats beside Codex and their fix round), TCC contract 16 (four `Risk: high` tasks; one fix round), Installers 7,
-  Texts 3 (T12, T13; T10/T11 by the session), the final review and its fix 2, the bookkeeping 1.
-- **Codex calls ~6**: the plan review, three group seats, (the final review is Fable), checks of fixes as needed.
+An estimate under the trial, without #210; the ledger measures it. The standing weight was ~45 Claude runs and ~9–11 h.
+
+- **Claude agent runs ~25**: implementers 13, the group fix rounds and narrow checks ~7, the final fix and Fable's check 2,
+  the bookkeeping 1, acceptance 1.
+- **Codex calls ~5**: the plan review, three group passes, the final pass on the head.
 - **Advisor (Gemini) calls ~4**: the text group, the CHANGELOG, the FAQ line, translations if the README line needs one.
 
-Time: lane B is the critical path (T4 → T5 → T6 on `P`, ~5–6 h of machine time), lane A beside it (~4–5 h, T3 after
-the Arbiter's answer). With the seats, CI and the bookkeeping: ~9–11 h of wall clock, two days with the stops.
+Time: lane B is the critical path (T4 → T5 → T6 on `P`), lane A beside it (T3 after the Arbiter's answer). With the
+group passes, CI and the bookkeeping: ~6–7 h of machine time, plus the stops.
 
 ## The first steps of the new session
 
