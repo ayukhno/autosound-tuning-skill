@@ -259,6 +259,9 @@ def _profile_open_count(path):
         return 0
 
 
+#: The installer's link to the skill, as `.gitignore` and git name it (#204).
+SKILL_LINK = ".claude/skills/autosound-tuning"
+
 #: What a fresh project must never push, seeded as a real file rather than promised in prose.
 #: `setup-critic-channel.md` said "it's gitignored" for months with nothing behind it: no
 #: `.gitignore` was written by anything, and `project-intake.md` asked the AGENT to make one --
@@ -281,6 +284,22 @@ GITIGNORE_LINES = [
     # A temp file a crash left beside a project file (`<file>.<pid>-<hex>.tmp`, rew_tool/project_io.py, skill #135):
     # never committed by `project_repo.init`'s `git add -A`.
     "*.tmp",
+    # The installer's link to the skill (#204, hub #319): machine-local, and no trailing slash, or git does not match a
+    # link.
+    SKILL_LINK,
+]
+
+#: What `project_repo.save` never commits and `status` lists apart from the tuning files (#204): read as `.gitignore`
+#: reads its lines. Everything the seeded `.gitignore` names -- `save` works on older projects, whose `.gitignore` the
+#: seed leaves alone, and the key's files must not go out because of that -- and what a session and the machine leave
+#: in the folder.
+HOUSEKEEPING = [line for line in GITIGNORE_LINES if not line.startswith("#")] + [
+    ".sessions.log",
+    ".claude/",
+    ".agents/",
+    ".autosound/",
+    ".DS_Store",
+    "Thumbs.db",
 ]
 
 
@@ -302,6 +321,16 @@ anyone: the session does both first -- no personal data in the body, the final t
 before it goes (the skill's `references/core/feedback-loop.md`, step 2 and the package's safety rules). A local
 markdown file is a draft, not a delivery."""
 
+#: Who sends the project to GitHub (the Arbiter, 2026-11-08): the session; TCC's button is the spare. The first line is
+#: what `project_repo.status` looks for (`sends`), so it stays on one line.
+SEND_RULE_MARK = "**Saving this project to GitHub is the session's job:**"
+SEND_RULE = f"""{SEND_RULE_MARK}
+when the project has a remote, run `python3 rew_tool/project_repo.py save <project>` after each banked version
+and at session close. It commits the tuning files and pushes them. A refusal (nothing to send, no remote, the remote
+ahead) changes nothing and says why: nothing to send needs no words, the others are said to the person. A push that
+fails names the commit it could not send, and the next `save` sends it. With no remote, nothing is owed: the backup is
+offered, never made."""
+
 _DOCS_LINE = """Documents for the person during tuning live in `docs/`: `docs/sheets/` (what to enter in the DSP software),
 `docs/plans/` (what to measure), `docs/reports/` (what to read)."""
 
@@ -313,6 +342,8 @@ The method is the `autosound-tuning` skill (Claude Code). Its rules, tools and p
 this folder's; `python3 rew_tool/contract.py check <project>` reads this project's state.
 
 {FEEDBACK_RULE}
+
+{SEND_RULE}
 
 {_DOCS_LINE}
 """
@@ -337,6 +368,8 @@ folder; `python3 rew_tool/deployment.py <project>` says whether the copies agree
 skill's, not this folder's.
 
 {FEEDBACK_RULE}
+
+{SEND_RULE}
 
 {_DOCS_LINE}
 
@@ -908,6 +941,22 @@ def _check_agents_md_loads_the_skill_for_codex():
         assert write_agents_md(made) is True and os.path.isfile(os.path.join(made, "AGENTS.md")), "no folder made"
 
 
+def _check_the_send_rule_and_the_link_are_seeded():
+    """#204: a new project's files say the session sends after each banked version and at close, and its `.gitignore`
+    keeps the skill's link out; a link needs a name with no trailing slash, or git does not match it."""
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmp:
+        assert write_claude_md(tmp) and write_agents_md(tmp) and write_gitignore(tmp)
+        for name in ("CLAUDE.md", "AGENTS.md"):
+            with open(os.path.join(tmp, name), encoding="utf-8") as fh:
+                text = fh.read()
+            for said in ("project_repo.py save", "banked version", "session close", "remote"):
+                assert said in text, f"{name} does not say {said!r}"
+        with open(os.path.join(tmp, ".gitignore"), encoding="utf-8") as fh:
+            lines = fh.read().splitlines()
+        assert ".claude/skills/autosound-tuning" in lines, lines
+
+
 def _check_read_project_reads_a_bom():
     """`_read_project` -- a source project's facts, for the picker and the seed -- gives the same answer with and
     without a UTF-8 BOM (#147, item 6): an editor's marker, read as `project_io.read_json` reads it. It opened
@@ -935,7 +984,7 @@ def _selftest():
     for check in (_check_a_held_lock_said_in_the_result, _check_a_seed_makes_its_new_folder,
                   _check_a_bad_wait_is_a_usage_error, _check_a_context_in_rew_analitic_travels,
                   _check_claude_md_loads_the_skill, _check_agents_md_loads_the_skill_for_codex,
-                  _check_read_project_reads_a_bom):
+                  _check_read_project_reads_a_bom, _check_the_send_rule_and_the_link_are_seeded):
         try:
             check()
         except AssertionError as exc:
