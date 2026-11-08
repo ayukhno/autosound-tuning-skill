@@ -9,7 +9,7 @@ A map: decision → data → REW API function. The API is in `rew_tool/rew_api.p
 | Delays / time alignment | Impulse / step response, ETC | Sweep (loopback) | `get_impulse_response` |
 | Phase rotation / excess GD at joints | Group delay — at a junction, the energy arrival τ through FDW-6 (the direct sound); REW's GD is the cabin's, labelled by its window | Sweep | `windows.windowed_group_delay` on the IR (`get_impulse_response`); `get_group_delay` for the cabin |
 | Safe band limits (where to put the HPF) | Distortion (THD + harmonics) | Sweep at the working level | `get_distortion` |
-| Resonances / "ringing" (doors, 150 Hz) | CSD / waterfall | Sweep | (REW UI; IR from `get_impulse_response`) |
+| Resonances / "ringing" (doors, 150 Hz) | CSD / waterfall | Sweep | (REW UI for the view; IR from `get_impulse_response`; the decay of one peak: `ear_suspects.py`, `enclosure-install-diagnostics.md`) |
 | Driver/box T-S (Fs, Qts/Qtc, Vas, Re), L/R match, enclosure QC, box verify | Impedance (Z vs freq) | Impedance sweep (jig + ref resistor) | `get_fr` on the imp measurement (`unit=ohm`); method → `impedance-ts.md` |
 | Predicting the L+R or band+band sum | Trace arithmetic A+B | — | REW trace math (UI/API) |
 | A channel's current filters / EQ | Filters / EQ | — | `get_filters`, `get_equaliser`, `get_equalisers` |

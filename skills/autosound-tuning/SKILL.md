@@ -145,7 +145,7 @@ Everything else — the inventory, the caveats, the previews, the reasoning, the
 | [patterns/target-curves/target_curves_guide.md](references/patterns/target-curves/target_curves_guide.md) | Target curves + offsets. |
 | [core/naming-and-structure.md](references/core/naming-and-structure.md) | Measurement names, .mdat storage, preset structure; the report's words (§1a); step ids and names (§1b). |
 | [core/capabilities.md](references/core/capabilities.md) | **Find the tool by what you want, not by the path** — ask it first: `python3 rew_tool/capabilities.py find "<what you want>"` prints the matching rows; every capability by intent (EN/UK words), its command, what it needs, its maturity. For a session that comes with its own process. |
-| [core/analysis-playbook.md](references/core/analysis-playbook.md) | Which REW graph for which decision. |
+| [core/analysis-playbook.md](references/core/analysis-playbook.md) | Which REW graph for which decision: frequency response, phase, impulse, group delay, distortion (THD), excess phase, impedance, RTA, ringing. |
 | [core/estimator-scope.md](references/core/estimator-scope.md) | When a number is NOT an answer: where each tool abstains, why a measurement is not a setting, what survives a "from scratch". |
 | [core/diagnostic-techniques.md](references/core/diagnostic-techniques.md) | Anomalies, joint-phase summation, peak-vs-null. |
 | [core/filter-types-car-audio.md](references/core/filter-types-car-audio.md) | LR/Bessel/Butterworth, starting crossover points. |

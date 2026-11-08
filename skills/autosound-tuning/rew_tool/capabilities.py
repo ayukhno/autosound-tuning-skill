@@ -268,6 +268,15 @@ def _selftest():
                  "поскаржитись на TCC"):     # #150: the feedback gate, in the words a person says
         hit = find(said)
         assert hit and "post_feedback" in hit[0][2][2], (said, hit[:1])
+    for said, tool in (("ringing", "ear_suspects.py"), ("затухання", "ear_suspects.py"), ("THD", "get_distortion"),
+                       ("гармоніки", "get_distortion")):     # #208: what a tool reads is found by the words people say
+        hit = find(said)
+        assert hit and tool in hit[0][2][2], (said, hit[:1])
+    for said in ("waterfall", "spectrogram", "RT60"):        # REW's own view, said as such
+        hit = find(said)
+        assert hit and "REW's own window" in hit[0][2][1], (said, hit[:1])
+    coherence = find("coherence")
+    assert coherence and "not read" in coherence[0][2][1], coherence[:1]
     assert find("zz qq") == [] and find("a to") == [], "nothing to match is an empty answer"
     print(f"selftest[capabilities] OK -- {n} board rows: every module, flag, verb, function and read pointer "
           f"named on the board exists; every module with a command line is on the board or listed as "
