@@ -42,6 +42,7 @@ ledger became **tier-aware**, EQ bands became **structured objects**, and every 
 ```
 <root>/versions/v_001.json …   immutable snapshots, numbered once per PROJECT   # <root> = <project>/state
 <root>/slots.json              {"active", "slots": {preset: {version, since, label, note, dsp_preset,
+                               loaded: {version, since, source},
                                history: [{version, since}]}}, "configs": {name: {version, slot,
                                purpose, saved, previous: {code, version} | null,
                                history: [{version, saved}]}}, "layout": "project-numbered"}
@@ -209,6 +210,16 @@ a version without the field is valid.
 - **status lifecycle (AD-1):** 🟡`proposed` → 🟢`applied` (Arbiter attests) → 📏`measured`. The file
   is the truth for **intent + attested-applied**, NOT a device mirror — **device-truth = the latest
   measurement.** It claims nothing more.
+- **HEAD is the pointer; `loaded` is a dated claim; neither is a mirror (AD-1, #201).** HEAD
+  (`slots[slot].version`) is the version the slot's line stands at, and it may be a proposal nobody has
+  entered yet. `slots[slot].loaded = {version, since, source}` says this version went into the DSP's
+  preset, when, and how that is known. It is written by `attest` (the newly banked version, which is
+  HEAD; source `attest`), by `config save` (source `config save <name>`) and by `state.py loaded <slot>
+  <version> --source "…"` for what no verb here saw: a preset loaded in the PC tool, a `.pct6` read
+  back. A later move of HEAD leaves it where it is, so HEAD ahead of `loaded` reads plainly as «proposed,
+  not in the DSP». No `loaded` means no claim: unknown, never HEAD. A preset changed by hand leaves both
+  behind, so device-truth stays the latest measurement. `loaded` is on the per-project line only: a
+  `slots.json` beside per-preset folders makes the ledger unreadable.
 - **`render` is generated-only** — never hand-edit the Markdown sheet; edit the JSON and re-render.
   (The render is also the settings sheet the future `apply-change` gate hands the Arbiter at the
   PC-Tool screen — the artifact that makes the compliant path the easiest path.)
@@ -232,6 +243,7 @@ h.revert("v_001")             # -> new snapshot == v_001 content
 python3 state.py --root <dir> log|render|diff|revert <preset> [args]
 python3 state.py --root <dir> config save <version> <name> [--slot S] [--dsp-preset N] [--purpose "…"]
 python3 state.py --root <dir> config list | config compare <name> [--with <name or version>]
+python3 state.py --root <dir> loaded <slot> <version> --source "<where this comes from>"
 python3 state.py selftest
 python3 state/migrate.py <old-project-dir> --into <new-project-dir> [--dry-run]   # 2.x -> 3.0, into a NEW project
 ```

@@ -724,6 +724,9 @@ def attest(history, version=None, note=None, source_file=None):
     `preset_settings` flips with the rows (#197, #200; it is no tier, so their walk does not reach it). `source_file`
     (#200) is the record of the saved preset this version was read from and what the comparison said; the session or
     the person fills it, since the method has no reader of that file yet.
+
+    The slot records what the DSP holds now (#201, `slots[slot].loaded`): the newly banked version, which is HEAD, under
+    this same hold. The per-project line only; on the older layout no `slots.json` may appear.
     """
     with _held(history):
         version = version or history.head()
@@ -741,6 +744,8 @@ def attest(history, version=None, note=None, source_file=None):
         if source_file is not None:
             s.setdefault(_state.PRESET_SETTINGS, {})["source_file"] = source_file
         v = history.snapshot(s, note=note or f"attested applied ({', '.join(flipped) or 'no proposed rows'})")
+        if history._project():
+            history.record_loaded(v, "attest")
     return {"version": v, "applied_channels": flipped}
 
 

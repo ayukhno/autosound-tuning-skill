@@ -723,6 +723,7 @@ def _read_snapshot_json(path):
 #     state/versions/v_NNN.json   every version, once per project, immutable; `preset` = the slot it
 #                                 was banked FOR, `parent` = the version it was made from
 #     state/slots.json            {"active", "slots": {preset: {version, since, label, note,
+#                                 loaded: {version, since, source},
 #                                 history: [{version, since}]}}, "layout": "project-numbered"}
 #     state/legacy/<preset>/      the old per-preset tree, moved as it was
 #     state/legacy-map.json       {"<preset>/v_NNN": "v_MMM"}: every old citation resolves
@@ -912,8 +913,10 @@ def save_config(root, version, code, slot=None, dsp_preset=None, purpose=None, p
             rec["purpose"] = purpose
         rec["history"] = list(rec.get("history") or []) + [{"version": version, "saved": now}]
         slots.setdefault("configs", {})[code] = rec
+        entry = slots["slots"].setdefault(slot, {})
+        entry["loaded"] = {"version": version, "since": now, "source": f"config save {code}"}     # #201
         if dsp_preset is not None:
-            slots["slots"].setdefault(slot, {})["dsp_preset"] = dsp_preset
+            entry["dsp_preset"] = dsp_preset
         _write_slots(root, slots)
     return {"code": code, **rec}
 
@@ -1425,6 +1428,31 @@ class PresetHistory:
                 _write_slots(self.root, slots)
                 return
             _project_io().atomic_write_text(self._head_path(), version + "\n")
+
+    def record_loaded(self, version, source):
+        """Record that `version` is in the DSP's preset for this slot: `slots[slot].loaded = {version, since, source}`
+        (#201, schema.md AD-1), a dated claim with its source. HEAD is not touched, and no later move of HEAD touches
+        this. Read and written under the project's writer lock; the per-project line only, since a `slots.json` beside
+        per-preset folders makes the ledger unreadable (`ledger_layout`). Refuses a version not on the line, a slot
+        holding none and an empty source, and a `slots.json` it cannot read (`_pointer_file`): no fallback to `{}`."""
+        source = str(source or "").strip()
+        if not source:
+            raise SnapshotError("what is in the DSP is recorded with its source: say where this comes from")
+        with _hold(self.project_dir):
+            if not self._project():
+                raise SnapshotError(f"{self.root}: what the DSP holds is recorded on the per-project version line; "
+                                    f"move to it first: `{migrate_line_command(self.root)}`")
+            if version not in project_versions(self.root):
+                raise SnapshotError(f"no version {version!r} on this line")
+            slots = _read_slots(self.root)
+            entry = slots["slots"].get(self.preset)
+            if not (entry or {}).get("version"):
+                raise SnapshotError(f"the slot {self.preset!r} holds no version on this line "
+                                    f"(slots: {', '.join(sorted(slots['slots'])) or 'none'})")
+            entry["loaded"] = {"version": version, "since": datetime.datetime.now().isoformat(timespec="seconds"),
+                               "source": source}
+            _write_slots(self.root, slots)
+            return entry["loaded"]
 
     # -- read/write --
     def load(self, version=None):
@@ -2502,6 +2530,11 @@ def _main(argv=None):
     cp.add_argument("--purpose", default=None, help="save: what it is for, in words")
     cp.add_argument("--previous", default=None, help="save: the configuration it continues, when not its ancestor")
     cp.add_argument("--with", dest="against", default=None, help="compare: another name or a version")
+    lp = sub.add_parser("loaded", help="record which version is in the DSP's preset for a slot, with where that "
+                                       "comes from (#201); HEAD stays where it is")
+    lp.add_argument("preset")
+    lp.add_argument("version")
+    lp.add_argument("--source", required=True, help="where this comes from: a preset loaded, a .pct6 read back ...")
     sub.add_parser("seal", help="seal every banked version not sealed yet (#58 P1); a seal is never renewed")
     sub.add_parser("verify", help="name every sealed version whose content changed (#58 P1) and every file that "
                                   "is not the version its name says (#89); exit 3 if any")
@@ -2661,6 +2694,10 @@ def _run(p, args):
             print(json.dumps(reg.load(), indent=2, ensure_ascii=False))
         return 0
     h = PresetHistory(args.root, args.preset)
+    if args.cmd == "loaded":
+        rec = h.record_loaded(args.version, args.source)
+        print(f"{args.preset}: {rec['version']} in the DSP, {rec['since']} ({rec['source']}); HEAD is {h.head()}")
+        return 0
     if args.cmd == "variant":
         return _variant_cli(h, args)
     if args.cmd == "log":
@@ -3878,6 +3915,7 @@ def _check_ledger_writers_read_with_the_lock_held():
                 ("snapshot", project[0], lambda: h.snapshot(_sample_state(), note="v3")),
                 ("place", project[0], lambda: h.place("v_001")),
                 ("save_config", project[0], lambda: save_config(root, "v_001", "SQ-1", slot="SQ")),
+                ("record_loaded", project[0], lambda: h.record_loaded("v_001", "the writer's own check")),
                 ("repair_version", project[0], lambda: repair_version(root, "v_002")),
                 ("seal_all", project[0], lambda: seal_all(root)),
                 ("set_active", project[0], lambda: Registry(root).set_active("SQ")),
@@ -4062,6 +4100,145 @@ def _own_tempdir(selftest):
 
 
 @_own_tempdir
+def _loaded_of(root, slot):
+    """`slots[slot]` as the file on disk has it, and the record of what the DSP holds (#201)."""
+    with open(os.path.join(root, SLOTS_FILE), encoding="utf-8") as fh:
+        entry = json.load(fh)["slots"][slot]
+    return entry, entry.get("loaded")
+
+
+def _check_attest_records_what_is_in_the_dsp():
+    """`attest` says the person entered the version, so the slot records it: `loaded = {version, since, source}`, the
+    newly banked version, which is HEAD (#201). HEAD then moves on with a proposal and `loaded` stays: slot
+    `1.N-NOV26_from0` ticked HEAD v_012 while the DSP held v_009, and that is the difference this field exists to say."""
+    import shutil
+    import tempfile
+    _apply = _siblings().load("state/apply.py")
+    top = tempfile.mkdtemp(prefix="autosound_state_loaded_attest_")
+    try:
+        root = os.path.join(top, "state")
+        h = PresetHistory(root, "SQ", project_dir=top)
+        h.snapshot(_sample_state(), note="baseline")
+        v = _apply.attest(h)["version"]
+        entry, loaded = _loaded_of(root, "SQ")
+        assert loaded, f"attest banked {v} and recorded nothing about the DSP: {sorted(entry)}"
+        assert sorted(loaded) == ["since", "source", "version"], loaded
+        assert loaded["version"] == v == h.head() == entry["version"] and loaded["source"] == "attest", (v, loaded)
+        datetime.datetime.fromisoformat(loaded["since"])
+        proposal = h.snapshot(_sample_state(), note="a proposal, in no DSP yet")
+        entry, after = _loaded_of(root, "SQ")
+        assert h.head() == entry["version"] == proposal != v, "HEAD keeps its meaning: the pointer moved with the bank"
+        assert after == loaded, f"a bank moved the record of the DSP: {after}"
+        h.place(v)
+        h.place(proposal)
+        assert _loaded_of(root, "SQ")[1] == loaded, "moving the pointer rewrote what the DSP holds"
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_config_save_records_what_is_in_the_dsp():
+    """`config save` is a version saved into the device, so it writes `loaded` as well (#201), with the name it was
+    saved under as its source, and the date the configuration has."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_state_loaded_config_")
+    try:
+        root = os.path.join(top, "state")
+        h = PresetHistory(root, "SQ", project_dir=top)
+        h.snapshot(_sample_state(), note="baseline")
+        h.snapshot(_sample_state(), note="second")
+        Registry(root).set_active("SQ")
+        assert _main(["--root", root, "config", "save", "v_001", "SQ-1", "--slot", "SQ"]) == 0
+        entry, loaded = _loaded_of(root, "SQ")
+        assert loaded, f"config save recorded nothing about the DSP: {sorted(entry)}"
+        assert loaded["version"] == "v_001" == entry["version"] and loaded["source"] == "config save SQ-1", loaded
+        assert loaded["since"] == configs(root)["SQ-1"]["saved"], (loaded, configs(root)["SQ-1"])
+        rec = save_config(root, "v_002", "SQ-2", slot="SQ")
+        assert _loaded_of(root, "SQ")[1] == {"version": "v_002", "since": rec["saved"], "source": "config save SQ-2"}
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_loaded_verb():
+    """`state.py loaded <slot> <version> --source TEXT` is the record for what no verb here saw -- a preset loaded in
+    the PC tool, a `.pct6` read back (#201). It names any version on the line, an older one too, and leaves HEAD. What
+    it cannot stand behind it refuses, the file as it was: a version not on the line, a slot that holds none, a claim
+    with no source, and a `slots.json` it cannot read -- `{}` for a half-written file is TCC's reader only, a writer
+    falling back to it would write the slots away."""
+    import shutil
+    import tempfile
+    pj = _siblings().load("project.py")
+    top = tempfile.mkdtemp(prefix="autosound_state_loaded_verb_")
+
+    def run(*argv):
+        try:
+            return pj._run_cli(_main, ["--root", root, *argv])
+        except SystemExit as exc:                   # argparse: an unknown verb
+            return exc.code, "", "argparse"
+    try:
+        root = os.path.join(top, "state")
+        h = PresetHistory(root, "SQ", project_dir=top)
+        h.snapshot(_sample_state(), note="baseline")
+        h.snapshot(_sample_state(), note="second")
+        rc, out, err = run("loaded", "SQ", "v_001", "--source", "SQ-2.pct6 loaded, read back on the screen")
+        assert rc == 0, (rc, out, err)
+        entry, loaded = _loaded_of(root, "SQ")
+        assert loaded and loaded["version"] == "v_001" and loaded["source"].startswith("SQ-2.pct6"), loaded
+        datetime.datetime.fromisoformat(loaded["since"])
+        assert "v_001" in out and h.head() == entry["version"] == "v_002", (out, entry)
+        path = os.path.join(root, SLOTS_FILE)
+        with open(path, "rb") as fh:
+            whole = fh.read()
+        for label, argv, said in (("a version not on the line", ("loaded", "SQ", "v_099", "--source", "x"), "v_099"),
+                                  ("a slot with no version", ("loaded", "FULL", "v_001", "--source", "x"), "FULL"),
+                                  ("no source", ("loaded", "SQ", "v_001", "--source", "  "), "source")):
+            rc, out, err = run(*argv)
+            assert rc == 1 and err.startswith("error: ") and said in err, (label, rc, err)
+            with open(path, "rb") as fh:
+                assert fh.read() == whole, (label, "slots.json changed")
+        cut = whole[:len(whole) // 2]
+        with open(path, "wb") as fh:
+            fh.write(cut)
+        rc, out, err = run("loaded", "SQ", "v_001", "--source", "x")
+        assert rc == 1 and err.startswith(f"error: {path}: cannot be read"), (rc, err)
+        with open(path, "rb") as fh:
+            assert fh.read() == cut, "a slots.json that cannot be read was rewritten"
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_loaded_stays_off_the_old_layout():
+    """`loaded` is the per-project line's (#201): a `slots.json` beside per-preset folders makes the ledger unreadable
+    (`ledger_layout`) and switches TCC's layout. `attest` banks there as before and writes no such file; the verb and
+    `config save` refuse, naming the move."""
+    import shutil
+    import tempfile
+    _apply = _siblings().load("state/apply.py")
+    pj = _siblings().load("project.py")
+    top = tempfile.mkdtemp(prefix="autosound_state_loaded_old_")
+    try:
+        root = os.path.join(top, "state")
+        os.makedirs(os.path.join(root, "SQ"))
+        with open(os.path.join(root, "SQ", "v_001.json"), "w", encoding="utf-8") as fh:
+            json.dump(dict(_sample_state(), preset="SQ", version="v_001", schema_version=SCHEMA_VERSION), fh)
+        h = PresetHistory(root, "SQ", project_dir=top)
+        assert ledger_layout(root) == "preset"
+        v = _apply.attest(h)["version"]
+        assert v == "v_002" == h.head(), v
+        slots = os.path.join(root, SLOTS_FILE)
+        assert not os.path.exists(slots) and ledger_layout(root) == "preset", "attest wrote a slots.json on the old layout"
+        try:
+            rc, out, err = pj._run_cli(_main, ["--root", root, "loaded", "SQ", "v_001", "--source", "x"])
+        except SystemExit as exc:                   # argparse: an unknown verb
+            rc, err = exc.code, "argparse"
+        assert rc == 1 and "migrate-line --apply" in err, (rc, err)
+        assert not os.path.exists(slots) and ledger_layout(root) == "preset", "the verb wrote a slots.json on the old layout"
+        rc, out, err = pj._run_cli(_main, ["--root", root, "config", "save", "v_001", "SQ-1", "--slot", "SQ"])
+        assert rc == 3 and "migrate-line --apply" in err and not os.path.exists(slots), (rc, err)
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
 def _selftest():
     failures = []
     for check in (_check_variant_delta_refused, _check_eq_refusals, _check_canonical_code_uses_the_loaded_naming,
@@ -4076,7 +4253,9 @@ def _selftest():
                   _check_a_held_lock_answers_75, _check_a_bad_timeout_is_a_usage_error,
                   _check_no_load_and_save_outside_update, _check_ledger_writers_read_with_the_lock_held,
                   _check_the_repairs_name_their_project, _check_a_pointer_file_of_another_shape_refused,
-                  _check_a_cut_version_said_as_cut, _check_project_json_read_with_a_bom, _check_preset_settings):
+                  _check_a_cut_version_said_as_cut, _check_project_json_read_with_a_bom, _check_preset_settings,
+                  _check_attest_records_what_is_in_the_dsp, _check_config_save_records_what_is_in_the_dsp,
+                  _check_loaded_verb, _check_loaded_stays_off_the_old_layout):
         try:
             check()
         except AssertionError as exc:
