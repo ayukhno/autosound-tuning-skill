@@ -304,8 +304,7 @@ Two new modules, numpy + scipy, not in `IMPORTABLE`:
   role table, overridable by flags (bass 40–125 Hz, woofer↔mid 150–600, mid↔tweeter LP 1.6–5 kHz and HP 2–5 kHz), in 1/6-oct steps snapped to the
   profile's, then ±1/12 oct around the shortlist: ~10 × 10 corners × 17² families ≈ 29,000 pairs a joint. The count is printed before the run, and over a
   ceiling it refuses without a flag. Run time is measured in slice 1 and goes in the ledger.
-- *Method constants, named at the top with their source:* ±30°; dip −3.5 dB; leak −24 dB an octave out (bass: −24 at 100 Hz and −30 over 125–200 Hz,
-  `swws_search2.py:44`); HP floors 1.45 × Fs (mid, the run's value) and 2 × Fs (tweeter, `crossover_checks.fs_margin`); the bass re-score −0.1 oct;
+- *Method constants, named at the top with their source:* ±30°; dip −3.5 dB; leak −24 dB an octave out (bass: −24 at 100 Hz and −30 over 125–200 Hz, `swws_search2.py:44`, those frequencies scaled by `max(1, crossing / 65)`, so the reference car is judged as it was); HP floors 1.45 × Fs (mid, the run's value) and 2 × Fs (tweeter, `crossover_checks.fs_margin`); the bass re-score −0.1 oct;
   the L and R acoustic crossings within 1/3 oct (`stage_lock.py:217`). The run's 4.5 kHz ceiling was its 3–4″ mid: a project bound, `--max-crossing`, off by default.
 - *The metric follows each candidate's acoustic crossing.* Under 1 kHz, on the 5/500 ms window: the ±30° band through the crossing, worst then median of
   the points, then the summation loss (`dsp_math.sum_loss`). From 1 kHz, on the 1/4 ms window (it reads from 1 kHz up, `mt_search.py:14-15`): the power sum
@@ -362,7 +361,7 @@ known level step; without it the install line and the label; two versions differ
 **The replay, a session's check and not CI, with an adapter in the session's scratch:** the local caches `scripts/results/{swws_raw_0615,joint_wm_raw,mt_raw}.npz` (outside git;
 complex responses on three grids, protective filters still in, two sessions, no impulses, so decay is not replayable from them). Two separate claims, because the conditions
 were added after the first search and exclude its best (`docs/2026-10-26-swws-analysis.md:116-132`). Without the leak and dip conditions, the score of banked candidate B is
-reproduced within 0.05 oct. With them, candidate C (BW36 60 / BE24 90, 0.98 / 1.00 oct) is in the top 10, within 0.1 oct of the run's best. Results in the ledger.
+reproduced within 0.05 oct. **Done on slice 1 (the ledger has the numbers): the history holds to 0.001 oct; the claim on C did not hold.** The wider grid finds better rows of the same pattern, and every peak, C included, is one delay step wide, so the table ranks by the width kept over ±0.10 ms. The claim that stands: with the conditions on, the run's candidates pass and score as the run scored them.
 
 **T15 · the runbook, `SK/references/phases/joint-by-joint.md`,** in the phase files' form (Goal-node, then steps). It holds what the path needs, the capture,
 the order of joints, align-then-cross, the search and metric per joint, the conditions, the tournament and the blend, «both paths», the three lessons from

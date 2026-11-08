@@ -20,6 +20,14 @@ Minutes per call were not timed, except where noted.
 - `save`: a file `git rm --cached` by hand, covered by `.gitignore` but not by the housekeeping list, stops `save` at «could not commit» until a manual commit. Rare.
 - A partial re-read of a candidate: the sheet still ends «run `attest`», and `attest` then refuses, naming `propose --on`. Safe, misleading.
 
+## The replay on the Passat's curves (slice 1, a session's check)
+
+- The history: candidate B, conditions off, 1.599 / 1.757 oct worst / median; the run had 1.60 / 1.76. Candidate C 0.983 / 0.999; the run 0.98 / 1.00. The scoring reproduces the run.
+- The run's three candidates under the conditions all pass the leak. A relative limit, tried first, dropped one: it was replaced by the validated absolute limits, scaled only above a 65 Hz crossing.
+- Every width peak is one delay step wide (C: 0.58 / 0.98 / 0.57 oct at 10.65 / 10.70 / 10.75 ms). Ranked by the width kept over ±0.10 ms, C has 0.55 and would rank 108 of 238; the Arbiter's ear chose it. The table describes; the ear decides.
+- A shortlist by the reference-point width does not keep the run's own candidates; the top rows are of the same pattern (woofer HP above sub LP, the sub later). Not widened.
+- Cost on these curves: 28.2 s, 112 MB with the conditions on; 45 s with them off. Slice 1's selftest: 41 s.
+
 ## Probes
 
 - 2026-11-08, T8: `gemini-3.8-flash-high` under ADC, a one-line prompt: 4 of 4 answered, 3.0–7.6 s (agy 1.5.3). A large prompt on High is not tested.
