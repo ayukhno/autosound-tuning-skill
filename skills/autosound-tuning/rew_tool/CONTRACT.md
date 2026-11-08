@@ -54,8 +54,9 @@ file is written, else one line on stderr, `note: the round is open, but its plan
 
 | verb | flags |
 |---|---|
-| `add-step` | `--project`, `--covers` |
+| `add-step` | `--project`, `--covers`, `--note-do`, `--note-expect`, `--note-if-not` |
 | `skip` | `--superseded-by` |
+| `done` | `--heard` |
 | `reviewer` | `--review`, `--mode` |
 | `decision` | `--invalidates` |
 | `session-close` | `--check` |
@@ -71,7 +72,7 @@ file is written, else one line on stderr, `note: the round is open, but its plan
 | `handoff` | `--json` |
 | `capture-close` | `--no-rew` |
 
-`show`, `plan`, `enter-phase`, `start`, `done`, `block`, `target`, `session-start`, `session-reopen`,
+`show`, `plan`, `enter-phase`, `start`, `block`, `target`, `session-start`, `session-reopen`,
 `amp-changes`, `capture-supersede`, `capture-skip` and `check` take none. A flag is `--`, an ASCII
 letter and no whitespace -- after an `=`, whitespace is the value's only when the name before it is one of the verb's
 flags (`--invalidates=w-L_1 (sw)`); any other token is a word -- a bare `--`, a negative number, and text that only

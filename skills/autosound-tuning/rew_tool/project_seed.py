@@ -262,6 +262,9 @@ def _profile_open_count(path):
 #: The installer's link to the skill, as `.gitignore` and git name it (#204).
 SKILL_LINK = ".claude/skills/autosound-tuning"
 
+#: The names below that carry a key: `project_repo.save` refuses to send one (#204).
+KEY_FILES = [".critic-env", "rew_analitic/.critic-env", "critic-env"]
+
 #: What a fresh project must never push, seeded as a real file rather than promised in prose.
 #: `setup-critic-channel.md` said "it's gitignored" for months with nothing behind it: no
 #: `.gitignore` was written by anything, and `project-intake.md` asked the AGENT to make one --
@@ -275,9 +278,7 @@ GITIGNORE_LINES = [
     "# Written by project_seed.py. Secrets and machine-local state do not leave this folder.",
     "# The key itself belongs OUTSIDE the project: ~/.config/autosound/critic-env",
     "# (Windows: %APPDATA%\\autosound\\critic-env). See setup-critic-channel.md.",
-    ".critic-env",
-    "rew_analitic/.critic-env",
-    "critic-env",
+    *KEY_FILES,
     ".mcp.json",
     ".tcc/",
     "*.mdat",

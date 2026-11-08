@@ -17,16 +17,21 @@ project `EPY-Sep2026` was not a repository at all -- no history, no backup, and 
   (no `gh`) is not asked again: local history is kept all the same.
 * **save** (#204) commits the tuning files with the method's message and pushes. It stages only those, never
   `git add -A`: the housekeeping (`project_seed.HOUSEKEEPING`: `.sessions.log`, `.tcc/`, `*.tmp`, the key's files, the
-  skill's link, ...) stays out even where an older `.gitignore` does not name it, and a link already tracked stops being
-  tracked with the next commit. The order: no remote -> fetch -> the remote ahead -> commit -> push, every refusal
-  before the commit, so a refusal and `--dry-run` leave the history, the index and the files as they were (a fetch moves
-  only the last-known remote ref). A refusal is exit 1 with its line, a held git lock among them. Nothing to commit but
-  commits not pushed is a push. A push that fails after the commit names the commit, and the next `save` sends it.
+  skill's link, ...) stays out even where an older `.gitignore` does not name it or the file is tracked. The order: no
+  remote -> fetch -> the remote ahead, or holding a branch HEAD does not contain where this branch has no ref there ->
+  a key file tracked or waiting, the link added by a waiting commit -> commit -> push. Every refusal comes before the
+  commit, so a refusal and `--dry-run` leave the history, the index and the files as they were (a fetch moves only the
+  last-known remote ref). A refusal is exit 1 with its line, a held git lock among them. Nothing to commit but commits
+  not pushed is a push. A link tracked at HEAD stops being tracked whenever anything goes out, in a commit of its own
+  if no tuning file changed. A step that fails stops there, before the commit. A push that fails after the commit
+  names the commit, and the next `save` sends it.
 * **status --json** adds, beside `repo, remote, gh, init, offer`, `changes: {tuning, housekeeping}`,
-  `ahead: [{hash, time, subject}]`, `remote_head: {hash, time}`, `fetched`, `fetch_error` and `sends` ("session" when
-  the project's `CLAUDE.md` or `AGENTS.md` carries the rule, else "person"). The network stays out of it, as it runs at
-  every `contract.py check` and TCC's window waits on it: it reads the last-known remote ref and says when that was
-  fetched (`fetched`, null for never). `--fetch` asks the remote first; a fetch that failed is `fetch_error`.
+  `ahead: [{hash, time, subject}]`, `remote_head: {hash, time}`, `fetched`, `fetch_error`, `changes_error` and `sends`
+  ("session" when the project's `CLAUDE.md` or `AGENTS.md` carries the rule, else "person"). The network stays out of
+  it, as it runs at every `contract.py check` and TCC's window waits on it: it reads the last-known remote ref and says
+  when that was fetched (`fetched`, null for never). `--fetch` asks the remote first; a fetch that failed is
+  `fetch_error`. A local read git could not do is `changes_error` (null when all is well), and what could not be read
+  is null, not empty: `changes` and `ahead` null are "unknown", where `{tuning: [], ...}` and `[]` are "nothing".
 
 Standard library only. Self-test: `python3 project_repo.py --selftest`.
 """
@@ -54,6 +59,8 @@ if _HERE not in sys.path:
 FIRST_COMMIT = "Project started: the method's files as seeded"
 #: The commit `save` makes.
 SAVE_COMMIT = "Tuning saved: {n} file(s)"
+#: The commit `save` makes when only the skill's link has to stop being tracked.
+LINK_COMMIT = "Stop tracking the skill's link"
 #: A first push carries the project's captures (TCC's own bound on it, Ruling 48).
 PUSH_SECONDS = 600
 FETCH_SECONDS = 60
@@ -155,8 +162,13 @@ def init(project_dir):
         _git(project_dir, "config", "user.name", who[0])
         _git(project_dir, "config", "user.email", who[1])
         said.append(f"git identity for this project only: {who[0]} <{who[1]}>, from {who[2]}")
-    # #204: the skill's link is the installer's, and an existing .gitignore need not name it.
-    _git(project_dir, "add", "-A", "--", ".", f":(exclude){project_seed.SKILL_LINK}")
+    # #204: an existing .gitignore need not name the skill's link, the key's files or the rest of the housekeeping.
+    changes = _changes(project_dir)
+    if changes is None:
+        return False, "git could not read this project's files"
+    failed = _first_failure(_staging(project_dir, changes))
+    if failed:
+        return False, f"git add failed: {_said_by(failed)}"
     if _git(project_dir, "diff", "--cached", "--quiet").returncode == 0:
         state = "a repository already" if not fresh else "a repository now, with nothing to commit yet"
         return True, "; ".join([f"{project_dir} is {state}"] + said)
@@ -200,17 +212,39 @@ def _tracking(project_dir, branch):
 
 
 def _git_path(project_dir, name):
-    return os.path.join(project_dir, _git(project_dir, "rev-parse", "--git-path", name).stdout.strip())
+    """Where git keeps `name`; None when it does not say (joined to nothing, that was the project folder itself)."""
+    r = _git(project_dir, "rev-parse", "--git-path", name)
+    said = r.stdout.strip() if r.returncode == 0 else ""
+    return os.path.join(project_dir, said) if said else None
 
 
-def _is_housekeeping(path):
-    """`path`, as git names it: does it match `project_seed.HOUSEKEEPING`, read as `.gitignore` reads its lines? A name
-    ending in `/` is a folder that git shows whole: another repository inside this one, which is not `save`'s to take."""
-    import project_seed
-    if path.endswith("/"):
-        return True
+def _said_by(step):
+    return (step.stderr or step.stdout).strip()[-200:]
+
+
+def _first_failure(steps):
+    """Run `steps` in order and stop at the first that does not exit 0: that step's result, or None."""
+    for step in steps:
+        result = step()
+        if result.returncode != 0:
+            return result
+    return None
+
+
+def _staging(project_dir, changes):
+    """The steps that make the index what a commit should take: the tuning files and no housekeeping."""
+    steps = []
+    if changes["staged_housekeeping"]:           # staged by hand: a commit takes the whole index
+        steps.append(lambda: _git_paths(project_dir, changes["staged_housekeeping"], "reset", "-q"))
+    if changes["tuning"]:
+        steps.append(lambda: _git_paths(project_dir, changes["tuning"], "add"))
+    return steps
+
+
+def _matches(path, patterns):
+    """`path`, as git names it: does it match one of `patterns`, read as `.gitignore` reads its lines?"""
     parts = path.split("/")
-    for pattern in project_seed.HOUSEKEEPING:
+    for pattern in patterns:
         if pattern.endswith("/"):
             if pattern[:-1] in parts[:-1]:
                 return True
@@ -220,6 +254,13 @@ def _is_housekeeping(path):
         elif any(fnmatch.fnmatchcase(part, pattern) for part in parts):
             return True
     return False
+
+
+def _is_housekeeping(path):
+    """Is `path` in `project_seed.HOUSEKEEPING`? A name ending in `/` is a folder that git shows whole: another
+    repository inside this one, which is not `save`'s to take."""
+    import project_seed
+    return path.endswith("/") or _matches(path, project_seed.HOUSEKEEPING)
 
 
 def _changes(project_dir):
@@ -246,20 +287,63 @@ def _changes(project_dir):
 
 
 def _commits(project_dir, *revs):
-    """`[{hash, time, subject}]`, newest first; empty for a range git cannot read (a branch with no commit yet)."""
+    """`[{hash, time, subject}]`, newest first; None for a range git could not read."""
     r = _git(project_dir, "log", "--no-show-signature", "--format=%H%x00%cI%x00%s", *revs)
     if r.returncode != 0:
-        return []
+        return None
     return [dict(zip(("hash", "time", "subject"), line.split("\0", 2))) for line in r.stdout.splitlines() if line]
 
 
+def _unsent(project_dir, branch):
+    """The revisions of what `branch` has and the remote is not known to: all that no branch of the remote holds, for
+    a branch the remote has never seen."""
+    ref = _tracking(project_dir, branch)
+    return [f"{ref}..HEAD"] if ref else ["HEAD", "--not", "--remotes=origin"]
+
+
+def _unborn(project_dir):
+    """HEAD's branch has no commit yet: the one reason a log may fail that is not a failure."""
+    r = _git(project_dir, "log", "-1", "--format=%H", env=dict(os.environ, LC_ALL="C"))
+    return r.returncode != 0 and ("does not have any commits yet" in r.stderr or "bad default revision" in r.stderr)
+
+
 def _ahead(project_dir, branch):
-    """The commits on `branch` the remote is not known to have. A branch the remote has never seen: all that no branch
-    of the remote holds."""
+    """The commits on `branch` the remote is not known to have; None when git could not read them."""
     if not branch:
         return []
-    ref = _tracking(project_dir, branch)
-    return _commits(project_dir, f"{ref}..HEAD") if ref else _commits(project_dir, "HEAD", "--not", "--remotes=origin")
+    commits = _commits(project_dir, *_unsent(project_dir, branch))
+    return [] if commits is None and _unborn(project_dir) else commits
+
+
+def _unsent_paths(project_dir, branch, diff_filter):
+    """The paths the waiting commits touch, kept to `--diff-filter`; None when git could not read them."""
+    r = _git(project_dir, "log", "--no-show-signature", "--format=", "-z", "--name-only", "--no-renames", "-m",
+             f"--diff-filter={diff_filter}", *_unsent(project_dir, branch))
+    if r.returncode != 0:
+        return None
+    return [path.strip("\n") for path in r.stdout.split("\0") if path.strip("\n")]
+
+
+def _at_head(project_dir):
+    """Every path tracked at HEAD (none on a branch with no commit yet); None when git could not read them."""
+    r = _git(project_dir, "ls-tree", "-r", "--name-only", "-z", "HEAD")
+    if r.returncode != 0:
+        return [] if _unborn(project_dir) else None
+    return [path for path in r.stdout.split("\0") if path]
+
+
+def _remote_branches_not_in_head(project_dir):
+    """The remote's branches HEAD does not contain, as the remote says now -- a local ref can be stale or narrowed by
+    the fetch refspec -- or None when it did not answer."""
+    r = _network(project_dir, FETCH_SECONDS, "ls-remote", "--heads", "origin")
+    if r.returncode != 0:
+        return None
+    others = []
+    for line in r.stdout.splitlines():
+        sha, _, ref = line.partition("\t")
+        if ref.startswith("refs/heads/") and _git(project_dir, "merge-base", "--is-ancestor", sha, "HEAD").returncode != 0:
+            others.append(ref[len("refs/heads/"):])
+    return others
 
 
 def _who_sends(project_dir):
@@ -290,28 +374,48 @@ def status(project_dir, fetch=False):
     project_dir = os.path.abspath(project_dir)
     out = _repo_state(project_dir)
     out.update(changes={"tuning": [], "housekeeping": []}, ahead=[], remote_head=None, fetched=None, fetch_error=None,
-               sends=_who_sends(project_dir))
+               changes_error=None, sends=_who_sends(project_dir))
     if not out["repo"]:
         return out
+    failed = []
     changes = _changes(project_dir)
-    if changes:
+    if changes is None:
+        out["changes"] = None
+        failed.append("git could not read this project's changes")
+    else:
         out["changes"] = {"tuning": changes["tuning"], "housekeeping": changes["housekeeping"]}
-    if not out["remote"]:
-        return out
+    if out["remote"]:
+        failed += _what_is_not_sent(project_dir, out, fetch)
+    out["changes_error"] = "; ".join(failed) or None
+    return out
+
+
+def _what_is_not_sent(project_dir, out, fetch):
+    """`status`'s remote half, written into `out`. The reads git could not do, in words."""
+    failed = []
     if fetch:
         out["fetch_error"] = _fetch(project_dir)
     branch = _branch(project_dir)
     out["ahead"] = _ahead(project_dir, branch)
+    if out["ahead"] is None:
+        failed.append("git could not read the commits not on the remote")
     ref = _tracking(project_dir, branch)
     if ref:
         head = _commits(project_dir, "-1", ref)
-        out["remote_head"] = {"hash": head[0]["hash"], "time": head[0]["time"]} if head else None
+        if head is None:
+            failed.append("git could not read the remote's last-known commit")
+        elif head:
+            out["remote_head"] = {"hash": head[0]["hash"], "time": head[0]["time"]}
+    fetch_head = _git_path(project_dir, "FETCH_HEAD")
+    if fetch_head is None:
+        failed.append("git did not say where its own files are")
+        return failed
     try:
-        when = os.path.getmtime(_git_path(project_dir, "FETCH_HEAD"))
+        when = os.path.getmtime(fetch_head)
         out["fetched"] = datetime.datetime.fromtimestamp(when).astimezone().isoformat(timespec="seconds")
     except OSError:
         pass                                     # never fetched here: null says so
-    return out
+    return failed
 
 
 def save(project_dir, dry_run=False):
@@ -334,6 +438,32 @@ def _count(n, what):
     return f"{n} {what}" + ("" if n == 1 else "s")
 
 
+def _what_must_not_go(project_dir, branch, at_head, waiting):
+    """The refusal for what this project must not send: a key file tracked or waiting, the skill's link added by a
+    waiting commit. None when there is none."""
+    import project_seed
+    key_tracked = [path for path in at_head if _matches(path, project_seed.KEY_FILES)]
+    if key_tracked:
+        name = key_tracked[0]
+        return (f"{name} carries a key AND is tracked by git. Nothing changed. Fix: `git rm --cached '{name}'`, commit, "
+                "move the key to the machine's file (setup-critic-channel.md), and CHANGE the key: it is in the history")
+    if not waiting:
+        return None
+    key_waiting = _unsent_paths(project_dir, branch, "d")
+    link_added = _unsent_paths(project_dir, branch, "A")
+    if key_waiting is None or link_added is None:
+        return "git could not read what the waiting commits contain. Nothing changed"
+    for name in key_waiting:
+        if _matches(name, project_seed.KEY_FILES):
+            return (f"{name} carries a key and is in a commit not yet sent. Nothing changed. Take it out of that commit "
+                    "(removing it in a later commit leaves it in the history), and keep the key in the machine's file "
+                    "(setup-critic-channel.md)")
+    if any(_matches(name, [project_seed.SKILL_LINK]) for name in link_added):
+        return (f"{project_seed.SKILL_LINK} (the skill's link) is added by a commit not yet sent. Nothing changed. Take "
+                "it out of that commit: the link is this machine's")
+    return None
+
+
 def _save(project_dir, dry_run):
     import project_seed
     if not _origin(project_dir):
@@ -342,6 +472,8 @@ def _save(project_dir, dry_run):
     if not branch:
         return False, "HEAD is not on a branch: finish what git is in the middle of, then save"
     lock = _git_path(project_dir, "index.lock")
+    if lock is None:
+        return False, "git did not say where its own files are. Nothing changed"
     if os.path.exists(lock):
         return False, f"git's lock is held ({lock}): another git is at work, or one crashed and its lock needs removing"
     reason = _fetch(project_dir)
@@ -361,40 +493,56 @@ def _save(project_dir, dry_run):
         if int(r.stdout.strip() or 0):
             return False, (f"pull first: the remote has {_count(int(r.stdout), 'commit')} this copy does not. "
                            "Nothing changed")
+    else:
+        others = _remote_branches_not_in_head(project_dir)
+        if others is None:
+            return False, "could not reach the remote to read its branches. Nothing changed"
+        if others:
+            named = ", ".join(f"'{name}'" for name in others)
+            return False, (f"origin has {named}, not contained in this copy's '{branch}', and no '{branch}' of its own: "
+                           f"a push would start a second branch. Get onto that branch (`git branch -m {others[0]}` if "
+                           "this is the same work, then pull), then save. Nothing changed")
     tuning, ahead = changes["tuning"], _ahead(project_dir, branch)
+    if ahead is None:
+        return False, "git could not read the commits waiting to be sent. Nothing changed"
+    at_head = _at_head(project_dir)
+    if at_head is None:
+        return False, "git could not read what is tracked. Nothing changed"
+    refusal = _what_must_not_go(project_dir, branch, at_head, bool(ahead))
+    if refusal:
+        return False, refusal
     kept_out = len(changes["housekeeping"])
     left = f"; {_count(kept_out, 'housekeeping file')} {'stays' if kept_out == 1 else 'stay'} out" if kept_out else ""
     if not tuning and not ahead:
         return False, f"nothing to send: no tuning file changed and no commit is waiting{left}"
-    link_tracked = bool(_git(project_dir, "ls-files", "--", project_seed.SKILL_LINK).stdout.strip())
+    link_tracked = any(_matches(path, [project_seed.SKILL_LINK]) for path in at_head)
 
     if dry_run:
-        parts = ([f"a new commit of {_count(len(tuning), 'file')}"] if tuning else []) + \
+        made_of = _count(len(tuning), "file") if tuning else "the link's removal alone"
+        parts = ([f"a new commit of {made_of}"] if tuning or link_tracked else []) + \
                 ([f"{_count(len(ahead), 'commit')} already waiting"] if ahead else [])
         lines = [f"would send to origin: {' and '.join(parts)}{left}"]
         lines += [f"  {path}" for path in tuning]
         lines += [f"  commit {c['hash'][:9]} {c['subject']}" for c in ahead]
-        if tuning and link_tracked:
+        if link_tracked:
             lines.append(f"  and stop tracking {project_seed.SKILL_LINK}")
         return True, "\n".join(lines)
 
     made = None
-    if tuning:
+    if tuning or link_tracked:
         who = _identity_for_this_repo(project_dir)
         if who:
             _git(project_dir, "config", "user.name", who[0])
             _git(project_dir, "config", "user.email", who[1])
-        steps = []
-        if changes["staged_housekeeping"]:       # staged by hand: a commit takes the whole index
-            steps.append(_git_paths(project_dir, changes["staged_housekeeping"], "reset", "-q"))
-        steps.append(_git_paths(project_dir, tuning, "add"))
+        steps = _staging(project_dir, changes)
         if link_tracked:
-            steps.append(_git(project_dir, "rm", "-r", "-q", "--cached", "--ignore-unmatch", "--",
-                              project_seed.SKILL_LINK))
-        steps.append(_git(project_dir, "commit", "-q", "-m", SAVE_COMMIT.format(n=len(tuning))))
-        for step in steps:
-            if step.returncode != 0:
-                return False, f"could not commit: {(step.stderr or step.stdout).strip()[-200:]}. Nothing was pushed"
+            steps.append(lambda: _git(project_dir, "rm", "-r", "-q", "--cached", "--ignore-unmatch", "--",
+                                      project_seed.SKILL_LINK))
+        message = SAVE_COMMIT.format(n=len(tuning)) if tuning else LINK_COMMIT
+        steps.append(lambda: _git(project_dir, "commit", "-q", "-m", message))
+        failed = _first_failure(steps)
+        if failed:
+            return False, f"could not commit: {_said_by(failed)}. No commit was made and nothing was pushed"
         made = _git(project_dir, "rev-parse", "--short", "HEAD").stdout.strip()
 
     try:
@@ -405,7 +553,7 @@ def _save(project_dir, dry_run):
     if reason:
         kept = f"commit {made} is made here and NOT sent" if made else f"{_count(len(ahead), 'commit')} here, NOT sent"
         return False, f"{kept}: {reason}. The next save sends it"
-    sent = (f"commit {made} ({_count(len(tuning), 'file')})" if made else "") + \
+    sent = (f"commit {made} ({_count(len(tuning), 'file') if tuning else 'the link stops being tracked'})" if made else "") + \
            (" and " if made and ahead else "") + (_count(len(ahead), "waiting commit") if ahead else "")
     return True, f"sent to origin: {sent}{left}"
 
@@ -772,6 +920,251 @@ def _check_sends_says_who_sends():
         assert status(proj).get("sends") == "session", "AGENTS.md alone should say session"
 
 
+@contextlib.contextmanager
+def _git_paths_fails_at(verb):
+    """`_git_paths` with `verb` failing, as a full disk or an unreadable file makes it fail."""
+    real = globals()["_git_paths"]
+
+    def failing(project_dir, paths, *args):
+        if args[0] == verb:
+            return subprocess.CompletedProcess(args, 1, "", f"simulated: {verb} failed")
+        return real(project_dir, paths, *args)
+
+    globals()["_git_paths"] = failing
+    try:
+        yield
+    finally:
+        globals()["_git_paths"] = real
+
+
+def _check_a_failing_step_stops_before_the_commit():
+    """A failed step used to be read after the commit had run: "Tuning saved" without the files, which the next save sent."""
+    for verb in ("reset", "add"):
+        with _sandbox() as (proj, bare, _tmp):
+            _connect(proj, bare)
+            _write(proj, "staged-by-hand.txt")
+            _git(proj, "add", "staged-by-hand.txt")   # what the commit could still take
+            _write(proj, "tuning.txt")
+            _write(proj, ".sessions.log")
+            _git(proj, "add", ".sessions.log")        # what the reset has to do
+            before, remote_was = _head(proj), _on_remote(bare)
+            with _git_paths_fails_at(verb):
+                rc, said = _said("save", proj)
+            assert rc == 1 and "could not commit" in said, (verb, rc, said)
+            assert (_head(proj), _on_remote(bare)) == (before, remote_was), (verb, "a commit despite the failure", said)
+            rc, said = _said("save", proj)            # the cause gone, one commit with all of it
+            sent = _tree(bare, _on_remote(bare))
+            assert rc == 0 and "tuning.txt" in sent and "staged-by-hand.txt" in sent, (verb, rc, said, sent)
+            assert ".sessions.log" not in sent and _git(proj, "rev-parse", "HEAD~1").stdout.strip() == before, (verb, sent)
+
+
+def _diverge_on(proj, name):
+    """The remote gets branch `name`, holding a commit this copy does not."""
+    _git(proj, "commit", "--allow-empty", "-q", "-m", "only on the remote")
+    r = _git(proj, "push", "-q", "origin", f"HEAD:refs/heads/{name}")
+    assert r.returncode == 0, r.stderr
+    _git(proj, "reset", "-q", "--hard", "HEAD~1")
+
+
+def _check_a_remote_on_another_branch_is_refused():
+    """With no ref of this branch's name the "pull first" check had nothing to compare, and the push made a second branch."""
+    with _sandbox() as (proj, bare, _tmp):                # local master, the remote has only main
+        _git(proj, "remote", "add", "origin", bare)
+        _git(proj, "branch", "-m", "master")
+        _diverge_on(proj, "main")
+        _write(proj, "tuning.txt")
+        was = (_head(proj), _porcelain(proj), _on_remote(bare))
+        for argv in (("save", proj, "--dry-run"), ("save", proj)):
+            rc, said = _said(*argv)
+            assert rc == 1 and "main" in said, (argv, rc, said)
+            assert (_head(proj), _porcelain(proj), _on_remote(bare)) == was, (argv, "a refusal changed something", said)
+    with _sandbox() as (proj, bare, _tmp):                # an upstream of another name
+        _git(proj, "remote", "add", "origin", bare)
+        _git(proj, "branch", "-m", "work")
+        _diverge_on(proj, "main")
+        assert _git(proj, "branch", "--set-upstream-to=origin/main").returncode == 0
+        _write(proj, "tuning.txt")
+        was = (_head(proj), _on_remote(bare))
+        rc, said = _said("save", proj)
+        assert rc == 1 and "main" in said and (_head(proj), _on_remote(bare)) == was, (rc, said)
+    with _sandbox() as (proj, bare, _tmp):                # a branch HEAD contains is no reason to refuse
+        _git(proj, "remote", "add", "origin", bare)
+        _git(proj, "branch", "-m", "master")
+        assert _git(proj, "push", "-q", "origin", "HEAD:refs/heads/main").returncode == 0
+        _write(proj, "tuning.txt")
+        rc, said = _said("save", proj)
+        assert rc == 0, (rc, said)
+
+
+def _commit_the_link(proj):
+    _link(proj)
+    _git(proj, "add", "-f", ".claude/skills/autosound-tuning")
+    _git(proj, "commit", "-q", "-m", "the link came along")
+    assert [p for p in _tree(proj, "HEAD") if p.startswith(".claude/")], "the setup did not track the link"
+
+
+def _check_a_tracked_link_leaves_with_waiting_commits():
+    """It left only with a tuning change, so commits waiting went out with the link still tracked."""
+    with _sandbox() as (proj, bare, _tmp):
+        _commit_the_link(proj)
+        _connect(proj, bare)
+        rc, said = _said("save", proj)                # with nothing else to send it stays that
+        assert rc == 1 and "nothing to send" in said, (rc, said)
+        _write(proj, "by-hand.txt")
+        _git(proj, "add", "by-hand.txt")
+        _git(proj, "commit", "-q", "-m", "a commit the session made")
+        waiting = _head(proj)
+        rc, said = _said("save", proj, "--dry-run")
+        assert rc == 0 and "stop tracking" in said and _head(proj) == waiting, (rc, said)
+        rc, said = _said("save", proj)
+        assert rc == 0 and _on_remote(bare) == _head(proj) != waiting, (rc, said)
+        assert _git(proj, "rev-parse", "HEAD~1").stdout.strip() == waiting, "more than the one commit"
+        sent = _tree(bare, _on_remote(bare))
+        assert "by-hand.txt" in sent and not [p for p in sent if p.startswith(".claude/")], sent
+        assert os.path.lexists(os.path.join(proj, ".claude", "skills", "autosound-tuning")), "the link left the folder"
+
+
+def _check_a_waiting_commit_that_adds_the_link_is_refused():
+    with _sandbox() as (proj, bare, _tmp):
+        _connect(proj, bare)
+        _commit_the_link(proj)
+        _write(proj, "tuning.txt")
+        was = (_head(proj), _porcelain(proj), _on_remote(bare))
+        for argv in (("save", proj, "--dry-run"), ("save", proj)):
+            rc, said = _said(*argv)
+            assert rc == 1 and ".claude/skills/autosound-tuning" in said, (argv, rc, said)
+            assert (_head(proj), _porcelain(proj), _on_remote(bare)) == was, (argv, "a refusal changed something", said)
+
+
+def _commit_a_key(proj, rel):
+    _write(proj, rel, "GEMINI_API_KEY=AQ.x\n")
+    _git(proj, "add", "-f", rel)
+    _git(proj, "commit", "-q", "-m", "the key came along")
+
+
+def _check_a_tracked_key_is_refused():
+    for rel in (".critic-env", "rew_analitic/.critic-env", "sub/critic-env"):
+        with _sandbox() as (proj, bare, _tmp):
+            _commit_a_key(proj, rel)
+            _connect(proj, bare)
+            _write(proj, "tuning.txt")
+            was = (_head(proj), _porcelain(proj), _on_remote(bare))
+            for argv in (("save", proj, "--dry-run"), ("save", proj)):
+                rc, said = _said(*argv)
+                assert rc == 1 and rel in said, (argv, rc, said)
+                assert (_head(proj), _porcelain(proj), _on_remote(bare)) == was, (argv, "a refusal changed something", said)
+
+
+def _check_a_key_in_a_waiting_commit_is_refused():
+    with _sandbox() as (proj, bare, _tmp):            # not at HEAD any more, and still on its way out in the history
+        _connect(proj, bare)
+        _commit_a_key(proj, ".critic-env")
+        _git(proj, "rm", "-q", "--cached", ".critic-env")
+        _git(proj, "commit", "-q", "-m", "taken back out")
+        _write(proj, "tuning.txt")
+        was = (_head(proj), _on_remote(bare))
+        rc, said = _said("save", proj)
+        assert rc == 1 and ".critic-env" in said and (_head(proj), _on_remote(bare)) == was, (rc, said)
+
+
+def _check_a_commit_that_takes_the_key_out_is_sent():
+    """The refusal's own way out: `git rm --cached` of a key already sent is a waiting commit that names it, and must go."""
+    with _sandbox() as (proj, bare, _tmp):
+        _commit_a_key(proj, ".critic-env")
+        _connect(proj, bare)
+        _git(proj, "rm", "-q", "--cached", ".critic-env")
+        _git(proj, "commit", "-q", "-m", "the key leaves")
+        rc, said = _said("save", proj)
+        assert rc == 0 and ".critic-env" not in _tree(bare, _on_remote(bare)), (rc, said)
+
+
+def _check_a_tracked_sessions_log_stays_out():
+    """Real projects track it and every session changes it: no refusal, and the commit does not take it."""
+    with _sandbox() as (proj, bare, _tmp):
+        _write(proj, ".sessions.log", "as committed\n")
+        _git(proj, "add", ".sessions.log")
+        _git(proj, "commit", "-q", "-m", "their log")
+        _connect(proj, bare)
+        _write(proj, ".sessions.log", "a later session\n")
+        _write(proj, "tuning.txt")
+        rc, said = _said("save", proj)
+        sent = _on_remote(bare)
+        assert rc == 0 and sent == _head(proj) and "tuning.txt" in _tree(bare, sent), (rc, said)
+        assert _git(proj, "show", "HEAD:.sessions.log").stdout == "as committed\n", "the log was committed"
+        assert ".sessions.log" in _porcelain(proj), "the log should stay as it was: not committed"
+
+
+def _check_init_takes_no_housekeeping():
+    """An existing `.gitignore` is left alone, so it need not name any of it; `init` holds by itself, as `save` does."""
+    with _sandbox() as (_proj, _bare, tmp):
+        older = os.path.join(tmp, "older")
+        _write(older, ".gitignore", "# their own\n")
+        names = (".sessions.log", ".critic-env", "rew_analitic/.critic-env", "critic-env", ".mcp.json", ".tcc/x", "a.mdat",
+                 "b.tmp", ".DS_Store", "sub/.DS_Store", "Thumbs.db", ".autosound/x", ".agents/x", ".claude/settings.json")
+        for rel in names:
+            _write(older, rel)
+        _write(older, "tuning.txt")
+        _link(older)
+        ok, line = init(older)
+        tree = _tree(older, "HEAD")
+        assert ok and "tuning.txt" in tree and ".gitignore" in tree, (line, tree)
+        assert not [p for p in tree if p in names or p.startswith((".claude/", ".tcc/", ".autosound/", ".agents/"))], tree
+
+
+def _check_status_says_a_failed_read():
+    """A git that could not read used to look like nothing waiting."""
+    with _sandbox() as (proj, bare, _tmp):            # all is well
+        _connect(proj, bare)
+        st = status(proj)
+        assert "changes_error" in st and st["changes_error"] is None, st
+    with _sandbox() as (proj, bare, _tmp):            # the index is unreadable
+        _connect(proj, bare)
+        _write(proj, "tuning.txt")
+        with open(os.path.join(proj, ".git", "index"), "wb") as fh:
+            fh.write(b"not an index")
+        st = status(proj)
+        assert st.get("changes_error") and st["changes"] is None, st
+        assert st["repo"] and st["remote"] and st["gh"] == "absent" and st["init"] is None and st["offer"] is None, st
+    with _sandbox() as (proj, bare, _tmp):            # a commit in the waiting range is gone
+        _connect(proj, bare)
+        sent = _head(proj)
+        _write(proj, "waiting.txt")
+        _git(proj, "add", "waiting.txt")
+        _git(proj, "commit", "-q", "-m", "waiting")
+        loose = os.path.join(proj, ".git", "objects", sent[:2], sent[2:])
+        os.chmod(loose, 0o600)
+        os.remove(loose)
+        st = status(proj)
+        assert st.get("changes_error") and st["ahead"] is None, st
+    with _sandbox() as (proj, bare, _tmp):            # and `save` does not take it for nothing waiting
+        _connect(proj, bare)
+        _write(proj, "tuning.txt")
+        before, real = _head(proj), globals()["_ahead"]
+        globals()["_ahead"] = lambda *a: None
+        try:
+            rc, said = _said("save", proj)
+        finally:
+            globals()["_ahead"] = real
+        assert rc == 1 and "could not read" in said and _head(proj) == before, (rc, said)
+    with _sandbox() as (proj, bare, _tmp):            # git names none of its own files
+        _connect(proj, bare)
+        real = globals()["_git"]
+
+        def no_git_path(project_dir, *args, env=None):
+            if args[:2] == ("rev-parse", "--git-path"):
+                return subprocess.CompletedProcess(args, 128, "", "simulated")
+            return real(project_dir, *args, env=env)
+
+        globals()["_git"] = no_git_path
+        try:
+            st = status(proj)
+            rc, said = _said("save", proj)
+        finally:
+            globals()["_git"] = real
+        assert st.get("changes_error") and st["fetched"] is None, st
+        assert rc == 1 and "is held" not in said, (rc, said)
+
+
 def _selftest():
     if not shutil.which("git"):
         print("selftest[project_repo] SKIPPED -- no git on this machine")
@@ -846,7 +1239,12 @@ def _selftest():
                   _check_an_older_repository_keeps_the_link_and_the_key_out, _check_init_does_not_take_the_link,
                   _check_a_first_save_goes_to_an_empty_remote, _check_an_identity_is_set_only_to_commit,
                   _check_a_remote_that_cannot_be_reached, _check_status_keeps_what_tcc_reads_and_adds_the_rest,
-                  _check_status_with_no_repository_carries_the_keys_empty, _check_sends_says_who_sends):
+                  _check_status_with_no_repository_carries_the_keys_empty, _check_sends_says_who_sends,
+                  _check_a_failing_step_stops_before_the_commit, _check_a_remote_on_another_branch_is_refused,
+                  _check_a_tracked_link_leaves_with_waiting_commits, _check_a_waiting_commit_that_adds_the_link_is_refused,
+                  _check_a_tracked_key_is_refused, _check_a_key_in_a_waiting_commit_is_refused,
+                  _check_a_commit_that_takes_the_key_out_is_sent, _check_a_tracked_sessions_log_stays_out,
+                  _check_init_takes_no_housekeeping, _check_status_says_a_failed_read):
         try:
             check()
         except AssertionError as exc:

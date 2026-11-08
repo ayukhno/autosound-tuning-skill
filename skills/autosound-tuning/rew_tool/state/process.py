@@ -7036,11 +7036,12 @@ def _check_a_verb_held_to_the_round_asked():
         # The flag is one of the verb's: given twice it is no answer, and a title is never the flag's word.
         refused(["capture-taken", "--round", now, "--round", old, "a_2 (sw)"], "error: --round was given twice")
         # A round that moves while REW is read, with --round given: the check's own hold refuses it.
+        verified_before = len(p.events(kinds=(EV_CAPTURE_VERIFIED,)))
         verifier.during = lambda: Process(d).start_capture("3", expected=["a_3 (sw)"])
         rc, out, err = _run_main(["process.py", d, "capture-check", "--round", now])
         verifier.during = None
         assert rc == EXIT_NO and err.strip().startswith(f"error: round {now} was closed or replaced"), (rc, out, err)
-        assert "checks" not in p.load()["capture"] or "a_2 (sw)" not in p.load()["capture"]["checks"], p.load()["capture"]
+        assert len(p.events(kinds=(EV_CAPTURE_VERIFIED,))) == verified_before, "a refused check wrote its verdicts"
         # ...and a round that moves between the caller's read and the method's own hold: refused under that hold.
         series = iter(range(4, 20))
         for call in (lambda opened: p.record_capture("a_9 (sw)", round_id=opened),
@@ -7048,6 +7049,9 @@ def _check_a_verb_held_to_the_round_asked():
             n = next(series)
             p.start_capture(str(n), expected=[f"a_{n} (sw)"])
             opened = p.load()["capture"]["id"]
+            own_record = lambda: [e for e in p.events(kinds=(EV_CAPTURE_TAKEN, EV_CAPTURE_PROTECTIVE))
+                                  if e.get("capture") == opened]
+            record_before = own_record()
 
             def another_writer_first(project_dir):
                 globals()["_hold"] = real_hold
@@ -7065,7 +7069,7 @@ def _check_a_verb_held_to_the_round_asked():
                 globals()["_hold"] = real_hold
             assert before_call is not None, "a round moved before the method's hold was written into"
             assert before_call.read == opened and before_call.now == p.load()["capture"]["id"], vars(before_call)
-            assert "a_9 (sw)" not in p.load()["capture"]["taken"], p.load()["capture"]
+            assert own_record() == record_before, (opened, own_record())
         # With no round open, the same refusal, saying so.
         last = p.load()["capture"]["id"]
         assert _run_main(["process.py", d, "capture-close", "--no-rew"])[0] == EXIT_OK
