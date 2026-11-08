@@ -1,11 +1,11 @@
-# PLAN W-12 · v3.2.1 — #210 and the critical fixes, without the engine
+# PLAN W-12 · v3.3.0 — #210, the critical fixes and the four returned features, without the engine
 
-**The composition, the Arbiter 2026-11-08 («так, патч»):** 11 issues, a patch. #210 joined with `ok`; #200, #201, #202
-and #204 went back to the pool for the next wave (their plan text, tasks T2–T3, T6, T7 and questions 1–3, is at `1f33687`);
-the question of the version is closed: `v3.2.1`.
+**The composition, the Arbiter 2026-11-08:** 15 issues, the minor `v3.3.0` (milestone `W-12 · v3.3.0`). Earlier that day it was 11 issues and the patch
+`v3.2.1` («так, патч»), with #200, #201, #202 and #204 sent to the pool; the patch is dropped and the four are back. **The order:** build everything with no
+release tag → a release candidate → TCC does its work on it (hub #331, SKL-091) → when TCC is done, the minors, skill `v3.3.0` and TCC `v1.3.0`. No ear test by
+the Arbiter before the candidate.
 
-**Status:** written 2026-10-30 on branch `wave-2026-10-30` from three code maps (sonnet · medium, at `393fcf2`); not yet
-reviewed. The Arbiter, 2026-10-30: «збір закінчено» → 14 issues on `W-12 · v3.2.1` (#196–#209), `ok` on all 14 (first
+**Status:** written 2026-10-30 on branch `wave-2026-10-30` from three code maps (sonnet · medium, at `393fcf2`). Codex's plan review at `9daab88` (report: `hub/scratch/skill/codex-w12-plan-report.md`): every finding checked against the code and taken in; T2's #200 half, T3, T6 and T7 came back after it and have had no review. The Arbiter, 2026-10-30: «збір закінчено» → 14 issues on `W-12 · v3.2.1` (#196–#209), `ok` on all 14 (first
 the fixes and TCC's asks, then «це треба брати!» for the five features: the freeze of 2026-10-21, hub #295 HUB-090, is
 lifted for this wave by his word). «Пиши план, план збережемо і будемо робити в новій сесії»: the build starts in a new
 session, after the plan review and his «го». Built without `superpowers` (hub H-022): the PR carries `Engine: none`;
@@ -18,7 +18,14 @@ Paths: `SK` = `skills/autosound-tuning`, `RT` = `SK/rew_tool`, `S` = `RT/state/s
 
 ## Open questions for the Arbiter — before «го»
 
-None. #210's design raised three, answered by the Arbiter 2026-11-08 (lane F's section).
+#210's design raised three, answered by the Arbiter 2026-11-08 (lane F's section). The return of the four reopens three, asked with this advice:
+
+1. **#200 — the source of the preset tier.** **Advice:** W-12 builds the tier, its diff and sheet rows and the source-file fields, filled by the session or the
+   user; a file reader in the skill is its own task for a later wave, on his word. #210's runbook falls back to `screen-read-dsp.md` either way.
+2. **#201 — «in the DSP now».** AD-1 (`RT/state/schema.md:111-114`) says the ledger is not a device mirror. **Advice:** a dated, sourced *claim*: `slots[slot].loaded =
+   {version, since, source}`, written by `attest` and a new verb; never inferred from file times. HEAD keeps its meaning.
+3. **#204 — who sends.** No rule in the skill says the session commits and pushes after every step. **Advice:** the rule goes into the project seed; `status --json`
+   carries `sends: "session"` for a project seeded with it, `"person"` otherwise.
 
 ## The W-12 trial: the PMO method's review weight, and the numbers (the Arbiter, 2026-11-08)
 
@@ -32,7 +39,7 @@ and keeps the part of that loop that paid: the check of fixes (9 regressions in 
   without a `file:line` quote, an inventory of every site of each class it finds, a «checked → clean» row per category.
   One fix round. Pass 2, only when a fix touched `Risk: high` code: a narrow check of the fixes (opus · high), on pass 1's
   classes only. A third pass is the Arbiter's word.
-- **A silent reviewer:** 20 minutes without a report → the next one at once (code: Codex → the Opus seats, never Gemini),
+- **A silent reviewer:** 20 minutes without a report → the next one at once (code: Codex → Gemini 4 as the Critic, the Arbiter 2026-11-08),
   the reason in the ledger. W-11 lost 44 minutes to one.
 - **The end of the wave:** Codex on the branch head after the bookkeeping, one fix round, then Fable on those fixes only.
 - **A finding's place:** W-12 reaches people. Stops the main process → blocks the release; hinders, with a workaround →
@@ -60,6 +67,8 @@ At the wave's end the numbers go to the hub as one ticket, for the Arbiter's rev
 - **The seats.** Plan review, group passes, the final pass on the head: Codex (`codex exec -m gpt-6-astra -c
   model_reasoning_effort=high -s read-only --ephemeral -o <file> -`, the brief on stdin). Codex out of limits or silent →
   the Opus seats (`pr-review-toolkit:silent-failure-hunter`, `pr-review-toolkit:pr-test-analyzer`, opus · high).
+  **Codex is out of tokens from 2026-11-08 for five hours: the Critic is then Gemini 4 (`AI ask --model gemini-4-argon-high`), the Arbiter's word.** It reverses the rule of
+  2026-10-21 (code never to Gemini: it invented code quotes), so every quote it gives is checked against the file before a finding counts, and the ledger counts the false ones.
   User-facing text (README, FAQ, the CHANGELOG, the method's text) → Gemini via the Advisor (`AI ask --model
   gemini-3.8-flash-medium`). Every finding is checked against the code before acting.
 - **Models** (`hub:seam` «Models by role»): implementer `Risk: high` opus · high; ordinary opus · medium; T13 is a
@@ -86,13 +95,13 @@ At the wave's end the numbers go to the hub as one ticket, for the Arbiter's rev
 
 | lane | files | tasks, in order |
 |---|---|---|
-| **A** | `S`, `A`, `RT/state/schema.md` | T1 #199 → T2 #197 |
-| **B** | `P`, `N`, `V`, `C`, `RT/CONTRACT.md`, `RT/rew_api.py` (read) | T4 #203 → T5 #198 |
+| **A** | `S`, `A`, `RT/state/schema.md`, `RT/levelbase.py`, `RT/predict.py` (T2's readers) | T1 #199 → T2 #197 + #200 → T3 #201 |
+| **B** | `P`, `N`, `V`, `C`, `RT/CONTRACT.md`, `RT/rew_api.py` (read), `PR`, `RT/project_seed.py`, the three references of T5 | T4 #203 → T5 #198 → T7 #204 → T6 #202 |
 | **D** | `install.sh`, `install.ps1`, `IC`, `FAQ*.md` (one line) | T8 #205 → T9 #206 |
 | **E** | `AI`, `README*.md`, `SK/SKILL.md`, `SK/references/**`, `RT/capabilities.py`, `scripts/docs-check.py` | T10–T13 |
 | **F** | `RT/joint_search.py`, `RT/version_bench.py`, `SK/references/phases/joint-by-joint.md`, then `RT/intake.py`, `RT/intake_i18n/*`, `RT/state/process.py` (`_route_line`), `SK/SKILL.md` (Map row), `project-intake.md`, `capture-session-sheet.md`, `virtual-first.md`, `capabilities.md`, `rew-tool-docs.md` | T14 #210 → T15 → T16, after lane E |
 
-T4 first in lane B: TCC builds against it in its own W-12, and it settles `P`'s exit table. Lane E's `SK/SKILL.md` edit (T12) runs while no other agent edits it.
+**F's new modules run after E; its edits to `P` and `capture-session-sheet.md` wait for B as well.** B's three reference edits (T5) and F's `scripts/selftests.txt` and `reading-cost-baseline.json` belong to the lanes' file lists. T4 first in lane B: TCC builds against it in its own W-12, and it settles `P`'s exit table. Lane E's `SK/SKILL.md` edit (T12) runs while no other agent edits it.
 
 ## Group Versions ledger — `Risk: high`, lane A
 
@@ -103,19 +112,46 @@ CLI `--on <version|HEAD>`. With no `on`, when the slot's newest version is an un
 "candidate"`, not HEAD), **refuse**: «the newest version v_002 is a candidate not in the slot; this delta would land on
 HEAD v_001 — pass --on v_002 to build on the candidate, or --on HEAD». With `on`, load that version and pass
 `parent=<it>` to `snapshot` (`S`:1308, `parent` exists). The sheet header (`settings_sheet`, `A`:359-368) names the
-base: «v_003 = v_002 + …». TCC: `propose` refusals reach it as a `ValueError` («the method's gate», tcc
-`ui/tcc/main_window.py:2100, 2673, 2785`) — check the message shows whole; `parent` stays the true base (TCC's
-`ledger_line.parent_of`). Tests: `A --selftest` — a refused propose after a candidate (red on the old code), `--on`
-building on the candidate with `parent` set, the header line.
+base: «v_003 = v_002 + …». **Promotion, the blocker of the plan review.** With `--on <candidate>`: `structural_moves` is measured against the candidate's own base (HEAD at its making), not the candidate, so
+its unreviewed moves stay held (`A`:547-557 compares only the last step today); the result stays a candidate until evidence and a reviewer are there, and then every row
+`candidate` becomes `proposed` and `variant` is cleared (no branch clears it today, `A`:563-568), so `attest` (`A`:622-625) covers them. The sheet is measured against what is in the DSP, the
+last placed version, because «Enter only these» (`A`:371-372) on candidate → fix would leave out the candidate's changes. `parent` holds on both layouts (`S`:1344-1346 sets it only under `project_line`).
+The refusal reaches a person as the CLI's `error: …` on stderr, exit 1 (`A`:1274-1276); TCC calls no `apply.propose` and hands a request to the model. `parent` stays the true base (TCC's
+`ledger_line.parent_of`). Tests: `A --selftest` — a refused propose after a candidate (red on the old code); candidate + small fix with and without evidence and a reviewer; `attest` after it; the whole
+entry sheet; the header line; `parent` on both layouts.
 
-**T2 · #197 — a version keeps its input gain.** S.
-Key: **`preset_settings`** (a top-level dict; `preset` is taken by the slot name, and a dict outside `_NON_TIER_KEYS` would
-be read as a tier — `S`:136-165), added to `_NON_TIER_KEYS` and validated on its own. Only `input_gain_db` for now, default
-0 dB, never asked for; #200 adds its fields to the same key in its wave. No migration, `SCHEMA_VERSION` stays 3. Shown by
-`diff_states` (`S`:1421-1453), `render_state` (`S`:1471-1583) and `settings_sheet`/`delta_rows` (`A`:325-432) only when set
-or different; a change is an ordinary row, `structural_moves` (`A`:72-90) does not count it, so no reviewer. TCC ignores an
-unknown top-level non-tier key (tcc `state/dsp_state.py` `ProjectView.from_dict`). Tests: `S selftest` — validate accepts
-and refuses, diff and render with and without; `A --selftest` — a trim is a row with no reviewer. Docs: `RT/state/schema.md`.
+**T2 · #197 + #200 — the preset settings and the source file.** L.
+Key: **`preset_settings`** (a top-level dict; `preset` is taken by the slot name, and a dict outside
+`_NON_TIER_KEYS` would be read as a tier — `S`:136-165). Added to `_NON_TIER_KEYS` and validated on its own:
+`input_gain_db` (#197), `sources: {main, hec, digital}` (dB), `fx: {realcenter, dynamic_bass, subxpander}`, `rtc: {on,
+curve}`, `bt: {source, auto_switch}`, `conductor: {sub_lamps}`. Every field optional; a missing field reads as the
+default (0 dB, off) **except** `dynamic_bass`/`subxpander` in records that do not state them: unknown, not off (the
+tuner's naming). No migration, `SCHEMA_VERSION` stays 3.
+`provenance.source_file: {name, path, md5, saved (PC-Tool's root @D), pctool (@V), device (@Dev), read_at,
+compared}` — filled by the session or the user (question 1). Shown: `diff_states` (`S`:1421-1453; the scalar list at
+:1430 and a dict walk), `render_state` (`S`:1471-1583) and `settings_sheet`/`delta_rows` (`A`:325-432) print a field
+only when set or different; a change to it is an ordinary row — `structural_moves` (`A`:72-90) does not count it, so
+no reviewer. A delta path for non-tier fields beside `apply_delta`/`_split_by_tier` (`A`:198, :134). Legacy «FX»: the
+naming grammar's `+FX` (`N`) and the references say it means RealCenter; no alias for the other two. Loudness between
+versions: no such code exists (`RT/equal_loudness.py` is ISO 226 targets) — the field is there for it; nothing to
+extend now. TCC: an unknown top-level non-tier key is ignored (tcc `state/dsp_state.py` `ProjectView.from_dict`); its
+tab is hub #324 (SKL-090), and the field shape goes to TCC on #324 when T2 closes. Tests: `S selftest` — validate
+accepts and refuses shapes, diff and render with and without; `A --selftest` — a trim is a row with no reviewer.
+Docs: `RT/state/schema.md`, the naming reference where `+FX` is defined.
+
+**Its write path and consumers, from the plan review.** `preset_settings` is not a tier, so a delta today becomes a channel delta and fails on `_MERGEABLE` (`A`:142-144, :216-222): the delta path takes it explicitly.
+The diff keeps the existing envelope and the writers and renderers handle it by name (`S`:1429-1451; the CLI's walk `S`:1594-1606 assumes channel → field). A master trim is decided at each reader, once: verification (`S`:1050-1059), the capture-level
+comparison (`RT/levelbase.py:369-380`, called from `P`:3791-3797), the prediction (`chains_from_snapshot`, `RT/predict.py:757-763`, one application, never on both tiers), TCC's proposal view (the generic `settings` rows, tcc `state/proposal_view.py:51-61`). `version_bench.py loudness` reads it.
+Added tests: trim-only and mixed deltas; missing = 0; non-zero → 0; two versions that differ only by the trim, in the prediction and the bench.
+
+**T3 · #201 — «in the DSP now».** M. After the Arbiter's answer to question 2; as advised: `slots.json`
+`slots[slot].loaded = {version, since, source}`, additive (TCC reads `slots.json` and watches it — `slots()` must still
+read `{}` on a half-written file); written by `attest` (`A`:610-628, under the same lock) and by `state.py loaded`;
+`slots.json` keeps one writer (the method). `schema.md` AD-1: one paragraph — HEAD is the pointer, `loaded` is a dated
+claim with its source, neither is a mirror. Answer hub #325 with the field. Tests: `S selftest` (the verb, the attest
+write, a half-written file), `C selftest` if the CONTINUE check reads HEAD (`C`:1010, :3534).
+
+Group passes: Codex on the lane's diff; one fix round; the narrow check of fixes (the trial above).
 
 Group passes: Codex on the lane's diff; one fix round; the narrow check of fixes (the trial above).
 
@@ -131,26 +167,51 @@ Group passes: Codex on the lane's diff; one fix round; the narrow check of fixes
    `P`:1311-1326: `REW's measurement list was not read …`) pinned as fixed prefixes in `RT/CONTRACT.md` §2's exit-1 row
    (no new exit code: TCC already matches three prefixes, tcc `core/process_writer.py:201-203`).
 3. A recorded verdict says REW answered an error: `V`'s skeleton (`V`:158-179) gains `rew: "error" | "unavailable" |
-   null`, set where «frequency/impulse response unreadable» is made (`V`:229-231, :286-288) from `rew_api.rew_state`;
-   stored with the check in `round["checks"]` and `taken[…]["verified"]` (`P` ~3300-3500 — read before editing). The
+   null`, set where «frequency/impulse response unreadable» is made (`V`:229-231, :286-288) by a mapping, because `rew_api.rew_state` is `None` for an `HTTPError` (`RT/rew_api.py:169-177`): an
+   `HTTPError` is `"error"`, the state `unavailable` is `"unavailable"`, a programming error and `protocol`/`config` stay out of the field (`null`), and `_no_impulse` (`V`:124-132) stays what it is, no failure. All sites: `V`:108-121, :158-159, :223-232, :281-288, `P`:3344-3348, :3369-3392.
+   Stored with the check in `round["checks"]` and `taken[…]["verified"]`, **and additively in the `capture_verified` event** (`P`:3516-3542), since after the next round the history has only that (`P`:2958-2961; tcc `state/process_view.py:442-449`). The final locked check (`P`:3461-3467) stays. The
    issue text stays (TCC may match it — grep tcc `unreadable` first).
 4. `RT/CONTRACT.md` §3 (:105) and §10 (:592) headings out of «planned (W-10)» — the bodies already say «as built»;
    `"rew_state(exc)"` added to `IMPORTABLE`'s `rew_api.py` tuple (`C`:121-129; defined `RT/rew_api.py:168-177`); §9's
    row stays as it says.
 Tests: `P selftest` — `--round` refused on a moved round for each verb (red first), `_check_exit_table`,
-`_check_flags_tcc_sends`, `_check_unknown_flags`; `V selftest` — the `rew` field; `C selftest`; `contract-guard`.
+`_check_flags_tcc_sends`, `_check_unknown_flags`, check → close → open another round → replay keeps `rew`; `V selftest` — the `rew` field for an HTTP error, unavailable, a malformed answer, an expected missing impulse and a programming error, on both curve reads; `C selftest`; `contract-guard`.
 Then a comment on hub #297 with the flags and the field for TCC's #218/#219.
 
 **T5 · #198 — the p1–p9 points as their own group.** S.
-`N`: `KIND_POINTS` and the label «Points» (`N`:892-897); `place_in_groups` (`N`:945-971) puts a parsed position
-(`parse_name`'s `position`, `N`:142-145, :566) into `points`; order solo → group → points → rta. The tripod → hand-held
+`N`: `KIND_POINTS` and the label «Points» (`N`:892-897); `place_in_groups` (`N`:945-971) puts a parsed position `p1`…`p9`
+into `points`, and **`x0` stays with the tripod** (`N`:87-88: it is a position too). One setup identity (tripod sweeps · hand-held sweeps · RTA) replaces the method-only partition and count (`N`:935-942), and `"sw"`/`"rta"` stay the method values; a late points group is placed in order, not appended (`N`:964-969). `_last_method_taken` (`P`:1242 on) uses the same identity; order solo → group → points → rta. The tripod → hand-held
 switch is written where switches are rendered: `render_round_list` (`P`:1215-1235) and `setup["switches"]`
 (`P`:2270) — «<- switch: tripod → hand-held». `expected_groups`' signature stays (`IMPORTABLE`). The «four columns at
 most» text becomes five in `N`:888-891, `references/core/naming-and-structure.md:113`, `why-these-rules.md:139`,
 `phases/capture-session-sheet.md:43`. TCC: `_round_groups` keeps `label, method, names` — a new group shows as a column
 without TCC code; its fallback `groups_from_titles` (rounds without `groups`) still groups by method — said to TCC in one
-bus comment when T5 closes, no ticket unless TCC asks. Tests: `N selftest` (`N`:1695-1750 — the order and the label),
+bus comment when T5 closes, no ticket unless TCC asks. Tests: `N selftest` (`N`:1695-1750 — the order and the label, no prior setup, starting from either method, late optional points, `x0` on the tripod),
 `P selftest` (`rnd["groups"]` ~12060-12101).
+
+**T7 · #204 — `project_repo.py save` and `status`.** M.
+`PR` has `init` and `status` only (`PR`:233-253); `status` returns `{repo, remote, gh, init, offer}` (`PR`:129-143),
+which TCC requires (tcc `core/project_repo.py:84-109`) — kept, keys added. Build: (1) `save <project> [--dry-run]`:
+commit the tuning files with the method's message, push; refuse with a reason — nothing to send, no remote, the remote
+ahead (pull first); never `.claude/skills/autosound-tuning`. (2) `status --json` adds `changes: {tuning: […],
+housekeeping: […]}`, `ahead: [{hash, time, subject}]`, `remote_head: {hash, time}`, `sends` (question 3). The
+housekeeping list is new (`.sessions.log`, `.tcc/`, `*.tmp`, …) beside `GITIGNORE_LINES` (`RT/project_seed.py:~267-285`);
+the `.claude/skills/autosound-tuning` link goes into the seeded `.gitignore` and `init`'s `git add -A` stops taking it.
+`status_lines` (used by `contract.py check`) unchanged when there is nothing to report. Tests: `PR --selftest` with
+`AUTOSOUND_NO_GH=1` and a bare local remote (save, refusals, dry-run, the link excluded — red first);
+`project_seed.py --selftest`. Then a comment on hub #326 for TCC's button.
+
+**T6 · #202 — a step's note.** M.
+`add_step` (`P`:1876-1926) gains `note=None` = `{do, expect, if_not}`, kept in the step entry and in `step_added`;
+the CLI `add-step --note-do/--note-expect/--note-if-not` (`VERB_FLAGS` `P`:4493). The answer: `finish_step`
+(`P`:1944-2003) takes `--heard "<the Arbiter's words>"`, kept as `note.answer` beside `expect`; a `decision` with
+`--step <id>` (`record_decision`, `P`:3905-3928) fills it too. `session-close` (`P`:12304-12363) lists steps with an
+`expect` and no `answer` as owed lines — **not** owed for the exit code (TCC reads the exit as the answer): printed
+only. `state/process-schema.md` documents the shape. TCC reads none of these keys (its `_to_step` reads a fixed list) —
+additive; hub #312 (PAS-019) gets the shape when T6 closes. Tests: `P selftest` — the note kept, the answer kept, the
+close lines; the flag guards.
+
+Group passes: Codex on lanes B and C's diff; one fix round; the narrow check of fixes (the trial above).
 
 Group passes: Codex on lane B's diff; one fix round; the narrow check of fixes (the trial above).
 
@@ -160,9 +221,7 @@ Group passes: Codex on lane B's diff; one fix round; the narrow check of fixes (
 First the Arbiter's re-check: a one-line probe of `gemini-3.8-flash-high` under ADC (`agy`, 3 tries, timed); the
 result in the ledger. Still silent → `install.sh:2475-2477`, `install.ps1:2556-2558` and `FAQ*.md:117` name the tier
 the guides name (`SK/references/tooling/setup-critic-channel.md:66`: Flash Medium) and separate «Pro not offered where
-you are» from the ADC reviewer. Answers → the text stays, the ledger says why. Lines: `Invoke-Upstream`
-(`install.ps1:514-535`) ends the relayed child's output with a line break (`Write-Host ""` after `Out-Host` when the
-last chunk has none); Claude Code's «✔» mojibake is its own, not touched. Tests: `IC` (the ps1 case runs on CI's
+you are» from the ADC reviewer. Answers → the text stays, the ledger says why. Lines: the paths differ, so a fixture with no final line break comes first, at the real boundary: live upstream `install.ps1:532`, captured `:527`, winget captured `:1177` (shown by `Warn` `:1185`), uv through `Run` `:1305`, `:2145`, the wrapper `:488-493`. The fix is a host-only line break at the boundary that proves it; the wrapper keeps its Boolean and the exit code. Claude Code's «✔» mojibake is its own, not touched. Tests: `IC` (the ps1 case runs on CI's
 Windows job).
 
 **T9 · #206 — a running TCC during the macOS update.** S.
@@ -170,7 +229,7 @@ Windows job).
 Build the same on macOS before the app block (`install.sh` ~:1920, before `uv tool install … --upgrade` at :2024):
 `pgrep -f autosound-tcc` → a warning naming the command to close it, the app left as it is, `DRY_RUN` respected. No
 `pkill` by the installer: a hung process is the user's to end, and the line says how. Tests: `IC` `app_problems`
-(`IC`:1554) with a stand-in `pgrep` (red first).
+(`IC`:1554) with a stand-in `pgrep` **and its own macOS case**, because that harness sets `on_mac() { return 1; }` (`IC`:1589): TCC running, neither `uv tool install` nor `--install-desktop` runs; TCC not running; dry-run (red first).
 
 Group seat: one (a small risky diff) — Codex.
 
@@ -189,8 +248,7 @@ optional `docs-check` rule: a track id (`EMMA/…`) named in `references/` resol
 `SK/references/core/capabilities.md`: the distortion row's words (THD, harmonics), a ringing / decay / waterfall / CSD /
 RT60 / дзвін / затухання row → `ear_suspects.py` ring-down, REW's waterfall, `references/core/enclosure-install-diagnostics.md`;
 a single-measurement report row (`rew_tool.py` with no arguments — it passes `check()`'s module test). `RT/capabilities.py`
-selftest: `find()` of each quantity in `docs/RESEARCH-2026-10-25-rew-quantities.md` §1 names the intended module, and
-«ringing» does not land first on `verify.py`. `SK/SKILL.md:148` names the quantities; the playbook's ringing row
+selftest, by the research table's own three classes (`docs/RESEARCH-2026-10-25-rew-quantities.md`): a quantity a tool reads → that module; waterfall/CSD, spectrogram, RT60 → REW's own view, said as such; coherence → an explicit «not read», not the arrival search; «ringing» does not land first on `verify.py`. `SK/SKILL.md:148` names the quantities; the playbook's ringing row
 (`references/core/analysis-playbook.md:12`) names `ear_suspects.py` and the diagnostics page. The non-interactive
 report stays out (a feature, not asked). Checks: `capabilities.py --selftest`, `doc-commands-check`, `docs-check`,
 `reading-cost` (SKILL.md's budget).
@@ -235,7 +293,7 @@ Two new modules, numpy + scipy, not in `IMPORTABLE`:
 - *The space from the project.* Families `dsp_math.options_for`, corners from `crossover_filters` snapped to its step (a public wrapper over
   `xover_wishes._profile_xo`), gain `dsp_profile.gain_range_db`, delay `predict._profile_limits`, Fs `xover_wishes._fs_of`. A missing Fs or an
   unreadable profile refuses in one line, exit 3. This drops the scripts' LR48, which the Helix does not offer (`swws_xo.py:32-33`).
-- *The input.* Solos at the points through `predict.load_solo_*` and `ellipsoid.load_positions_*`; the protective filter comes out once, by
+- *The input.* Solos at the points through `predict.load_solo_*`, by a new all-channels loader that keeps `info` (IR, timing, protection), since `ellipsoid.load_positions_*` drop it (`ellipsoid.py:80-81`); the protective filter comes out once, by
   `predict.de_embed_solos` from the round's record, and its refusal is passed on as it stands. One capture session is assumed: curves from two sessions
   refuse unless `--level-step <band>` names the control band, since a session's offset otherwise reads as a driver's imbalance. A front driver without
   the nine points refuses; `--single-point` runs on the centre point and marks every row. A sub may stay at one point while its crossing is under 100 Hz
@@ -250,15 +308,15 @@ Two new modules, numpy + scipy, not in `IMPORTABLE`:
 - *The metric follows each candidate's acoustic crossing.* Under 1 kHz, on the 5/500 ms window: the ±30° band through the crossing, worst then median of
   the points, then the summation loss (`dsp_math.sum_loss`). From 1 kHz, on the 1/4 ms window (it reads from 1 kHz up, `mt_search.py:14-15`): the power sum
   over the points, then the worst of the left-ear, right-ear and centre groups must not cancel, then the flattest response to the target. A joint whose
-  bounds straddle 1 kHz gets two lists, one per class, because their scores do not compare.
-- *The ear groups.* The run's groups were fixed by hand after reading the arrivals (`mt_search.py:264-267`). The rule here: each point's L−R arrival, 1–4 kHz,
-  minus the centre points' mean; below −0.1 ms left, above +0.1 ms right, between unassigned. A group needs two points; otherwise only the nine-point
+  bounds straddle 1 kHz gets two lists, one per class, because their scores do not compare; a candidate whose ±½ oct scoring band itself crosses 1 kHz is scored in the upper class, on the band clipped at 1 kHz, and marked.
+- *The ear groups.* The run's groups were fixed by hand after reading the arrivals (`mt_search.py:264-267`). The rule here: at each point the L−R arrival of the mids and of the tweeters (`windows.arrival_between`, 1–4 kHz),
+  minus the centre points' mean of the same pair; both below −0.1 ms left, both above +0.1 ms right; between, or the two pairs disagreeing, unassigned. A group needs two points; otherwise only the nine-point
   sum applies and the output says so. Centre stays p1/p5/p9.
 - *Shortlists by joint class.* Bass: all pairs on the reference point, vectorised over delay, then the best per crossing band on every point. Woofer↔mid and
   above: every pair that passes the leak test on both sides is scored on all the points with its delay curve kept (`stage_lock.py:157-159`,
-  `stage_sym.py:88-96`), because the L−R conditions couple the sides and a one-point shortlist can lose the only pair that meets them.
+  `stage_sym.py:88-96`), because the L−R conditions couple the sides and a one-point shortlist can lose the only pair that meets them. Curves are held in float32, chunked by family pair; the top 200 per crossing band per side survive; the count is capped by the same ceiling as the grid.
 - *Align first:* `--align` runs one flatten on the points' power mean, replacing the three `fit_eq` copies: gain up ≤ 6 dB and ≤ 4 cuts of ≤ 6 dB against the
-  target, then the channel put back to its own passband level, so only the shape changes (`wm_flat.py:83-90`). A channel left outside the gain range brings every
+  target, then the channel put back to its own passband level, so only the shape changes (`wm_flat.py:83-90`). The fit and anchor bands are a role table, overridable (woofer 100–560 / 100–200 Hz, mid 200–1250 / 700–1500, upper-joint mid 1250–5000, tweeter 1600–10000 / 5000–10000, sub 25–130). A channel left outside the gain range brings every
   channel down alike (`global_trim_db`, `wm_flat.py:184`), not a cap per channel, which took one side to 0 oct; both ends of the range are checked. Cross-first is
   compared with the same EQ budget on the sum (`wm_flat.py:115-130`). `dsp_math.greedy_eq_fit` is not it: it fits a residual with a boost budget.
 - *Stage conditions, only on real L/R pairs, on by default, each with a flag off:* the signed rule is (delay L − delay R) = −(raw arrival L − raw arrival R)
@@ -273,8 +331,8 @@ Two new modules, numpy + scipy, not in `IMPORTABLE`:
   ≥ 1.5× longer, and the filter's group delay there (`stage_v6.py:193`), both as the issue's explanation of the blend. Reported, not ranked.
 
 **`RT/version_bench.py`.** Compares whole ledger versions, whichever path built them, so the Resonalyze path, the joint path and both in one
-table need nothing more. Versions on different point coverage refuse rather than compare. Subcommands: `table` (`predict.predict` per version → `variant_front.terms`
-→ `front`'s picks on its four terms, with no argmax; the joint widths, ear sums, decay, share and L/R phase are shown beside them and take no part in the picks, and
+table need nothing more. Versions on different point coverage refuse rather than compare. Subcommands: `table` (`predict.predict` per version → `predict.to_json` (`terms` reads that shape) → `variant_front.terms`
+→ `front`'s picks on its four terms, with no argmax; a term missing for any version is named and fewer than two comparable terms print no pick (`variant_front.py:183,197-198`); the joint widths, ear sums, decay, share and L/R phase are shown beside them and take no part in the picks, and
 a term that cannot be computed is named); `loudness` (Zwicker through a lazy `mosqito` import; absent, it prints the install line and gives ISO 226 at 80 phon, labelled as less
 exact when versions differ in the bass); `lr-phase` (L vs R, 250–800 Hz, phase and group-delay difference, acoustic and electrical, centre and nine points, as `lr_tracking.py`);
 `round-check` (each tripod sum against the complex sum of its solos: rms and maximum over 1/3-oct bands, no offset removed, as `s4_6b_vs_model.py:165-168`; over 1 dB rms is
@@ -297,7 +355,7 @@ a missing Fs refuses; a 2-way, a front sub and a single sub give the right joint
 shortlist would lose the pair the coupled search keeps; a bass joint that falls is recovered and one that cannot be is rejected; the upper group survives a `--move`; a delay
 past the ceiling rejects; a group that cancels is rejected from 1 kHz while the nine-point sum passes, with ear groups inferred from planted arrivals and an ambiguous set falling back;
 a straddling joint gives two lists; missing points refuse. Bench: `lr-phase` and `round-check` on planted differences; ISO 226 and, where `mosqito` is present, a Zwicker match on a
-known level step; without it the install line and the label. T16: all three choices, an absent legacy value, save and reload, `_route_line` under both modes.
+known level step; without it the install line and the label; `table` on planted versions, including a term missing for one. T16: all three choices, an absent legacy value, save and reload, `_route_line` under all three modes.
 
 **The replay, a session's check and not CI, with an adapter in the session's scratch:** the local caches `scripts/results/{swws_raw_0615,joint_wm_raw,mt_raw}.npz` (outside git;
 complex responses on three grids, protective filters still in, two sessions, no impulses, so decay is not replayable from them). Two separate claims, because the conditions
@@ -310,7 +368,8 @@ the ear. It replaces the desk steps of Phases 1–2 only; 0, 3 and 4 stay. **One
 проекта далі»; the same capture served more than ten desk variants on the Passat). Nothing the engine reads differs: it takes the tripod solos (`resonalyze_engine.py:1446`), and the joints need
 those plus the points. So block B of `capture-session-sheet.md` (and `virtual-first.md:131-132`) lists the nine points for every front driver and the centre, tweeters included, as the
 default; on a 3-way + centre that is 63 sweeps against the sheet's 36. This changes the sheet's «the ellipsoid is the one optional part» of 2026-10-02: it can still be cut for time, and the sheet
-then names the cost: the engine loses nothing, the joints only run with `--single-point`. The sub may stay at one point (above). Steps through `add_step`, source `skill`, phase 1; TCC renders an unknown step id
+then names the cost: the engine loses nothing, the joints only run with `--single-point`. The sub may stay at one point (above). **A refusal is the person's, informed** (the Arbiter, 2026-11-08): the session says the limits in words before the capture, and the decision is recorded with them
+(`record_decision`; `_positions_asked`, `process.py:455-479`, already counts it). `joint_search.py --single-point` needs that record and refuses without it. The round itself: the sheet's recipe adds the titles on the `capture-start` line (the existing door, sheet :43), and its loopback timing line moves above block B, because `predict.load_solo_rew` refuses a sweep off the loopback base (`predict.py:550-553`). Light touch has no capture session (`virtual-first.md:56-57`) and is not offered the joints. Test: the same capture list for all three approaches and after changing the approach, tweeters, centre and the sub exception included. Steps through `add_step`, source `skill`, phase 1; TCC renders an unknown step id
 (`state/process_view.py:610-635`). It stays outside `reading-cost`'s `ORDERED` and is read when the path is chosen, so the budget does not count this path's reading; the runbook
 says so at its head. Gemini reads it. English only: `i18n-check` does not cover `references/`.
 
@@ -319,7 +378,7 @@ requirements as virtual-first: `goal.desk_approach`, enum `joint_by_joint | reso
 (asked at the project's start, at the desk; the capture does not depend on it, so it can still be changed after the capture), no default: the person picks. Its note says what each needs and gives: several DSP memories, reading a
 saved preset back, time for A/B; a ranked set with the reasons, against the engine's front; both = more time, and the best of two. It also states the
 evidence: one car, 3-way + centre + sub. `_route_line` dispatches on mode × approach instead of its one fixed sentence (`process.py:989-992`): an improved car on the engine keeps
-today's line; with joints it names block X and the runbook; both names both; a new tune names the runbook only for joints or both; an absent value keeps today's behaviour. Labels in
+today's line; with joints it names block X and the runbook; both names both; a new tune names the runbook only for joints or both; an absent value keeps today's behaviour; light touch adds nothing. Labels in
 `intake_i18n/{en,uk,de,pl}.json`, the three through the Advisor. `project-intake.md` §4 gets the offer. **`SK/SKILL.md` only a Reference Map row:** before the Map it holds 17,416 of 17,500 bytes
 (`docs-check` rule 17). `reading-cost-baseline.json` is rewritten in that commit, as its own visible diff. The archived way stays unoffered and `DESIGN_PATHS` is not touched.
 
@@ -334,23 +393,23 @@ Group passes: Codex per slice of T14, one fix round each; the narrow check of fi
 
 ## The end of the wave
 
-1. The bookkeeping on the branch: `## [v3.2.1]` from `## [Unreleased]` with its
+1. The bookkeeping on the branch: `## [v3.3.0]` from `## [Unreleased]` with its
    Upgrading (T1's refusal and `--on`, T2's `preset_settings`, T4's `--round` and `rew` field, #210's tools and the new
    route), `plugin.json`, `INSTALLER_VERSION`/`$InstallerVersion`; Gemini reads the
    CHANGELOG entry.
 2. Codex on the head of `main..wave-2026-10-30`, after the bookkeeping; one fix round; **Fable** on those fixes only.
-3. One PR with `Engine: none` → its full CI on every system → acceptance (the trial above) → `git merge --ff-only` → the
-   tag `v3.2.1` on that commit. The skill's own patch: it does not wait for TCC's wave; TCC pins the published tag. Receipts
-   on hub #297, #303 name the tag; hub #313, #325, #326 are deferred to the next wave.
+3. One PR with `Engine: none` → its full CI on every system → acceptance (the trial above) → **the release candidate**, announced on hub #331. No release tag yet.
+4. TCC does its W-12 (`v1.3.0`) on the candidate. Fixes it asks for ride on the branch, as a new candidate.
+5. When TCC is done, **both minors through the `release` role** (`WAVES.md`, the minor pair: skill `v3.3.0`, then TCC pins it, then `v1.3.0`). Receipts on hub #297, #303, #313, #325, #326 name the tag.
 
 ## Cost
 
-11 issues in 13 tasks, five groups. An estimate under the trial; the ledger measures it.
+15 issues in 16 tasks, five groups. An estimate under the trial; the ledger measures it, and nothing here includes the first measured search time (slice 1).
 
 - **Claude agent runs ~30**: implementers 14 (T10/T11 by the session; T14 is four), #210's design 3 (spent), the group fix rounds
   and narrow checks ~10, the final fix and Fable's check 2, the bookkeeping 1, acceptance 1.
 - **Codex calls ~10**: the plan review, #210's design, three group passes, T14's four slices, the final pass on the head.
-- **Advisor (Gemini) calls ~4**: the text group, the CHANGELOG, the FAQ line, translations if the README line needs one.
+- **Advisor (Gemini) calls ~6**: the text group, the CHANGELOG, the FAQ line, translations if the README line needs one, the runbook and intake text, the three intake translations in one batch. While Codex is out, its calls above go to Gemini 4.
 
 Time: lane F is the critical path, after lane E. All together ~9 h of machine time, plus the stops.
 
