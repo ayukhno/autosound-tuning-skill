@@ -2,7 +2,8 @@
 """joint_search -- the search behind the joint-by-joint approach (#210): the joints from the roles, the bass joint.
 
 One raw capture, then the joints from the bottom up, each joint a search over the filter space that scores and ranks
-the variants. This module holds the engine and, in this build, the BASS joint: sub low-pass x next role's high-pass x
+the variants: a candidate's delay and rank come from the margin, the narrowest band within `DELAY_TOLERANCE_MS` of it, not the peak (the
+replay of #210). This module holds the engine and, in this build, the BASS joint: sub low-pass x next role's high-pass x
 sub level x polarity x sub/front delay, the front's L-R offset held. The joints above the bass come later, on the same
 engine (`docs/PLAN-W-12.md`, T14).
 
@@ -58,11 +59,13 @@ PHASE_WINDOW_DEG = 30.0
 #: The sum against the target may not fall below this in the joint's band (a peak is EQ's to cut; a dip is not):
 #: `swws_search2.py:7,56`.
 DIP_LIMIT_DB = -3.5
-#: The sub's leak above the joint, sub minus front, relative to the row's crossing. `swws_search2.py:6,44` read it at 100 Hz and
-#: over 125-200 Hz, which belong to one car's crossing near 65 Hz: 100 Hz is 1.5x that crossing, 125-200 Hz is 2-3x it.
-LEAK_NEAR_RATIO = 1.5
+#: The sub's leak above the joint, sub minus front: -24 dB at 100 Hz and -30 dB over 125-200 Hz, the limits the method was validated
+#: with (`swws_search2.py:6,44`). Those frequencies belong to that run's crossing near 65 Hz: a crossing at or below this is judged
+#: exactly as the run was, a higher one has them moved up by crossing / `LEAK_ANCHOR_CROSSING_HZ`.
+LEAK_ANCHOR_CROSSING_HZ = 65.0
+LEAK_NEAR_HZ = 100.0
 LEAK_NEAR_DB = -24.0
-LEAK_FAR_RATIOS = (2.0, 3.0)
+LEAK_FAR_HZ = (125.0, 200.0)
 LEAK_FAR_DB = -30.0
 #: The floor of a high-pass, times the driver's installed Fs. Mid: the run's value (#210); tweeter: `fs_margin`'s convention.
 #: A woofer is not on this list (`xover_wishes.FRAGILE_ROLES`): its margin is shown per row, not filtered on.
@@ -77,7 +80,7 @@ SINGLE_POINT_SKIP_WORDS = "nine points skipped"
 SINGLE_POINT_ONE_WORDS = "joints run on one point"
 SINGLE_POINT_DECISION = f"{SINGLE_POINT_SKIP_WORDS}; the {SINGLE_POINT_ONE_WORDS}"
 #: A recorded answer starting with one of these is the person saying no to the question that carried the words.
-_NO_WORDS = ("no", "nope", "ні", "нi", "нет")
+_NO_WORDS = ("no", "nope", "not", "don't", "don’t", "ні", "нi", "не", "нет")
 #: The grid: 1/6-oct corners over the joint's bounds, then +-1/12 oct around the shortlist (PLAN-W-12, the grid).
 CORNER_STEP_OCT = 1.0 / 6.0
 CORNER_REFINE_OCT = 1.0 / 12.0
@@ -86,12 +89,17 @@ CORNER_REFINE_OCT = 1.0 / 12.0
 GRID_CEILING_PAIRS = 60000
 #: Rows held at once per crossing band while the grid is walked. The reference-point scan yields many rows per pair; only the
 #: best per band can reach the shortlist, so anything past this is settled and the rest dropped, counted (`past_shortlist`).
-#: The memory of a run stays one filter-response bank (about 24 kB per filter option) plus this, whatever the grid's size.
+#: The memory of a run stays one filter-response bank (about 11 kB per filter option: 24 bytes a point on the bass grid) plus this,
+#: whatever the grid's size.
 ROW_BUFFER_PER_BAND = 2000
 #: Delay of the front against the sub: coarse over +-`delay.max_ms`, then fine around the best (`swws_xo.py:194,218`).
 DELAY_COARSE_STEP_MS = 0.2
 DELAY_FINE_SPAN_MS = 1.0
 DELAY_FINE_STEP_MS = 0.05
+#: A head moving about 3.4 cm (0.10 ms in air). The worst-of-nine band can peak within one delay step (#210, the replay: 0.58 / 0.98 /
+#: 0.57 oct at 10.65 / 10.70 / 10.75 ms), and a peak that narrow does not survive a head moving a centimetre. A delay's margin is the
+#: narrowest worst-of-nine band within this either side of it: the candidate takes the delay with the best margin and ranks on it.
+DELAY_TOLERANCE_MS = 0.10
 #: Candidates per crossing band carried from the reference point to every point (`swws_xo.py:221`).
 SHORTLIST_PER_BAND = 40
 #: A free L-R offset, only with the stage condition off, around the raw offset (a free per-side search moved it by up to
@@ -133,7 +141,7 @@ class JointClass:
 #: Bounds per joint (PLAN-W-12: "bass 40-125 Hz"), overridable by `--lp-bounds` / `--hp-bounds`; the crossing window, the dip
 #: band and its offset-fit band are `swws_xo.py:102` and `swws_search2.py:21-22`.
 JOINT_CLASSES = {
-    # the grid reaches 3x the top of the crossing window: the far leak band of a crossing at 200 Hz is 400-600 Hz
+    # the grid reaches past the far leak band of a crossing at 200 Hz: 200/65 x 125-200 Hz is 385-615 Hz
     "bass": JointClass("bass", (40.0, 125.0), (40.0, 125.0), (35.0, 200.0), (20.0, 630.0), (45.0, 110.0), (100.0, 250.0)),
 }
 
@@ -495,6 +503,27 @@ def _neighbours(opt, cls_bounds, xo):
     return sorted(out)
 
 
+def _leak_bins(f, crossing_hz):
+    """The grid points of the leak limit for a crossing: (near index, far band's first and last index). At or below
+    `LEAK_ANCHOR_CROSSING_HZ` the run's own frequencies, above it moved up with the crossing; a far band past the top of the grid
+    reads the grid's last point, as far as it reaches."""
+    scale = max(1.0, float(crossing_hz) / LEAK_ANCHOR_CROSSING_HZ)
+    near = int(np.argmin(np.abs(f - LEAK_NEAR_HZ * scale)))
+    last = len(f) - 1
+    lo = min(int(np.searchsorted(f, LEAK_FAR_HZ[0] * scale, side="left")), last)
+    hi = max(int(np.searchsorted(f, LEAK_FAR_HZ[1] * scale, side="right")) - 1, lo)
+    return near, lo, hi
+
+
+def _delay_margins(probes, worst, at):
+    """Per fine delay (`at`: its index in `probes`, ascending ms): the narrowest worst-of-points band within `DELAY_TOLERANCE_MS`
+    of it. A candidate's band at one delay only is no band to a head that moves."""
+    out = np.empty(len(at))
+    for j, i in enumerate(at):
+        out[j] = worst[np.abs(probes - probes[i]) <= DELAY_TOLERANCE_MS + 1e-9].min()
+    return out
+
+
 def _offsets_of(single_upper, free, rule_ms, step_ms):
     """The front's L-R offsets the scan walks, each on the DSP's delay step, once each: the source of the ceiling's count too."""
     if single_upper:
@@ -521,17 +550,13 @@ def scan_bass(inp):
     lp_bank, hp_bank = _Bank(f, "lp"), _Bank(f, "hp")
     sub_db0 = _db(inp.ref_lower).astype(np.float32)
     sub_ph0 = np.degrees(np.angle(inp.ref_lower)).astype(np.float32)
-    # the leak bands, in grid steps above each row's own crossing (the grid is log-spaced, so one offset fits every crossing)
-    n_near = int(round(math.log2(LEAK_NEAR_RATIO) / step))
-    n_far = (int(round(math.log2(LEAK_FAR_RATIOS[0]) / step)), int(round(math.log2(LEAK_FAR_RATIOS[1]) / step)))
-    last = len(f) - 1
     cw = np.flatnonzero((f >= cls.crossing_window[0]) & (f <= cls.crossing_window[1]))
     cw_mask, m0 = np.zeros(len(f), bool), int(cw[0])
     cw_mask[cw] = True
     edges = _band_edges(cls)
     rejected = {"leak": 0, "no_crossing": 0, "sub_one_point": 0, "phase": 0, "gain": 0, "delay": 0, "stage": 0, "dip": 0,
                 "past_shortlist": 0}
-    label_at = {}
+    label_at, leak_at = {}, {}
     bands, peak = {}, [0]                     # {label: {"kept": sorted rows, "wait": rows not yet looked at}}, the peak held
 
     def scan(pairs, oi):
@@ -549,12 +574,14 @@ def scan_bass(inp):
             rejected["no_crossing"] += int((~has).sum())
             if not g_cross.any():
                 continue
-            # the leak, relative to each gain's own crossing (`LEAK_*`): the same two levels whether the test is on or off
+            # the leak, at each gain's own crossing (`LEAK_*`): the same two levels whether the test is on or off
             near_db, far_db = np.zeros(len(gains)), np.zeros(len(gains))
             for c in np.unique(cross[g_cross]):
-                a, b = int(c) + n_far[0], int(c) + n_far[1]
-                near = float(gap[min(int(c) + n_near, last)])
-                far = float(gap[min(a, last):min(b, last) + 1].max())
+                if int(c) not in leak_at:
+                    leak_at[int(c)] = _leak_bins(f, float(f[c]))
+                i_near, far_lo, far_hi = leak_at[int(c)]
+                near = float(gap[i_near])
+                far = float(gap[far_lo:far_hi + 1].max())
                 at_c = cross == c
                 near_db[at_c], far_db[at_c] = near + gains[at_c], far + gains[at_c]
             if inp.leak_on:
@@ -695,15 +722,16 @@ def scan_bass(inp):
 
 
 def _row_key(r):
-    """The ranking: worst point's band, median's band, the summation loss; among ties the sum nearest the target."""
-    return (r["width_worst_oct"], r["width_median_oct"], -99.0 if r["loss_median_db"] is None else r["loss_median_db"],
+    """The ranking: the margin (the worst point's band that survives a head moving), the worst point's band at the row's delay, the
+    median's, the summation loss; among ties the sum nearest the target."""
+    return (r["margin_oct"], r["width_worst_oct"], r["width_median_oct"], -99.0 if r["loss_median_db"] is None else r["loss_median_db"],
             -99.0 if r["dip_median_db"] is None else -abs(r["dip_median_db"]))
 
 
 def _public(row):
     """The row as a reader gets it: numbers rounded for reading (the ranking used the unrounded values)."""
     out = dict(row)
-    for key, n in (("width_worst_oct", 2), ("width_median_oct", 2), ("loss_median_db", 2), ("dip_median_db", 2),
+    for key, n in (("margin_oct", 2), ("width_worst_oct", 2), ("width_median_oct", 2), ("loss_median_db", 2), ("dip_median_db", 2),
                    ("leak_near_db", 1), ("leak_far_db", 1), ("crossing_hz", 1)):
         out[key] = _round(out[key], n)
     return out
@@ -714,8 +742,8 @@ def _round(v, n=2):
 
 
 def _score_points(inp, row, label, offsets, lp_bank, hp_bank, step, cls, m0, cw_mask, single_upper, rejected):
-    """Every point, the delay refined there: worst then median of the ±30 degree band, then the summation loss. A row that falls
-    here (past a limit at its final delay, the one-point limit at another point's crossing) is counted in `rejected`."""
+    """Every point, the delay refined there: the margin of the worst point's ±30 degree band over the delay tolerance
+    (`_delay_margins`) picks the delay, then that delay's worst and median, then the summation loss. A row that falls here (past a limit at its final delay, the one-point limit at another point's crossing) is counted in `rejected`."""
     f = np.asarray(inp.freqs, float)
     _coarse_w, lp, hp, g, pol, d, _c, oi, leak_near, leak_far = row
     xs, xw = lp_bank.get(lp)[0], hp_bank.get(hp)[0]
@@ -732,8 +760,14 @@ def _score_points(inp, row, label, offsets, lp_bank, hp_bank, step, cls, m0, cw_
     if fine.size == 0:
         rejected["delay"] += 1
         return None
-    rot = 360.0 * f[None, :] * fine[:, None] * 1e-3
-    widths = np.zeros((len(inp.points), len(fine)))
+    # the margin looks at a head moving, whatever delays the DSP can take: probes at the fine step around each settable delay, up
+    # to the tolerance either side, a probe past the delay ceiling included (it is an arrival, not a setting)
+    n_tol = int(round(DELAY_TOLERANCE_MS / DELAY_FINE_STEP_MS))
+    fine_at = np.round(fine, 6)
+    probes = np.unique(np.round((fine_at[None, :] + np.arange(-n_tol, n_tol + 1)[:, None] * DELAY_FINE_STEP_MS).ravel(), 6))
+    at = np.searchsorted(probes, fine_at)
+    rot = 360.0 * f[None, :] * probes[:, None] * 1e-3
+    widths = np.zeros((len(inp.points), len(probes)))
     crossings = [None] * len(inp.points)
     for p in range(len(inp.points)):
         c = _crossing(gap[p], cw_mask, m0)
@@ -747,9 +781,12 @@ def _score_points(inp, row, label, offsets, lp_bank, hp_bank, step, cls, m0, cw_
         widths[p] = _widths(a <= PHASE_WINDOW_DEG, c, step)
     worst = widths.min(0)
     median = np.median(widths, axis=0)
-    # worst first, then the median; the plateau's centre on a tie
-    top = worst >= worst.max() - 1e-9
-    k = int(np.flatnonzero(top)[_plateau_centre(median[top])])
+    margins = _delay_margins(probes, worst, at)
+    # the margin first, then that delay's worst, then its median; the plateau's centre on a tie
+    top = np.flatnonzero(margins >= margins.max() - 1e-9)
+    top = top[worst[at[top]] >= worst[at[top]].max() - 1e-9]
+    k = int(top[_plateau_centre(median[at[top]])])
+    i_best = int(at[k])
     d_best = _snap_ms(float(fine[k]), inp.delay_step_ms)
     tas = _delay_split(d_best, offsets[oi], inp.max_ms, single_upper, lower_offset_ms=inp.lower_offset_ms, step_ms=inp.delay_step_ms)
     if tas is None:
@@ -782,7 +819,8 @@ def _score_points(inp, row, label, offsets, lp_bank, hp_bank, step, cls, m0, cw_
             "polarity": pol, "delay_ms": round(d_best, 3), "who_delays": _who_delays(tas),
             "ta_ms": tas, "lr_offset_ms": 0.0 if single_upper else round(float(offsets[oi]), 3),
             "sub_lr_offset_ms": None if inp.lower_offset_ms is None else round(float(inp.lower_offset_ms), 3),
-            "crossing_hz": float(np.median(fxs)), "width_worst_oct": float(worst[k]), "width_median_oct": float(median[k]),
+            "crossing_hz": float(np.median(fxs)), "margin_oct": float(margins[k]), "width_worst_oct": float(worst[i_best]),
+            "width_median_oct": float(median[i_best]),
             "loss_median_db": float(np.median(losses)) if losses else None,
             "dip_median_db": float(np.median(dips)) if dips else None, "leak_near_db": float(leak_near),
             "leak_far_db": float(leak_far), "fs_margin": fs_margin, "band": label, "marks": list(inp.marks)}
@@ -971,6 +1009,9 @@ def _build_bass_input(joint, *, curves, lower_curves, freqs, single_point, lp_op
     if not lower.single:
         lower_rule = lr_rule_ms(chan_l[0], chan_l[1], lower.role, positions=_rule_positions(chan_l[0], chan_l[1], sub_one_point))
         lower_offset = _snap_ms(lower_rule, delay_step_ms)
+        notes.append(f"the stereo sub's L-R offset ({lower_offset:+.2f} ms) is low-confidence: read in {ARRIVAL_READ[lower.role][0][0]:g}-"
+                     f"{ARRIVAL_READ[lower.role][0][1]:g} Hz, where a planted 1 ms read as about 0.4 ms -- check it by a measurement of its own "
+                     "before keying it in")
         sum_low = _front_sum(low_stack[0], low_stack[1], freqs, lower_offset)
         ref_low = _front_sum(_ref_curve(chan_l[0], lower.codes[0]), _ref_curve(chan_l[1], lower.codes[1]), freqs, lower_offset)
     else:
@@ -985,7 +1026,7 @@ def _build_bass_input(joint, *, curves, lower_curves, freqs, single_point, lp_op
             notes.append(f"the free L-R offset is searched around 0, not the raw offset: {exc}")
     if sub_one_point:
         notes.append("the sub is one curve for every point: no drift is applied between the points")
-    # the woofer's low-pass, in the model when `--front-lp` names it: it adds its phase to the front's arrival at the crossing
+    # the upper role's low-pass, in the model when `--front-lp` names it: it adds its phase to the front's arrival at the crossing
     lp_h = None if front_lp is None else dsp_math.xo_response(freqs, front_lp[2], front_lp[1], "lp", front_lp[0])
     with_lp = (lambda h: h) if lp_h is None else (lambda h: h * lp_h)
     return BassInput(freqs=freqs, points=points, lower=sum_low, upper_l=with_lp(up_stack[0]),
@@ -1036,14 +1077,14 @@ def render(doc):
         lines.append(f"\nCrossing {label}:")
         lines.append(f"  {'LP':>12} {'HP':>12} {'sub dB':>7} {'front dB':>9} {'sub pol':>7} "
                      + (f"{'L-R ms':>7} " if free_shown else "")
-                     + f"{delay_heads} {'delay on':>9} {'worst oct':>9} "
-                     f"{'med oct':>7} {'loss dB':>7} {'dip dB':>6} {'leak 1.5x':>9} {'Fs':>7}")
+                     + f"{delay_heads} {'delay on':>9} {'margin':>7} {'worst oct':>9} "
+                     f"{'med oct':>7} {'loss dB':>7} {'dip dB':>6} {'leak near':>9} {'Fs':>7}")
         for r in rows:
-            lines.append(f"  {_filter_name(r['lp']):>12} {_filter_name(r['hp']):>12} {r['sub_gain_db']:>+7.1f} {r['front_gain_db']:>+9.1f} "
+            lines.append(f"  {_filter_name(r['lp']):>12} {_filter_name(r['hp']):>12} {r['sub_gain_db']:>+7.2f} {r['front_gain_db']:>+9.2f} "
                          f"{r['polarity']:>7} "
                          + (f"{r['lr_offset_ms']:>+7.2f} " if free_shown else "")
                          + " ".join(f"{r['delays_ms'][c]:>8.3f}" for c in codes)
-                         + f" {r['who_delays']:>9} {r['width_worst_oct']:>9.2f} {r['width_median_oct']:>7.2f} "
+                         + f" {r['who_delays']:>9} {r['margin_oct']:>7.2f} {r['width_worst_oct']:>9.2f} {r['width_median_oct']:>7.2f} "
                          f"{r['loss_median_db'] if r['loss_median_db'] is not None else float('nan'):>7.2f} "
                          f"{r['dip_median_db'] if r['dip_median_db'] is not None else float('nan'):>6.1f} "
                          f"{r['leak_near_db']:>9.1f} {r['fs_margin'] or '':>7}"
@@ -1057,7 +1098,7 @@ def render(doc):
         lines.append("Rejected: " + (_reasons(doc["rejected"]) or "nothing"))
     else:
         lines.append("No variant came through the limits. Reasons, counted: " + (_reasons(doc["rejected"]) or "none recorded"))
-    lines.append("\nThis describes; the choice is the tuner's.")
+    lines.append("\nThis describes and never picks: the ear decides, the choice is the tuner's.")
     return "\n".join(lines)
 
 
@@ -1092,10 +1133,10 @@ def _cli(argv=None):
     ap.add_argument("--no-leak", action="store_true", help="condition off: do not reject the sub's leak above the crossing")
     ap.add_argument("--no-dip", action="store_true", help="condition off: do not reject a dip under the target")
     ap.add_argument("--front-lp", nargs=3, metavar=("FAMILY", "ORDER", "HZ"),
-                    help="the woofer's low-pass, in the model of the bass joint (its phase moves the delay)")
+                    help="the upper role's low-pass, in the model of the bass joint (its phase moves the delay)")
     ap.add_argument("--allow-large-grid", action="store_true",
                     help=f"over {GRID_CEILING_PAIRS} filter pairs x L-R offsets, run anyway: time grows with the combinations, "
-                         "memory with the filter options (about 24 kB each), the row buffer stays bounded")
+                         "memory with the filter options (about 11 kB each), the row buffer stays bounded")
     ap.add_argument("--top", type=int, default=TOP_DEFAULT, help="rows per crossing band")
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--out", metavar="DIR", help="write the table and the JSON here")
@@ -1242,8 +1283,8 @@ def _cli(argv=None):
         notes.append(f"the profile also offers {', '.join(space.dropped)}: the model does not build those exactly, so they were left "
                      "out of the search")
     if len(stack) > 1 and front_lp is None:
-        notes.append("the woofer's low-pass is not in this model yet (the joint above it has no result): the delay will shift once the "
-                     "woofer gets it, and it is re-scored by the next joint (--front-lp FAMILY ORDER HZ to model it now)")
+        notes.append(f"the {upper.role}'s low-pass is not in this model yet (the joint above it has no result): the delay will shift once "
+                     f"the {upper.role} gets it, and it is re-scored by the next joint (--front-lp FAMILY ORDER HZ to model it now)")
     res = scan_bass(inp)
     top = max(1, int(args.top))
 
@@ -1257,22 +1298,28 @@ def _cli(argv=None):
            "channels": {"lower": lower_codes, "upper": upper_codes},
            "grid": grid, "rows": [published(r) for r in res["rows"]], "bands": bands, "rejected": res["rejected"],
            "dropped_options": list(space.dropped),
-           "conditions": {"lr_offset_ms": 0.0 if upper.single else round(inp.lr_rule_ms, 3),
-                          "lr_offset_tolerance_ms": LR_OFFSET_TOLERANCE_MS,
+           "conditions": {"lr_offset_ms": 0.0 if upper.single else round(_snap_ms(inp.lr_rule_ms, inp.delay_step_ms), 3),
+                          "lr_rule_ms": 0.0 if upper.single else round(inp.lr_rule_ms, 3),
+                          "lr_offset_tolerance_ms": LR_OFFSET_TOLERANCE_MS, "delay_tolerance_ms": DELAY_TOLERANCE_MS,
                           "lr_offset_held": (not free) and (not upper.single),
                           "lr_offset_free": bool(free) and not upper.single,
                           "upper_single": upper.single,
-                          "lower_lr_offset_ms": None if inp.lower_offset_ms is None else round(inp.lower_rule_ms, 3),
+                          "lower_lr_offset_ms": None if inp.lower_offset_ms is None else round(inp.lower_offset_ms, 3),
+                          "lower_lr_rule_ms": None if inp.lower_rule_ms is None else round(inp.lower_rule_ms, 3),
                           "front_lp": list(front_lp) if front_lp else None,
                           "sub_one_point": inp.sub_one_point, "hp_floor_hz": round(floor, 1)},
-           "notes": notes + inp.notes, "note": "This never picks: the table describes and the choice is the tuner's."}
+           "notes": notes + inp.notes, "note": "This never picks: the table describes, the margin ranks on what survives a head moving, the ear decides and the choice "
+                   "is the tuner's."}
     if not res["rows"]:
         doc["empty"] = {"said": "no variant came through the limits", "reasons": _reasons(res["rejected"])}
     text = render(doc)
-    if args.out:
-        project_io.atomic_write_json(os.path.join(args.out, f"joint-{joint.name}.json"), doc, makedirs=True)
-        project_io.atomic_write_text(os.path.join(args.out, f"joint-{joint.name}.txt"), text + "\n", makedirs=True)
     print(json.dumps(doc, indent=2, ensure_ascii=False) if args.json else text)
+    if args.out:
+        try:
+            project_io.atomic_write_json(os.path.join(args.out, f"joint-{joint.name}.json"), doc, makedirs=True)
+            project_io.atomic_write_text(os.path.join(args.out, f"joint-{joint.name}.txt"), text + "\n", makedirs=True)
+        except OSError as exc:
+            raise JointSearchError(f"--out {args.out}: the table above was not written: {exc}") from None
     return 0
 
 
@@ -1306,22 +1353,20 @@ def _front_lp_spec(values, space):
 
 
 def _single_point_decided(process_mod, project_dir):
-    """Has the person decided to run on one point? A `user_decision` whose question or answer says both that the nine points
-    were skipped and that the joints run on one point (`SINGLE_POINT_*`), the answer not a bare no to the question that carried
-    them. Asked for the positions, the bare word "position": neither is that decision (`process._positions_asked` is another gate)."""
+    """Has the person decided to run on one point? The latest `user_decision` whose question or answer says both that the nine points
+    were skipped and that the joints run on one point (`SINGLE_POINT_*`) decides: its answer is not a bare no to the question that
+    carried them. Asked for the positions, the bare word "position": neither is that decision (`process._positions_asked` is another gate)."""
     try:
         events = process_mod.Process(os.path.join(project_dir, "process"))._events(kinds=(process_mod.EV_USER_DECISION,))
     except process_mod.ProcessError as exc:
         raise JointSearchError(f"the project's decisions cannot be read: {exc}") from None
-    for event in events:
+    for event in reversed(events):
         question = " ".join(str(event.get("question", "")).lower().split())
         answer = " ".join(str(event.get("answer", "")).lower().split())
         said = f"{question} {answer}"
         if SINGLE_POINT_SKIP_WORDS not in said or SINGLE_POINT_ONE_WORDS not in said:
             continue
-        if SINGLE_POINT_SKIP_WORDS not in answer and (answer.split() or [""])[0].rstrip(".,!") in _NO_WORDS:
-            continue
-        return True
+        return SINGLE_POINT_SKIP_WORDS in answer or (answer.split() or [""])[0].rstrip(".,!") not in _NO_WORDS
     return False
 
 
@@ -1794,9 +1839,8 @@ def _check_band_decides_the_rank():
     top = rows[0]
     better_loss = [r for r in rows if r["loss_median_db"] > top["loss_median_db"] + 0.05]
     assert better_loss, "no row with a better loss: the plant does not separate the band from the loss"
-    assert all(r["width_worst_oct"] <= top["width_worst_oct"] for r in rows), top["width_worst_oct"]
-    assert all(r["width_worst_oct"] < top["width_worst_oct"] for r in better_loss), \
-        [(r["width_worst_oct"], top["width_worst_oct"]) for r in better_loss][:3]
+    assert all(r["margin_oct"] <= top["margin_oct"] for r in rows), top["margin_oct"]
+    assert all(_row_key(r) < _row_key(top) for r in better_loss), [(r["margin_oct"], top["margin_oct"]) for r in better_loss][:3]
     step = math.log2(inp.freqs[1] / inp.freqs[0])
     for row in [top] + better_loss[:5]:
         read = _band_width(inp.freqs, _row_phase(inp, row), row["crossing_hz"])
@@ -1935,7 +1979,7 @@ def _check_table_enterable():
         line = next(ln for ln in text.splitlines() if ln.strip().startswith(_filter_name(row["lp"]))
                     and _filter_name(row["hp"]) in ln)
         fields = line.split()
-        for value in (f"{row['sub_gain_db']:+.1f}", f"{row['front_gain_db']:+.1f}", f"{row['delays_ms']['sw']:.3f}",
+        for value in (f"{row['sub_gain_db']:+.2f}", f"{row['front_gain_db']:+.2f}", f"{row['delays_ms']['sw']:.3f}",
                       f"{row['delays_ms']['w-L']:.3f}", f"{row['delays_ms']['w-R']:.3f}"):
             assert value in fields, (value, line)
     finally:
@@ -1982,9 +2026,9 @@ def _check_notes_printed():
         done()
 
 
-def _check_leak_relative_to_the_crossing():
-    """I4: a crossing near 120 Hz with a sub that falls away fast above it is no leak: 100 and 125-200 Hz were one car's. The same
-    pair with a gentle low-pass, which still sits under -24 dB at 100 Hz of its own crossing band, is rejected at 1.5x."""
+def _check_leak_moves_with_the_crossing():
+    """I4: a crossing near 120 Hz with a sub that falls away fast above it is no leak: the 100 and 125-200 Hz were one car's, and the
+    limit moves up with the crossing. The same pair with a gentle low-pass is rejected at the frequencies moved up."""
     lp, hp = ("LR", 48, 113.0), ("LR", 36, 113.0)
     good = scan_bass(_planted_input(lp=lp, hp=hp, fams=[("LR", 48), ("LR", 36)], lp_corners=(113,), hp_corners=(113,), delay_ms=1.0,
                                     dip_on=False))
@@ -2399,6 +2443,261 @@ def _check_fs_floor_through_the_options():
         done()
 
 
+# -------- the replay's round (#210): the leak as the run validated it, the ranking on a delay a head survives, the review's small findings
+def _run_shape(lo, hi):
+    """A sub's phase against its pair's filters: in phase over a known run, 90 degrees out everywhere else."""
+    return lambda f: np.where((f >= lo) & (f <= hi), 0.0, 90.0)
+
+
+def _knife_shape(lo, split, hi):
+    """In tolerance by a hair over `lo`..`hi`: +29.9 degrees below `split`, -29.9 above it, 90 out. Moving the delay either way
+    takes one side past the 30 degrees, so the worst point is widest at one delay only."""
+    return lambda f: np.where((f >= lo) & (f < split), 29.9, np.where((f >= split) & (f <= hi), -29.9, 90.0))
+
+
+def _two_pair_input(shapes):
+    """Two filter pairs, A = LR36 at 56 Hz and B = LR36 at 125 Hz, each with its own phase plan per point: flat drivers, the sub's
+    phase below 100 Hz cancels A's filters and adds `shapes["A"][p]`, above it B's and `shapes["B"][p]`. Each pair's numbers are read
+    off its plan; a mixed pair (a corner of each) is in the grid and takes no part in what the checks ask."""
+    a, b = ("LR", 36, 56.0), ("LR", 36, 125.0)
+    n = len(shapes["A"])
+    inp = _planted_input(lp=a, hp=a, fams=[("LR", 36)], lp_corners=(56, 125), hp_corners=(56, 125), n_points=n, leak_on=False,
+                         dip_on=False, single_upper=True)
+    inp.gains_db = (2.0,)
+    f = inp.freqs
+
+    def own(pair):
+        return np.degrees(np.angle(dsp_math.xo_response(f, pair[2], pair[1], "hp", pair[0]))
+                          - np.angle(dsp_math.xo_response(f, pair[2], pair[1], "lp", pair[0])))
+
+    inp.upper_l = np.ones((n, len(f)), complex)
+    inp.ref_l = inp.upper_l[0]
+    for p in range(n):
+        phase = np.where(f < 100.0, own(a) + shapes["A"][p](f), own(b) + shapes["B"][p](f))
+        inp.lower[p] = 10.0 ** (-2.0 / 20.0) * np.exp(1j * np.radians(phase))
+    inp.ref_lower = inp.lower[0]
+    return inp, a, b
+
+
+def _row_of(rows, pair):
+    return next(r for r in rows if tuple(r["lp"]) == tuple(pair) and tuple(r["hp"]) == tuple(pair))
+
+
+def _check_leak_from_the_validated_limits():
+    """The leak limit is the run's own: -24 dB at 100 Hz and -30 dB over 125-200 Hz, judged there for a crossing at or below 65 Hz,
+    moved up by crossing/65 above it. LR36 at 56 Hz is -21 dB at 1.5x its crossing and -30 dB at 100 Hz: the validated limit passes
+    it, the relative one dropped it. Each row's two readings are the gap at those frequencies, read independently."""
+    def read(inp, row):
+        f = inp.freqs
+        lp = dsp_math.xo_response(f, row["lp"][2], row["lp"][1], "lp", row["lp"][0])
+        hp = dsp_math.xo_response(f, row["hp"][2], row["hp"][1], "hp", row["hp"][0])
+        gap = _db(inp.ref_lower * lp * 10.0 ** (row["sub_rel_db"] / 20.0)) - _db(_front_sum(inp.ref_l, inp.ref_r, f, row["lr_offset_ms"]) * hp)
+        scale = max(1.0, row["crossing_hz"] / 65.0)
+        return float(gap[int(np.argmin(np.abs(f - 100.0 * scale)))]), float(gap[(f >= 125.0 * scale) & (f <= 200.0 * scale)].max())
+
+    low = ("LR", 36, 56.0)
+    inp = _planted_input(lp=low, hp=low, fams=[("LR", 36)], lp_corners=(56,), hp_corners=(56,), dip_on=False)
+    rows = [r for r in scan_bass(inp)["rows"] if r["sub_rel_db"] == 2.0]
+    assert rows and rows[0]["crossing_hz"] <= 65.0, "LR36 at 56 Hz passes the run's limit and came back with no row"
+    high = ("LR", 48, 113.0)
+    moved = _planted_input(lp=high, hp=high, fams=[("LR", 48)], lp_corners=(113,), hp_corners=(113,), dip_on=False, delay_ms=1.0)
+    rows_high = [r for r in scan_bass(moved)["rows"] if r["crossing_hz"] > 65.0]
+    assert rows_high, "no row with a crossing above 65 Hz"
+    for source, row in [(inp, r) for r in rows] + [(moved, r) for r in rows_high]:
+        near, far = read(source, row)
+        assert abs(row["leak_near_db"] - near) < 1e-3 and abs(row["leak_far_db"] - far) < 1e-3, \
+            (row["crossing_hz"], row["leak_near_db"], near, row["leak_far_db"], far)
+    gentle = ("LR", 24, 56.0)                  # -20 dB at 100 Hz, over the limit at the run's own frequency
+    res = scan_bass(_planted_input(lp=gentle, hp=gentle, fams=[("LR", 24)], lp_corners=(56,), hp_corners=(56,), dip_on=False))
+    assert not [r for r in res["rows"] if r["sub_rel_db"] == 2.0] and res["rejected"].get("leak", 0) > 0, res["rejected"]
+
+
+def _check_margin_ranks_past_a_knife_edge():
+    """A band that holds at one delay only does not survive a head moving: pair A is 1.66 oct wide at one delay and 0.87 oct either
+    side of it; pair B is 1.04 oct at every delay near. By the peak A leads; by the margin B does, and A's delay moves off the knife."""
+    shape_a = _knife_shape(30.0, 52.0, 95.0)
+    inp, a, b = _two_pair_input({"A": [shape_a] * 3, "B": [_run_shape(102.0, 210.0)] * 3})
+    rows = scan_bass(inp)["rows"]
+    knife, broad = _row_of(rows, a), _row_of(rows, b)
+    step = math.log2(inp.freqs[1] / inp.freqs[0])
+    assert abs(broad["margin_oct"] - math.log2(210.0 / 102.0)) <= 3 * step, broad["margin_oct"]
+    assert abs(knife["margin_oct"] - math.log2(95.0 / 52.0)) <= 3 * step, knife["margin_oct"]
+    assert knife["margin_oct"] < broad["margin_oct"], (knife["margin_oct"], broad["margin_oct"])
+    assert rows.index(broad) < rows.index(knife), "the pair with the better margin ranks first"
+    assert knife["delay_ms"] >= DELAY_TOLERANCE_MS - 1e-9, knife["delay_ms"]
+    # the replay's two readings, by the arithmetic of the margin: the delays within the tolerance of the middle one
+    for widths, want in (((0.58, 0.98, 0.57), 0.57), ((0.86, 1.17, 0.95), 0.86)):
+        grid = np.array([10.65, 10.70, 10.75])
+        assert abs(float(_delay_margins(grid, np.array(widths), np.array([1]))[0]) - want) < 1e-9, (widths, want)
+
+
+def _check_margin_tolerance_reaches_past_a_coarse_step():
+    """The tolerance is a head moving, not the DSP's step: on a 0.25 ms delay step the margin still looks at +-0.10 ms, not at the
+    delay alone, and the delay it gives stays on the step."""
+    inp, a, _b = _two_pair_input({"A": [_knife_shape(30.0, 52.0, 95.0)] * 3, "B": [_run_shape(102.0, 210.0)] * 3})
+    inp.delay_step_ms = 0.25
+    knife = _row_of(scan_bass(inp)["rows"], a)
+    step = math.log2(inp.freqs[1] / inp.freqs[0])
+    assert knife["margin_oct"] <= math.log2(95.0 / 52.0) + 3 * step, knife["margin_oct"]
+    assert abs(knife["delay_ms"] / 0.25 - round(knife["delay_ms"] / 0.25)) < 1e-6, knife["delay_ms"]
+
+
+def _check_worst_ranks_before_median():
+    """Two pairs: A has the wider median and the narrower worst, B the reverse. Worst comes first, so B leads."""
+    wide_median = [_run_shape(45.0, 70.0), _run_shape(35.0, 90.0), _run_shape(30.0, 95.0)]
+    even = [_run_shape(102.0, 180.0)] * 3
+    inp, a, b = _two_pair_input({"A": wide_median, "B": even})
+    rows = scan_bass(inp)["rows"]
+    first, second = _row_of(rows, b), _row_of(rows, a)
+    assert second["width_median_oct"] > first["width_median_oct"] + 0.3, (second["width_median_oct"], first["width_median_oct"])
+    assert second["width_worst_oct"] < first["width_worst_oct"] - 0.1, (second["width_worst_oct"], first["width_worst_oct"])
+    assert rows.index(first) < rows.index(second), "worst before median"
+    # the tie-breaks: margin, then the worst at that delay, then the median
+    def row(margin, worst, median):
+        return {"margin_oct": margin, "width_worst_oct": worst, "width_median_oct": median, "loss_median_db": -1.0, "dip_median_db": -1.0}
+    ranked = sorted((row(0.8, 0.9, 1.0), row(0.8, 1.1, 0.7), row(0.9, 0.9, 0.5)), key=_row_key, reverse=True)
+    assert [(r["margin_oct"], r["width_worst_oct"]) for r in ranked] == [(0.9, 0.9), (0.8, 1.1), (0.8, 0.9)], ranked
+
+
+#: The smallest grid that still has rows: for the checks about what is said, not what ranks.
+_SMALL = ["--lp-bounds", "56:63", "--hp-bounds", "71:80", "--gain", "6:8:2"]
+
+
+_STEP_0_1 = {"dsp_profile": {"name": "X", "dsp_processing_rate_hz": 96000, "delay": {"max_ms": 20.0, "step_ms": 0.1},
+                             "channel_gain": {"range_db": [-30.0, 5.0]},
+                             "groups": [{"id": "physical_outputs", "crossover_filters": {
+                                 "corner_freq_range_hz": [20.0, 20480.0], "corner_freq_step_hz": 1.0,
+                                 "types": {"LR": {"orders_db_per_oct": [24, 36]}, "BW": {"orders_db_per_oct": [24]}}}}]}}
+
+
+def _check_header_prints_the_scored_offset():
+    """The header and `lr_offset_ms` carry the offset the search scored, on the DSP's step; the raw rule is a field of its own. L
+    later by 1.04 ms on a 0.1 ms step scores -1.00, not -1.04. A stereo sub the same."""
+    top, done = _tmp()
+    try:
+        roles = {"sw-L": "sub", "sw-R": "sub", "w-L": "woofer", "w-R": "woofer"}
+        argv, _, _, _ = _solo_project(top, roles=roles, profile=_STEP_0_1, at={"sw-L": 192, "sw-R": 96, "w-L": 200, "w-R": 100},
+                                      points={"w-L": POSITIONS, "w-R": POSITIONS})
+        cond = _doc(argv + _SMALL)["conditions"]
+        assert cond["lr_offset_ms"] == -1.0 and abs(cond["lr_rule_ms"] - (-100.0 / 96.0)) < 0.03, cond
+        assert abs(cond["lower_lr_offset_ms"] / 0.1 - round(cond["lower_lr_offset_ms"] / 0.1)) < 1e-6, cond
+        assert cond["lower_lr_rule_ms"] != cond["lower_lr_offset_ms"], cond
+        rc, text, err = _run(argv + _SMALL)
+        assert rc == 0, err[-300:]
+        head = text.splitlines()[0]
+        assert "L-R offset held at -1.00 ms" in head and f"{_doc(argv + _SMALL)['conditions']['lr_rule_ms']:+.2f} ms" not in head, head
+    finally:
+        done()
+
+
+def _check_single_point_latest_decision_decides():
+    """The person's latest matching decision stands, and "не", "not", "don't" read as a no, as "ні" does."""
+    proc = _process_module()
+    top, done = _tmp()
+    try:
+        argv, proj, _, _ = _solo_project(top, points=None)
+        cmd = argv + _SMALL + ["--single-point"]
+        p = proc.Process(os.path.join(proj, "process"))
+        for answer, want in (("так, на одній", 0), ("ні, передумав", 3), ("так", 0), ("не треба", 3), ("так", 0), ("not this time", 3),
+                             ("так", 0), ("don't", 3), ("так", 0), ("Don’t do it", 3), ("так", 0)):
+            p.record_decision(_DECISION_WORDS, answer)
+            rc, _out, err = _run(cmd)
+            assert rc == want, (answer, rc, want, err[-200:])
+    finally:
+        done()
+
+
+def _check_bad_out_is_a_refusal_after_the_table():
+    """A `--out` that cannot be written: the table is printed first and the failure is the one line, exit 3, not a traceback."""
+    top, done = _tmp()
+    try:
+        argv, _, _, _ = _solo_project(top)
+        blocked = os.path.join(top, "afile")
+        with open(blocked, "w", encoding="utf-8") as fh:
+            fh.write("in the way\n")
+        rc, out, err = _run(argv + _SMALL + ["--out", os.path.join(blocked, "out")])
+        refusal = [ln for ln in err.strip().splitlines() if ln.startswith("refusing:")]
+        assert rc == 3 and "the choice is the tuner's" in out and len(refusal) == 1 and "--out" in refusal[0], (rc, out[-200:], err[-300:])
+    finally:
+        done()
+
+
+def _check_gains_print_on_a_quarter_step():
+    """A 0.25 dB gain step: the table prints the quarter, .2f, and a gain that fits it is keyable as printed."""
+    prof = json.loads(json.dumps(_STEP_0_1))
+    prof["dsp_profile"]["channel_gain"]["step_db"] = 0.25
+    top, done = _tmp()
+    try:
+        argv, _, _, _ = _solo_project(top, profile=prof)
+        tiny = ["--lp-bounds", "56:71", "--hp-bounds", "56:80", "--gain", "2.25:6.25:2"]
+        doc = _doc(argv + tiny)
+        assert doc["rows"], doc["rejected"]
+        rc, text, err = _run(argv + tiny)
+        assert rc == 0, err[-300:]
+        row = doc["rows"][0]
+        line = next(ln for ln in text.splitlines() if ln.strip().startswith(_filter_name(row["lp"])) and _filter_name(row["hp"]) in ln)
+        fields = line.split()
+        for value in (f"{row['sub_gain_db']:+.2f}", f"{row['front_gain_db']:+.2f}"):
+            assert value in fields, (value, line)
+    finally:
+        done()
+
+
+def _check_front_lp_note_names_the_role():
+    """The note about the next joint's low-pass names the role the stack has: a midrange above the sub is not called a woofer."""
+    top, done = _tmp()
+    try:
+        roles = {"sw": "sub", "m-L": "midrange", "m-R": "midrange", "tw-L": "tweeter", "tw-R": "tweeter"}
+        argv, _, _, _ = _solo_project(top, roles=roles, at={"sw": 96, "m-L": 200, "m-R": 100, "tw-L": 100, "tw-R": 100},
+                                      points={"m-L": POSITIONS, "m-R": POSITIONS})
+        doc = _doc(argv + ["--lp-bounds", "56:71", "--hp-bounds", "80:100", "--gain", "2:8:2"])
+        said = [n for n in doc["notes"] if "re-scored" in n]
+        assert said and "midrange's low-pass" in said[0] and "woofer" not in said[0], doc["notes"]
+    finally:
+        done()
+
+
+def _check_stereo_sub_offset_is_low_confidence():
+    """A stereo sub's L-R offset is read at 30-100 Hz, which read a planted 1 ms as about 0.4 ms: every run with a stereo sub says it
+    is low-confidence and must be checked; a run with a single sub says nothing."""
+    top, done = _tmp()
+    try:
+        roles = {"sw-L": "sub", "sw-R": "sub", "w-L": "woofer", "w-R": "woofer"}
+        argv, _, _, _ = _solo_project(top, roles=roles, at={"sw-L": 192, "sw-R": 96, "w-L": 200, "w-R": 100},
+                                      points={"w-L": POSITIONS, "w-R": POSITIONS})
+        said = [n for n in _doc(argv + _SMALL)["notes"] if "low-confidence" in n]
+        assert said and "check" in said[0], said
+    finally:
+        done()
+    top, done = _tmp()
+    try:
+        argv, _, _, _ = _solo_project(top)
+        assert not any("low-confidence" in n for n in _doc(argv + _SMALL)["notes"])
+    finally:
+        done()
+
+
+def _check_margin_in_table_and_json():
+    """`margin` and the peak worst/median are columns of the table and fields of the JSON; the note says the table never picks and
+    the ear decides."""
+    top, done = _tmp()
+    try:
+        argv, _, _, _ = _solo_project(top)
+        doc = _doc(argv + _SMALL)
+        assert doc["rows"], doc["rejected"]
+        for row in doc["rows"]:
+            assert row["margin_oct"] <= row["width_worst_oct"] + 1e-9, row
+        assert doc["conditions"]["delay_tolerance_ms"] == DELAY_TOLERANCE_MS, doc["conditions"]
+        assert "never picks" in doc["note"] and "ear" in doc["note"], doc["note"]
+        rc, text, err = _run(argv + _SMALL)
+        assert rc == 0, err[-300:]
+        head = next(ln for ln in text.splitlines() if "LP" in ln and "HP" in ln)
+        assert "margin" in head and "worst oct" in head and "med oct" in head, head
+        assert "the ear decides" in text and "never picks" in text, text[-200:]
+    finally:
+        done()
+
+
 def _selftest():
     failures = []
     for check in (_check_joints_from_roles, _check_planted_delay_polarity_corners, _check_family_outside_profile_never_returned,
@@ -2406,13 +2705,17 @@ def _selftest():
                   _check_refusals_are_one_line, _check_protective_refusal_passed_on, _check_cli_end_to_end,
                   _check_band_decides_the_rank, _check_worst_and_median_of_points, _check_space_and_rows_against_a_profile,
                   _check_corners_from_the_top_level, _check_stereo_sub_delays, _check_table_enterable, _check_free_offset_is_said,
-                  _check_notes_printed, _check_leak_relative_to_the_crossing, _check_no_leak_and_empty_words,
+                  _check_notes_printed, _check_leak_moves_with_the_crossing, _check_no_leak_and_empty_words,
                   _check_front_lp_moves_the_delay, _check_single_point_needs_the_decision, _check_single_point_rule_on_any_reference,
                   _check_only_the_joints_roles_are_built, _check_level_step_and_sub_ver_refused, _check_failures_are_refusals,
                   _check_rejected_counts_every_drop_once, _check_grid_ceiling_and_row_buffer, _check_sub_limit_at_every_point,
                   _check_one_point_limit_with_leak_on, _check_stage_rule_on_a_coarse_step, _check_delay_step_and_gain_step,
                   _check_delay_ceiling_and_gain_range, _check_corners_snap, _check_time_base, _check_level_step_succeeds,
-                  _check_partial_sub_points, _check_fs_floor_through_the_options):
+                  _check_partial_sub_points, _check_fs_floor_through_the_options, _check_leak_from_the_validated_limits,
+                  _check_margin_ranks_past_a_knife_edge, _check_margin_tolerance_reaches_past_a_coarse_step, _check_worst_ranks_before_median,
+                  _check_header_prints_the_scored_offset, _check_single_point_latest_decision_decides,
+                  _check_bad_out_is_a_refusal_after_the_table, _check_gains_print_on_a_quarter_step, _check_front_lp_note_names_the_role,
+                  _check_stereo_sub_offset_is_low_confidence, _check_margin_in_table_and_json):
         try:
             check()
         except AssertionError as exc:
@@ -2420,8 +2723,8 @@ def _selftest():
     assert not failures, "\n".join(failures)
     print("selftest OK -- the joints come from the roles; a planted delay, polarity and corner pair are found by a margin, "
           "on either side of the delay; a family outside the profile never comes back; the ±30 degree band ranks, worst and median "
-          "of the points apart; the table is what a person keys in, stereo sub included; the L-R rule holds on the DSP's step; leak "
-          "is relative to the crossing; every refusal is one line, exit 3; every drop is counted once; nothing is picked")
+          "of the points apart, ranked on the margin a moving head leaves; the table is what a person keys in, stereo sub included; the L-R "
+          "rule holds on the DSP's step; the leak limit is the run's own, moved up with the crossing; every refusal is one line, exit 3; every drop is counted once; nothing is picked")
     return 0
 
 
