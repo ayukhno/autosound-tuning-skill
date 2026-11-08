@@ -574,7 +574,10 @@ def propose(history, delta, note=None, provenance=None, registry=None, allow_non
     `on="HEAD"` confirms HEAD. With no `on`, a slot whose newest version is a candidate not in the slot is REFUSED: the
     delta would land on HEAD, without the candidate it was written against. Built on a candidate, the structural moves
     are measured from the candidate's own base, so what it has not earned stays held; with evidence and a reviewer its
-    rows become `proposed` and it stops being a candidate. The sheet is always measured against the last placed version.
+    rows become `proposed` and it stops being a candidate. A candidate `variant switch` put in the slot is built on the
+    same way, with no `on`. A base that is not HEAD answers to the slot as well: its structural moves are also measured
+    from the last placed version. The sheet is always measured against that version, every row it lists is `proposed`,
+    and a version that goes in the slot is no variant any more.
 
     One writer's step under the project's writer lock (#141, J2b): what it reads -- the active slot, HEAD, the
     channels, the profile -- and what it writes -- the version, its delta, its sheet -- are one hold (`_held`)."""
@@ -584,15 +587,40 @@ def propose(history, delta, note=None, provenance=None, registry=None, allow_non
 
 def _candidate_base(history, snap):
     """The state a candidate was made from (#199): up its `parent` line to the first version that is no candidate. A
-    candidate banked before `parent` was kept on the old layout, or a line that loops, reads as the slot's HEAD."""
+    candidate banked before `parent` was kept on the old layout, or a line that loops, reads as the slot's HEAD; if that
+    is a candidate too, as the previous version by number that is none. None when the slot has no such version: there
+    is nothing to measure the candidate's moves from, and the caller holds the change."""
     seen = set()
     while snap.get("variant") == "candidate":
         parent = snap.get("parent")
         if not parent or parent in seen:
-            return history.load()
+            snap = history.load()
+            break
         seen.add(parent)
         snap = history.load(parent)
-    return snap
+    if snap.get("variant") != "candidate":
+        return snap
+    versions = history.versions()
+    own = snap.get("version")
+    for earlier in reversed(versions[:versions.index(own)] if own in versions else versions):
+        found = history.load(earlier)
+        if found.get("variant") != "candidate":
+            return found
+    return None
+
+
+def _mark_what_differs(proposed, in_dsp):
+    """Every row the sheet will list is `proposed` (#199): measured from the last placed version, a row taken from the
+    base can differ from it with no delta touching it, and `attest` flips only what is `proposed`. A status is no
+    difference, and neither is a row or a setting that is gone (there is nothing left to mark)."""
+    changed = _state.diff_states(in_dsp, proposed)
+    for tier in _state.tier_names(proposed):
+        for ch, fields in (changed.get(tier) or {}).items():
+            if set(fields) - {"status", "__removed__"}:
+                proposed[tier][ch]["status"] = "proposed"
+    settings = proposed.get(_state.PRESET_SETTINGS)
+    if isinstance(settings, dict) and _state.PRESET_SETTINGS in changed["preset"]:
+        settings["status"] = "proposed"
 
 
 def _propose(history, delta, note, provenance, registry, allow_nonactive, evidence, reviewed, on=None):
@@ -621,30 +649,41 @@ def _propose(history, delta, note, provenance, registry, allow_nonactive, eviden
     current = history.load(base)  # read-before-edit (raises if no baseline — seed via history.snapshot first)
     # What the sheet is measured from: what is in the DSP (#199). «Enter only these» on candidate → fix would leave out
     # the candidate's own changes if it were the candidate. What a structural move is measured from is its own base:
-    # the candidate's moves have earned nothing by being built on.
+    # the candidate's moves have earned nothing by being built on. A candidate `variant switch` put in the slot is the
+    # same case with no `on`: its moves earned nothing by being placed either.
     in_dsp = current if head in (None, base) else history.load(head)
-    on_candidate = on is not None and current.get("variant") == "candidate"
+    on_candidate = current.get("variant") == "candidate"
     # Channel identity (SCR-039), so a delta addressed to a renamed channel's CURRENT name reaches
     # the row the ledger keeps under its id instead of banking a second row for the same driver.
     identity = _state.project_channels(getattr(history, "project_dir", None) or "")
     proposed = apply_delta(current, delta, identity)   # deterministic refusals fire here
     if provenance is not None:
         proposed["provenance"] = provenance
+    _mark_what_differs(proposed, in_dsp)
     d = _state.diff_states(in_dsp, proposed)        # note current has no version yet in-memory
     project_dir = getattr(history, "project_dir", None)
     adv = advisories(in_dsp, proposed) + gain_grid_advisories(project_dir, in_dsp, proposed)
     # #57 P2 / #58 P7: a structural move banks as a proposal only on evidence that resolves and one review. An
     # import of what the device already holds (`provenance`) is its own evidence and needs no review.
-    moves = structural_moves(_candidate_base(history, current) if on_candidate else current, proposed)
+    # A base that is not HEAD answers to the slot too (#199): against the DSP's own state, `{}` on an older version is
+    # every move between the two, and a named variant carries its moves in with it.
+    measured_from = _candidate_base(history, current) if on_candidate else current
+    moves = [] if measured_from is None else structural_moves(measured_from, proposed)
+    if base != head:
+        moves = list(dict.fromkeys(moves + structural_moves(in_dsp, proposed)))
     held = []
-    if moves and provenance is None:
-        held = evidence_problems(evidence, project_dir)
-        if not reviewed:
-            held.append("no reviewer call behind it -- a structural change banks after one "
-                        "(`scripts/autosound_ai.py critic <package> --record`, then `reviewed=<the review file>`)")
-        elif not os.path.isfile(reviewed if os.path.isabs(str(reviewed))
-                                else os.path.join(project_dir or "", str(reviewed))):
-            held.append(f"reviewed={reviewed!r}: no such review file")
+    if provenance is None:
+        if measured_from is None:
+            held.append(f"no version on slot {history.preset!r} that is not a candidate, so its structural moves cannot "
+                        f"be measured from anything")
+        if moves:
+            held += evidence_problems(evidence, project_dir)
+            if not reviewed:
+                held.append("no reviewer call behind it -- a structural change banks after one "
+                            "(`scripts/autosound_ai.py critic <package> --record`, then `reviewed=<the review file>`)")
+            elif not os.path.isfile(reviewed if os.path.isabs(str(reviewed))
+                                    else os.path.join(project_dir or "", str(reviewed))):
+                held.append(f"reviewed={reviewed!r}: no such review file")
     candidate = bool(held)
     if candidate:
         for tier in _state.tier_names(proposed):
@@ -665,7 +704,8 @@ def _propose(history, delta, note, provenance, registry, allow_nonactive, eviden
         settings = proposed.get(_state.PRESET_SETTINGS)
         if isinstance(settings, dict) and settings.get("status") == "candidate":
             settings["status"] = "proposed"
-        proposed.pop("variant", None)
+    if not candidate:
+        proposed.pop("variant", None)                # it goes in the slot: what it is, is a version on the line (#199)
     # The samples follow the profile's rate, said which (#147, item 2) -- not the snapshot's recorded one. Read before
     # the bank, so nothing it raises can leave a version banked with no sheet.
     rate, rate_said = sheet_rate(project_dir, proposed["sample_rate"])
@@ -682,7 +722,7 @@ def _propose(history, delta, note, provenance, registry, allow_nonactive, eviden
         sheet += "\n\n⚠️ **Advisories (double-check, not blocking):**\n" + "\n".join("- " + a for a in adv)
     if candidate:
         sheet = (f"🟠 CANDIDATE {version} -- banked on the line, not in the slot yet. "
-                 f"Structural: {', '.join(moves)}. What it waits for: " + "; ".join(held)
+                 f"Structural: {', '.join(moves) or 'not measured'}. What it waits for: " + "; ".join(held)
                  + f". Compute it at the desk (`predict`, `resonalyze_engine run`), then propose on it, `on={version}` "
                    "(`--on` on the command line) with the fix or an empty delta, `evidence=<that file>` and "
                    "`reviewed=` -- no car trip is needed for that.\n\n"
@@ -727,10 +767,16 @@ def attest(history, version=None, note=None, source_file=None):
 
     The slot records what the DSP holds now (#201, `slots[slot].loaded`): the newly banked version, which is HEAD, under
     this same hold. The per-project line only; on the older layout no `slots.json` may appear.
+
+    A candidate is refused (#199): it has earned no place in the DSP, and `propose --on` is how it earns one.
     """
     with _held(history):
         version = version or history.head()
         s = history.load(version)
+        if s.get("variant") == "candidate":
+            # Unearned, in the slot or not: an attest would bank it as entered, still marked candidate (#199, #201).
+            raise ValueError(f"{version} is a candidate, not a proposal: it is not attested. Earn it first: "
+                             f"`propose --on {version}` with evidence and a reviewer, then attest the version that makes")
         flipped = []
         for tier in _state.tier_names(s):
             for ch, c in (s.get(tier) or {}).items():
@@ -1398,6 +1444,243 @@ def _check_preset_settings_candidate_and_source_file():
         shutil.rmtree(top, ignore_errors=True)
 
 
+_EARNED = {"evidence": ["sub+w-L_2 (sw)"], "reviewed": "review.md"}
+
+
+def _on_the_command_line(h, *argv):
+    """`state.py <argv>`, the commands a person runs, with what they print kept out of the selftest's own output."""
+    import contextlib
+    import io
+    with contextlib.redirect_stdout(io.StringIO()):
+        assert _state._main(["--root", h.root, *argv]) == 0, argv
+
+
+def _a_named_variant(top, h, name, delta):
+    """`variant new <name> --delta`: a version on the line with its own name, not in the slot. Returns the version."""
+    path = os.path.join(top, f"{name}.json")
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump(delta, fh)
+    _on_the_command_line(h, "variant", "new", h.preset, name, "--delta", path)
+    return h.versions()[-1]
+
+
+def _check_a_candidate_switched_into_the_slot_is_held_then_promoted():
+    """A candidate `variant switch` put in the slot goes through the same hold and promotion as `--on` (#199), with a
+    plain `propose`: it was built on with its moves measured from itself, so it banked placed with no evidence, its rows
+    `candidate` for good, past the attest too."""
+    import shutil
+    import tempfile
+    for layout in ("project", "preset"):
+        top = tempfile.mkdtemp(prefix="autosound_apply_switched_")
+        try:
+            h = _ledger_with_a_baseline(top, layout)
+            propose(h, _FLIP, note="a flip")
+            _on_the_command_line(h, "variant", "switch", "SQ", "v_002")
+            r = propose(h, _FIX, note="a fix with nothing behind it")
+            assert r["candidate"] and r["structural"] == ["sub polarity"] and h.head() == "v_002", (layout, r)
+            s = h.load(r["version"])
+            assert s["variant"] == "candidate" and s["channels"]["sub"]["status"] == "candidate", (layout, s["channels"])
+        finally:
+            shutil.rmtree(top, ignore_errors=True)
+        top = tempfile.mkdtemp(prefix="autosound_apply_switched_")
+        try:
+            h = _ledger_with_a_baseline(top, layout)
+            propose(h, _FLIP, note="a flip")
+            _on_the_command_line(h, "variant", "switch", "SQ", "v_002")
+            r = propose(h, _FIX, note="reviewed now", **_EARNED)
+            s = h.load(r["version"])
+            assert not r["candidate"] and h.head() == r["version"] and "variant" not in s, (layout, r, s.get("variant"))
+            assert {s["channels"][c]["status"] for c in ("sub", "w-L")} == {"proposed"}, (layout, s["channels"])
+            a = attest(h, r["version"])
+            done = h.load(a["version"])
+            assert "sub" in a["applied_channels"], (layout, a)
+            assert {c["status"] for c in done["channels"].values()} == {"applied"}, (layout, done["channels"])
+        finally:
+            shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_attest_refuses_a_candidate():
+    """`attest` on a candidate is refused, naming `propose --on` (#199, #201): it banked a placed copy still marked
+    candidate and recorded it as in the DSP. Unplaced or switched into the slot, by version or as HEAD, nothing is
+    banked and the slot records nothing; the command line says it as `error: …`, exit 1."""
+    import contextlib
+    import io
+    import shutil
+    import tempfile
+    for layout in ("project", "preset"):
+        top = tempfile.mkdtemp(prefix="autosound_apply_attest_candidate_")
+        try:
+            h = _ledger_with_a_baseline(top, layout)
+            propose(h, _FLIP, note="a flip")
+            before = h.versions()
+
+            def refused(*args):
+                try:
+                    got = attest(h, *args)
+                except ValueError as exc:
+                    assert "propose --on v_002" in str(exc), (layout, str(exc))
+                else:
+                    raise AssertionError(f"{layout}: attest{args} banked {got['version']}")
+                assert h.versions() == before, (layout, h.versions())
+            refused("v_002")
+            assert h.head() == "v_001", (layout, h.head())
+            _on_the_command_line(h, "variant", "switch", "SQ", "v_002")
+            refused()
+            assert h.head() == "v_002", (layout, h.head())
+            if layout == "project":
+                assert "loaded" not in _state.Registry(h.root).load()["slots"]["SQ"], layout
+                _state.Registry(h.root).set_active("SQ")
+                err = io.StringIO()
+                with contextlib.redirect_stderr(err):
+                    rc = _main(["apply.py", top, "attest", "v_002"])
+                assert rc == 1 and err.getvalue().startswith("error: ") and "propose --on v_002" in err.getvalue(), \
+                    (rc, err.getvalue())
+        finally:
+            shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_a_base_that_is_not_head_answers_to_the_slot():
+    """`on=` a version that is neither HEAD nor a candidate measures its moves against what is in the slot as well
+    (#199): `propose {} --on v_001` under a reviewed `sub INV` placed `INV → NORM` with no evidence, and a named variant
+    carrying a flip placed the flip, keeping its `variant`. Held until evidence and a reviewer; a result that goes in
+    the slot is no variant any more."""
+    import shutil
+    import tempfile
+    for layout in ("project", "preset"):
+        top = tempfile.mkdtemp(prefix="autosound_apply_on_older_")
+        try:
+            h = _ledger_with_a_baseline(top, layout)
+            flip = propose(h, _FLIP, note="a reviewed flip", **_EARNED)
+            head = attest(h, flip["version"])["version"]
+            r = propose(h, {}, note="back to the old polarity", on="v_001")
+            assert r["candidate"] and r["structural"] == ["sub polarity"] and h.head() == head, (layout, r)
+            s = h.load(r["version"])
+            assert s["variant"] == "candidate" and s["channels"]["sub"]["status"] == "candidate", (layout, s["channels"])
+            assert "| sub | Polarity | INV → NORM |" in r["sheet"], (layout, r["sheet"])
+            r = propose(h, {}, note="reviewed now", on="v_001", **_EARNED)
+            s = h.load(r["version"])
+            assert not r["candidate"] and h.head() == r["version"] and "variant" not in s, (layout, r)
+            assert "sub" in attest(h, r["version"])["applied_channels"], layout
+        finally:
+            shutil.rmtree(top, ignore_errors=True)
+        top = tempfile.mkdtemp(prefix="autosound_apply_on_named_")
+        try:
+            h = _ledger_with_a_baseline(top, layout)
+            named = _a_named_variant(top, h, "B", _FLIP)
+            trim = {"preset_settings": {"input_gain_db": -0.3}}
+            r = propose(h, trim, note="a trim on the variant", on=named)
+            assert r["candidate"] and r["structural"] == ["sub polarity"] and h.head() == "v_001", (layout, r)
+            assert h.load(r["version"])["variant"] == "candidate", layout
+            r = propose(h, trim, note="reviewed now", on=named, **_EARNED)
+            s = h.load(r["version"])
+            assert not r["candidate"] and h.head() == r["version"], (layout, r)
+            assert "variant" not in s, (layout, "a placed version keeps its variant", s.get("variant"))
+        finally:
+            shutil.rmtree(top, ignore_errors=True)
+        top = tempfile.mkdtemp(prefix="autosound_apply_on_named_plain_")
+        try:
+            h = _ledger_with_a_baseline(top, layout)
+            named = _a_named_variant(top, h, "C", _FIX)
+            r = propose(h, {}, note="a variant with no structural move", on=named)
+            s = h.load(r["version"])
+            assert not r["candidate"] and h.head() == r["version"] and "variant" not in s, (layout, r, s.get("variant"))
+        finally:
+            shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_rows_the_sheet_lists_are_proposed():
+    """Every row that differs from the last placed version is `proposed` (#199): rows taken from an older base, or from
+    a candidate after HEAD moved, kept `applied` while the sheet listed them to enter, so `attest` never covered them.
+    The preset's settings the same; a row that is what the DSP holds stays as it was."""
+    import shutil
+    import tempfile
+    for layout in ("project", "preset"):
+        top = tempfile.mkdtemp(prefix="autosound_apply_rows_older_")
+        try:
+            h = _ledger_with_a_baseline(top, layout)
+            attest(h, propose(h, _FIX, note="a trim")["version"])
+            r = propose(h, {}, note="the older trim again", on="v_001")
+            s = h.load(r["version"])
+            assert not r["candidate"] and "| w-L | Gain | -8.8 dB → -7.8 dB |" in r["sheet"], (layout, r)
+            assert s["channels"]["w-L"]["status"] == "proposed", (layout, s["channels"]["w-L"])
+            assert s["channels"]["tw-R"]["status"] == "applied", (layout, "a row the DSP already holds")
+            assert "w-L" in attest(h, r["version"])["applied_channels"], layout
+        finally:
+            shutil.rmtree(top, ignore_errors=True)
+        top = tempfile.mkdtemp(prefix="autosound_apply_rows_moved_")
+        try:
+            h = _ledger_with_a_baseline(top, layout)
+            propose(h, _FLIP, note="a flip")                                      # the candidate v_002 on v_001
+            attest(h, propose(h, _FIX, note="HEAD moves on", on="HEAD")["version"])
+            r = propose(h, {}, note="the candidate, reviewed", on="v_002", **_EARNED)
+            s = h.load(r["version"])
+            assert not r["candidate"] and "| w-L | Gain | -8.8 dB → -7.8 dB |" in r["sheet"], (layout, r)
+            assert s["channels"]["w-L"]["status"] == "proposed", (layout, s["channels"]["w-L"])
+            assert {"sub", "w-L"} <= set(attest(h, r["version"])["applied_channels"]), layout
+        finally:
+            shutil.rmtree(top, ignore_errors=True)
+        top = tempfile.mkdtemp(prefix="autosound_apply_rows_settings_")
+        try:
+            h = _ledger_with_a_baseline(top, layout)
+            older = attest(h, propose(h, {"preset_settings": {"input_gain_db": -0.3}}, note="one")["version"])["version"]
+            attest(h, propose(h, {"preset_settings": {"input_gain_db": -1.0}}, note="another")["version"])
+            r = propose(h, {}, note="the older trim", on=older)
+            assert "| Preset | Input gain | -1 dB → -0.3 dB |" in r["sheet"], (layout, r["sheet"])
+            assert h.load(r["version"])["preset_settings"]["status"] == "proposed", layout
+            assert "preset_settings" in attest(h, r["version"])["applied_channels"], layout
+        finally:
+            shutil.rmtree(top, ignore_errors=True)
+
+
+def _write_version(h, version, **fields):
+    """`version` on the older layout's folder as a copy of `v_001` plus `fields` -- what no writer here makes any more: a
+    candidate with no `parent`, or a line that loops."""
+    seed = h.load("v_001")
+    seed.pop("parent", None)
+    seed.update(version=version, **fields)
+    seed["channels"]["sub"].update(polarity="INV", status="candidate")
+    with open(os.path.join(h.dir, f"{version}.json"), "w", encoding="utf-8") as fh:
+        json.dump(seed, fh)
+
+
+def _check_a_candidate_base_is_no_candidate():
+    """`_candidate_base` never answers with a candidate (#199): with no `parent`, or a line that loops, it read as HEAD,
+    which could be that same candidate, and the candidate promoted itself unreviewed. It walks to the previous version
+    by number that is none; a slot with no such version holds the change, evidence and a reviewer or not."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_apply_base_")
+    try:
+        h = _ledger_with_a_baseline(top, "preset")
+        _write_version(h, "v_002", variant="candidate")
+        h.place("v_002")
+        assert _candidate_base(h, h.load("v_002"))["version"] == "v_001", "no parent, in the slot"
+        r = propose(h, {}, note="nothing behind it", on="HEAD")
+        assert r["candidate"] and r["structural"] == ["sub polarity"] and h.head() == "v_002", r
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+    top = tempfile.mkdtemp(prefix="autosound_apply_base_loop_")
+    try:
+        h = _ledger_with_a_baseline(top, "preset")
+        _write_version(h, "v_002", variant="candidate", parent="v_003")
+        _write_version(h, "v_003", variant="candidate", parent="v_002")
+        h.place("v_003")
+        assert _candidate_base(h, h.load("v_003"))["version"] == "v_001", "a line that loops"
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+    top = tempfile.mkdtemp(prefix="autosound_apply_base_none_")
+    try:
+        h = _ledger_with_a_baseline(top, "preset")
+        _write_version(h, "v_001", variant="candidate")
+        assert _candidate_base(h, h.load("v_001")) is None, "no version on the slot is free of the candidate mark"
+        r = propose(h, {}, note="evidence, and nothing to measure from", on="HEAD", **_EARNED)
+        assert r["candidate"] and h.head() == "v_001" and r["version"] == "v_002", r
+        assert any("no version" in w for w in r["waits_for"]), r["waits_for"]
+        assert h.load("v_002")["variant"] == "candidate", h.load("v_002").get("variant")
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
 def _own_tempdir(selftest):
     """`selftest` run with tempfile's folder -- and TMPDIR, for the children it starts -- set to one folder of its own,
     removed with everything in it when the selftest ends, passed or failed, both put back (#148): a check that forgets
@@ -1438,7 +1721,10 @@ def _selftest():
                   _check_a_delta_after_a_candidate_is_refused, _check_a_fix_on_a_candidate_stays_held,
                   _check_a_candidate_is_promoted_with_evidence_and_a_reviewer,
                   _check_a_trim_is_a_row_with_no_reviewer, _check_preset_settings_merge_and_refusals,
-                  _check_preset_settings_candidate_and_source_file):
+                  _check_preset_settings_candidate_and_source_file,
+                  _check_a_candidate_switched_into_the_slot_is_held_then_promoted, _check_attest_refuses_a_candidate,
+                  _check_a_base_that_is_not_head_answers_to_the_slot, _check_rows_the_sheet_lists_are_proposed,
+                  _check_a_candidate_base_is_no_candidate):
         try:
             check()
         except AssertionError as exc:

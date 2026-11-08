@@ -1308,7 +1308,9 @@ def migrate_line(root, apply=False):
             for v in per[name]:
                 snap = _read_snapshot_json(os.path.join(pdir(name), v + ".json"))
                 new = mapping[f"{name}/{v}"]
-                snap.update({"version": new, "preset": snap.get("preset") or name, "parent": prev,
+                # A named base (#199) stays that base, on the new numbers; the line's own step otherwise.
+                snap.update({"version": new, "preset": snap.get("preset") or name,
+                             "parent": mapping.get(f"{name}/{snap.get('parent')}", prev),
                              "migrated_from": f"{name}/{v}"})
                 with open(os.path.join(vdir, new + ".json"), "w", encoding="utf-8") as fh:
                     json.dump(snap, fh, indent=2, sort_keys=True, ensure_ascii=False)
@@ -4099,7 +4101,6 @@ def _own_tempdir(selftest):
     return run
 
 
-@_own_tempdir
 def _loaded_of(root, slot):
     """`slots[slot]` as the file on disk has it, and the record of what the DSP holds (#201)."""
     with open(os.path.join(root, SLOTS_FILE), encoding="utf-8") as fh:
@@ -4239,6 +4240,35 @@ def _check_loaded_stays_off_the_old_layout():
         shutil.rmtree(top, ignore_errors=True)
 
 
+def _check_migrate_keeps_a_named_parent():
+    """`migrate-line` keeps a base that was named (#199): the stored `parent` goes through the map, so a version built
+    on an older one still says so on the new numbers. It was overwritten with the version before. No `parent`, or one
+    the map does not have, is the version before, as it always was."""
+    import shutil
+    import tempfile
+    root = tempfile.mkdtemp(prefix="autosound_migrate_parent_")
+    try:
+        os.makedirs(os.path.join(root, "SQ"))
+        for n, parent in ((1, None), (2, None), (3, "v_001"), (4, "v_099")):
+            s = dict(_sample_state(), preset="SQ", version=f"v_{n:03d}", created=f"2026-08-0{n}T00:00:00",
+                     schema_version=SCHEMA_VERSION, project_rev=1)
+            if parent:
+                s["parent"] = parent
+            with open(os.path.join(root, "SQ", f"v_{n:03d}.json"), "w", encoding="utf-8") as fh:
+                json.dump(s, fh)
+        with open(os.path.join(root, "SQ", "HEAD"), "w", encoding="utf-8") as fh:
+            fh.write("v_004\n")
+        with open(os.path.join(root, "registry.json"), "w", encoding="utf-8") as fh:
+            json.dump({"active": "SQ", "slots": {}}, fh)
+        migrate_line(root, apply=True)
+        h = PresetHistory(root, "SQ")
+        got = [h.load(f"v_{n:03d}").get("parent") for n in (1, 2, 3, 4)]
+        assert got == [None, "v_001", "v_001", "v_003"], got
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+@_own_tempdir
 def _selftest():
     failures = []
     for check in (_check_variant_delta_refused, _check_eq_refusals, _check_canonical_code_uses_the_loaded_naming,
@@ -4255,7 +4285,8 @@ def _selftest():
                   _check_the_repairs_name_their_project, _check_a_pointer_file_of_another_shape_refused,
                   _check_a_cut_version_said_as_cut, _check_project_json_read_with_a_bom, _check_preset_settings,
                   _check_attest_records_what_is_in_the_dsp, _check_config_save_records_what_is_in_the_dsp,
-                  _check_loaded_verb, _check_loaded_stays_off_the_old_layout):
+                  _check_loaded_verb, _check_loaded_stays_off_the_old_layout,
+                  _check_migrate_keeps_a_named_parent):
         try:
             check()
         except AssertionError as exc:

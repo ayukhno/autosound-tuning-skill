@@ -236,7 +236,7 @@ def run(project_dir, transcription_path, atf=None, write=False, preset=None, not
         else:
             res = _apply.propose(hist, {"channels": doc["channels"]},
                                  note=note or f"re-read from the DSP: {prov['source']}",
-                                 provenance=prov, registry=_state.Registry(root))
+                                 provenance=prov, registry=_state.Registry(root), on="HEAD")   # a device read is about the slot
             result["version"] = res["version"]
             result["mode"] = "proposed"
             result["diff"] = res.get("diff")
@@ -372,12 +372,49 @@ def _check_write_waits_for_the_lock():
     assert not failures, "\n  ".join(["--write and the project's lock:"] + failures)
 
 
+def _check_a_reread_past_a_candidate():
+    """A device read is about the slot, so a candidate not in it does not stop one (#199): `propose` refused it, naming
+    an `--on` this command does not have. The reading banks on HEAD and the slot moves; the candidate stays on the line."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="setup_import_candidate_")
+    try:
+        proj = os.path.join(top, "proj")
+        os.makedirs(os.path.join(proj, "state"))
+        dsp_profile.save_profile(dsp_profile.profile_path(proj),
+                                 dsp_profile.find_bundled("Audiotec-Fischer", "Helix DSP Ultra S"))
+        with open(os.path.join(proj, "project.json"), "w", encoding="utf-8") as fh:
+            json.dump({"schema_version": 3, "channels": [{"code": "m-L", "role": "mid", "tier": "channels"}]}, fh)
+        reading = {"preset": "SQ", "source": "PC-Tool 6 screens", "read_on": "2026-11-08", "channels": {
+            "m-L": {"hp": {"f": 300, "type": "LR", "slope": 24}, "lp": {"f": 3000, "type": "LR", "slope": 24},
+                    "gain_db": -3.0, "ta_ms": 2.35, "polarity": "NORM", "eq": []}}}
+        doc = os.path.join(top, "reading.json")
+        with open(doc, "w", encoding="utf-8") as fh:
+            json.dump(reading, fh)
+        seeded = run(proj, doc, write=True)["version"]
+        hist = _state.PresetHistory(os.path.join(proj, "state"), "SQ", project_dir=proj)
+        cand = _apply.propose(hist, {"channels": {"m-L": {"polarity": "INV"}}}, note="a flip")
+        assert cand["candidate"] and hist.head() == seeded, cand
+        reading["channels"]["m-L"]["gain_db"] = -4.0
+        with open(doc, "w", encoding="utf-8") as fh:
+            json.dump(reading, fh)
+        try:
+            r = run(proj, doc, write=True)
+        except ValueError as exc:
+            raise AssertionError(f"a device re-read was refused: {exc}") from None
+        snap = hist.load()
+        assert r["mode"] == "proposed" and hist.head() == r["version"] and snap["parent"] == seeded, (r, snap.get("parent"))
+        assert snap["channels"]["m-L"]["gain_db"] == -4.0 and snap["channels"]["m-L"]["polarity"] == "NORM", snap["channels"]
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
 def _selftest():
     import shutil
     import tempfile
 
     failures = []
-    for check in (_check_cli_refuses_unreadable_profile, _check_write_waits_for_the_lock):
+    for check in (_check_cli_refuses_unreadable_profile, _check_write_waits_for_the_lock, _check_a_reread_past_a_candidate):
         try:
             check()
         except AssertionError as exc:

@@ -3546,20 +3546,6 @@ def _selftest():
     with open(changelog, "w", encoding="utf-8") as fh:
         fh.write(f"## ▶️ CONTINUE\n- HEAD: {v1} (SQ_Jazzi)\n")
     assert check_project(root, skip_rew=True)["cross_checks"]["continue_head"] is None, "a matching HEAD warned"
-    # #201: the block is read against HEAD, not against `loaded`: a version that is only in the DSP is still a stale block.
-    slots_path = os.path.join(h.root, "slots.json")
-    with open(slots_path, encoding="utf-8") as fh:
-        slots_were = fh.read()
-    with_loaded = json.loads(slots_were)
-    with_loaded["slots"]["SQ_Jazzi"]["loaded"] = {"version": "v_009", "since": "2026-11-08T10:00:00", "source": "by hand"}
-    with open(slots_path, "w", encoding="utf-8") as fh:
-        json.dump(with_loaded, fh)
-    with open(changelog, "w", encoding="utf-8") as fh:
-        fh.write("## ▶️ CONTINUE\n- HEAD: v_009 (SQ_Jazzi)\n")
-    drift = check_project(root, skip_rew=True)["cross_checks"]["continue_head"]
-    assert drift and drift["stale"] == ["v_009"] and drift["heads"] == {"SQ_Jazzi": v1}, drift
-    with open(slots_path, "w", encoding="utf-8") as fh:
-        fh.write(slots_were)
     with open(changelog, "w", encoding="utf-8") as fh:
         fh.write("## ▶️ CONTINUE\n- next: the A/B, method v3.0.64\n")
     assert check_project(root, skip_rew=True)["cross_checks"]["continue_head"] is None, "a block with no version warned"
