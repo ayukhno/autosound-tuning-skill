@@ -18,14 +18,7 @@ Paths: `SK` = `skills/autosound-tuning`, `RT` = `SK/rew_tool`, `S` = `RT/state/s
 
 ## Open questions for the Arbiter — before «го»
 
-#210's design raised three, answered by the Arbiter 2026-11-08 (lane F's section). The return of the four reopens three, asked with this advice:
-
-1. **#200 — the source of the preset tier.** **Advice:** W-12 builds the tier, its diff and sheet rows and the source-file fields, filled by the session or the
-   user; a file reader in the skill is its own task for a later wave, on his word. #210's runbook falls back to `screen-read-dsp.md` either way.
-2. **#201 — «in the DSP now».** AD-1 (`RT/state/schema.md:111-114`) says the ledger is not a device mirror. **Advice:** a dated, sourced *claim*: `slots[slot].loaded =
-   {version, since, source}`, written by `attest` and a new verb; never inferred from file times. HEAD keeps its meaning.
-3. **#204 — who sends.** No rule in the skill says the session commits and pushes after every step. **Advice:** the rule goes into the project seed; `status --json`
-   carries `sends: "session"` for a project seeded with it, `"person"` otherwise.
+None. Answered by the Arbiter 2026-11-08: #210's three (lane F's section), and the three the return of the four reopened: **#200** by hand, checked against the saved preset when the skill can read one (below, T2); **#201** a dated, sourced record (T3); **#204** the session sends, TCC's button is the spare (T7).
 
 ## The W-12 trial: the PMO method's review weight, and the numbers (the Arbiter, 2026-11-08)
 
@@ -139,6 +132,8 @@ tab is hub #324 (SKL-090), and the field shape goes to TCC on #324 when T2 close
 accepts and refuses shapes, diff and render with and without; `A --selftest` — a trim is a row with no reviewer.
 Docs: `RT/state/schema.md`, the naming reference where `+FX` is defined.
 
+**The Arbiter on #200, 2026-11-08: the tier is Audiotec Fischer's** («специфіка тільки ATF»), Helix and its kin. The fields beyond `input_gain_db` are filled only on a DSP whose profile names them (`effects` in the bundled profile); on any other DSP nobody sees them. They are filled by the session or the person; **when the skill can read a saved preset it checks them against it**, and until then the check is the screen (`screen-read-dsp.md`). No file reader in this wave. The raw state before the capture is T15's.
+
 **Its write path and consumers, from the plan review.** `preset_settings` is not a tier, so a delta today becomes a channel delta and fails on `_MERGEABLE` (`A`:142-144, :216-222): the delta path takes it explicitly.
 The diff keeps the existing envelope and the writers and renderers handle it by name (`S`:1429-1451; the CLI's walk `S`:1594-1606 assumes channel → field). A master trim is decided at each reader, once: verification (`S`:1050-1059), the capture-level
 comparison (`RT/levelbase.py:369-380`, called from `P`:3791-3797), the prediction (`chains_from_snapshot`, `RT/predict.py:757-763`, one application, never on both tiers), TCC's proposal view (the generic `settings` rows, tcc `state/proposal_view.py:51-61`). `version_bench.py loudness` reads it.
@@ -197,6 +192,7 @@ ahead (pull first); never `.claude/skills/autosound-tuning`. (2) `status --json`
 housekeeping: […]}`, `ahead: [{hash, time, subject}]`, `remote_head: {hash, time}`, `sends` (question 3). The
 housekeeping list is new (`.sessions.log`, `.tcc/`, `*.tmp`, …) beside `GITIGNORE_LINES` (`RT/project_seed.py:~267-285`);
 the `.claude/skills/autosound-tuning` link goes into the seeded `.gitignore` and `init`'s `git add -A` stops taking it.
+**Who sends (the Arbiter, 2026-11-08): the session; TCC's button is the spare.** The rule goes into the project seed (`project_seed.py`'s `CLAUDE.md`/`AGENTS.md`): commit and push after each banked version and at session close when a remote exists; `status --json` `sends` is `"session"` for a project seeded with it, `"person"` otherwise.
 `status_lines` (used by `contract.py check`) unchanged when there is nothing to report. Tests: `PR --selftest` with
 `AUTOSOUND_NO_GH=1` and a bare local remote (save, refusals, dry-run, the link excluded — red first);
 `project_seed.py --selftest`. Then a comment on hub #326 for TCC's button.
@@ -368,7 +364,7 @@ the ear. It replaces the desk steps of Phases 1–2 only; 0, 3 and 4 stay. **One
 проекта далі»; the same capture served more than ten desk variants on the Passat). Nothing the engine reads differs: it takes the tripod solos (`resonalyze_engine.py:1446`), and the joints need
 those plus the points. So block B of `capture-session-sheet.md` (and `virtual-first.md:131-132`) lists the nine points for every front driver and the centre, tweeters included, as the
 default; on a 3-way + centre that is 63 sweeps against the sheet's 36. This changes the sheet's «the ellipsoid is the one optional part» of 2026-10-02: it can still be cut for time, and the sheet
-then names the cost: the engine loses nothing, the joints only run with `--single-point`. The sub may stay at one point (above). **A refusal is the person's, informed** (the Arbiter, 2026-11-08): the session says the limits in words before the capture, and the decision is recorded with them
+then names the cost: the engine loses nothing, the joints only run with `--single-point`. The sub may stay at one point (above). **The raw state before the capture** (the Arbiter, 2026-11-08), added to the `v0` preset of the sheet (:12) and `phase_0_baseline.md:61`: every enhancer, filter and EQ off, protective filters on, equal levels in the DSP, and preferably the amplifier gains already set (the method does not do that part: say so, any AI can advise how). On an Audiotec Fischer DSP the list is named from the profile (RealCenter, Dynamic Bass, SubXpander, RTC, input levels), for another DSP it is the general sentence; a readable save is checked, otherwise the screen. **A refusal is the person's, informed** (the Arbiter, 2026-11-08): the session says the limits in words before the capture, and the decision is recorded with them
 (`record_decision`; `_positions_asked`, `process.py:455-479`, already counts it). `joint_search.py --single-point` needs that record and refuses without it. The round itself: the sheet's recipe adds the titles on the `capture-start` line (the existing door, sheet :43), and its loopback timing line moves above block B, because `predict.load_solo_rew` refuses a sweep off the loopback base (`predict.py:550-553`). Light touch has no capture session (`virtual-first.md:56-57`) and is not offered the joints. Test: the same capture list for all three approaches and after changing the approach, tweeters, centre and the sub exception included. Steps through `add_step`, source `skill`, phase 1; TCC renders an unknown step id
 (`state/process_view.py:610-635`). It stays outside `reading-cost`'s `ORDERED` and is read when the path is chosen, so the budget does not count this path's reading; the runbook
 says so at its head. Gemini reads it. English only: `i18n-check` does not cover `references/`.
