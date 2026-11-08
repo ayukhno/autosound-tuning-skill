@@ -253,7 +253,7 @@ def _leg_reach(leg):
     return reach
 #: Preset-level fields whose change moves every band: the rate reshapes every filter, the virtual tier's EQ file is
 #: bands nobody listed.
-_WHOLE_PRESET = ("sample_rate", "virtual_eq_ptr")
+_WHOLE_PRESET = ("sample_rate", "virtual_eq_ptr", "preset_settings")
 
 
 def _leg_f(leg):
@@ -362,8 +362,8 @@ def changed_ranges(diff, before, after):
     back as the chain: a channel's level (gain, mute, off), its delay or its `eq_ptr` reaches its passband, as does a
     channel added or removed; its polarity or phase reaches either side of each corner as far as that leg sums with its
     neighbour (`_leg_reach`: ~12 dB down by its own slope), a channel with no corner its passband. A delay
-    that moves every output by the same amount is no change (`_uniform_delay`). A preset's rate or virtual
-    EQ file reaches everything."""
+    that moves every output by the same amount is no change (`_uniform_delay`). A preset's rate, its virtual
+    EQ file or its own settings (the input gain, #197) reach everything."""
     if not isinstance(diff, dict) or not isinstance(diff.get("preset", {}), dict):
         return None
     if any(k in (diff.get("preset") or {}) for k in _WHOLE_PRESET):
@@ -645,6 +645,14 @@ def _selftest():
         assert got_t == want, (what, got_t, want)
     assert changed_bands({"preset": {"virtual_eq_ptr": [None, "v.txt"]}, "channels": {}}, rows, rows) == \
         set(CONTROL_BANDS)
+    # 10b. The preset's input gain (#197) moves every band at once. The real diff: its status and its source file do not.
+    sys.path.insert(0, os.path.join(here, "state"))
+    import state as _state_for_trim
+    plain = {"channels": rows, "sample_rate": 96000}
+    trim = dict(plain, preset_settings={"input_gain_db": -0.3})
+    assert changed_bands(_state_for_trim.diff_states(plain, trim), plain, trim) == set(CONTROL_BANDS)
+    filed = dict(trim, preset_settings={"input_gain_db": -0.3, "status": "applied", "source_file": {"name": "x"}})
+    assert changed_bands(_state_for_trim.diff_states(trim, filed), trim, filed) == set()
     # 11. A leg typed OFF is no corner; a Bessel leg rolls off slower and reaches half an octave further.
     assert _leg_f({"f": 80, "type": "OFF"}) is None and _leg_f({"f": 80, "type": "LR"}) == 80.0
     assert _leg_reach({"f": 500, "type": "BE", "slope": 12}) == 1.5 and _leg_reach({"type": "BE24"}) == 1.0

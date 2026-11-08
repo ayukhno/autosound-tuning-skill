@@ -751,14 +751,29 @@ def drift_from_manifest(path, block="blockB_REW"):
 
 
 # ---------------------------------------------------------------- state
-def chains_from_snapshot(snapshot, tier="channels"):
+def preset_trim_db(snapshot):
+    """The preset's input gain (`preset_settings.input_gain_db`, #197); 0.0 when the version does not state it."""
+    settings = snapshot.get("preset_settings")
+    gain = settings.get("input_gain_db") if isinstance(settings, dict) else None
+    return float(gain) if isinstance(gain, (int, float)) and not isinstance(gain, bool) else 0.0
+
+
+def chains_from_snapshot(snapshot, tier="channels", trim=False):
     """Every row as a chain. A row this module cannot model does not stop the run and does not get
-    approximated: it becomes `{"unmodellable": reason}` and `predict` leaves the channel out, saying why."""
+    approximated: it becomes `{"unmodellable": reason}` and `predict` leaves the channel out, saying why.
+
+    `trim` puts the preset's input gain into the chains (#197): on for the `predict` view and the bench, off by default,
+    so the engine, `eq_propose` and `path_check` read as before, the engine's candidates carrying no trim either. It is
+    one gain for the whole preset, so it goes on the physical tier only: on both it would count twice through a route."""
     rows = snapshot.get(tier) or {}
+    offset = preset_trim_db(snapshot) if trim and tier == "channels" else 0.0
     out = {}
     for code, row in rows.items():
         try:
-            out[canon(code)] = chain_from_row(row, code=canon(code))
+            chain = chain_from_row(row, code=canon(code))
+            if offset and "gain_db" in chain:
+                chain = dict(chain, gain_db=chain["gain_db"] + offset)
+            out[canon(code)] = chain
         except PredictError as e:
             out[canon(code)] = {"muted": False, "unmodellable": str(e)}
     return out
@@ -2254,7 +2269,7 @@ def _main(argv=None):
         route_notes = []
     else:
         preset, snap = load_project_state(args.project, args.preset, args.state_ver)
-        chains = chains_from_snapshot(snap)
+        chains = chains_from_snapshot(snap, trim=True)
         state_label = f"{args.project} slot {preset} {snap.get('version') or 'HEAD'}"
         # The routing matrix, in this order: what the run says (`--route`), then what the PROJECT
         # records (`hardware.virtual_routing`, RES-007), then nothing -- and the third case leaves
@@ -2289,6 +2304,9 @@ def _main(argv=None):
                                    "no routing fact in the project either "
                                    "(`project.py <dir> set-route VFL w-L,m-L,tw-L`) -- pass "
                                    "--route VIRTUAL=out,out for one run, or record it once")
+        trim_db = preset_trim_db(snap)
+        if trim_db:
+            route_notes.append(f"the preset's input gain {trim_db:g} dB is in this prediction (`preset_settings`, #197)")
 
     drift = drift_from_manifest(args.drift) if args.drift else None
     if args.gate and args.fdw:
@@ -2415,7 +2433,7 @@ def _main(argv=None):
         if not args.project:
             ap.error("--from-state names a LEDGER version, so it needs --project")
         _, snap_a = load_project_state(args.project, args.preset, args.from_state)
-        chains_a = chains_from_snapshot(snap_a)
+        chains_a = chains_from_snapshot(snap_a, trim=True)
         # The identity shortcut needs ONE target state to compare against. With --align the rows
         # are about to move, and with --delta-vs there are two targets, so it is switched off and
         # every channel is divided out (which is correct either way, just not exact in the band
@@ -2501,7 +2519,7 @@ def _main(argv=None):
         if not args.project:
             ap.error("--delta-vs names a LEDGER version, so it needs --project")
         preset_b, snap_b = load_project_state(args.project, args.preset, args.delta_vs)
-        chains_b = chains_from_snapshot(snap_b)
+        chains_b = chains_from_snapshot(snap_b, trim=True)
         delta = delta_report(f, solos, chains, chains_b, joints=joints, band_oct=args.band_oct,
                              solos_gate=solos_gate, gate_spec=gate_kw, gate_anchors=gate_anchors,
                              labels=(args.state_ver or "HEAD", args.delta_vs))
@@ -2929,6 +2947,50 @@ def _check_unmodelled_families_refused_up_front():
                     or "LR, BW and BE" not in said[-1] or "Traceback" in err:
                 failures.append(f"{label}: rc {rc!r}, stdout {len(out)} chars, said {said[-1:]!r}")
         assert not failures, "\n  ".join(["a family the method cannot model, refused late or unnamed:"] + failures)
+    finally:
+        if saved_env is not None:
+            os.environ["AUTOSOUND_PROJECT_DIR"] = saved_env
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_the_preset_trim_is_in_the_view_not_the_engine():
+    """Two versions that differ only by the preset's input gain (#197): the `predict` view moves every point of the
+    sum by exactly the trim, once though the routed virtual tier is read too. A caller that does not ask for the trim
+    (the engine, `eq_propose`, `path_check`) reads the chains as before: their candidates carry no trim either."""
+    import shutil
+    import tempfile
+    saved_env = os.environ.pop("AUTOSOUND_PROJECT_DIR", None)
+    top = tempfile.mkdtemp(prefix="autosound_predict_trim_")
+    try:
+        virtual = {"VFL": {"gain_db": 0.0, "ta_ms": 0.0, "polarity": "NORM"}}
+        proj, solos = _two_way_fixture(top, virtual=virtual)
+        state_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "state")
+        if state_dir not in sys.path:
+            sys.path.insert(0, state_dir)
+        import state as st
+        h = st.PresetHistory(os.path.join(proj, "state"), "SQ", project_dir=proj)
+        trimmed = h.load()
+        trimmed["preset_settings"] = {"input_gain_db": -6.0}
+        try:
+            h.snapshot(trimmed, note="the trim")
+        except ValueError as exc:
+            raise AssertionError(f"a version with an input gain was refused: {exc}") from None
+        snap = h.load("v_002")
+        assert {k: v["gain_db"] for k, v in chains_from_snapshot(snap).items()} == {"w-L": 0.0, "m-L": 0.0}, "the default"
+        assert chains_from_snapshot(snap, trim=True)["w-L"]["gain_db"] == -6.0, chains_from_snapshot(snap, trim=True)
+        assert chains_from_snapshot(snap, "virtual_channels", trim=True)["VFL"]["gain_db"] == 0.0, "never on both tiers"
+        assert chains_from_snapshot(h.load("v_001"), trim=True)["w-L"]["gain_db"] == 0.0, "missing reads as 0"
+        reads = []
+        for ver in ("v_001", "v_002"):
+            rc, out, err = _run_main(["--solos", solos, "--project", proj, "--json", "--state-ver", ver,
+                                      "--route", "VFL=w-L,m-L"])
+            assert rc == 0, (rc, err[-400:])
+            reads.append(json.loads(out))
+        one, two = (np.asarray(r["all_mag_db"], float) for r in reads)
+        live = one > -60.0
+        assert live.any() and np.max(np.abs((two - one)[live] + 6.0)) < 0.01, (two - one)[live][:8]
+        assert not any("input gain" in n for n in reads[0]["notes"]), reads[0]["notes"]
+        assert any("input gain -6 dB" in n for n in reads[1]["notes"]), reads[1]["notes"]
     finally:
         if saved_env is not None:
             os.environ["AUTOSOUND_PROJECT_DIR"] = saved_env
@@ -3833,6 +3895,7 @@ def _selftest():
     _check_profile_read_strictly()
     _check_unmodelled_families_refused_up_front()
     _check_predict_refusals_are_one_line()
+    _check_the_preset_trim_is_in_the_view_not_the_engine()
     _check_refused_notes_never_cut()
     failures = []
     for check in (_check_says_what_it_did_not_check, _check_predict_error_says_it_is_a_refusal,

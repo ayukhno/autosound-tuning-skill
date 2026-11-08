@@ -136,8 +136,28 @@ TOP_REQUIRED = ("preset", "sample_rate", "channels")
 _NON_TIER_KEYS = {
     "preset", "version", "created", "schema_version", "sample_rate", "target", "roles",
     "provenance", "banked_ear_verdicts", "virtual_eq_ptr", "note", "features", "slot_label",
-    "save", "parent", "migrated_from", "variant", "version_was",
+    "save", "parent", "migrated_from", "variant", "version_was", "preset_settings",
 }
+# The preset's own settings, a dict outside the tiers (#197, #200; `schema.md`). `preset` is taken by the slot's name.
+# Path -> (kind, what a missing value reads as, the words on a sheet). None for "reads as" is a value nobody stated:
+# Dynamic Bass and SubXpander have no legacy alias, so a record that does not state them is unknown, not off.
+PRESET_SETTINGS = "preset_settings"
+_PRESET_FIELDS = {
+    "input_gain_db": ("db", 0.0, "Input gain"),
+    "sources.main": ("db", 0.0, "Main level"),
+    "sources.hec": ("db", 0.0, "HEC level"),
+    "sources.digital": ("db", 0.0, "Digital level"),
+    "fx.realcenter": ("switch", False, "RealCenter"),
+    "fx.dynamic_bass": ("switch", None, "Dynamic Bass"),
+    "fx.subxpander": ("switch", None, "SubXpander"),
+    "rtc.on": ("switch", False, "RTC"),
+    "rtc.curve": ("curve", None, "RTC curve"),
+    "bt.source": ("text", None, "BT source"),
+    "bt.auto_switch": ("switch", False, "BT auto-switch"),
+    "conductor.sub_lamps": ("count", None, "Conductor sub lamps"),
+}
+PRESET_FIELD_LABELS = {path: spec[2] for path, spec in _PRESET_FIELDS.items()}
+_SOURCE_FILE_FIELDS = ("name", "path", "md5", "saved", "pctool", "device", "read_at", "compared")
 _VER_RE = re.compile(r"^v_(\d{3,})$")
 _EQ_GAIN_RE = re.compile(r"^[+-][\d.]+$")
 _EQ_Q_RE = re.compile(r"^[Qq]([\d.]+)$")
@@ -441,6 +461,130 @@ def _validate_row(tier, ch_name, ch, required):
         _validate_eq(tier, ch_name, ch["eq"])
 
 
+def _number(value):
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def _preset_leaf(settings, path):
+    """One field of `preset_settings` by its path, None when not there. Reads an unvalidated file too."""
+    head, _, leg = path.partition(".")
+    if not leg:
+        return settings.get(head)
+    group = settings.get(head)
+    return group.get(leg) if isinstance(group, dict) else None
+
+
+def _validate_preset_value(path, kind, value):
+    where = f"{PRESET_SETTINGS}.{path}"
+    if kind == "db" and not _number(value):
+        raise ValueError(f"{where} must be a number of dB, got {value!r}")
+    if kind == "switch" and not isinstance(value, bool):
+        raise ValueError(f"{where} must be true or false, got {value!r}")
+    if kind == "text" and not isinstance(value, str):
+        raise ValueError(f"{where} must be a string, got {value!r}")
+    if kind == "count" and (not isinstance(value, int) or isinstance(value, bool) or value < 0):
+        raise ValueError(f"{where} must be a whole number from 0, got {value!r}")
+    if kind == "curve" and (not isinstance(value, dict) or not all(_number(v) for v in value.values())):
+        raise ValueError(f"{where} must be an object of name -> number, got {value!r}")
+
+
+def validate_preset_settings(settings):
+    """Raise ValueError on a malformed `preset_settings`, naming the field. A field it does not know is refused like a
+    channel field it does not know: a typo would otherwise read as the default, in silence. Every field may be missing
+    or null. It takes no profile: which DSP fills these is the method's text (`schema.md`), not a check."""
+    if not isinstance(settings, dict):
+        raise ValueError(f"{PRESET_SETTINGS} must be an object, got {settings!r}")
+    groups = {}
+    for path in _PRESET_FIELDS:
+        head, _, leg = path.partition(".")
+        if leg:
+            groups.setdefault(head, set()).add(leg)
+    known = {p for p in _PRESET_FIELDS if "." not in p} | set(groups) | {"status", "source_file"}
+    unknown = sorted(k for k in settings if k not in known)
+    if unknown:
+        raise ValueError(f"{PRESET_SETTINGS}: unknown field(s) {unknown} -- valid: {sorted(known)}")
+    for group, legs in sorted(groups.items()):
+        rows = settings.get(group)
+        if rows is None:
+            continue
+        if not isinstance(rows, dict):
+            raise ValueError(f"{PRESET_SETTINGS}.{group} must be an object of {sorted(legs)}, got {rows!r}")
+        strange = sorted(k for k in rows if k not in legs)
+        if strange:
+            raise ValueError(f"{PRESET_SETTINGS}.{group}: unknown field(s) {strange} -- valid: {sorted(legs)}")
+    for path, (kind, _default, _label) in _PRESET_FIELDS.items():
+        value = _preset_leaf(settings, path)
+        if value is not None:
+            _validate_preset_value(path, kind, value)
+    status = settings.get("status")
+    if status is not None and status not in STATUSES:
+        raise ValueError(f"{PRESET_SETTINGS}.status must be one of {STATUSES}, got {status!r}")
+    source = settings.get("source_file")
+    if source is None:
+        return
+    if not isinstance(source, dict):
+        raise ValueError(f"{PRESET_SETTINGS}.source_file must be an object of {list(_SOURCE_FILE_FIELDS)}, got {source!r}")
+    strange = sorted(k for k in source if k not in _SOURCE_FILE_FIELDS)
+    if strange:
+        raise ValueError(f"{PRESET_SETTINGS}.source_file: unknown field(s) {strange} -- valid: {list(_SOURCE_FILE_FIELDS)}")
+    for field, value in source.items():
+        fine = (value is None or isinstance(value, str)
+                or (field == "compared" and isinstance(value, list) and all(isinstance(v, str) for v in value)))
+        if not fine:
+            raise ValueError(f"{PRESET_SETTINGS}.source_file.{field} must be a string"
+                             + (" or a list of strings" if field == "compared" else "") + f", got {value!r}")
+
+
+def _preset_stated(state):
+    """`{path: value}` of the settings a state really holds: a field at its default, or missing, is not one. What two
+    states are compared on, so the `status` and the `source_file` beside them are no change of the DSP."""
+    settings = (state or {}).get(PRESET_SETTINGS)
+    if not isinstance(settings, dict):
+        return {}
+    out = {}
+    for path, (_kind, default, _label) in _PRESET_FIELDS.items():
+        value = _preset_leaf(settings, path)
+        if value not in (None, {}) and value != default:     # `{}`: an RTC curve with nothing in it says nothing
+            out[path] = value
+    return out
+
+
+def _preset_nested(flat):
+    """`_preset_stated`'s paths back in the field's own shape."""
+    out = {}
+    for path, value in flat.items():
+        head, _, leg = path.partition(".")
+        if leg:
+            out.setdefault(head, {})[leg] = value
+        else:
+            out[head] = value
+    return out
+
+
+def preset_settings_changes(pair):
+    """`[(path, label, was, now)]` from the `[old, new]` a diff carries under `preset`, a missing value read as its
+    default: what the sheet, the change card and `render_diff` print, in one order."""
+    old, new = (_preset_stated({PRESET_SETTINGS: side}) for side in pair)
+    out = []
+    for path, (_kind, default, label) in _PRESET_FIELDS.items():
+        was, now = old.get(path, default), new.get(path, default)
+        if was != now:
+            out.append((path, label, was, now))
+    return out
+
+
+def fmt_preset_value(path, value):
+    """One setting in the words of a sheet: unknown is said, an unstated value is a dash."""
+    kind = _PRESET_FIELDS[path][0]
+    if kind == "db" and _number(value):
+        return f"{value:g} dB"
+    if kind == "switch":
+        return "unknown" if value is None else ("on" if value else "off")
+    if kind == "curve" and isinstance(value, dict):
+        return " · ".join(f"{k} {_fmt_opt(v)}" for k, v in value.items())
+    return "—" if value is None else str(value)
+
+
 def validate(state):
     """Raise ValueError on malformed state; return the state unchanged if OK.
 
@@ -490,6 +634,8 @@ def validate(state):
             if not isinstance(ch, dict):
                 raise ValueError(f"{tier}.{ch_name!r} must be an object, got {ch!r}")
             _validate_row(tier, ch_name, ch, required)
+    if state.get(PRESET_SETTINGS) is not None:
+        validate_preset_settings(state[PRESET_SETTINGS])
     return state
 
 
@@ -1047,6 +1193,11 @@ def verification_set(state_a, state_b, series):
             seen.add(title)
             out.append((title, why))
     diff = diff_states(state_a, state_b)
+    settings = (diff.get("preset") or {}).get(PRESET_SETTINGS)
+    if settings:
+        said = ", ".join(label for _path, label, _was, _now in preset_settings_changes(settings))
+        add(f"ALL_{series} (rta)", f"the preset's settings moved ({said}): they act on every output at once, so the "
+                                   "whole-system sum shows them")
     for tier, rows in diff.items():
         if tier == "preset" or not isinstance(rows, dict):
             continue
@@ -1433,6 +1584,11 @@ def diff_states(a, b):
         d = _diff_scalar(a.get(k), b.get(k))
         if d is not None:
             out["preset"][k] = d
+    # One key, `[old, new]`, each only what it really sets (#197, #200): every walk over the tiers already skips
+    # `preset`. A status flip or a new source file is no change of the DSP, so neither reaches the diff.
+    was, now = _preset_stated(a), _preset_stated(b)
+    if was != now:
+        out["preset"][PRESET_SETTINGS] = [_preset_nested(was), _preset_nested(now)]
     for tier in sorted(set(tier_names(a)) | set(tier_names(b))):
         a_rows, b_rows = a.get(tier) or {}, b.get(tier) or {}
         tier_out = {}
@@ -1468,6 +1624,41 @@ def _fmt_opt(v, spec="g"):
     if isinstance(v, (int, float)) and not isinstance(v, bool):
         return format(v, spec)
     return "—" if v is None else str(v)
+
+
+def _source_file_line(source):
+    """The file a version was read from, in one line (#200)."""
+    head = source.get("name") or source.get("path") or "?"
+    if source.get("md5"):
+        head += f" (md5 {str(source['md5'])[:8]})"
+    parts = [head]
+    for field, said in (("saved", "saved"), ("pctool", "PC-Tool"), ("device", "device"), ("read_at", "read")):
+        if source.get(field):
+            parts.append(f"{said} {source[field]}")
+    compared = source.get("compared")
+    if compared:
+        parts.append("compared: " + ("; ".join(compared) if isinstance(compared, list) else str(compared)))
+    return " · ".join(parts)
+
+
+def _render_preset_settings(state):
+    """The section for `preset_settings`, printed only when something is set or differs (#197: «default 0 dB, and don't
+    ask until the user gets to needing it»)."""
+    settings = state.get(PRESET_SETTINGS)
+    settings = settings if isinstance(settings, dict) else {}
+    stated = _preset_stated(state)
+    source = settings.get("source_file")
+    if not stated and not source:
+        return []
+    status = settings.get("status")
+    lines = ["### Preset settings" + (f" {_STATUS_ICON.get(status, '?')} {status}" if stated and status else ""), ""]
+    if stated:
+        lines += ["| Setting | Value |", "|---|---|"]
+        lines += [f"| {PRESET_FIELD_LABELS[p]} | {fmt_preset_value(p, v)} |" for p, v in stated.items()]
+        lines.append("")
+    if isinstance(source, dict):
+        lines += [f"source file: {_source_file_line(source)}", ""]
+    return lines
 
 
 def render_state(state, channels=None, current_target=None, processing_rate_hz=None, rate_unread=None):
@@ -1577,6 +1768,7 @@ def render_state(state, channels=None, current_target=None, processing_rate_hz=N
                 f"| {' · '.join(bands) if bands else '—'} |"
             )
         lines.append("")
+    lines += _render_preset_settings(state)
     verdicts = state.get("banked_ear_verdicts") or []
     if verdicts:
         lines += ["", "**Banked ear verdicts:**"] + [f"- {v}" for v in verdicts]
@@ -1590,6 +1782,10 @@ def render_diff(d):
     if d["preset"]:
         lines.append("**Preset-level:**")
         for k, (o, n) in d["preset"].items():
+            if k == PRESET_SETTINGS:
+                lines += [f"- {label}: {fmt_preset_value(path, was)} → {fmt_preset_value(path, now)}"
+                          for path, label, was, now in preset_settings_changes((o, n))]
+                continue
             lines.append(f"- {k}: {o!r} → {n!r}")
         lines.append("")
     any_tier = False
@@ -3757,6 +3953,87 @@ def _check_a_pointer_file_of_another_shape_refused():
     assert not failures, "a ledger pointer file of another shape:\n  " + "\n  ".join(failures)
 
 
+def _check_preset_settings():
+    """The preset's own settings (#197, #200): `preset_settings` is a top-level dict that is no tier, validated on its
+    own. Every field is optional and a missing one reads as its default -- so it is no difference and nothing printed
+    -- except Dynamic Bass and SubXpander, which a record that does not state them leaves unknown, not off. Its `status`
+    and `source_file` are not state: a flip or a new file changes no setting."""
+    full = {"input_gain_db": -0.3, "sources": {"main": 0.0, "hec": -2.0, "digital": 0.0},
+            "fx": {"realcenter": True, "dynamic_bass": False, "subxpander": False},
+            "rtc": {"on": True, "curve": {"gstart0": -3.0, "fstart0": 800}},
+            "bt": {"source": "AUX", "auto_switch": True}, "conductor": {"sub_lamps": 7}, "status": "applied",
+            "source_file": {"name": "5S.preset", "path": "/presets/5S.preset", "md5": "46f99511aa",
+                            "saved": "291020261232", "pctool": "6.04.03", "device": "DSP.3",
+                            "read_at": "2026-11-08T20:00:00", "compared": "no difference"}}
+
+    def state_with(settings):
+        s = _sample_state()
+        if settings is not None:
+            s["preset_settings"] = settings
+        return s
+
+    for good in (full, {}, {"input_gain_db": 2}, {"fx": {"dynamic_bass": None}},
+                 {"source_file": {"compared": ["w-L gain differs"]}}):
+        try:
+            assert validate(state_with(good))
+        except ValueError as exc:
+            raise AssertionError(f"validate refused {good!r}: {exc}") from None
+        assert "preset_settings" not in tier_names(state_with(good)), good
+    for bad in (5.0, {"input_gain_db": "-0.3"}, {"input_gain_db": True}, {"inputgain": 1.0}, {"fx": True},
+                {"fx": {"realcenter": 1}}, {"fx": {"centre": True}}, {"sources": {"main": "0"}}, {"sources": {"opt": 0.0}},
+                {"rtc": {"on": "yes"}}, {"rtc": {"curve": [1, 2]}}, {"rtc": {"curve": {"gstart0": "a"}}},
+                {"bt": {"source": 1}}, {"bt": {"auto_switch": 1}}, {"conductor": {"sub_lamps": 1.5}},
+                {"conductor": {"sub_lamps": -1}}, {"conductor": {"sub_lamps": True}}, {"status": "typed"},
+                {"source_file": "5S.preset"}, {"source_file": {"sha": "x"}}, {"source_file": {"md5": 5}},
+                {"source_file": {"compared": [1]}}):
+        try:
+            validate(state_with(bad))
+        except ValueError as exc:
+            assert "preset_settings" in str(exc), (bad, exc)
+        else:
+            raise AssertionError(f"validate accepted {bad!r}")
+    bare = state_with(None)
+    trimmed = state_with({"input_gain_db": -0.3})
+    # The diff: one key under `preset`, no tier of its own.
+    d = diff_states(bare, trimmed)
+    assert d["preset"]["preset_settings"] == [{}, {"input_gain_db": -0.3}], d["preset"]
+    assert "preset_settings" not in {k for k in d if k not in ("from", "to", "preset") and d[k]}, d
+    back = diff_states(trimmed, state_with({"input_gain_db": 0}))
+    assert back["preset"]["preset_settings"] == [{"input_gain_db": -0.3}, {}], back["preset"]
+    # Missing reads as its default: no difference, in either direction, and the same for a whole group.
+    for same in ({"input_gain_db": 0.0}, {"sources": {"main": 0}}, {"fx": {"realcenter": False}}, {"rtc": {"on": False}},
+                 {"bt": {"auto_switch": False}}, {}, {"fx": {"dynamic_bass": None}}):
+        assert "preset_settings" not in diff_states(bare, state_with(same))["preset"], same
+        assert "preset_settings" not in diff_states(state_with(same), bare)["preset"], same
+    # Unknown is not off: a stated "off" against a record that does not say.
+    for leg in ("dynamic_bass", "subxpander"):
+        moved = diff_states(bare, state_with({"fx": {leg: False}}))["preset"]["preset_settings"]
+        assert moved == [{}, {"fx": {leg: False}}], moved
+    # Its status and its source file are no change of the DSP.
+    was = state_with({"input_gain_db": -0.3, "status": "proposed"})
+    now = state_with({"input_gain_db": -0.3, "status": "applied", "source_file": {"name": "5S.preset"}})
+    assert "preset_settings" not in diff_states(was, now)["preset"], diff_states(was, now)
+    # Printed by name, only when set or different.
+    for silent in (None, {}, {"input_gain_db": 0}, {"fx": {"realcenter": False}}):
+        assert "Preset settings" not in render_state(state_with(silent)), silent
+    assert "preset_settings" not in render_diff(diff_states(bare, state_with({"input_gain_db": 0})))
+    sheet = render_state(state_with(full))
+    for said in ("Preset settings", "| Input gain | -0.3 dB |", "| HEC level | -2 dB |", "| RealCenter | on |",
+                 "| Dynamic Bass | off |", "| RTC | on |", "| BT source | AUX |", "| Conductor sub lamps | 7 |",
+                 "5S.preset (md5 46f99511)", "no difference"):
+        assert said in sheet, (said, sheet)
+    assert "| Main level |" not in sheet and "'status'" not in sheet, sheet
+    shown = render_diff(diff_states(bare, state_with({"input_gain_db": -0.3, "fx": {"subxpander": True}})))
+    assert "Input gain: 0 dB → -0.3 dB" in shown and "SubXpander: unknown → on" in shown, shown
+    assert "{" not in shown, shown
+    # Verification: a setting of the whole preset is read on the whole-system sum.
+    titles = [t for t, _ in verification_set(bare, trimmed, 12)]
+    assert titles == ["ALL_12 (rta)"], titles
+    assert verification_set(was, now, 12) == [], "a status flip asks for no capture"
+    # project.py's mirror of the non-tier keys: `{"fx": {...}}` alone is a dict of dicts, and would be read as a tier.
+    assert "preset_settings" in _siblings().load("project.py")._LEDGER_NON_TIERS
+
+
 def _own_tempdir(selftest):
     """`selftest` run with tempfile's folder -- and TMPDIR, for the children it starts -- set to one folder of its own,
     removed with everything in it when the selftest ends, passed or failed, both put back (#148): a check that forgets
@@ -3799,7 +4076,7 @@ def _selftest():
                   _check_a_held_lock_answers_75, _check_a_bad_timeout_is_a_usage_error,
                   _check_no_load_and_save_outside_update, _check_ledger_writers_read_with_the_lock_held,
                   _check_the_repairs_name_their_project, _check_a_pointer_file_of_another_shape_refused,
-                  _check_a_cut_version_said_as_cut, _check_project_json_read_with_a_bom):
+                  _check_a_cut_version_said_as_cut, _check_project_json_read_with_a_bom, _check_preset_settings):
         try:
             check()
         except AssertionError as exc:

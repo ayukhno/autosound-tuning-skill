@@ -144,6 +144,37 @@ def _split_by_tier(current, delta):
     return {"channels": delta}
 
 
+def _merge_preset_settings(proposed, settings):
+    """Merge a delta's `preset_settings` into `proposed`, two levels deep: one `fx` switch leaves the others (#197,
+    #200). It is no tier, so it is taken out before `_split_by_tier`, which would wrap it as a channel. A delta cannot
+    give a `source_file`: that is `attest --source-file`, the claim that a version was compared to a file."""
+    if not isinstance(settings, dict):
+        raise ValueError(f"{_state.PRESET_SETTINGS} in a delta must be an object, got {settings!r}")
+    if "source_file" in settings:
+        raise ValueError(f"{_state.PRESET_SETTINGS}.source_file is not given by a delta: a new version was not compared "
+                         f"to that file -- it goes through `attest --source-file`")
+    merged = proposed.get(_state.PRESET_SETTINGS)
+    merged = copy.deepcopy(merged) if isinstance(merged, dict) else {}
+    for key, value in settings.items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key].update(value)
+        else:
+            merged[key] = value
+    merged["status"] = "proposed"
+    _state.validate_preset_settings(merged)
+    proposed[_state.PRESET_SETTINGS] = merged
+
+
+def _drop_source_file(proposed):
+    """A new version was not compared to the file the one before it was read from: its `source_file` is not carried
+    over (#200). A field left with nothing but its status goes with it."""
+    settings = proposed.get(_state.PRESET_SETTINGS)
+    if isinstance(settings, dict) and "source_file" in settings:
+        del settings["source_file"]
+        if not set(settings) - {"status"}:
+            del proposed[_state.PRESET_SETTINGS]
+
+
 def _row_key(rows, name, identity):
     """The row a delta means, given the name it was addressed to — SCR-039.
 
@@ -205,8 +236,14 @@ def apply_delta(current, delta, identity=None):
     `identity` (optional, `state.project_channels()`) lets a delta address a renamed channel by its
     current name and still land on the row the ledger has always kept it under — `propose` passes
     it; a direct caller with no project on disk simply doesn't.
+
+    `preset_settings`, beside the tiers (#197, #200), is merged on its own: `_merge_preset_settings`.
     """
     proposed = copy.deepcopy(current)
+    if _state.PRESET_SETTINGS in delta:
+        delta = dict(delta)
+        _merge_preset_settings(proposed, delta.pop(_state.PRESET_SETTINGS))
+    _drop_source_file(proposed)
     tier_delta = _split_by_tier(current, delta)
     for tier, rows in tier_delta.items():
         chans = proposed.setdefault(tier, {})
@@ -323,6 +360,8 @@ def gain_grid_advisories(project_dir, current, proposed):
 
 
 def _fmt_val(field, val, rate):
+    if field in _state.PRESET_FIELD_LABELS:
+        return _state.fmt_preset_value(field, val)   # the preset's settings (#197, #200): dB, on/off, unknown
     if field == "ta_ms" and isinstance(val, (int, float)):
         # No rate -- a profile nobody could read (#147, item 2) -- is no samples: `—`, never the snapshot's guess.
         return f"{val:g} ms ({_state.samples_for(val, rate) if rate else '—'} smp)"
@@ -344,10 +383,16 @@ def _fmt_val(field, val, rate):
 _FIELD_LABEL = {"hp": "HP", "lp": "LP", "gain_db": "Gain", "ta_ms": "TA",
                 "polarity": "Polarity", "eq": "EQ bands", "eq_ptr": "EQ export",
                 "status": "status", "tag": "Tag",
-                "mute": "Mute", "off": "Off"}
+                "mute": "Mute", "off": "Off", **_state.PRESET_FIELD_LABELS}
 
 
 _DIFF_RESERVED_KEYS = ("from", "to", "preset")
+
+
+def _preset_changes(diff):
+    """The preset settings a diff carries (`[old, new]` under `preset`), as `[(path, label, was, now)]`."""
+    pair = (diff.get("preset") or {}).get(_state.PRESET_SETTINGS)
+    return _state.preset_settings_changes(pair) if pair else []
 
 
 def _row_label(tier, ch):
@@ -382,6 +427,9 @@ def settings_sheet(diff, rate, preset, version, slot_note=None, rate_said=None, 
         lines.append(rate_said)
     lines += ["", "| Channel | Param | Old → New |", "|---|---|---|"]
     any_row = False
+    for path, label, was, now in _preset_changes(diff):
+        lines.append(f"| Preset | {label} | {_fmt_val(path, was, rate)} → {_fmt_val(path, now, rate)} |")
+        any_row = True
     for tier in sorted(k for k in diff if k not in _DIFF_RESERVED_KEYS):
         for ch, fields in diff[tier].items():
             label = _row_label(tier, ch)
@@ -412,7 +460,9 @@ def delta_rows(diff, rate):
     rather than a front-end diffing two snapshots and guessing at intent -- a `gain_db` that moved
     could be a level-match trim or a banked decision, and the snapshots do not say which.
     """
-    rows = []
+    rows = [{"tier": _state.PRESET_SETTINGS, "channel": "preset", "param": label, "field": path,
+             "was": _fmt_val(path, was, rate), "value": _fmt_val(path, now, rate), "was_raw": was, "value_raw": now}
+            for path, label, was, now in _preset_changes(diff)]
     for tier in sorted(k for k in diff if k not in _DIFF_RESERVED_KEYS):
         for ch, fields in diff[tier].items():
             if fields.get("__added__"):
@@ -601,6 +651,10 @@ def _propose(history, delta, note, provenance, registry, allow_nonactive, eviden
             for ch, row in (proposed.get(tier) or {}).items():
                 if (row or {}).get("status") == "proposed" and row != ((current.get(tier) or {}).get(ch)):
                     row["status"] = "candidate"
+        settings = proposed.get(_state.PRESET_SETTINGS)
+        if isinstance(settings, dict) and settings.get("status") == "proposed" \
+                and settings != current.get(_state.PRESET_SETTINGS):
+            settings["status"] = "candidate"
         proposed["variant"] = "candidate"
     elif on_candidate:
         # Evidence and a reviewer are there (#199): the candidate's rows are a proposal now, so `attest` covers them.
@@ -608,6 +662,9 @@ def _propose(history, delta, note, provenance, registry, allow_nonactive, eviden
             for row in (proposed.get(tier) or {}).values():
                 if (row or {}).get("status") == "candidate":
                     row["status"] = "proposed"
+        settings = proposed.get(_state.PRESET_SETTINGS)
+        if isinstance(settings, dict) and settings.get("status") == "candidate":
+            settings["status"] = "proposed"
         proposed.pop("variant", None)
     # The samples follow the profile's rate, said which (#147, item 2) -- not the snapshot's recorded one. Read before
     # the bank, so nothing it raises can leave a version banked with no sheet.
@@ -656,13 +713,17 @@ def write_sheet(project_dir, preset, version, sheet):
     return path
 
 
-def attest(history, version=None, note=None):
+def attest(history, version=None, note=None, source_file=None):
     """Arbiter confirms the proposed change was entered in Helix → flip its rows 🟡→🟢 applied,
     across EVERY tier (schema v2 — a virtual-tier row left 🟡 forever was the bug before this).
 
     Banks a new snapshot (immutable audit trail: proposed at v_N, applied at v_N+1). Attested =
     INTENT, not a device mirror — device-truth remains the latest measurement. HEAD is read and the snapshot banked
     under one hold of the project's writer lock (#141).
+
+    `preset_settings` flips with the rows (#197, #200; it is no tier, so their walk does not reach it). `source_file`
+    (#200) is the record of the saved preset this version was read from and what the comparison said; the session or
+    the person fills it, since the method has no reader of that file yet.
     """
     with _held(history):
         version = version or history.head()
@@ -673,6 +734,12 @@ def attest(history, version=None, note=None):
                 if c.get("status") == "proposed":
                     c["status"] = "applied"
                     flipped.append(ch if tier == "channels" else f"{tier}:{ch}")
+        settings = s.get(_state.PRESET_SETTINGS)
+        if isinstance(settings, dict) and settings.get("status") == "proposed":
+            settings["status"] = "applied"
+            flipped.append(_state.PRESET_SETTINGS)
+        if source_file is not None:
+            s.setdefault(_state.PRESET_SETTINGS, {})["source_file"] = source_file
         v = history.snapshot(s, note=note or f"attested applied ({', '.join(flipped) or 'no proposed rows'})")
     return {"version": v, "applied_channels": flipped}
 
@@ -1174,6 +1241,158 @@ def _check_a_candidate_is_promoted_with_evidence_and_a_reviewer():
         shutil.rmtree(top, ignore_errors=True)
 
 
+def _proposed(h, delta, **kw):
+    """`propose`, with a refusal said as a failed check: on the code before #197 a preset setting is a channel delta."""
+    try:
+        return propose(h, delta, **kw)
+    except ValueError as exc:
+        raise AssertionError(f"propose refused {delta!r}: {exc}") from None
+
+
+def _check_a_trim_is_a_row_with_no_reviewer():
+    """The preset's input gain (#197, #200) goes through `propose` as a settings row: no structural move whatever its
+    size, no reviewer, no channel touched. Its own `status`, proposed to applied by `attest`, which the rows' walk does
+    not reach. Trim-only and mixed deltas, on both layouts; a missing value is 0, a value back to 0 is a row."""
+    import shutil
+    import tempfile
+    for layout in ("project", "preset"):
+        top = tempfile.mkdtemp(prefix="autosound_apply_trim_")
+        try:
+            h = _ledger_with_a_baseline(top, layout)
+            r = _proposed(h, {"preset_settings": {"input_gain_db": -0.3}}, note="a trim for the A/B")
+            assert not r["candidate"] and r["version"] == "v_002" and h.head() == "v_002", (layout, r)
+            assert r["structural"] == [] and r["waits_for"] == [], (layout, r)
+            assert "| Preset | Input gain | 0 dB → -0.3 dB |" in r["sheet"], (layout, r["sheet"])
+            assert "_(no hard-param changes)_" not in r["sheet"], (layout, r["sheet"])
+            s = h.load("v_002")
+            assert s["preset_settings"] == {"input_gain_db": -0.3, "status": "proposed"}, (layout, s["preset_settings"])
+            assert {c["status"] for c in s["channels"].values()} == {"applied"}, (layout, "a channel was touched")
+            # What the card and the sheet print: the settings rows, in the same words.
+            rows = [x for x in delta_rows(r["diff"], 96000) if x["tier"] == "preset_settings"]
+            assert rows == [{"tier": "preset_settings", "channel": "preset", "param": "Input gain",
+                             "field": "input_gain_db", "was": "0 dB", "value": "-0.3 dB", "was_raw": 0.0,
+                             "value_raw": -0.3}], (layout, rows)
+            with open(os.path.join(h.proposals_dir, "v_002.json"), encoding="utf-8") as fh:
+                banked = json.load(fh)
+            assert banked["settings"] == rows, (layout, banked["settings"])
+            assert banked["preset_changes"]["preset_settings"] == [{}, {"input_gain_db": -0.3}], (layout, banked)
+            a = attest(h, "v_002")
+            assert a["applied_channels"] == ["preset_settings"], (layout, a)
+            done = h.load(a["version"])
+            assert done["preset_settings"]["status"] == "applied", (layout, done["preset_settings"])
+            assert "preset_settings" not in _state.diff_states(s, done)["preset"], (layout, "a status flip is no change")
+            # Back to 0: a row. Then a missing value against a 0: none.
+            r0 = _proposed(h, {"preset_settings": {"input_gain_db": 0.0}}, note="trim off")
+            assert "| Preset | Input gain | -0.3 dB → 0 dB |" in r0["sheet"], (layout, r0["sheet"])
+            r1 = _proposed(h, {"w-L": {"gain_db": -7.0}}, note="no trim named")
+            assert "Input gain" not in r1["sheet"], (layout, r1["sheet"])
+            # A large trim is still a level trim; a mixed delta lands on both.
+            big = _proposed(h, {"preset_settings": {"input_gain_db": -12.0}}, note="a big trim")
+            assert not big["candidate"] and big["advisories"] == [], (layout, big)
+            mixed = _proposed(h, {"preset_settings": {"sources": {"hec": -2.0}}, "w-L": {"gain_db": -7.5}}, note="both")
+            s = h.load(mixed["version"])
+            assert s["channels"]["w-L"]["gain_db"] == -7.5 and s["preset_settings"]["sources"] == {"hec": -2.0}, layout
+            assert s["preset_settings"]["input_gain_db"] == -12.0, (layout, s["preset_settings"])
+            assert "| w-L | Gain | -7 dB → -7.5 dB |" in mixed["sheet"], (layout, mixed["sheet"])
+            assert "| Preset | HEC level | 0 dB → -2 dB |" in mixed["sheet"], (layout, mixed["sheet"])
+            tiered = _proposed(h, {"preset_settings": {"conductor": {"sub_lamps": 7}},
+                                   "virtual_channels": {"VFL": {"gain_db": -1.0}}}, note="both, tier-keyed")
+            s = h.load(tiered["version"])
+            assert s["virtual_channels"]["VFL"]["gain_db"] == -1.0 and s["preset_settings"]["conductor"]["sub_lamps"] == 7
+            assert "| Preset | Conductor sub lamps | — → 7 |" in tiered["sheet"], (layout, tiered["sheet"])
+        finally:
+            shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_preset_settings_merge_and_refusals():
+    """A delta merges two levels deep (one FX switch does not wipe the others), and what `validate` refuses is refused
+    with nothing banked: a field it does not know, a value of the wrong kind, a `source_file` given by a delta."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_apply_merge_")
+    try:
+        h = _ledger_with_a_baseline(top, "project")
+        _proposed(h, {"preset_settings": {"fx": {"realcenter": True}, "sources": {"main": -1.0}}}, note="one")
+        r = _proposed(h, {"preset_settings": {"fx": {"dynamic_bass": False}}}, note="the other")
+        s = h.load(r["version"])
+        assert s["preset_settings"]["fx"] == {"realcenter": True, "dynamic_bass": False}, s["preset_settings"]
+        assert s["preset_settings"]["sources"] == {"main": -1.0}, s["preset_settings"]
+        assert "| Preset | Dynamic Bass | unknown → off |" in r["sheet"], r["sheet"]
+        assert "RealCenter" not in r["sheet"], r["sheet"]
+        before = h.versions()
+        for bad in ({"preset_settings": {"inputgain": 1.0}}, {"preset_settings": {"fx": {"centre": True}}},
+                    {"preset_settings": {"input_gain_db": "x"}}, {"preset_settings": 3.0},
+                    {"preset_settings": {"source_file": {"name": "5S.preset"}}}):
+            try:
+                propose(h, bad, note="refused")
+            except ValueError as exc:
+                assert "preset_settings" in str(exc), (bad, exc)
+            else:
+                raise AssertionError(f"banked {bad!r}")
+        assert h.versions() == before, h.versions()
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_preset_settings_candidate_and_source_file():
+    """Held with a structural move that has not earned its proposal, the settings are held with it and promoted with
+    it. The source file is `attest`'s (`--source-file`): kept by it, dropped by the next `propose`, which is a new
+    state nobody compared to that file -- and a drop is no row and no difference."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_apply_source_")
+    source = {"name": "5S.preset", "path": "/presets/5S.preset", "md5": "46f99511aa", "saved": "291020261232",
+              "pctool": "6.04.03", "device": "DSP.3", "read_at": "2026-11-08T20:00:00", "compared": "no difference"}
+    try:
+        h = _ledger_with_a_baseline(top, "project")
+        c = _proposed(h, {"preset_settings": {"input_gain_db": -0.5}, "sub": {"polarity": "INV"}}, note="held")
+        assert c["candidate"] and h.load(c["version"])["preset_settings"]["status"] == "candidate", c
+        r = _proposed(h, {}, note="reviewed", on=c["version"], evidence=["sub+w-L_2 (sw)"], reviewed="review.md")
+        s = h.load(r["version"])
+        assert not r["candidate"] and s["preset_settings"]["status"] == "proposed", (r, s["preset_settings"])
+        a = attest(h, r["version"], source_file=source)
+        done = h.load(a["version"])
+        assert done["preset_settings"]["status"] == "applied" and done["preset_settings"]["source_file"] == source, done
+        assert "preset_settings" not in _state.diff_states(s, done)["preset"], "the file is no change of the DSP"
+        assert "5S.preset (md5 46f99511)" in h.render(a["version"]), h.render(a["version"])
+        # The next proposal is a new state, compared to no file.
+        n = _proposed(h, {"w-L": {"gain_db": -7.0}}, note="a new state")
+        dropped = h.load(n["version"])
+        assert "source_file" not in dropped["preset_settings"], dropped["preset_settings"]
+        assert "Input gain" not in n["sheet"] and "5S.preset" not in n["sheet"], n["sheet"]
+        kept = attest(h, n["version"], source_file=dict(source, compared=["w-L gain differs"]))
+        assert h.load(kept["version"])["preset_settings"]["source_file"]["compared"] == ["w-L gain differs"]
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+    top = tempfile.mkdtemp(prefix="autosound_apply_source_cli_")
+    try:
+        h = _ledger_with_a_baseline(top, "project")
+        _state.Registry(h.root).set_active("SQ")
+        with open(os.path.join(top, "read.json"), "w", encoding="utf-8") as fh:
+            json.dump(source, fh)
+        import contextlib
+        import io
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            rc = _main(["apply.py", top, "attest", "--source-file", "read.json"])
+        assert rc == 0, (rc, err.getvalue())
+        assert h.load(h.head())["preset_settings"]["source_file"] == source, h.load(h.head())
+        # A field that held only the file goes with it: a state with no settings is one with no field.
+        n = _proposed(h, {"w-L": {"gain_db": -7.0}}, note="a new state")
+        assert "preset_settings" not in h.load(n["version"]), h.load(n["version"])
+        attest(h, n["version"], source_file=source)
+        before = h.versions()
+        with open(os.path.join(top, "bad.json"), "w", encoding="utf-8") as fh:
+            json.dump({"sha": "x"}, fh)
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            rc = _main(["apply.py", top, "attest", "--source-file", "bad.json"])
+        assert rc == 1 and err.getvalue().startswith("error: ") and "preset_settings" in err.getvalue(), err.getvalue()
+        assert h.versions() == before, h.versions()
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
 def _own_tempdir(selftest):
     """`selftest` run with tempfile's folder -- and TMPDIR, for the children it starts -- set to one folder of its own,
     removed with everything in it when the selftest ends, passed or failed, both put back (#148): a check that forgets
@@ -1212,7 +1431,9 @@ def _selftest():
                   _check_no_load_and_save_outside_update, _check_sheet_samples_follow_the_profile,
                   _check_an_unwritten_delta_is_said, _check_the_sheet_rate_is_read_first_and_said_by_cause,
                   _check_a_delta_after_a_candidate_is_refused, _check_a_fix_on_a_candidate_stays_held,
-                  _check_a_candidate_is_promoted_with_evidence_and_a_reviewer):
+                  _check_a_candidate_is_promoted_with_evidence_and_a_reviewer,
+                  _check_a_trim_is_a_row_with_no_reviewer, _check_preset_settings_merge_and_refusals,
+                  _check_preset_settings_candidate_and_source_file):
         try:
             check()
         except AssertionError as exc:
@@ -1454,13 +1675,14 @@ def _selftest():
 
 
 _USAGE = """usage: apply.py <project-dir> propose <delta.json> [--preset P] [--note TEXT] [--evidence E ...] [--reviewed FILE] [--on v_NNN|HEAD]
-       apply.py <project-dir> attest [v_NNN] [--preset P] [--note TEXT]
+       apply.py <project-dir> attest [v_NNN] [--preset P] [--note TEXT] [--source-file FILE.json]
        apply.py --selftest
 
   propose   bank the delta as a YELLOW version and print the settings sheet the Arbiter enters (skill #74: a
             proposal is a version on his screen, never files on disk; `eq_propose --accept` writes the delta).
             --on names the base: a version of this slot, or HEAD; past a candidate not in the slot it is required (#199)
-  attest    the Arbiter entered it: flip the proposed rows to green, as a new version
+  attest    the Arbiter entered it: flip the proposed rows to green, as a new version.
+            --source-file: a JSON object, the saved preset this version was read from (state/schema.md, #200)
 """
 
 
@@ -1471,7 +1693,7 @@ def _main(argv):
         print(_USAGE, file=sys.stderr)
         return 2
     project_dir, cmd, args = argv[1], argv[2], list(argv[3:])
-    opts = {"--preset": None, "--note": None, "--reviewed": None, "--on": None}
+    opts = {"--preset": None, "--note": None, "--reviewed": None, "--on": None, "--source-file": None}
     evidence = []
     rest = []
     i = 0
@@ -1506,7 +1728,13 @@ def _main(argv):
             print(got["sheet"])
             return 0
         if cmd == "attest":
-            got = attest(history, rest[0] if rest else None, note=opts["--note"])
+            source_file = None
+            if opts["--source-file"]:
+                source_path = (opts["--source-file"] if os.path.isabs(opts["--source-file"])
+                               else os.path.join(project_dir, opts["--source-file"]))
+                with open(source_path, encoding="utf-8-sig") as fh:   # an editor's or PowerShell's BOM is no fault
+                    source_file = json.load(fh)
+            got = attest(history, rest[0] if rest else None, note=opts["--note"], source_file=source_file)
             print(f"🟢 {got['version']} on {preset}: applied {', '.join(got['applied_channels']) or 'nothing proposed'}")
             return 0
     except (ValueError, OSError) as exc:

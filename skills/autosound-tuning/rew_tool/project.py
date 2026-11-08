@@ -818,7 +818,7 @@ def open_questions(data):
 #: `state/state.py`'s own list rather than imported, for the same reason `EVENT_CONFIG_CHANGE` is:
 #: one constant is not worth a cross-directory import. A dict-of-dicts under any OTHER key is a
 #: tier (`state.tier_names`).
-_LEDGER_NON_TIERS = ("roles", "provenance", "virtual_eq_ptr", "banked_ear_verdicts")
+_LEDGER_NON_TIERS = ("roles", "provenance", "virtual_eq_ptr", "banked_ear_verdicts", "preset_settings")
 
 
 class Project:

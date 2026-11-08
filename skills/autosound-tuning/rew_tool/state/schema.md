@@ -157,6 +157,52 @@ normalizes the `LS`/`HS` shorthand the two hand-authored v1 ledgers actually use
 **`eq` vs `eq_ptr`** — both, not either/or: `eq_ptr` says where the authoritative REW export
 lives, `eq` carries the bands themselves so a reader needs no second file.
 
+### Preset settings (`preset_settings`, #197, #200)
+
+A preset's own settings, beside the tiers: a top-level object that is **not** a tier (`_NON_TIER_KEYS`; `preset` is
+taken by the slot's name), checked on its own by `validate_preset_settings`. No migration: `SCHEMA_VERSION` stays 3, and
+a version without the field is valid.
+```jsonc
+"preset_settings": {
+  "input_gain_db": -0.3,                                       // the preset's main input gain, dB
+  "sources": {"main": 0.0, "hec": -2.0, "digital": 0.0},       // source levels, dB
+  "fx": {"realcenter": true, "dynamic_bass": false, "subxpander": false},   // the FX group, as the DSP shows it
+  "rtc": {"on": true, "curve": {"gstart0": -3.0, "fstart0": 800}},          // curve: name -> number
+  "bt": {"source": "AUX", "auto_switch": true},
+  "conductor": {"sub_lamps": 7},                               // the sub knob position it was set up and judged at
+  "status": "applied",                                         // its own, as a row's: proposed -> applied by attest
+  "source_file": {"name": "…", "path": "…", "md5": "…",        // the saved preset this version was read from
+                  "saved": "…", "pctool": "…", "device": "…",  // the save time, PC-Tool version, device it states
+                  "read_at": "…", "compared": "no difference"}  // or a list of the differences
+}
+```
+- **Every field is optional; a missing one reads as its default**, 0 dB or off. So it is no difference and nothing is
+  printed. The exception is `dynamic_bass` and `subxpander`, which have no legacy alias: where a record does not state
+  them they are **unknown, not off**. `bt.source`, `rtc.curve` and `conductor.sub_lamps` have no default: an unstated one
+  is a dash. A field `validate` does not know is refused, as a channel field is.
+- **Never asked for.** Not in the intake, not required to bank, not on a sheet while at its default (the tuner: «default
+  0 dB, and don't ask until the user gets to needing it»).
+- **Audiotec Fischer's** (the Arbiter, 2026-11-08), Helix and its kin. The fields beyond `input_gain_db` are filled only
+  on a DSP whose profile names them (`effects_and_dynamics`, `dsp_profile.py`). This is the method's text: `validate` and
+  the renderers get no profile. They are filled by the session or the person. When the skill can read a saved preset it
+  checks them against it; until then the check is the screen (`screen-read-dsp.md`).
+- **`FX` in anything older means RealCenter**: `fx.realcenter` (`references/core/naming-and-structure.md`).
+- **A delta** carries it by name, `{"preset_settings": {"input_gain_db": -0.3}}`, alone or beside the rows. `apply_delta`
+  takes it out before `_split_by_tier` and merges it two levels deep, so one `fx` switch leaves the others.
+- **A change is an ordinary row**: no structural move, so no reviewer. `structural_moves` and `advisories` walk the
+  tiers only. Held with a structural move that has not earned its proposal, it goes `candidate` and is promoted with it.
+- **The diff** carries one key under `preset`: `preset_settings: [old, new]`, each only what it really sets. Its status
+  and its source file are no change of the DSP, so neither reaches the diff. Readers: the sheet, `delta_rows` (`tier:
+  preset_settings`, `channel: preset`, `param`, `field`, `was`, `value`, `was_raw`, `value_raw`), `render_state`,
+  `render_diff` by name; `verification_set` asks for the whole-system sum; `levelbase.changed_ranges` reads it as
+  every band changed; `predict.chains_from_snapshot(snap, trim=True)` adds the input gain once, on the physical tier,
+  for the `predict` view, off by default for the engine.
+- **`source_file` is `attest`'s**: `attest --source-file <file.json>` (`apply.attest(…, source_file=)`) records it, and
+  `attest` keeps it. A delta cannot give it, and `propose` drops it, since a new version was not compared to that file.
+  Not `provenance`: `propose`'s only door replaces the whole `provenance` and switches off the structural hold.
+- **Not harmless to an older copy.** A 3.2 copy of the method reads the dict as a tier and refuses the number in it. It
+  fails loud, only on a project a newer copy has written. A project bound to an older copy moves up before using the field.
+
 ## Invariants
 - **ms is canonical, samples are a view.** Entering 96 kHz samples into a 48 kHz DSP doubles the
   delay — so the file commits to ms; `render` shows derived samples for the active rate.
@@ -203,6 +249,7 @@ r = apply.propose(h, {"w-L": {"gain_db": -7.5, "ta_ms": 5.45}, "sub": {"polarity
                   note="…")                     # -> banks 🟡 snapshot; r["sheet"] = the settings sheet
 print(r["sheet"])                               # channel/param old→new, ms+derived samples, advisories
 apply.attest(h)                                 # Arbiter entered it in Helix -> flip 🟡→🟢 applied (new snapshot)
+                                                # source_file={...}: the saved preset it was read from (#200)
 ```
 - **Tier-aware delta (schema v2):** a bare `{channel: {field: value}}` delta still means `channels`
   (unchanged); a delta is read as tier-keyed only when EVERY one of its top-level keys is already a
