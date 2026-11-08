@@ -595,7 +595,7 @@ def _sandbox():
             proj = os.path.join(tmp, "project")
             _write(proj, "project.json", "{}\n")
             bare = os.path.join(tmp, "remote.git")
-            subprocess.run(["git", "init", "-q", "--bare", bare], check=True, capture_output=True)
+            subprocess.run(["git", "init", "-q", "--bare", bare], check=True, capture_output=True, encoding="utf-8", timeout=60)
             ok, line = init(proj)
             assert ok, line
             yield proj, bare, tmp
@@ -656,7 +656,7 @@ def _porcelain(proj):
 def _second_copy_pushes(bare, tmp):
     """Someone else's commit lands on the remote."""
     other = os.path.join(tmp, "other")
-    r = subprocess.run(["git", "clone", "-q", bare, other], capture_output=True, text=True)
+    r = subprocess.run(["git", "clone", "-q", bare, other], capture_output=True, encoding="utf-8", timeout=60)
     assert r.returncode == 0, r.stderr
     _git(other, "config", "user.name", "other")
     _git(other, "config", "user.email", "other@example.invalid")

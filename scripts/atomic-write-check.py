@@ -38,6 +38,10 @@ SELF = "scripts/atomic-write-check.py"
 
 #: (file, literal) -> why the literal is not a temp name. Rule (a) passes exactly these.
 ALLOWED = {
+    ("skills/autosound-tuning/rew_tool/project_repo.py", "leftover.123-ab.tmp"):
+        "its selftest plants a temp a crash left, to see it counted as housekeeping and never staged",
+    ("skills/autosound-tuning/rew_tool/project_repo.py", "b.tmp"):
+        "its selftest lists the housekeeping names `init` must not stage: a file name, not a writer's temp",
     ("skills/autosound-tuning/rew_tool/project_seed.py", "*.tmp"):
         "the `.gitignore` line a new project gets, so that a temp a crash left is never committed: a pattern, "
         "not a temp name",
