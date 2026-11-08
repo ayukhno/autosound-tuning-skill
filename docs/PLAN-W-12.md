@@ -60,7 +60,7 @@ At the wave's end the numbers go to the hub as one ticket, for the Arbiter's rev
 - **The seats.** Plan review, group passes, the final pass on the head: Codex (`codex exec -m gpt-6-astra -c
   model_reasoning_effort=high -s read-only --ephemeral -o <file> -`, the brief on stdin). Codex out of limits or silent →
   the Opus seats (`pr-review-toolkit:silent-failure-hunter`, `pr-review-toolkit:pr-test-analyzer`, opus · high).
-  **Codex is out of tokens from 2026-11-08 for five hours: code reviews then go to one Opus seat (`feature-dev:code-reviewer`, opus · high, the whole tree), on the Arbiter's «спробуем іншим Опусом» and a side-by-side on T2, T3, T6, T7 (`docs/W-12-LEDGER.md`).** Gemini 4 (`gemini-4-argon-high`) is for text.
+  **The Arbiter, 2026-11-08, after a side-by-side on T2, T3, T6, T7 (`docs/W-12-LEDGER.md`): «для коду беремо Опус. Джемені на переклади і роздумʼя, пошук ідей». Wherever this plan says Codex for a code pass, read one Opus seat (`feature-dev:code-reviewer`, opus · high, the whole tree).** Gemini 4 (`gemini-4-argon-high`) takes translations, thinking-through and ideas.
   User-facing text (README, FAQ, the CHANGELOG, the method's text) → Gemini via the Advisor (`AI ask --model
   gemini-3.8-flash-medium`). Every finding is checked against the code before acting.
 - **Models** (`hub:seam` «Models by role»): implementer `Risk: high` opus · high; ordinary opus · medium; T13 is a
