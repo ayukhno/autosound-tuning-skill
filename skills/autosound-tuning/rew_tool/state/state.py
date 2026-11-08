@@ -1341,8 +1341,10 @@ class PresetHistory:
             # read again where the seal is added, to keep that read next to its write.
             _read_seals(self.root)
             project_line = self._project()
-            if project_line:
-                # The version it was made from: a line of numbers is a tree of edits (hub #195).
+            if project_line or parent or "parent" in state:
+                # The version it was made from: a line of numbers is a tree of edits (hub #195). The older layout has
+                # the key only where a base was named (#199) -- and a state loaded from such a version must not keep
+                # its parent's parent.
                 state["parent"] = parent or self.head()
             # The first snapshot is what creates the directory. On the per-project line `slots.json`
             # goes down FIRST, so a stop between the two cannot leave `versions/` without it.

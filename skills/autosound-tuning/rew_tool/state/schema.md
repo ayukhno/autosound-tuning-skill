@@ -52,6 +52,15 @@ ledger became **tier-aware**, EQ bands became **structured objects**, and every 
 A version carries `preset` (the slot it was banked FOR) and `parent` (the version it was made from);
 a variant also carries `variant` (its name) and is banked without moving the slot (`place=False`).
 
+**A candidate is a variant named `candidate`** (`propose`, a structural move with no evidence or no reviewer behind
+it). While a slot's newest version is one and not in the slot, a `propose` that names no base is refused: `--on v_NNN`
+builds on it, `--on HEAD` says the delta really is for the slot's version (#199). Built on a candidate, the result's
+structural moves are measured from the candidate's own base, the first version up its `parent` line that is no
+candidate, so nothing it has not earned goes through. It stays a candidate until evidence and a reviewer are there; then
+its `candidate` rows become `proposed`, `variant` is cleared and it is placed, so `attest` covers them. `parent` is
+the true base (`v_003 = v_002 + …`, also on the older layout), while the sheet is measured against the last placed
+version, because that is what is in the DSP.
+
 **A configuration is a version SAVED into a DSP preset under a name** (the Arbiter, 2026-09-23). A
 `v_NNN` is a full DSP state proposed at the desk and may never be kept; what the tuner saves into the
 device he saves under a name of his own (`SQ-1`, `FULL-v1`, `SQ-2`, any name, any purpose).
