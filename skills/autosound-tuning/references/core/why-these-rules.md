@@ -136,7 +136,7 @@ rule.
 - **A step goes by its id; a step is named for what it ends in** — skill #72 and skill #73
   (`naming-and-structure.md` §1b).
 - **A request to measure is a round, never words** — the Arbiter's rule, skill #77, for the AI in TCC, a terminal and
-  TCC Control alike; the list ordered by setup, in four columns, with `--optional` captures on it — skills #78–#80
+  TCC Control alike; the list ordered by setup, in five columns (the p1–p9 points are the fifth, #198), with `--optional` captures on it — skills #78–#80
   (`capture-session-sheet.md`).
 - **REW's view is the Arbiter's** — hub TCC-015: a session stopped between "off" and "back on" left the view changed.
 - **Settings land in chat, every document for the person in `<project>/docs/`** — the Arbiter's rule, skill #61.

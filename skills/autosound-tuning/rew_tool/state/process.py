@@ -1218,21 +1218,32 @@ def render_round_list(round_):
     lines = []
     optional = set(round_.get("optional") or [])
     setup = round_.get("setup") or {}
+    naming = _load_naming()
+    setup_of = naming.group_setup if naming else (lambda g: g.get("method"))
+    hand_held = naming.SETUP_HAND_HELD if naming else ""
     if setup.get("first"):
         lines.append(f"  set up for {setup['first']}"
                      + (f" (last taken: {setup['from']})" if setup.get("from") else " (--start)"))
-    last_method = None
+    last_setup = None
     for group in round_.get("groups") or []:
-        switch = last_method is not None and group.get("method") != last_method
-        lines.append(f"  {group.get('label')}" + ("   <- switch: " + ("tripod in, driver out" if group.get("method") == "sw"
-                                                                       else "tripod out, driver in") if switch else ""))
+        now = setup_of(group)
+        switch = last_setup is not None and now != last_setup
+        lines.append(f"  {group.get('label')}" + (f"   <- switch: {_switch_words(last_setup, now, hand_held)}" if switch else ""))
         for name in group.get("names") or []:
             lines.append(f"    {name}" + ("   (optional)" if name in optional else ""))
-        last_method = group.get("method")
+        last_setup = now
     if not round_.get("groups"):
         for name in round_.get("expected") or []:
             lines.append(f"    {name}" + ("   (optional)" if name in optional else ""))
     return lines
+
+
+def _switch_words(was, now, hand_held):
+    """What changes in the car between two setups: the tripod and the driver for sw <-> rta, by name for the points."""
+    if hand_held in (was, now):
+        spoken = {"sw": "tripod", "rta": "RTA"}
+        return f"{spoken.get(was, was)} → {spoken.get(now, now)}"
+    return "tripod in, driver out" if now == "sw" else "tripod out, driver in"
 
 
 def _outstanding_optional(round_):
@@ -1240,7 +1251,8 @@ def _outstanding_optional(round_):
 
 
 def _last_method_taken(round_):
-    """`(method, title)` of the last capture a round recorded, by its `at` -- the setup the car is in (skill #78)."""
+    """`(setup, title)` of the last capture a round recorded, by its `at` -- the setup the car is in (skill #78): the
+    method, or `naming.SETUP_HAND_HELD` for a point p1..p9 (#198)."""
     naming = _load_naming()
     if not round_ or naming is None:
         return None, None
@@ -1250,7 +1262,7 @@ def _last_method_taken(round_):
             continue           # a superseded row is a typo's trace, not the setup the car was left in (N17)
         parsed = naming.parse_name(title)
         if parsed and parsed.get("method") and (last is None or str((entry or {}).get("at") or "") > last[0]):
-            last = (str((entry or {}).get("at") or ""), parsed["method"], title)
+            last = (str((entry or {}).get("at") or ""), naming.title_setup(parsed), title)
     return (last[1], last[2]) if last else (None, None)
 
 
@@ -2102,9 +2114,9 @@ class Process:
         `expected` is `naming.expected_groups(phase, glossary, version)` -- what the method says this phase
         measures, for the channels the project has on -- and the titles given beside it are added in their
         place; without it, the titles given are the list. Either way the round carries its columns (`groups`,
-        skill #79/#83: Solo/Group by sw/rta, what a front-end draws), ordered by SETUP (skill #78): the method the
-        car is set up for first -- `start_method`, else the last capture the previous round recorded -- then one
-        switch. `optional` names the captures that go on the list "if there is time" (skill #80): listed, ordered,
+        skill #79/#83: Solo/Group by sw/rta and the p1..p9 Points, what a front-end draws), ordered by SETUP (skill
+        #78, #198): the setup the car is in first -- `start_method`, else the last capture the previous round
+        recorded -- then the others, each once. `optional` names the captures that go on the list "if there is time" (skill #80): listed, ordered,
         recorded when taken, and not a gap when not.
 
         `version` is the series number the titles carry (`_N`); a round opened with a ledger version
@@ -2267,7 +2279,7 @@ class Process:
             first, from_title = (start_method, None) if start_method else _last_method_taken(previous)
             groups = naming.order_by_setup(groups, first)
             setup = {"first": first, "from": from_title,
-                     "switches": naming.method_switches([g["method"] for g in groups])}
+                     "switches": naming.method_switches([naming.group_setup(g) for g in groups])}
             expected = naming.flatten_groups(groups)
             if control is not None:
                 control = _row_for(expected, control) or control
@@ -12324,6 +12336,41 @@ def _selftest():
     plain_r = rr.start_capture("57", ["m-L_57 (sw)", "Ms_57 (rta)", "w-L_57 (sw)"], phase="2")
     assert [(g["label"], g["names"]) for g in plain_r["groups"]] == \
         [("Solo (sw)", ["m-L_57 (sw)", "w-L_57 (sw)"]), ("Group (rta)", ["Ms_57 (rta)"])], plain_r["groups"]
+    # #198: the p1..p9 points are a column of their own, and going to them is a change of setup, named and counted. A
+    # project of its own: the rounds below count on `rr`'s numbering.
+    import shutil
+    pt_root = tempfile.mkdtemp(prefix="autosound_points_")
+    shutil.copy(os.path.join(rr_root, "project.json"), pt_root)
+    pt = Process(os.path.join(pt_root, "process"))
+    pt_titles = ["m-L_60 (sw)", "Ms_60 (sw)", "m-L p1_60 (sw)", "m-L p2_60 (sw)", "m-L_60 (rta)"]
+    pr60 = pt.start_capture("60", pt_titles, phase="2")
+    assert [g["label"] for g in pr60["groups"]] == ["Solo (sw)", "Group (sw)", "Points (sw)", "Solo (rta)"], pr60["groups"]
+    assert pr60["groups"][2]["method"] == "sw" and pr60["groups"][2]["names"] == ["m-L p1_60 (sw)", "m-L p2_60 (sw)"]
+    assert pr60["expected"] == [n for g in pr60["groups"] for n in g["names"]], "the list IS the columns, flattened"
+    assert pr60["setup"] == {"first": None, "from": None, "switches": 2}, pr60["setup"]
+    shown = render_round_list(pr60)
+    assert "  Group (sw)" in shown and "  Points (sw)   <- switch: tripod → hand-held" in shown, shown
+    assert "  Solo (rta)   <- switch: hand-held → RTA" in shown, shown
+    plan_text = open(os.path.join(pt_root, "docs", "plans", "_60-capture.md"), encoding="utf-8").read()
+    assert "<- switch: tripod → hand-held" in plan_text, plan_text
+    # The car left on a point is set up hand-held: the next round starts there.
+    for at, title in enumerate(pt_titles[:4]):
+        pt.record_capture(title, at=f"2026-09-26T10:0{at}:00")
+    pr61 = pt.start_capture("61", ["m-L_61 (rta)", "m-L_61 (sw)", "m-L p1_61 (sw)"], phase="2")
+    assert pr61["setup"] == {"first": _load_naming().SETUP_HAND_HELD, "from": "m-L p2_60 (sw)", "switches": 2}, pr61["setup"]
+    assert [g["label"] for g in pr61["groups"]] == ["Points (sw)", "Solo (sw)", "Solo (rta)"], pr61["groups"]
+    assert "  Solo (sw)   <- switch: hand-held → tripod" in render_round_list(pr61), render_round_list(pr61)
+    # Late optional points on a planned round, from either method: in their place, and still optional.
+    late = pt.start_capture("62", phase="2", plan=True, start_method="sw", optional=["m-L p1_62 (sw)"])
+    assert [g["label"] for g in late["groups"]][:3] == ["Solo (sw)", "Points (sw)", "Solo (rta)"], late["groups"]
+    assert late["optional"] == ["m-L p1_62 (sw)"] and late["setup"]["switches"] == 2, late
+    assert "    m-L p1_62 (sw)   (optional)" in render_round_list(late), render_round_list(late)
+    from_rta = pt.start_capture("63", phase="2", plan=True, start_method="rta", optional=["m-L p1_63 (sw)"])
+    assert [g["label"] for g in from_rta["groups"]][-2:] == ["Solo (sw)", "Points (sw)"], from_rta["groups"]
+    # A title at `x0` is on the tripod, and a method-only round reads as it did.
+    assert _last_method_taken({"taken": {"m-L_1 (sw) x0": {"at": "2026-10-07T10:00:00"}}}) == ("sw", "m-L_1 (sw) x0")
+    assert _last_method_taken({"taken": {"m-L_1 (rta)": {"at": "2026-10-07T10:00:00"}}}) == ("rta", "m-L_1 (rta)")
+    shutil.rmtree(pt_root, ignore_errors=True)
     # Optional captures do not count as a gap: outstanding names the required ones, the optional apart.
     opt = rr.start_capture("58", ["m-L_58 (sw)"], phase="2", optional=["w-L_58 (sw)"])
     assert opt["expected"] == ["m-L_58 (sw)", "w-L_58 (sw)"] and rr.capture_outstanding() == ["m-L_58 (sw)"]

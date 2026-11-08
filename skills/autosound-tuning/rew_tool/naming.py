@@ -143,6 +143,8 @@ _POS_RE = re.compile(r"^(?P<code>.+?)\s+(?P<pos>p[1-9]|x0)$")
 _POS_WORD_RE = re.compile(r"(?<!\S)(?:p[1-9]|x0)(?!\S)")
 _CTL_RE = re.compile(r"^(?P<code>.+?)-(?P<ctl>ctl[0-9])$")
 POSITIONS = tuple(f"p{i}" for i in range(1, 10)) + ("x0",)
+#: The points of the ellipsoid, swept hand-held around the head (#198). `x0` is a position too, but it is the tripod.
+HAND_HELD_POSITIONS = tuple(p for p in POSITIONS if p != "x0")
 CONTROL_OPEN = ("ctl1", "ctl")
 CONTROL_CLOSE = ("ctl3", "rep")
 
@@ -886,20 +888,41 @@ def validate_series(titles, expected, glossary=None):
 
 
 # A round's columns (skill #79, the Arbiter 2026-09-24): what a capture is MADE OF -- one driver (solo) or several
-# together (group) -- by how it is taken (sw / rta). Four at most: Solo (sw), Solo (rta), Group (sw), Group (rta).
-# Pairs, sides, joints and combos are all groups; splitting them by what they are in the analysis gave five columns
-# nobody in the car needed.
+# together (group) -- by how it is taken (sw / rta). Pairs, sides, joints and combos are all groups; splitting them by
+# what they are in the analysis gave columns nobody in the car needed. Five at most since #198 (the tuner's ask): Solo
+# (sw), Solo (rta), Group (sw), Group (rta), Points (sw) -- the p1..p9 sweeps are taken hand-held, not on the tripod,
+# and 36 of them under the group sweeps hid where the tripod part ended. `method` stays "sw" on that column.
 KIND_SOLO = "solo"
 KIND_GROUP = "group"
-_KIND_LABELS = {KIND_SOLO: "Solo", KIND_GROUP: "Group"}
+KIND_POINTS = "points"
+_KIND_LABELS = {KIND_SOLO: "Solo", KIND_GROUP: "Group", KIND_POINTS: "Points"}
+
+#: What a round's list is ordered by and counts changes of (skills #78, #198): the tripod sweeps, the hand-held sweeps,
+#: the RTA. The first and the last are named by their method, so a round with no points reads as it always did.
+SETUP_HAND_HELD = "hand-held"
+_SETUP_ORDER = (METHOD_SWEEP, SETUP_HAND_HELD, METHOD_RTA)
 
 
 def group_label(kind, method):
     return f"{_KIND_LABELS.get(kind, kind)} ({method})"
 
 
+def _setup(is_point, method):
+    return SETUP_HAND_HELD if is_point and method == METHOD_SWEEP else method
+
+
+def group_setup(group):
+    """The setup a round's column is taken in: its method, except the points' sweeps, which are hand-held."""
+    return _setup(group.get("kind") == KIND_POINTS, group.get("method"))
+
+
+def title_setup(parsed):
+    """The setup one capture was taken in, from `parse_name`'s answer -- the same identity as `group_setup`."""
+    return _setup(parsed.get("position") in HAND_HELD_POSITIONS, parsed.get("method"))
+
+
 def expected_groups(phase, glossary, version):
-    """`expected_series` split into the groups a checklist is actually read in: the four columns of skill #79.
+    """`expected_series` split into the groups a checklist is actually read in: the columns of skill #79.
 
     Returns `[{"kind", "label", "method", "names"}]`, in the plan's order (solo before group, sw before rta) -- a
     flat list is right for set comparison and wrong for display: "10 of 20 captured" tells a tuner nothing about
@@ -927,24 +950,30 @@ def expected_groups(phase, glossary, version):
 def order_by_setup(groups, first):
     """The round's groups in the order the car is taken in (skill #78, the Arbiter's rule from the seat).
 
-    A sweep is the mic on the tripod, the driver out of the seat; an RTA is the driver in the seat with the mic in
-    hand. Every change of method is the tripod going in or out, so the list takes `first` -- the method the car is
-    set up for, normally the last one captured -- in full, then switches ONCE and takes the rest. With `first`
-    unknown the plan's order stands. Stable: within a method the plan's order (solo, then group) is kept.
+    A sweep is the mic on the tripod, the driver out of the seat; the points (#198) are sweeps with the mic in hand
+    around the head; an RTA is the driver in the seat with the mic in hand. Each is a setup of its own (`group_setup`),
+    so the list takes `first` -- the setup the car is in, normally the last one captured -- in full, then the others,
+    each once, tripod before hand-held before RTA. With `first` unknown the plan's order stands. Stable: within a setup
+    the plan's order (solo, then group) is kept.
     """
     if not first:
         return list(groups)
-    return [g for g in groups if g.get("method") == first] + [g for g in groups if g.get("method") != first]
+
+    def rank(group):
+        setup = group_setup(group)
+        return setup != first, _SETUP_ORDER.index(setup) if setup in _SETUP_ORDER else len(_SETUP_ORDER)
+    return sorted(groups, key=rank)
 
 
 def method_switches(methods):
-    """How many times the setup changes along a list of methods: the number a round's order keeps at one."""
+    """How many times the setup changes along a list of setups (`group_setup`): a method alone cannot see the points."""
     return sum(1 for a, b in zip(methods, methods[1:]) if a != b)
 
 
 def place_in_groups(groups, titles, glossary):
     """`groups` with each of `titles` added in its place (skill #80): a solo with the solos of its method, a group
-    capture with the groups, and a method the round has no column for as a new one at the end. A title already
+    capture with the groups, a point p1..p9 with the points, and a method the round has no column for as a new one at
+    the end -- except that the hand-held points never sit before the tripod sweeps they follow. A title already
     listed is not listed twice; one the grammar refuses is put in a group of its own so that it is still ON the
     list and visibly odd. Used for the titles typed beside `--plan`, for "if you have time" captures and for a round
     opened without a plan at all -- so every round carries its columns (skill #83)."""
@@ -957,7 +986,10 @@ def place_in_groups(groups, titles, glossary):
             continue
         parsed = parse_name(title, glossary)
         if parsed and parsed.get("method"):
-            kind = KIND_SOLO if (parsed.get("code_current") or parsed.get("code")) in solos else KIND_GROUP
+            if parsed.get("position") in HAND_HELD_POSITIONS:
+                kind = KIND_POINTS
+            else:
+                kind = KIND_SOLO if (parsed.get("code_current") or parsed.get("code")) in solos else KIND_GROUP
             method = parsed["method"]
         else:
             kind, method = "other", "?"
@@ -965,10 +997,21 @@ def place_in_groups(groups, titles, glossary):
         if group is None:
             group = {"kind": kind, "label": group_label(kind, method) if kind != "other" else "Not in the grammar",
                      "method": method, "names": []}
-            out.append(group)
+            out.insert(_new_group_at(out, group), group)
         group["names"].append(title)
         listed.add(title)
     return out
+
+
+def _new_group_at(groups, new):
+    """Where a column the round did not have goes: solo -> group -> points -> rta (#198). The hand-held points go right
+    after the last tripod sweeps, or first when there are none; a tripod column goes before them; the rest at the end."""
+    setups = [group_setup(g) for g in groups]
+    if group_setup(new) == SETUP_HAND_HELD:
+        return max((i + 1 for i, s in enumerate(setups) if s == METHOD_SWEEP), default=0)
+    if group_setup(new) == METHOD_SWEEP and SETUP_HAND_HELD in setups:
+        return setups.index(SETUP_HAND_HELD)
+    return len(groups)
 
 
 def flatten_groups(groups):
@@ -1745,6 +1788,45 @@ def _selftest():
     bare = place_in_groups([], ["m-L_5 (sw)", "Ms_5 (rta)"], car)      # a round opened without the plan
     assert [(x["label"], x["names"]) for x in bare] == [("Solo (sw)", ["m-L_5 (sw)"]), ("Group (rta)", ["Ms_5 (rta)"])]
     assert flatten_groups(placed) == [n for x in placed for n in x["names"]]
+
+    # -- #198 (the tuner): the p1..p9 points are a column of their own. They are swept hand-held around the head, so
+    #    going to them is a change of setup like sw <-> rta; in Group (sw) nothing showed where the tripod part ended.
+    def labels(found):
+        return [x["label"] for x in found]
+    pts = place_in_groups(g2, ["m-L p1_55 (sw)", "L w+m p9_55 (sw)"], car)
+    assert labels(pts) == ["Solo (sw)", "Points (sw)", "Solo (rta)", "Group (rta)"], "in order, not at the end: %s" % pts
+    assert pts[1] == {"kind": "points", "label": "Points (sw)", "method": "sw",
+                      "names": ["m-L p1_55 (sw)", "L w+m p9_55 (sw)"]}, "`method` stays the method: %s" % pts[1]
+    assert "m-L p1_55 (sw)" not in pts[0]["names"], "a point of one driver is a point, not a solo"
+    tripod = place_in_groups([], ["m-L_5 (sw)", "Ms_5 (sw)", "m-L_5 (rta)"], car)
+    assert labels(place_in_groups(tripod, ["m-L p1_5 (sw)"], car)) == \
+        ["Solo (sw)", "Group (sw)", "Points (sw)", "Solo (rta)"], "solo -> group -> points -> rta"
+    assert labels(place_in_groups([], ["m-L p1_5 (sw)", "m-L_5 (sw)", "Ms_5 (sw)"], car)) == \
+        ["Solo (sw)", "Group (sw)", "Points (sw)"], "the points typed first still come after the tripod"
+    assert labels(place_in_groups([], ["m-L p1_5 (sw)", "m-L_5 (rta)"], car)) == ["Points (sw)", "Solo (rta)"]
+    # A late points column among late tripod ones: the tripod part stays whole once the setup is known.
+    late = place_in_groups(g2, ["L w+m_55 (sw)", "m-L p1_55 (sw)"], car)
+    assert labels(order_by_setup(late, "sw")) == \
+        ["Solo (sw)", "Group (sw)", "Points (sw)", "Solo (rta)", "Group (rta)"], late
+    # No prior setup, and starting from each of the three setups.
+    assert order_by_setup(pts, None) == pts, "nothing known about the setup: the plan's order"
+    assert labels(order_by_setup(pts, "sw")) == ["Solo (sw)", "Points (sw)", "Solo (rta)", "Group (rta)"]
+    assert labels(order_by_setup(pts, "rta")) == ["Solo (rta)", "Group (rta)", "Solo (sw)", "Points (sw)"]
+    assert labels(order_by_setup(pts, SETUP_HAND_HELD)) == ["Points (sw)", "Solo (sw)", "Solo (rta)", "Group (rta)"]
+    # One identity for the three setups: a group's and a title's agree, and the count is the setups', not the methods'.
+    assert [group_setup(x) for x in pts] == ["sw", SETUP_HAND_HELD, "rta", "rta"], pts
+    assert title_setup(parse_name("m-L p1_55 (sw)")) == SETUP_HAND_HELD
+    assert title_setup(parse_name("m-L_55 (sw)")) == "sw" and title_setup(parse_name("m-L_55 (rta)")) == "rta"
+    assert method_switches([group_setup(x) for x in pts]) == 2, "tripod -> hand-held -> RTA is two changes of setup"
+    # `x0` is a position too, and it is the tripod point: it stays with the tripod sweeps.
+    x0s = place_in_groups(g2, ["w-L_55 (sw) x0", "L w+m_55 (sw) x0"], car)
+    assert labels(x0s) == ["Solo (sw)", "Solo (rta)", "Group (rta)", "Group (sw)"], x0s
+    assert "w-L_55 (sw) x0" in x0s[0]["names"] and x0s[3]["names"] == ["L w+m_55 (sw) x0"], x0s
+    assert title_setup(parse_name("w-L_55 (sw) x0")) == "sw"
+    # A position typed on an RTA (the method asks for none) is listed as a point, but its setup is still the RTA's.
+    rta_point = place_in_groups(g2, ["m-L p1_55 (rta)"], car)
+    assert labels(rta_point)[-1] == "Points (rta)" and group_setup(rta_point[-1]) == "rta", rta_point
+    assert title_setup(parse_name("m-L p1_55 (rta)")) == "rta"
 
     # -- skill #83: ONE source for "active" -- the project's channel rows (`hidden`, role `unused`, what the intake's
     #    slot switch writes), read when the glossary is loaded for a project. The glossary kept `r-L`/`r-R` active
