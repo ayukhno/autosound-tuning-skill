@@ -1,4 +1,8 @@
-# PLAN W-12 · v3.2.1 — fixes, TCC's two asks and five features, without the engine
+# PLAN W-12 · v3.2.1 — #210 and the critical fixes, without the engine
+
+**The composition, the Arbiter 2026-11-08 («так, патч»):** 11 issues, a patch. #210 joined with `ok`; #200, #201, #202
+and #204 went back to the pool for the next wave (their plan text, tasks T2–T3, T6, T7 and questions 1–3, is at `1f33687`);
+the question of the version is closed: `v3.2.1`.
 
 **Status:** written 2026-10-30 on branch `wave-2026-10-30` from three code maps (sonnet · medium, at `393fcf2`); not yet
 reviewed. The Arbiter, 2026-10-30: «збір закінчено» → 14 issues on `W-12 · v3.2.1` (#196–#209), `ok` on all 14 (first
@@ -14,25 +18,7 @@ Paths: `SK` = `skills/autosound-tuning`, `RT` = `SK/rew_tool`, `S` = `RT/state/s
 
 ## Open questions for the Arbiter — before «го»
 
-Each has the session's advice; the build follows the advice unless he says otherwise.
-
-1. **#200 — the `.pct6` decoder.** The skill has no decoder (only prose; `SK/references/tooling/screen-read-dsp.md`
-   calls the file encrypted). The issue wants `attest` to fill and check the tier from a decoded file «once the decoder
-   is in the skill». **Advice:** W-12 builds the tier, its diff/sheet rows and the source-file provenance fields, filled
-   by the session or the user; bringing a decoder into the skill is its own task for a later wave, on his word. Then
-   `screen-read-dsp.md`'s «encrypted» line is left as it is in W-12.
-2. **#201 — «in the DSP now».** AD-1 (`RT/state/schema.md:111-114`) says the ledger is not a device mirror. **Advice:**
-   the method records a dated, sourced *claim*, not a mirror: per slot in `slots.json`, `loaded: {version, since,
-   source}` with `source` one of `attest` · `pct6` · `user`, written by `attest` and by a new verb `state.py loaded
-   <slot> <version> --source user`; never inferred from file times. HEAD keeps its meaning: the slot's pointer, the
-   newest placed version, which may be `proposed` and not in the DSP. AD-1 gets one paragraph saying so; TCC draws «in
-   the DSP» from `loaded` only (hub #325's answer).
-3. **#204 — who sends.** No rule in the skill says the session commits and pushes after every step (the map found
-   none). **Advice:** the rule is written into the project seed (`project_seed.py`'s project `CLAUDE.md`/`AGENTS.md`):
-   the session commits and pushes after each banked version and at session-close when a remote exists; `status --json`
-   carries `sends: "session"` for a project seeded with the rule, `"person"` otherwise.
-4. **The version.** Five features in a patch. **Advice:** keep `v3.2.1` while building; the name is settled at the
-   release with TCC (a minor `v3.3.0` pairs with a TCC `v1.3.0`, `RELEASE-CHANNEL.md` §3.1; TCC's wave is `W-12 · v1.2.2`).
+None. #210's design may raise some: they come with its advice, before its build.
 
 ## The W-12 trial: the PMO method's review weight, and the numbers (the Arbiter, 2026-11-08)
 
@@ -63,7 +49,7 @@ and keeps the part of that loop that paid: the check of fixes (9 regressions in 
 | per external reviewer (Codex, Gemini) | calls, minutes, silences, findings, real after the check against the code, false, real ones no other seat found, severity |
 | CI | runs by workflow, minutes, each red by cause (product · test · runner), what it found that no local check had |
 | who found what | stage, found, critical, its fate. The alarm: a critical found only in acceptance, or by a person after the tag |
-| the estimate | ~25 runs and ~6–7 h against the standing plan's ~45 and ~9–11 h, and against TCC's W-12 |
+| the estimate | ~30 runs and ~9 h for this composition; against the standing weight, per task, and against TCC's W-12 |
 
 At the wave's end the numbers go to the hub as one ticket, for the Arbiter's review between waves.
 
@@ -100,14 +86,13 @@ At the wave's end the numbers go to the hub as one ticket, for the Arbiter's rev
 
 | lane | files | tasks, in order |
 |---|---|---|
-| **A** | `S`, `A`, `RT/state/schema.md`, `RT/state/migrate.py` (read) | T1 #199 → T2 #197+#200 → T3 #201 |
-| **B** | `P`, `N`, `V`, `C`, `RT/CONTRACT.md`, `RT/state/process-schema.md`, `RT/rew_api.py` (read) | T4 #203 → T5 #198 → T6 #202 |
-| **C** | `PR`, `RT/project_seed.py` | T7 #204 |
+| **A** | `S`, `A`, `RT/state/schema.md` | T1 #199 → T2 #197 |
+| **B** | `P`, `N`, `V`, `C`, `RT/CONTRACT.md`, `RT/rew_api.py` (read) | T4 #203 → T5 #198 |
 | **D** | `install.sh`, `install.ps1`, `IC`, `FAQ*.md` (one line) | T8 #205 → T9 #206 |
 | **E** | `AI`, `README*.md`, `SK/SKILL.md`, `SK/references/**`, `RT/capabilities.py`, `scripts/docs-check.py` | T10–T13 |
+| **F** | new modules under `RT/`, a new runbook under `SK/references/`, then `SK/SKILL.md`, `project-intake.md` | T14 #210 → T15 → T16, after lane E |
 
-T4 first in lane B: TCC builds against it in its own W-12, and it settles `P`'s exit table before T5/T6 add flags.
-T3 waits for the Arbiter's answer to question 2. Lane E's `SK/SKILL.md` edit (T12) runs while no other agent edits it.
+T4 first in lane B: TCC builds against it in its own W-12, and it settles `P`'s exit table. Lane E's `SK/SKILL.md` edit (T12) runs while no other agent edits it.
 
 ## Group Versions ledger — `Risk: high`, lane A
 
@@ -123,35 +108,18 @@ base: «v_003 = v_002 + …». TCC: `propose` refusals reach it as a `ValueError
 `ledger_line.parent_of`). Tests: `A --selftest` — a refused propose after a candidate (red on the old code), `--on`
 building on the candidate with `parent` set, the header line.
 
-**T2 · #197 + #200 — the preset settings and the source file.** L.
-Key: **`preset_settings`** (a top-level dict; `preset` is taken by the slot name, and a dict outside
-`_NON_TIER_KEYS` would be read as a tier — `S`:136-165). Added to `_NON_TIER_KEYS` and validated on its own:
-`input_gain_db` (#197), `sources: {main, hec, digital}` (dB), `fx: {realcenter, dynamic_bass, subxpander}`, `rtc: {on,
-curve}`, `bt: {source, auto_switch}`, `conductor: {sub_lamps}`. Every field optional; a missing field reads as the
-default (0 dB, off) **except** `dynamic_bass`/`subxpander` in records that do not state them: unknown, not off (the
-tuner's naming). No migration, `SCHEMA_VERSION` stays 3.
-`provenance.source_file: {name, path, md5, saved (PC-Tool's root @D), pctool (@V), device (@Dev), read_at,
-compared}` — filled by the session or the user (question 1). Shown: `diff_states` (`S`:1421-1453; the scalar list at
-:1430 and a dict walk), `render_state` (`S`:1471-1583) and `settings_sheet`/`delta_rows` (`A`:325-432) print a field
-only when set or different; a change to it is an ordinary row — `structural_moves` (`A`:72-90) does not count it, so
-no reviewer. A delta path for non-tier fields beside `apply_delta`/`_split_by_tier` (`A`:198, :134). Legacy «FX»: the
-naming grammar's `+FX` (`N`) and the references say it means RealCenter; no alias for the other two. Loudness between
-versions: no such code exists (`RT/equal_loudness.py` is ISO 226 targets) — the field is there for it; nothing to
-extend now. TCC: an unknown top-level non-tier key is ignored (tcc `state/dsp_state.py` `ProjectView.from_dict`); its
-tab is hub #324 (SKL-090), and the field shape goes to TCC on #324 when T2 closes. Tests: `S selftest` — validate
-accepts and refuses shapes, diff and render with and without; `A --selftest` — a trim is a row with no reviewer.
-Docs: `RT/state/schema.md`, the naming reference where `+FX` is defined.
-
-**T3 · #201 — «in the DSP now».** M. After the Arbiter's answer to question 2; as advised: `slots.json`
-`slots[slot].loaded = {version, since, source}`, additive (TCC reads `slots.json` and watches it — `slots()` must still
-read `{}` on a half-written file); written by `attest` (`A`:610-628, under the same lock) and by `state.py loaded`;
-`slots.json` keeps one writer (the method). `schema.md` AD-1: one paragraph — HEAD is the pointer, `loaded` is a dated
-claim with its source, neither is a mirror. Answer hub #325 with the field. Tests: `S selftest` (the verb, the attest
-write, a half-written file), `C selftest` if the CONTINUE check reads HEAD (`C`:1010, :3534).
+**T2 · #197 — a version keeps its input gain.** S.
+Key: **`preset_settings`** (a top-level dict; `preset` is taken by the slot name, and a dict outside `_NON_TIER_KEYS` would
+be read as a tier — `S`:136-165), added to `_NON_TIER_KEYS` and validated on its own. Only `input_gain_db` for now, default
+0 dB, never asked for; #200 adds its fields to the same key in its wave. No migration, `SCHEMA_VERSION` stays 3. Shown by
+`diff_states` (`S`:1421-1453), `render_state` (`S`:1471-1583) and `settings_sheet`/`delta_rows` (`A`:325-432) only when set
+or different; a change is an ordinary row, `structural_moves` (`A`:72-90) does not count it, so no reviewer. TCC ignores an
+unknown top-level non-tier key (tcc `state/dsp_state.py` `ProjectView.from_dict`). Tests: `S selftest` — validate accepts
+and refuses, diff and render with and without; `A --selftest` — a trim is a row with no reviewer. Docs: `RT/state/schema.md`.
 
 Group passes: Codex on the lane's diff; one fix round; the narrow check of fixes (the trial above).
 
-## Group TCC contract — `Risk: high`, lanes B and C
+## Group TCC contract — `Risk: high`, lane B
 
 **T4 · #203 — four guarantees.** M.
 1. `--round <id>` on `capture-check`, `capture-taken`, `capture-protective` (the issue's record-capture /
@@ -173,18 +141,6 @@ Tests: `P selftest` — `--round` refused on a moved round for each verb (red fi
 `_check_flags_tcc_sends`, `_check_unknown_flags`; `V selftest` — the `rew` field; `C selftest`; `contract-guard`.
 Then a comment on hub #297 with the flags and the field for TCC's #218/#219.
 
-**T7 · #204 — `project_repo.py save` and `status`.** M.
-`PR` has `init` and `status` only (`PR`:233-253); `status` returns `{repo, remote, gh, init, offer}` (`PR`:129-143),
-which TCC requires (tcc `core/project_repo.py:84-109`) — kept, keys added. Build: (1) `save <project> [--dry-run]`:
-commit the tuning files with the method's message, push; refuse with a reason — nothing to send, no remote, the remote
-ahead (pull first); never `.claude/skills/autosound-tuning`. (2) `status --json` adds `changes: {tuning: […],
-housekeeping: […]}`, `ahead: [{hash, time, subject}]`, `remote_head: {hash, time}`, `sends` (question 3). The
-housekeeping list is new (`.sessions.log`, `.tcc/`, `*.tmp`, …) beside `GITIGNORE_LINES` (`RT/project_seed.py:~267-285`);
-the `.claude/skills/autosound-tuning` link goes into the seeded `.gitignore` and `init`'s `git add -A` stops taking it.
-`status_lines` (used by `contract.py check`) unchanged when there is nothing to report. Tests: `PR --selftest` with
-`AUTOSOUND_NO_GH=1` and a bare local remote (save, refusals, dry-run, the link excluded — red first);
-`project_seed.py --selftest`. Then a comment on hub #326 for TCC's button.
-
 **T5 · #198 — the p1–p9 points as their own group.** S.
 `N`: `KIND_POINTS` and the label «Points» (`N`:892-897); `place_in_groups` (`N`:945-971) puts a parsed position
 (`parse_name`'s `position`, `N`:142-145, :566) into `points`; order solo → group → points → rta. The tripod → hand-held
@@ -196,17 +152,7 @@ without TCC code; its fallback `groups_from_titles` (rounds without `groups`) st
 bus comment when T5 closes, no ticket unless TCC asks. Tests: `N selftest` (`N`:1695-1750 — the order and the label),
 `P selftest` (`rnd["groups"]` ~12060-12101).
 
-**T6 · #202 — a step's note.** M.
-`add_step` (`P`:1876-1926) gains `note=None` = `{do, expect, if_not}`, kept in the step entry and in `step_added`;
-the CLI `add-step --note-do/--note-expect/--note-if-not` (`VERB_FLAGS` `P`:4493). The answer: `finish_step`
-(`P`:1944-2003) takes `--heard "<the Arbiter's words>"`, kept as `note.answer` beside `expect`; a `decision` with
-`--step <id>` (`record_decision`, `P`:3905-3928) fills it too. `session-close` (`P`:12304-12363) lists steps with an
-`expect` and no `answer` as owed lines — **not** owed for the exit code (TCC reads the exit as the answer): printed
-only. `state/process-schema.md` documents the shape. TCC reads none of these keys (its `_to_step` reads a fixed list) —
-additive; hub #312 (PAS-019) gets the shape when T6 closes. Tests: `P selftest` — the note kept, the answer kept, the
-close lines; the flag guards.
-
-Group passes: Codex on lanes B and C's diff; one fix round; the narrow check of fixes (the trial above).
+Group passes: Codex on lane B's diff; one fix round; the narrow check of fixes (the trial above).
 
 ## Group Installers — `Risk: high`, lane D
 
@@ -254,34 +200,59 @@ report stays out (a feature, not asked). Checks: `capabilities.py --selftest`, `
 
 Group review: Gemini reads the changed user-facing lines (README, SKILL.md row, test-tracks line) once.
 
+## Group Joint-by-joint approach — `Risk: high`, lane F (#210)
+
+The wave's only new feature, and the only part not yet designed. **Before the build:** `feature-dev:feature-dev` — a code
+map of the Passat project's `scripts/` against `RT/`, architects only if there is more than one way; the result replaces
+this section and goes through Codex like the rest of the plan.
+
+What is known. The tools exist as 13 scripts, ~2560 lines, numpy and `dsp_math`: `swws_search2`, `swws_xo`, `swws_epy`,
+`swws_flat`, `swws_gd_thd` (sub↔woofer); `wm_search`, `joint_wm`, `wm_flat` (woofer↔mid); `mt_search` (mid↔tweeter);
+`stage_lock`, `loudness_match`, `levelbase`, `gate` (conditions, loudness, the round check). They were written for one car,
+so **the port is a generalisation**: channel names, Fs floors, the DSP's filter families, gain and delay limits come from
+the project's profile, not from the code.
+
+**T14 · the tools into `RT/`, in three slices** (bass joint · woofer↔mid with flatten-first and decay · mid↔tweeter on the
+nine-point power sum), each with the stage conditions as options, the L-vs-R phase metric, the loudness match of versions
+and the round-level check of a tripod sum against the complex sum of its solos. Registered in `RT/capabilities.py`.
+Tests: a selftest per slice on a synthetic set of curves whose best variant is known, red first.
+
+**T15 · the runbook** under `SK/references/`: the order of joints, align-then-cross, the search space and metric per joint,
+the conditions carried upward, the tournament and the blend, the three lessons from the ear. Gemini reads it; the uk/de/pl
+versions through the Advisor if the route names them.
+
+**T16 · the offer at the first step**, by name, next to the Resonalyze path, with what it needs and what the user gets
+(`project-intake.md`, `SK/SKILL.md`, within `reading-cost`). The approach archived by the Arbiter is not offered. #210 needs a
+way to read back a saved preset, and the skill has none: the runbook names the need and falls back to reading the screen
+(`screen-read-dsp.md`); a decoder stays with #200. Whether TCC's first step changes is asked on the bus ticket to TCC.
+
+Group passes: Codex per slice of T14, one fix round each; the narrow check of fixes (the trial above).
+
 ## The end of the wave
 
-1. The bookkeeping on the branch: `## [v3.2.1]` (or the release's name, question 4) from `## [Unreleased]` with its
-   Upgrading (T1's refusal and `--on`, T2's `preset_settings`, T3's `loaded`, T4's `--round` and `rew` field, T6's
-   flags, T7's `save` and status keys), `plugin.json`, `INSTALLER_VERSION`/`$InstallerVersion`; Gemini reads the
+1. The bookkeeping on the branch: `## [v3.2.1]` from `## [Unreleased]` with its
+   Upgrading (T1's refusal and `--on`, T2's `preset_settings`, T4's `--round` and `rew` field, #210's tools and the new
+   route), `plugin.json`, `INSTALLER_VERSION`/`$InstallerVersion`; Gemini reads the
    CHANGELOG entry.
 2. Codex on the head of `main..wave-2026-10-30`, after the bookkeeping; one fix round; **Fable** on those fixes only.
-3. One PR with `Engine: none` → its full CI on every system → acceptance (the trial above) → `git merge --ff-only` →
-   the candidate `beta-v3.2.1-rc1`
-   on that commit → a ticket to TCC for its run on the candidate (its W-12 builds against T4/T7) → the release with
-   TCC through the train. Receipts on hub #297, #303, #313, #325, #326 name the tag.
+3. One PR with `Engine: none` → its full CI on every system → acceptance (the trial above) → `git merge --ff-only` → the
+   tag `v3.2.1` on that commit. The skill's own patch: it does not wait for TCC's wave; TCC pins the published tag. Receipts
+   on hub #297, #303 name the tag; hub #313, #325, #326 are deferred to the next wave.
 
 ## Cost
 
-14 issues in 13 tasks, four groups. Roughly:
-An estimate under the trial, without #210; the ledger measures it. The standing weight was ~45 Claude runs and ~9–11 h.
+11 issues in 13 tasks, five groups. An estimate under the trial; the ledger measures it.
 
-- **Claude agent runs ~25**: implementers 13, the group fix rounds and narrow checks ~7, the final fix and Fable's check 2,
-  the bookkeeping 1, acceptance 1.
-- **Codex calls ~5**: the plan review, three group passes, the final pass on the head.
+- **Claude agent runs ~30**: implementers 13 (T10/T11 by the session; T14 is three), #210's design ~3, the group fix rounds
+  and narrow checks ~10, the final fix and Fable's check 2, the bookkeeping 1, acceptance 1.
+- **Codex calls ~9**: the plan review, #210's design, three group passes, T14's three slices, the final pass on the head.
 - **Advisor (Gemini) calls ~4**: the text group, the CHANGELOG, the FAQ line, translations if the README line needs one.
 
-Time: lane B is the critical path (T4 → T5 → T6 on `P`), lane A beside it (T3 after the Arbiter's answer). With the
-group passes, CI and the bookkeeping: ~6–7 h of machine time, plus the stops.
+Time: lane F is the critical path, after lane E. All together ~9 h of machine time, plus the stops.
 
 ## The first steps of the new session
 
-1. `bin/ticket queue` — the wave block shows 14 `ОК`.
-2. Read this plan; get the Arbiter's answers to the four questions above (his words into this file's status).
+1. `bin/ticket queue` — the wave block shows 11 `ОК`.
+2. Read this plan; #210's design (lane F's section) first, its questions to the Arbiter with advice.
 3. The plan review by Codex (the brief: this file + the three maps' facts it cites); findings checked and taken in.
 4. His «го» → lanes A–E as above; the ledger `docs/W-12-LEDGER.md` from the first run.

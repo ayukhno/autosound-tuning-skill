@@ -1627,13 +1627,17 @@ S-062, S-064 (with TCC's half, hub #217 SKL-056), S-065, S-066. When he says to 
 four assessment lines, and nothing is built before his `ok` on that task. Resume: `hub/bin/role skill --resume
 6b9c70d1-4094-4337-a1fd-23976307dfc2`.
 
-## S-125 · W-12 · v3.2.1 — all 14: fixes, TCC's asks and the five features
+## S-126 · A third approach at the first step: joint-by-joint upward (skill #210)
 
-**Status**: open 2026-10-30 · the plan `docs/PLAN-W-12.md` written on branch `wave-2026-10-30` from three code maps; not reviewed yet; the build in a NEW session (the Arbiter: «план збережемо і будемо робити в новій сесії»); next: his answers to the plan's four questions (the `.pct6` decoder, «in the DSP now», who sends, the version) → Codex's plan review → his «го»; resume: `hub/bin/role skill --resume 05c10c35-b54d-4a4c-ad98-060ce119aa95` · was: the Arbiter took the five features back too («це треба брати!»): `ok` on all 14; the freeze of 2026-10-21 lifted for this wave by his word; next: the plan in five groups — Versions ledger (#197, #199, #200, #201), Rounds and steps (#198, #202), TCC contract (#203, #204), Installers (#205, #206), Texts and small fixes (#196, #207, #208, #209) · was: milestone `W-12 · v3.2.1` (milestone 11) opened on the Arbiter's «збір закінчено»; 14 pool items put on it and assessed (#196–#209); the Arbiter took «fixes + TCC's asks»: `ok` on 9 — #196, #199, #205, #206, #207, #208, #209 and TCC's #203 (hub #297), #204 (hub #326); #197, #198, #200, #201, #202 back to the pool (new features, the freeze of 2026-10-21, hub #295 HUB-090); not on the milestone: S-108 (only on his word), S-017 (waits for his test); TCC's W-12 is `W-12 · v1.2.2`; next: the plan, groups Installers (#205, #206), TCC contract (#203, #204), Texts and small fixes (#196, #207, #208, #209), #199 alone; built without the engine, PR carries `Engine: none`
+**Status**: open 2026-11-08 · on milestone `W-12 · v3.2.1` as #210 with `ok` (the Arbiter); feature, `Risk: high`, L; design before the build, `docs/PLAN-W-12.md` lane F
+
+## S-125 · W-12 · v3.2.1 — #210 and the critical fixes (11 issues, a patch)
+
+**Status**: open 2026-11-08 · the Arbiter: the review-weight trial with its ledger («так пробуємо і збираємо статистику»), W-12 = #210 + the critical fixes, a patch («так, патч»); #200, #201, #202, #204 back to the pool; next: #210's design → Codex's plan review → his «го» · was: open 2026-10-30 · the plan `docs/PLAN-W-12.md` written on branch `wave-2026-10-30` from three code maps; not reviewed yet; the build in a NEW session (the Arbiter: «план збережемо і будемо робити в новій сесії»); next: his answers to the plan's four questions (the `.pct6` decoder, «in the DSP now», who sends, the version) → Codex's plan review → his «го»; resume: `hub/bin/role skill --resume 05c10c35-b54d-4a4c-ad98-060ce119aa95` · was: the Arbiter took the five features back too («це треба брати!»): `ok` on all 14; the freeze of 2026-10-21 lifted for this wave by his word; next: the plan in five groups — Versions ledger (#197, #199, #200, #201), Rounds and steps (#198, #202), TCC contract (#203, #204), Installers (#205, #206), Texts and small fixes (#196, #207, #208, #209) · was: milestone `W-12 · v3.2.1` (milestone 11) opened on the Arbiter's «збір закінчено»; 14 pool items put on it and assessed (#196–#209); the Arbiter took «fixes + TCC's asks»: `ok` on 9 — #196, #199, #205, #206, #207, #208, #209 and TCC's #203 (hub #297), #204 (hub #326); #197, #198, #200, #201, #202 back to the pool (new features, the freeze of 2026-10-21, hub #295 HUB-090); not on the milestone: S-108 (only on his word), S-017 (waits for his test); TCC's W-12 is `W-12 · v1.2.2`; next: the plan, groups Installers (#205, #206), TCC contract (#203, #204), Texts and small fixes (#196, #207, #208, #209), #199 alone; built without the engine, PR carries `Engine: none`
 
 ## S-124 · Saving the project to GitHub: a `save` verb and a fuller `status` in `project_repo.py` (hub #326 TCC-068)
 
-**Status**: open 2026-10-30 · on milestone `W-12 · v3.2.1` as #204 with `ok` (the Arbiter: fixes + TCC's asks) · was: open 2026-10-30 · W-12's pool; feature, `Risk: high` (commits and pushes the user's project), waits for the Arbiter's word under the freeze
+**Status**: open 2026-11-08 · back in the pool for the next wave as #204, off W-12 (the Arbiter: #210 and the critical fixes first) · was: open 2026-10-30 · on milestone `W-12 · v3.2.1` as #204 with `ok` (the Arbiter: fixes + TCC's asks) · was: open 2026-10-30 · W-12's pool; feature, `Risk: high` (commits and pushes the user's project), waits for the Arbiter's word under the freeze
 
 The method's half of hub #320 (SKL-087) and tcc#235. 30.10, live: TCC's panel said «Незбережені зміни 1 · Ще не
 відправлено 1» while the session had made and pushed five commits; the one file was `.sessions.log`. The Arbiter asks
@@ -1646,7 +1650,7 @@ in a save (hub #319 SKL-086).
 
 ## S-123 · «In the DSP now»: the ledger has no fact for which version a slot holds (hub #325 TCC-067)
 
-**Status**: open 2026-10-30 · on milestone `W-12 · v3.2.1` as #201 with `ok` (the Arbiter: «це треба брати!») · was: briefly back in the pool · was: open 2026-10-30 · W-12's pool; a method decision first (AD-1), then maybe a field; the Arbiter called the mark «супер ідея» (hub #317 PAS-024)
+**Status**: open 2026-11-08 · back in the pool for the next wave as #201, off W-12 (the Arbiter: #210 and the critical fixes first) · was: open 2026-10-30 · on milestone `W-12 · v3.2.1` as #201 with `ok` (the Arbiter: «це треба брати!») · was: briefly back in the pool · was: open 2026-10-30 · W-12's pool; a method decision first (AD-1), then maybe a field; the Arbiter called the mark «супер ідея» (hub #317 PAS-024)
 
 Slot `1.N-NOV26_from0`, 27.10: TCC's list ticked HEAD v_012 and the Arbiter read it as «loaded»; the DSP held v_009,
 the ear had heard v_008 from a re-saved file; finding it out took a decode and the journal. `rew_tool/state/schema.md`
@@ -1659,7 +1663,7 @@ candidate).
 
 ## S-122 · A plan step carries a note: what to do, what is expected, what to change if not (hub #313 PAS-020)
 
-**Status**: open 2026-10-30 · on milestone `W-12 · v3.2.1` as #202 with `ok` (the Arbiter: «це треба брати!») · was: briefly back in the pool · was: open 2026-10-30 · W-12's pool; feature, waits for the Arbiter's word under the freeze; the data side only — TCC's half is hub #312 (PAS-019, `to:tcc`), so no ticket from here
+**Status**: open 2026-11-08 · back in the pool for the next wave as #202, off W-12 (the Arbiter: #210 and the critical fixes first) · was: open 2026-10-30 · on milestone `W-12 · v3.2.1` as #202 with `ok` (the Arbiter: «це треба брати!») · was: briefly back in the pool · was: open 2026-10-30 · W-12's pool; feature, waits for the Arbiter's word under the freeze; the data side only — TCC's half is hub #312 (PAS-019, `to:tcc`), so no ticket from here
 
 From the Passat project (after AYA final). A step has only a name; a listening or check step needs the model's
 prediction kept («voice 5–10 cm left of centre», «upper bass right slightly thinner, −61° at 210 Hz») and what to do
@@ -1696,7 +1700,7 @@ on the capture verbs (`process.py` `VERB_FLAGS`; `--round` exists only in `ear_s
 
 ## S-119 · A preset tier in the version: input levels, the FX group, RTC, the Conductor, the source file (skill #200)
 
-**Status**: open 2026-10-30 · on milestone `W-12 · v3.2.1` as #200 with `ok` (the Arbiter: «це треба брати!») · was: briefly back in the pool · was: open 2026-10-30 · W-12's pool; feature, `Risk: high` (the version schema, `attest`), waits for the Arbiter's word under the freeze; absorbs S-116 (#197); TCC's half sent as hub #324 (SKL-090)
+**Status**: open 2026-11-08 · back in the pool for the next wave as #200, off W-12 (the Arbiter: #210 and the critical fixes first) · was: open 2026-10-30 · on milestone `W-12 · v3.2.1` as #200 with `ok` (the Arbiter: «це треба брати!») · was: briefly back in the pool · was: open 2026-10-30 · W-12's pool; feature, `Risk: high` (the version schema, `attest`), waits for the Arbiter's word under the freeze; absorbs S-116 (#197); TCC's half sent as hub #324 (SKL-090)
 
 From the Passat project. A version holds `channels` and `virtual_channels` only; a Helix preset also carries settings
 for the whole preset that change what is heard (source levels, RealCenter / Dynamic Bass / SubXpander, RTC, BT,
