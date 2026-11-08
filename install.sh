@@ -2486,6 +2486,8 @@ if [ "$MODE" = "tcc" ] && [ -z "${TCC_REFUSED:-}" ]; then
   n=$((n + 1))
   say "  $n. In the panel on the right, say what you want, in any language:"
   say "     \"let's tune this car from scratch\"."
+elif [ "${TCC_REFUSED#it is running}" != "${TCC_REFUSED:-}" ]; then
+  say "  $n. Close Autosound TCC and run this line again."
 else
   say "  $n. Open a NEW Terminal window — this one cannot see what was just installed — and run:"
   say "          mkdir -p ~/Autosound/my-car && cd ~/Autosound/my-car"
