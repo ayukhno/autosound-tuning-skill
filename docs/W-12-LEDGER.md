@@ -14,3 +14,12 @@ The numbers the plan's trial asks for (`docs/PLAN-W-12.md`). Filled from the fir
 Each checked at its main site. **Side by side on T2, T3, T6, T7:** found by both 6; by Opus only 13 (among them a failed push after the commit, a network call in `status`, an older copy refusing the key); by Gemini only 4 (the diff's shape, the delta's wrap and shallow merge, `_fmt_val`, `step_done`). One run on unequal inputs. The Arbiter, on it: «для коду беремо Опус. Джемені на переклади і роздумʼя, пошук ідей і тд.»
 
 Minutes per call were not timed, except where noted.
+
+## For the PMO (hub-kit), the Arbiter's word 2026-11-08
+
+To go into the end-of-wave ticket for the hub, and from it to the PMO advice. No write to hub-kit from here.
+
+- **The code reviewer: `feature-dev:code-reviewer` on Opus (high), one fresh seat per group's diff, the whole tree open.** It is Anthropic's agent type and read-only. So far in this wave: 19 of 19 real on four tasks where Gemini 4 on excerpts had 9 real and 2 in part of 12, and 13 of Opus's findings were its alone; on the installer group a blocker a Mac could not show (a test red on both non-Mac CI jobs); on the versions group 2 blockers and 4 important, among them an unreviewed structural change reaching HEAD through the new `--on`.
+- **The brief that made it work:** no finding without a `path:line` opened and quoted, an inventory of every site of a class, a severity, a «checked -> clean» row per category, a section for what could not be checked.
+- **Split the work:** code to this seat; translations, thinking-through and ideas to Gemini.
+
