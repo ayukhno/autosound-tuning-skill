@@ -19,7 +19,7 @@ project `EPY-Sep2026` was not a repository at all -- no history, no backup, and 
   `git add -A`: the housekeeping (`project_seed.HOUSEKEEPING`: `.sessions.log`, `.tcc/`, `*.tmp`, the key's files, the
   skill's link, ...) stays out even where an older `.gitignore` does not name it or the file is tracked. The order: no
   remote -> fetch -> the remote ahead, or holding a branch HEAD does not contain where this branch has no ref there ->
-  a key file tracked or waiting, the link added by a waiting commit -> commit -> push. Every refusal comes before the
+  a key file tracked or waiting -> commit -> push. Every refusal comes before the
   commit, so a refusal and `--dry-run` leave the history, the index and the files as they were (a fetch moves only the
   last-known remote ref). A refusal is exit 1 with its line, a held git lock among them. Nothing to commit but commits
   not pushed is a push. A link tracked at HEAD stops being tracked whenever anything goes out, in a commit of its own
@@ -439,8 +439,9 @@ def _count(n, what):
 
 
 def _what_must_not_go(project_dir, branch, at_head, waiting):
-    """The refusal for what this project must not send: a key file tracked or waiting, the skill's link added by a
-    waiting commit. None when there is none."""
+    """The refusal for what this project must not send: a key file tracked or waiting. None when there is none. The
+    skill's link is no refusal even in a waiting commit: an older `init` put it there, it is no secret, and a project
+    never pushed would have no way out. It stops being tracked in what goes out."""
     import project_seed
     key_tracked = [path for path in at_head if _matches(path, project_seed.KEY_FILES)]
     if key_tracked:
@@ -450,17 +451,13 @@ def _what_must_not_go(project_dir, branch, at_head, waiting):
     if not waiting:
         return None
     key_waiting = _unsent_paths(project_dir, branch, "d")
-    link_added = _unsent_paths(project_dir, branch, "A")
-    if key_waiting is None or link_added is None:
+    if key_waiting is None:
         return "git could not read what the waiting commits contain. Nothing changed"
     for name in key_waiting:
         if _matches(name, project_seed.KEY_FILES):
             return (f"{name} carries a key and is in a commit not yet sent. Nothing changed. Take it out of that commit "
                     "(removing it in a later commit leaves it in the history), and keep the key in the machine's file "
                     "(setup-critic-channel.md)")
-    if any(_matches(name, [project_seed.SKILL_LINK]) for name in link_added):
-        return (f"{project_seed.SKILL_LINK} (the skill's link) is added by a commit not yet sent. Nothing changed. Take "
-                "it out of that commit: the link is this machine's")
     return None
 
 
@@ -1024,16 +1021,16 @@ def _check_a_tracked_link_leaves_with_waiting_commits():
         assert os.path.lexists(os.path.join(proj, ".claude", "skills", "autosound-tuning")), "the link left the folder"
 
 
-def _check_a_waiting_commit_that_adds_the_link_is_refused():
+def _check_a_waiting_commit_that_adds_the_link_still_goes_out():
+    """An older `init` committed the link, and such a project was never pushed: it has to have a way out."""
     with _sandbox() as (proj, bare, _tmp):
         _connect(proj, bare)
         _commit_the_link(proj)
         _write(proj, "tuning.txt")
-        was = (_head(proj), _porcelain(proj), _on_remote(bare))
-        for argv in (("save", proj, "--dry-run"), ("save", proj)):
-            rc, said = _said(*argv)
-            assert rc == 1 and ".claude/skills/autosound-tuning" in said, (argv, rc, said)
-            assert (_head(proj), _porcelain(proj), _on_remote(bare)) == was, (argv, "a refusal changed something", said)
+        rc, said = _said("save", proj)
+        assert rc == 0, (rc, said)
+        sent = _tree(proj, "HEAD")
+        assert "tuning.txt" in sent and not [p for p in sent if p.startswith(".claude/")], sent
 
 
 def _commit_a_key(proj, rel):
@@ -1241,7 +1238,7 @@ def _selftest():
                   _check_a_remote_that_cannot_be_reached, _check_status_keeps_what_tcc_reads_and_adds_the_rest,
                   _check_status_with_no_repository_carries_the_keys_empty, _check_sends_says_who_sends,
                   _check_a_failing_step_stops_before_the_commit, _check_a_remote_on_another_branch_is_refused,
-                  _check_a_tracked_link_leaves_with_waiting_commits, _check_a_waiting_commit_that_adds_the_link_is_refused,
+                  _check_a_tracked_link_leaves_with_waiting_commits, _check_a_waiting_commit_that_adds_the_link_still_goes_out,
                   _check_a_tracked_key_is_refused, _check_a_key_in_a_waiting_commit_is_refused,
                   _check_a_commit_that_takes_the_key_out_is_sent, _check_a_tracked_sessions_log_stays_out,
                   _check_init_takes_no_housekeeping, _check_status_says_a_failed_read):
