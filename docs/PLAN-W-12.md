@@ -5,7 +5,7 @@
 release tag → a release candidate → TCC does its work on it (hub #331, SKL-091) → when TCC is done, the minors, skill `v3.3.0` and TCC `v1.3.0`. No ear test by
 the Arbiter before the candidate.
 
-**Status:** written 2026-10-30 on branch `wave-2026-10-30` from three code maps (sonnet · medium, at `393fcf2`). Codex's plan review at `9daab88` (report: `hub/scratch/skill/codex-w12-plan-report.md`): every finding checked against the code and taken in; T2's #200 half, T3, T6 and T7 came back after it and have had no review. The Arbiter, 2026-10-30: «збір закінчено» → 14 issues on `W-12 · v3.2.1` (#196–#209), `ok` on all 14 (first
+**Status:** written 2026-10-30 on branch `wave-2026-10-30` from three code maps (sonnet · medium, at `393fcf2`). Codex's plan review at `9daab88` (report: `hub/scratch/skill/codex-w12-plan-report.md`): each finding checked at its main site and taken in (not every line of its inventories). T2's #200 half, T3, T6 and T7 came back after it; Gemini 4 reviewed them while Codex was out of tokens: 12 findings, 9 real, 2 in part, 1 false, two statements about code that the code contradicts (`docs/W-12-LEDGER.md`). The Arbiter, 2026-10-30: «збір закінчено» → 14 issues on `W-12 · v3.2.1` (#196–#209), `ok` on all 14 (first
 the fixes and TCC's asks, then «це треба брати!» for the five features: the freeze of 2026-10-21, hub #295 HUB-090, is
 lifted for this wave by his word). «Пиши план, план збережемо і будемо робити в новій сесії»: the build starts in a new
 session, after the plan review and his «го». Built without `superpowers` (hub H-022): the PR carries `Engine: none`;
@@ -125,9 +125,7 @@ compared}` — filled by the session or the user (question 1). Shown: `diff_stat
 :1430 and a dict walk), `render_state` (`S`:1471-1583) and `settings_sheet`/`delta_rows` (`A`:325-432) print a field
 only when set or different; a change to it is an ordinary row — `structural_moves` (`A`:72-90) does not count it, so
 no reviewer. A delta path for non-tier fields beside `apply_delta`/`_split_by_tier` (`A`:198, :134). Legacy «FX»: the
-naming grammar's `+FX` (`N`) and the references say it means RealCenter; no alias for the other two. Loudness between
-versions: no such code exists (`RT/equal_loudness.py` is ISO 226 targets) — the field is there for it; nothing to
-extend now. TCC: an unknown top-level non-tier key is ignored (tcc `state/dsp_state.py` `ProjectView.from_dict`); its
+naming grammar's `+FX` (`N`) and the references say it means RealCenter; no alias for the other two. Loudness between versions: T14's `version_bench.py loudness` reads the field. TCC: an unknown top-level non-tier key is ignored (tcc `state/dsp_state.py` `ProjectView.from_dict`); its
 tab is hub #324 (SKL-090), and the field shape goes to TCC on #324 when T2 closes. Tests: `S selftest` — validate
 accepts and refuses shapes, diff and render with and without; `A --selftest` — a trim is a row with no reviewer.
 Docs: `RT/state/schema.md`, the naming reference where `+FX` is defined.
@@ -137,13 +135,15 @@ Docs: `RT/state/schema.md`, the naming reference where `+FX` is defined.
 **Its write path and consumers, from the plan review.** `preset_settings` is not a tier, so a delta today becomes a channel delta and fails on `_MERGEABLE` (`A`:142-144, :216-222): the delta path takes it explicitly.
 The diff keeps the existing envelope and the writers and renderers handle it by name (`S`:1429-1451; the CLI's walk `S`:1594-1606 assumes channel → field). A master trim is decided at each reader, once: verification (`S`:1050-1059), the capture-level
 comparison (`RT/levelbase.py:369-380`, called from `P`:3791-3797), the prediction (`chains_from_snapshot`, `RT/predict.py:757-763`, one application, never on both tiers), TCC's proposal view (the generic `settings` rows, tcc `state/proposal_view.py:51-61`). `version_bench.py loudness` reads it.
-Added tests: trim-only and mixed deltas; missing = 0; non-zero → 0; two versions that differ only by the trim, in the prediction and the bench.
+Added tests: trim-only and mixed deltas; missing = 0; non-zero → 0; two versions that differ only by the trim, in the prediction and the bench; `attest` after a trim-only proposal.
+
+**The representation, from the Critic (Gemini 4).** In a diff the whole field goes under `out["preset"]` as one key, `preset_settings: (old, new)`: every tier walk already skips `preset` (`A`:350, `S`:1594, `RT/levelbase.py:373`), the sheet and `delta_rows` print it by name, and `_WHOLE_PRESET` gets the key, so a trim reads as every band changed (`RT/levelbase.py:369`). In a delta it is taken out before `_split_by_tier` (`A`:142-144 would wrap it under channels) and merged two levels deep, so one `fx` field does not wipe the others. It carries its own `status`, `proposed` → `applied` by `attest`, which flips only tier rows (`A`:622-625). `_fmt_val` and `_FIELD_LABEL` (`A`:331, :344) learn its dB fields.
 
 **T3 · #201 — «in the DSP now».** M. After the Arbiter's answer to question 2; as advised: `slots.json`
 `slots[slot].loaded = {version, since, source}`, additive (TCC reads `slots.json` and watches it — `slots()` must still
 read `{}` on a half-written file); written by `attest` (`A`:610-628, under the same lock) and by `state.py loaded`;
 `slots.json` keeps one writer (the method). `schema.md` AD-1: one paragraph — HEAD is the pointer, `loaded` is a dated
-claim with its source, neither is a mirror. Answer hub #325 with the field. Tests: `S selftest` (the verb, the attest
+claim with its source, neither is a mirror. `loaded` is written only on a project-line ledger (`S`:741, :1343). The `{}` on a half-written file is TCC's reader only: the skill's writers do not fall back to it. Answer hub #325 with the field. Tests: `S selftest` (the verb, the attest
 write, a half-written file), `C selftest` if the CONTINUE check reads HEAD (`C`:1010, :3534).
 
 Group passes: Codex on the lane's diff; one fix round; the narrow check of fixes (the trial above).
@@ -192,6 +192,8 @@ ahead (pull first); never `.claude/skills/autosound-tuning`. (2) `status --json`
 housekeeping: […]}`, `ahead: [{hash, time, subject}]`, `remote_head: {hash, time}`, `sends` (question 3). The
 housekeeping list is new (`.sessions.log`, `.tcc/`, `*.tmp`, …) beside `GITIGNORE_LINES` (`RT/project_seed.py:~267-285`);
 the `.claude/skills/autosound-tuning` link goes into the seeded `.gitignore` and `init`'s `git add -A` stops taking it.
+**`save`, from the Critic (Gemini 4).** It stages only `changes.tuning`, never `git add -A` (`PR`:119 would take `.sessions.log`, which the seed does not ignore, and the skill link on an older repo). The order: no remote → fetch → the remote ahead refuses → commit → push; all checks before any commit, so a refusal and `--dry-run` change nothing. Nothing new to commit but commits not pushed is a push, not «nothing to send». `status`'s early return for a folder with no repo (`PR`:134-137) carries the new keys empty.
+
 **Who sends (the Arbiter, 2026-11-08): the session; TCC's button is the spare.** The rule goes into the project seed (`project_seed.py`'s `CLAUDE.md`/`AGENTS.md`): commit and push after each banked version and at session close when a remote exists; `status --json` `sends` is `"session"` for a project seeded with it, `"person"` otherwise.
 `status_lines` (used by `contract.py check`) unchanged when there is nothing to report. Tests: `PR --selftest` with
 `AUTOSOUND_NO_GH=1` and a bare local remote (save, refusals, dry-run, the link excluded — red first);
@@ -203,7 +205,7 @@ the CLI `add-step --note-do/--note-expect/--note-if-not` (`VERB_FLAGS` `P`:4493)
 (`P`:1944-2003) takes `--heard "<the Arbiter's words>"`, kept as `note.answer` beside `expect`; a `decision` with
 `--step <id>` (`record_decision`, `P`:3905-3928) fills it too. `session-close` (`P`:12304-12363) lists steps with an
 `expect` and no `answer` as owed lines — **not** owed for the exit code (TCC reads the exit as the answer): printed
-only. `state/process-schema.md` documents the shape. TCC reads none of these keys (its `_to_step` reads a fixed list) —
+only. A step with no note gets one when the answer lands; a decision naming a step not in the plan is recorded as today, with no note. `--heard` also goes into `step_done` (`P`:2001). The owed lines cover steps in progress or done, never todo or skipped, and print apart from `lines`, so the clean stop's own line stays (`P`:12345). `state/process-schema.md` documents the shape. TCC reads none of these keys (its `_to_step` reads a fixed list) —
 additive; hub #312 (PAS-019) gets the shape when T6 closes. Tests: `P selftest` — the note kept, the answer kept, the
 close lines; the flag guards.
 
@@ -257,7 +259,7 @@ Group review: Gemini reads the changed user-facing lines (README, SKILL.md row, 
 ## Group Joint-by-joint approach — `Risk: high`, lane F (#210)
 
 **Design, 2026-11-08** (three code maps, each claim that carries a decision re-checked against the code). Codex read it at `95abb06`: 14 findings, each
-checked against the code and taken in, one in part (the caches it found absent exist in the local project, outside git); the report is `hub/scratch/skill/codex-210-report.md`. The build waits for the plan
+checked at its main site and taken in, one in part (the caches it found absent exist in the local project, outside git); the report is `hub/scratch/skill/codex-210-report.md`. The build waits for the plan
 review and the Arbiter's «го».
 
 **The Arbiter's answers (2026-11-08).** (1) «це один з двух шляхів (другий через бібліотеки Resonalyze) - користувач може вибрати
