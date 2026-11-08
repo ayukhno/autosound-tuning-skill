@@ -57,10 +57,16 @@ a variant also carries `variant` (its name) and is banked without moving the slo
 it). While a slot's newest version is one and not in the slot, a `propose` that names no base is refused: `--on v_NNN`
 builds on it, `--on HEAD` says the delta really is for the slot's version (#199). Built on a candidate, the result's
 structural moves are measured from the candidate's own base, the first version up its `parent` line that is no
-candidate, so nothing it has not earned goes through. It stays a candidate until evidence and a reviewer are there; then
-its `candidate` rows become `proposed`, `variant` is cleared and it is placed, so `attest` covers them. `parent` is
-the true base (`v_003 = v_002 + …`, also on the older layout), while the sheet is measured against the last placed
-version, because that is what is in the DSP.
+candidate, so nothing it has not earned goes through. It stays a candidate until evidence and a reviewer are there,
+even with no move of its own; then its `candidate` rows become `proposed`, `variant` is cleared and it is placed, so
+`attest` covers them. Until then `attest` refuses it, in the slot or not. A device read vouches only for the rows it
+read: the others stay `candidate`, and the version stays one while any is left. `parent` is the true base
+(`v_003 = v_002 + …`, also on the older layout), while the sheet is measured against the last placed version, because
+that is what is in the DSP.
+
+**A base other than HEAD answers to the slot** (`--on <older or named version>`): its structural moves are measured
+against the last placed version as well, so a delta of `{}` on an older version is every move between the two, a row
+only the slot holds counting as removed. Held until evidence and a reviewer are there, like any candidate.
 
 **A configuration is a version SAVED into a DSP preset under a name** (the Arbiter, 2026-09-23). A
 `v_NNN` is a full DSP state proposed at the desk and may never be kept; what the tuner saves into the

@@ -1239,8 +1239,8 @@ def migrate_line(root, apply=False):
     OK. The ACTIVE preset keeps its numbers, because journals, rounds and reports cite `v_0NN` with no
     preset and almost always mean the one being tuned. The other presets are numbered after it, each
     in its own order, and `legacy-map.json` records every move, the kept ones too. Content is copied
-    unchanged, except `version`, `parent` (the previous version of the same preset) and
-    `migrated_from`. The old tree goes into `legacy/` as it was.
+    unchanged, except `version`, `parent` (the named base when the map has it, else the previous
+    version of the same preset) and `migrated_from`. The old tree goes into `legacy/` as it was.
 
     Resumes a stopped run: `versions/` is derived, so a run that stopped before `slots.json` rebuilds
     it from the per-preset directories, wherever they are now (at the root or already in `legacy/`).
