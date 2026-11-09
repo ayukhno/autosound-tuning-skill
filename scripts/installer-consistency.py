@@ -1569,7 +1569,7 @@ STUB_PKILL = (b"#!/bin/sh\n"
 APP_MAC_CASES = (
     ("TCC running", True, False, "TCC", 0, 0,
      ("Autosound TCC is running", "Close it and run this line again", "the app was left as it is",
-      "pkill -f bin/autosound-tcc", "was here before and was not upgraded"),
+      "pkill -f bin/autosound-tcc", "~/Library/Logs/autosound-tcc", "was here before and was not upgraded"),
      ("about 700 MB", "would run", "the app is not installed:", "4242")),
     ("TCC not running", False, False, "", 1, 1, ("about 700 MB", "✓ installed"),
      ("Autosound TCC is running", "pkill", "was not upgraded")),

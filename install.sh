@@ -1924,7 +1924,8 @@ if [ "$MODE" = "tcc" ] && [ "$DRY_RUN" = 0 ] && on_mac && pgrep -f bin/autosound
   # process is the person's to end, and the line says how. A dry run changes nothing, so it stops at nothing.
   TCC_REFUSED="it is running -- close it and run this line again (if it will not close: pkill -f bin/autosound-tcc)"
   warn "Autosound TCC is running. Close it and run this line again; the app was left as it is."
-  warn "If it hangs and will not close:  pkill -f bin/autosound-tcc"
+  warn "If it hangs and will not close: first save the end of its log (tail -50 ~/Library/Logs/autosound-tcc/tcc.log),"
+  warn "then:  pkill -f bin/autosound-tcc"
 elif [ "$MODE" = "tcc" ]; then
   say "  the app and what it needs, about 700 MB — a few minutes, no output until it is done…"
   # `--python` is not optional here. Without it `uv tool install` used the system interpreter —
