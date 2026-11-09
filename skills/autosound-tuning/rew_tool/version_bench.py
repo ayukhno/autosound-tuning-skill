@@ -94,6 +94,10 @@ ROUND_AVERAGE_OCT = 1.0 / 12.0
 SOUND_SETTINGS = ("sources.main", "sources.hec", "sources.digital", "fx.realcenter", "fx.dynamic_bass", "fx.subxpander", "rtc.on", "rtc.curve")
 ZWICKER_INSTALL = "-m pip install mosqito"
 ISO_LABEL = "less exact when the versions differ in the bass (ISO 226 weights level only; Zwicker reads the masking)"
+#: Why a flag takes both readings: the window's reading takes each record's own bulk delay out for the 1/12-oct complex average, so a sum whose arrivals are spread in time and its solos are not averaged alike.
+ROUND_BOTH_WORDS = ("a sum is flagged only when both readings are over the threshold: the window takes each record's own bulk delay out for its 1/12-oct complex average, "
+                    "so a sum of arrivals spread in time reads off through it while the whole record reads 0 (the window column alone is not a verdict)")
+ROUND_WHOLE_ALONE_WORDS = "--whole-record: the whole-record reading alone was asked for, and it alone flags"
 ROUND_THRESHOLD_WORDS = ("a working threshold, not `verify_prediction`'s validated criterion, "
                          "which means something else")
 _TMP_PREFIX = "autosound_version_bench_"
@@ -711,12 +715,12 @@ def _window_words(spec):
                                                     "1/12-oct complex average, +-1/24 oct (`s4_6b_vs_model.py`)")
 
 
-def _sum_rows(freqs, sums, band_of, floor_db):
-    """Per sum: the measured level against the complex sum of its solos over 1/3-oct bands, rms and maximum, no offset removed (`s4_6b_vs_model.py:165-168`)."""
+def _sum_keeps(freqs, sums, band_of, floor_db):
+    """Per sum, the 1/3-oct bands it is read over: the band named for it, or the bands around its peak within `floor_db` of the peak of its solos' sum."""
     centres, masks = _third_bands(freqs)
-    rows = []
-    for code, (measured, members, solo_sum) in sums.items():
-        have, want = _band_levels(measured, masks), _band_levels(solo_sum, masks)
+    keeps = {}
+    for code, (_measured, _members, solo_sum) in sums.items():
+        want = _band_levels(solo_sum, masks)
         if code in band_of:
             keep = (centres >= band_of[code][0]) & (centres <= band_of[code][1])
         else:
@@ -728,6 +732,17 @@ def _sum_rows(freqs, sums, band_of, floor_db):
                 hi += 1
             keep = np.zeros(len(want), bool)
             keep[lo:hi + 1] = True
+        keeps[code] = keep
+    return keeps
+
+
+def _sum_rows(freqs, sums, keeps):
+    """Per sum: the measured level against the complex sum of its solos over its 1/3-oct bands, rms and maximum, no offset removed (`s4_6b_vs_model.py:165-168`)."""
+    centres, masks = _third_bands(freqs)
+    rows = []
+    for code, (measured, members, solo_sum) in sums.items():
+        have, want = _band_levels(measured, masks), _band_levels(solo_sum, masks)
+        keep = keeps[code]
         if not keep.any():
             rows.append({"sum": code, "members": members, "band_hz": None, "bands": 0, "rms_db": None, "max_db": None, "flagged": False, "why": "no 1/3-oct band in its band"})
             continue
@@ -735,6 +750,10 @@ def _sum_rows(freqs, sums, band_of, floor_db):
         rows.append({"sum": code, "members": members, "band_hz": [round(float(centres[keep][0]), 1), round(float(centres[keep][-1]), 1)], "bands": int(keep.sum()),
                      "rms_db": round(float(np.sqrt(np.mean(err ** 2))), 3), "max_db": round(float(np.max(np.abs(err))), 3), "flagged": False})
     return rows
+
+
+def _over(row, flag):
+    return row["rms_db"] is not None and row["rms_db"] > flag
 
 
 def round_doc(loader, glossary, freqs, th):
@@ -775,28 +794,46 @@ def round_doc(loader, glossary, freqs, th):
                                 + (f" (its sums: {', '.join(not_measured)})" if not_measured else ""))
     if not sums:
         raise VersionBenchError("no sum could be checked, every sum found lacks a solo: " + "; ".join(not_checked))
-    rows = _sum_rows(freqs, sums, th["sum_band"], th["floor_db"])
+    keeps = _sum_keeps(freqs, sums, th["sum_band"], th["floor_db"])
+    rows = _sum_rows(freqs, sums, keeps)
+    whole_of = {}
+    if spec is not None:         # the whole record beside it, over the same bands: a flag needs both readings over (`ROUND_BOTH_WORDS`)
+        whole_sums = {code: entry for code, entry in read(None)[0].items() if code in keeps}
+        whole_of = {r["sum"]: r for r in _sum_rows(freqs, whole_sums, keeps)}
     for r in rows:
-        r["flagged"] = bool(r["rms_db"] is not None and r["rms_db"] > th["flag_rms_db"])
+        whole = whole_of.get(r["sum"])
+        if whole is not None:
+            r["whole_record"] = {"rms_db": whole["rms_db"], "max_db": whole["max_db"]}
+        r["flagged"] = _over(r, th["flag_rms_db"]) and (whole is None or _over(whole, th["flag_rms_db"]))
     default = None
     if th["flag_rms_db"] != ROUND_FLAG_RMS_DB or th["floor_db"] != ROUND_FLOOR_DB or spec != ROUND_WINDOW:
-        base = _sum_rows(freqs, sums if spec == ROUND_WINDOW else read(ROUND_WINDOW)[0], th["sum_band"], ROUND_FLOOR_DB)
+        base_sums = sums if spec == ROUND_WINDOW else read(ROUND_WINDOW)[0]
+        base_keeps = _sum_keeps(freqs, base_sums, th["sum_band"], ROUND_FLOOR_DB)
+        base_whole = {r["sum"]: r for r in _sum_rows(freqs, {code: entry for code, entry in read(None)[0].items() if code in base_keeps}, base_keeps)}
         default = {"flag_rms_db": ROUND_FLAG_RMS_DB, "floor_db": ROUND_FLOOR_DB, "window": _window_words(ROUND_WINDOW),
-                   "flagged": [r["sum"] for r in base if r["rms_db"] is not None and r["rms_db"] > ROUND_FLAG_RMS_DB]}
+                   "flagged": [r["sum"] for r in _sum_rows(freqs, base_sums, base_keeps)
+                               if _over(r, ROUND_FLAG_RMS_DB) and (r["sum"] not in base_whole or _over(base_whole[r["sum"]], ROUND_FLAG_RMS_DB))]}
     return {"rows": rows, "flag_rms_db": th["flag_rms_db"], "floor_db": th["floor_db"], "window": _window_words(spec), "words": ROUND_THRESHOLD_WORDS,
+            "flag_rule": ROUND_BOTH_WORDS if spec is not None else ROUND_WHOLE_ALONE_WORDS,
             "not_checked": not_checked, "not_measured": not_measured, "default": default}
 
 
 def render_round(doc):
-    lines = [f"  each tripod sum against the complex sum of its solos, 1/3-oct bands, no offset removed, read through {doc['window']}:",
-             f"  {'sum':16}{'band Hz':>16}{'bands':>7}{'rms dB':>9}{'max dB':>9}"]
+    both = any("whole_record" in r for r in doc["rows"])
+    lines = [f"  each tripod sum against the complex sum of its solos, 1/3-oct bands, no offset removed, read through {doc['window']}" + (", and over the whole record beside it:" if both else ":"),
+             f"  {'sum':16}{'band Hz':>16}{'bands':>7}{'rms dB':>9}{'max dB':>9}" + (f"{'whole rms':>11}{'whole max':>11}" if both else "")]
+
+    def cell(value, width):
+        return ("--" if value is None else format(value, ".2f")).rjust(width)
     for r in doc["rows"]:
         band = f"{r['band_hz'][0]:g}-{r['band_hz'][1]:g}" if r["band_hz"] else "--"
-        lines.append(f"  {r['sum'][:16]:16}{band:>16}{r['bands']:>7}"
-                     f"{('--' if r['rms_db'] is None else format(r['rms_db'], '.2f')):>9}{('--' if r['max_db'] is None else format(r['max_db'], '.2f')):>9}"
+        whole = r.get("whole_record") or {}
+        lines.append(f"  {r['sum'][:16]:16}{band:>16}{r['bands']:>7}{cell(r['rms_db'], 9)}{cell(r['max_db'], 9)}"
+                     + (f"{cell(whole.get('rms_db'), 11)}{cell(whole.get('max_db'), 11)}" if both else "")
                      + ("  FLAG" if r["flagged"] else "") + (f"  {r['why']}" if r.get("why") else ""))
     flagged = [r["sum"] for r in doc["rows"] if r["flagged"]]
-    lines.append(f"  over {doc['flag_rms_db']:g} dB rms: {', '.join(flagged) or 'none'} -- {doc['words']}")
+    lines.append(f"  over {doc['flag_rms_db']:g} dB rms" + (" on both readings" if both else "") + f": {', '.join(flagged) or 'none'} -- {doc['words']}")
+    lines.append(f"  {doc['flag_rule']}")
     if doc["default"]:
         lines.append(f"  changed from the default; at the default {doc['default']['flag_rms_db']:g} dB rms and {doc['default']['floor_db']:g} dB floor, through {doc['default']['window']}, it would flag: "
                      f"{', '.join(doc['default']['flagged']) or 'none'}")
@@ -1997,6 +2034,34 @@ def _check_round_check_window():
     assert float(np.max(np.abs(gap_db))) < 0.5, float(np.max(np.abs(gap_db)))
 
 
+def _spread_round_project():
+    """Three arrivals far apart, the sum exactly their sum: each record's own bulk delay comes out for the 1/12-oct complex average, so the sum and its solos are averaged around different times."""
+    if _FX.get("spread"):
+        return _FX["spread"]
+    n = 1 << 14
+    a, b, c = _impulse(96, 0.4, n), _impulse(700, 0.3, n), _impulse(1300, 0.25, n)
+    _FX["spread"] = _project_on_disk("spread", {"R": [_snapshot_of({"w-L": _row(None, 500)})]}, {"w_L": a, "m_L": b, "tw_L": c, "L_w+m+t": a + b + c},
+                                     glossary={"joints": {"L w+m+t": ["w-L", "m-L", "tw-L"]}})
+    return _FX["spread"]
+
+
+def _check_round_check_flags_only_when_both_readings_are_over():
+    """Acceptance A6 (#210): an exact sum of arrivals spread in time reads over the threshold through the window and 0 over the whole record: the sum and its solos are averaged around their own bulk delays.
+    Both readings are printed per sum and a sum is flagged only when both are over; the output says so. A planted error reads in both and is flagged. `--whole-record` asks for that reading alone, and it alone flags."""
+    proj, solos = _spread_round_project()
+    doc = _doc(["round-check", "--project", proj, "--solos", solos])
+    row = doc["rows"][0]
+    assert row["rms_db"] > 1.0 and row["whole_record"]["rms_db"] < 0.05 and not row["flagged"], row
+    assert "both" in doc["flag_rule"], doc.get("flag_rule")
+    rc, text, _e = _run(["round-check", "--project", proj, "--solos", solos])
+    line = next(ln for ln in text.splitlines() if ln.strip().startswith("L w+m+t"))
+    assert rc == 0 and "FLAG" not in line and format(row["rms_db"], ".2f") in line and format(row["whole_record"]["rms_db"], ".2f") in line, line
+    assert "both" in text and "bulk delay" in text, text
+    proj, solos = _round_project()
+    planted = next(r for r in _doc(["round-check", "--project", proj, "--solos", solos])["rows"] if r["sum"] == "R w+m")
+    assert planted["flagged"] and abs(planted["whole_record"]["rms_db"] - 2.0) < 0.05, planted
+
+
 def _check_round_check_averages_over_the_codes_width():
     """`s4_6b_vs_model.py:48` is `k = 2 ** (1 / 24)`: each point averages over +-1/24 oct, 1/12 oct in all. The reading against those lines written out, on a comb the average's width shows on."""
     fs = 48000.0
@@ -2152,7 +2217,7 @@ def _selftest():
                       _check_zwicker_match_on_a_known_step, _check_real_mosqito_when_installed, _check_input_trim_only,
                       _check_flags_show_their_effect, _check_refusals_are_one_line,
                       _check_nothing_to_read_refuses, _check_left_out_is_named, _check_preset_settings_named,
-                      _check_differing_joint_sets_lose_the_joint_terms, _check_virtual_tier_named, _check_round_check_window,
+                      _check_differing_joint_sets_lose_the_joint_terms, _check_virtual_tier_named, _check_round_check_window, _check_round_check_flags_only_when_both_readings_are_over,
                       _check_bad_inputs_refuse, _check_documented_level_db_form, _check_loudness_sum_is_coherent,
                       _check_bass_marker_across_versions, _check_table_flags_show_their_effect, _check_tripod_fallback_says_tripod,
                       _check_broken_mosqito_says_why, _check_round_check_names_what_it_did_not_read, _check_round_check_averages_over_the_codes_width):
