@@ -2668,7 +2668,8 @@ def _bank_words(rows):
     if not rows:
         return []
     return ["\nTo bank a row: its `delta` in the --json or --out file (`rows[N-1].delta`, N the row's #N) is the row in the ledger's own fields; "
-            "write it to a file, then `python3 rew_tool/state/apply.py <project> propose <file> --on HEAD` (runbook: `references/phases/joint-by-joint.md` §7)."]
+            "write it to a file, then `python3 rew_tool/state/apply.py <project> propose <file> --on HEAD` (runbook: `references/phases/joint-by-joint.md` §7).",
+            "A row describes the channels it names on the raw capture: bank it on a version that holds the raw state (`--on <that version>`), not on a tuned HEAD, on a car already tuned the current tune stays a candidate beside the variants, and check that the banked version re-scores as the row (`version_bench.py table`, §7)."]
 
 
 def _bounds(spec, label):
@@ -2957,13 +2958,13 @@ def _polarity_decided(fixed_rows):
     return decided
 
 
-def _eq_decided(fixed_rows):
-    """The channels whose EQ a `--fixed` row stated in its delta, an empty one included: a flatten that fitted no cuts below is carried up as that, not as nothing said."""
+def _eq_decided(held):
+    """The channels whose EQ a row this run holds stated in its delta, an empty one included: a flatten that fitted no cuts below is carried up as that, not as nothing said. `held` pairs each `--fixed` row with the channels this run takes from it. A channel the row names and this run does not hold (the woofers under `--fixed <the mid-tweeter row> --move lower`, searched as captured) is not stated: the run scored it without that row's EQ, and an `eq: []` would wipe the ledger's."""
     decided = set()
-    for row in fixed_rows:
+    for row, codes in held:
         delta = row.get("delta")
         if isinstance(delta, dict):
-            decided |= {code for code, fields in delta.items() if isinstance(fields, dict) and "eq" in fields}
+            decided |= {code for code in codes if isinstance(delta.get(code), dict) and "eq" in delta[code]}
     return decided
 
 
@@ -3933,7 +3934,8 @@ def _coupled_part(args, space, channels, stack, th, process_mod, joint, base_cls
     cross_first = None
     if args.align and not args.no_cross_first:
         cross_first = _cross_first_block(_dc_replace(base_inp, sides=sides_on(pre_chains), bass=hold_on(pre_chains, None), decay=None, lower_eq=None), flat_limits)
-    ctx = {"sides": {name: (low, up) for name, low, up in pairs_of_sides}, "gains": gains, "eq": eq_bands, "held_filters": held_filters, "carried": carried or {}, "polarity_decided": _polarity_decided(fixed_rows), "eq_stated": set(eq_bands) | _eq_decided(fixed_rows)}
+    eq_held = ([(fixed_below, set(lower.codes) | set(carried or ()))] if fixed_below is not None else []) + ([(fixed_upper, set(upper.codes))] if fixed_upper is not None and fixed_upper["joint"] != joint.name else [])          # a row of this same joint holds its delays and polarity, not its EQ
+    ctx = {"sides": {name: (low, up) for name, low, up in pairs_of_sides}, "gains": gains, "eq": eq_bands, "held_filters": held_filters, "carried": carried or {}, "polarity_decided": _polarity_decided(fixed_rows), "eq_stated": set(eq_bands) | _eq_decided(eq_held)}
     top = max(1, int(args.top))
     pub = [(_public_power if power else _public_coupled)(r, ctx) for r in res["rows"]]
     bands = {}
@@ -7774,7 +7776,7 @@ def _check_a_row_carries_a_delta_ready_for_propose():
         assert banked["channels"]["m-L"]["ta_ms"] == row["delays_ms"]["m-L"], banked["channels"]["m-L"]
         for flags in (_TINY, _WM_SMALL):
             rc, text, err = _run(argv + flags)
-            assert rc == 0 and "delta" in text and "propose" in text and "--on HEAD" in text, (rc, err[-300:], text[-400:])
+            assert rc == 0 and "delta" in text and "propose" in text and "--on HEAD" in text and "on the raw capture" in text and "the current tune stays a candidate" in text, (rc, err[-300:], text[-500:])
     finally:
         done()
 
@@ -7793,8 +7795,8 @@ def _ledger_on(proj, channels):
     return history
 
 
-def _bank_row(top, proj, row, name):
-    """`rows[N-1].delta` through `apply.py propose --on HEAD`, as the runbook says."""
+def _bank_row(top, proj, row, name, on="HEAD"):
+    """`rows[N-1].delta` through `apply.py propose --on <version>`, as the runbook says."""
     import contextlib
     import io as _io
     path = os.path.join(top, f"delta-{name}.json")
@@ -7802,7 +7804,7 @@ def _bank_row(top, proj, row, name):
         json.dump(row["delta"], fh)
     said = _io.StringIO()
     with contextlib.redirect_stdout(said), contextlib.redirect_stderr(said):
-        rc = _apply_module()._main(["apply.py", proj, "propose", path, "--on", "HEAD", "--note", name])
+        rc = _apply_module()._main(["apply.py", proj, "propose", path, "--on", on, "--note", name])
     assert rc == 0, (name, rc, said.getvalue()[-400:])
 
 
@@ -7940,6 +7942,54 @@ def _check_an_align_that_cut_nothing_clears_the_older_eq():
         done()
 
 
+def _check_a_blend_states_only_the_eq_it_held():
+    """Acceptance 2, B1 (#210): the runbook's blend, `--fixed <the mid-tweeter row> --move lower`, searches the woofers as captured and does not hold them, so the row says nothing about their EQ and the chain's stays. The EQ of the channels the run does hold is stated.
+    Banked on a raw version the row re-scores as its own numbers; banked on a version that holds the chain, the woofers' EQ is still there."""
+    top, done = _tmp()
+    try:
+        argv, proj, house, _solos = _cli_3way(top, tw=True)
+        _write_text(house, _HOUSE_HUMP)
+        bass_file, bass = _bass_row_file(top, argv)
+        wm = _doc(argv + _WM_SMALL + ["--no-dip", "--bass-drop", "6", "--fixed", f"{bass_file}@1", "--align", "--no-cross-first"])
+        assert wm["rows"] and wm["rows"][0]["channels"]["w-L"]["eq"], (wm["rejected"], "the fixture must fit cuts on the woofers, or this check checks nothing")
+        wm_file = _write_doc(os.path.join(top, "wm.json"), wm)
+        mt = _doc(argv + _U_CLI + ["--fixed", f"{wm_file}@1", "--lower-drop", "6"])
+        assert mt["rows"], mt["rejected"]
+        mt_file = _write_doc(os.path.join(top, "mt.json"), mt)
+        blend = _doc(argv + _WM_SMALL + ["--no-dip", "--fixed", f"{mt_file}@1", "--move", "lower"])
+        assert blend["rows"], blend["rejected"]
+        row = blend["rows"][0]
+        for code in ("w-L", "w-R"):
+            assert "eq" not in row["delta"][code], (code, row["delta"][code])
+        for code in ("m-L", "m-R"):
+            assert row["delta"][code].get("eq") == mt["rows"][0]["channels"][code]["eq"], (code, row["delta"][code], mt["rows"][0]["channels"][code])
+        same = _doc(argv + _WM_SMALL + ["--no-dip", "--fixed", f"{wm_file}@1", "--move", "lower"])       # a row of this joint holds delays and polarity, not its EQ
+        assert same["rows"], same["rejected"]
+        for code in ("w-L", "w-R", "m-L", "m-R"):
+            assert "eq" not in same["rows"][0]["delta"][code], (code, same["rows"][0]["delta"][code])
+        before = {code: dict(_BLANK_LEDGER_CHANNEL) for code in ("sw", "w-L", "w-R", "m-L", "m-R", "tw-L", "tw-R")}
+        history = _ledger_on(proj, before)
+        for name, chain_row in (("bass", bass["rows"][0]), ("wm", wm["rows"][0]), ("mt", mt["rows"][0])):
+            _bank_row(top, proj, chain_row, name)
+        chain = history.load("v_004")["channels"]
+        assert chain["w-L"]["eq"], chain["w-L"]
+        _bank_row(top, proj, row, "blend-on-the-chain", on="v_004")
+        banked = history.load("v_005")["channels"]
+        for code in ("w-L", "w-R"):
+            assert banked[code]["eq"] == chain[code]["eq"], (code, banked[code]["eq"], chain[code]["eq"])
+            assert banked[code]["hp"] == chain[code]["hp"] and banked[code]["gain_db"] == chain[code]["gain_db"], (code, banked[code], chain[code])
+            assert banked[code]["lp"] == row["delta"][code]["lp"] and banked[code]["ta_ms"] == row["delta"][code]["ta_ms"], (code, banked[code], row["delta"][code])
+        _bank_row(top, proj, row, "blend-on-raw", on="v_001")
+        rebuilt = _write_doc(os.path.join(top, "banked-blend.json"), _row_from_banked(history.load("v_006"), ("w-L", "w-R", "m-L", "m-R")))
+        again = _doc(argv + _U_CLI + ["--fixed", rebuilt, "--lower-drop", "6"])
+        assert again["rows"], again["rejected"]
+        for side, was in row["sides"].items():
+            now = again["rows"][0]["lower_joint"]["sides"][side]
+            assert abs(now["baseline_worst_oct"] - was["width_worst_oct"]) < 0.006 and abs(now["baseline_median_oct"] - was["width_median_oct"]) < 0.006, (side, now, was)      # the row prints 2 places
+    finally:
+        done()
+
+
 def _check_the_hard_floor_binds_every_high_pass():
     """Acceptance A3: `crossover_checks.FS_FLOOR` x Fs binds every high-pass the search proposes, a woofer's in the bass joint included: no row carries a corner under it, no row reads `REFUSE`, the refine
     steps included, and the output says what the floor took out."""
@@ -8042,7 +8092,7 @@ def _selftest():
                   _check_the_fs_floor_is_a_default_over_a_hard_limit, _check_no_row_through_the_dip_shows_the_nearest, _check_a_crossing_under_one_khz_keeps_its_upward_leak,
                   _check_held_woofers_at_zero_take_a_placeable_pair, _check_single_point_refusal_is_the_sheets_line, _check_a_no_with_a_colon_is_no_decision,
                   _check_out_keeps_the_table_it_holds, _check_a_row_carries_a_delta_ready_for_propose,
-                  _check_a_chain_banks_what_was_scored, _check_a_ledger_keeps_what_the_row_did_not_decide, _check_an_align_that_cut_nothing_clears_the_older_eq, _check_the_hard_floor_binds_every_high_pass, _check_an_empty_table_is_rerun_on_the_same_out):
+                  _check_a_chain_banks_what_was_scored, _check_a_ledger_keeps_what_the_row_did_not_decide, _check_an_align_that_cut_nothing_clears_the_older_eq, _check_a_blend_states_only_the_eq_it_held, _check_the_hard_floor_binds_every_high_pass, _check_an_empty_table_is_rerun_on_the_same_out):
         try:
             check()
         except AssertionError as exc:
