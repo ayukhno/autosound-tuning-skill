@@ -80,7 +80,7 @@ LEAK_NEAR_HZ = 100.0
 LEAK_NEAR_DB = -24.0
 LEAK_FAR_HZ = (125.0, 200.0)
 LEAK_FAR_DB = -30.0
-#: The hard floor of a high-pass, times the driver's installed Fs, mid and tweeter alike: under it the driver is asked to play its own resonance (`crossover_checks.FS_FLOOR`). `--hp-fs-floor` cannot go under it.
+#: The hard floor of every high-pass the search proposes, times the driver's installed Fs, woofer, mid and tweeter alike: under it the driver is asked to play its own resonance (`crossover_checks.FS_FLOOR`). `--hp-fs-floor` cannot go under it.
 HP_FS_HARD_FLOOR = _cc.FS_FLOOR
 #: The default floor of a high-pass, times the driver's installed Fs: a default, not safety. A corner under it is listed only with `--hp-fs-floor`, the effect shown. Mid: 1.4 x Fs, the reference tune's working 280 Hz stays inside it; tweeter: `fs_margin`'s convention.
 #: A woofer is not on this list (`xover_wishes.FRAGILE_ROLES`): its margin is shown per row, not filtered on.
@@ -93,7 +93,8 @@ SUB_ONE_POINT_MAX_HZ = 100.0
 #: Both halves are checked: that the nine points were skipped, and that the joints run on one point (`_single_point_decided`).
 SINGLE_POINT_SKIP_WORDS = "nine points skipped"
 SINGLE_POINT_ONE_WORDS = "joints run on one point"
-SINGLE_POINT_DECISION = f"{SINGLE_POINT_SKIP_WORDS}; the {SINGLE_POINT_ONE_WORDS}"
+#: The whole phrase the refusal asks for, the sheet's own (`capture-session-sheet.md`): "ellipsoid positions" is what `process._positions_asked` reads as the question having been answered.
+SINGLE_POINT_DECISION = f"ellipsoid positions: {SINGLE_POINT_SKIP_WORDS}; the {SINGLE_POINT_ONE_WORDS}"
 #: A recorded answer starting with one of these is the person saying no to the question that carried the words.
 _NO_WORDS = ("no", "nope", "not", "don't", "don’t", "ні", "нi", "не", "нет")
 #: The grid: 1/6-oct corners over the joint's bounds, then +-1/12 oct around the shortlist (PLAN-W-12, the grid).
@@ -2801,11 +2802,21 @@ def _limits_report(th, own):
 
 
 def _hp_floors(th, role, fs_hz):
-    """The high-pass floor of the role on this run and on the defaults, Hz: `(floor, default floor)`. A role with no default floor (a woofer) refuses the flag."""
+    """The high-pass floor of the role on this run and on the defaults, Hz: `(floor, default floor)`. A role with no default multiple (a woofer) stands on the hard floor, `crossover_checks.FS_FLOOR`, and refuses the flag."""
     default = HP_FS_FLOOR.get(role)
     if th.hp_fs_floor is not None and default is None:
-        raise JointSearchError(f"--hp-fs-floor: the {role} has no floor to change here (`HP_FS_FLOOR`): its Fs margin is shown per row, not filtered on")
-    return round((th.hp_fs_floor or default or 0.0) * fs_hz, 6), round((default or 0.0) * fs_hz, 6)
+        raise JointSearchError(f"--hp-fs-floor: the {role} has only the hard floor, {HP_FS_HARD_FLOOR:g} x Fs (`crossover_checks.FS_FLOOR`), and it has no flag to loosen")
+    default = default or HP_FS_HARD_FLOOR
+    return round((th.hp_fs_floor or default) * fs_hz, 6), round(default * fs_hz, 6)
+
+
+def _floor_note(role, floor_hz, fs_hz, corners):
+    """What the high-pass floor took out of this run's grid, in words; nothing when it took out nothing."""
+    gone = [c for c in corners if c < floor_hz]
+    if not gone:
+        return None
+    return (f"the high-pass floor {floor_hz:g} Hz ({floor_hz / fs_hz:.2g} x the {role}'s Fs {fs_hz:g} Hz) took out the high-pass corners under it, a driver's protection, not offered as a row: "
+            + ", ".join(f"{c:g}" for c in gone) + " Hz")
 
 
 def _own_of(cls, shortlist, role=None):
@@ -2932,14 +2943,26 @@ def _channel_row(pub_row, lower, upper):
     return out
 
 
-def _undecided(channels, sides, ctx):
-    """What a coupled row did not decide, so that its delta leaves the ledger's own: the polarity of a lower channel no held row named, and the EQ of a channel nothing fitted or held."""
-    no_polarity = [ctx["sides"][name][0] for name in sides if not ctx["held_filters"].get(ctx["sides"][name][0], {}).get("polarity")]
-    return no_polarity, [code for code in channels if code not in ctx["eq"]]
+def _polarity_decided(fixed_rows):
+    """The channels whose polarity a `--fixed` row settled: its delta states it, or, a row file from before the delta, it reads `INV` (a printed `NORM` may be only how a row shows what it did not touch)."""
+    decided = set()
+    for row in fixed_rows:
+        delta = row.get("delta")
+        if isinstance(delta, dict):
+            decided |= {code for code, fields in delta.items() if isinstance(fields, dict) and "polarity" in fields}
+        else:
+            decided |= {code for code, channel in row["channels"].items() if channel.get("polarity") == "INV"}
+    return decided
 
 
-def _ledger_delta(channels, no_polarity=(), no_eq=()):
-    """A row's `channels` in the ledger's own fields, what `apply.py propose` takes: the delay as `ta_ms`, each filter as `{f, type, slope}`. A field the search did not decide stays out (`no_polarity`, `no_eq`, and whatever the row leaves unset), so the ledger keeps its own: the table's `NORM` and empty EQ are only how a row prints what it did not touch."""
+def _undecided_polarity(sides, ctx):
+    """The channels whose polarity this row has not decided: a joint's lower channels and the channels carried from below, unless a held row settled it. The upper channels' polarity is searched, the sub's was."""
+    unset = [ctx["sides"][name][0] for name in sides] + list(ctx["carried"])
+    return [code for code in unset if code not in ctx["polarity_decided"]]
+
+
+def _ledger_delta(channels, no_polarity=()):
+    """A row's `channels` in the ledger's own fields, what `apply.py propose` takes: the delay as `ta_ms`, each filter as `{f, type, slope}`. What the row has nothing to say about stays out, so the ledger keeps its own: an undecided polarity (the table's `NORM` is only how a row prints what it did not touch), an EQ that is empty, a field left unset. An EQ the row fitted, held or carried is stated: it is in what was scored."""
     delta = {}
     for code, channel in channels.items():
         fields = {}
@@ -2953,7 +2976,7 @@ def _ledger_delta(channels, no_polarity=(), no_eq=()):
             fields["ta_ms"] = channel["delay_ms"]
         if channel.get("polarity") and code not in no_polarity:
             fields["polarity"] = channel["polarity"]
-        if channel.get("eq") is not None and code not in no_eq:
+        if channel.get("eq"):
             fields["eq"] = channel["eq"]
         delta[code] = fields
     return delta
@@ -2980,7 +3003,7 @@ def _public_coupled(row, ctx):
     if row.get("lower_joint"):
         out["lower_joint"] = _rounded_lower_joint(row["lower_joint"])
     out["channels"] = _channels_of(row, sides, ctx)
-    out["delta"] = _ledger_delta(out["channels"], *_undecided(out["channels"], sides, ctx))
+    out["delta"] = _ledger_delta(out["channels"], _undecided_polarity(sides, ctx))
     return out
 
 
@@ -3038,7 +3061,7 @@ def _public_power(row, ctx):
     if row.get("lower_joint"):
         out["lower_joint"] = _rounded_lower_joint(row["lower_joint"])
     out["channels"] = _channels_of(row, sides, ctx)
-    out["delta"] = _ledger_delta(out["channels"], *_undecided(out["channels"], sides, ctx))
+    out["delta"] = _ledger_delta(out["channels"], _undecided_polarity(sides, ctx))
     return out
 
 
@@ -3077,7 +3100,7 @@ def _render_coupled(doc):
             lines.append(head)
     lines.append("")
     held = _held_lines(doc.get("held") or {})
-    if held:
+    if held and doc["rows"]:
         lines.append("Every row above also takes, channel by channel:")
         lines.extend(f"  {line}" for line in held)
         lines.append("")
@@ -3133,7 +3156,7 @@ def _render_power(doc):
             lines.append(head)
     lines.append("")
     held = _held_lines(doc.get("held") or {})
-    if held:
+    if held and doc["rows"]:
         lines.append("Every row above also takes, channel by channel:")
         lines.extend(f"  {line}" for line in held)
         lines.append("")
@@ -3465,7 +3488,7 @@ def _write_out(args, joint_name, doc, text):
         return
     paths = [os.path.join(args.out, f"joint-{joint_name}.{ext}") for ext in ("json", "txt")]
     there = [os.path.basename(path) for path in paths if os.path.exists(path)]
-    if there and not args.overwrite:
+    if there and not args.overwrite and not _table_of_no_rows(paths[0]):
         raise JointSearchError(f"--out {args.out}: the table above was not written: {' and '.join(there)} already there, with the @N numbers recorded from it: "
                                "give another --out, or --overwrite to replace it")
     try:
@@ -3473,6 +3496,16 @@ def _write_out(args, joint_name, doc, text):
         project_io.atomic_write_text(paths[1], text + "\n", makedirs=True)
     except OSError as exc:
         raise JointSearchError(f"--out {args.out}: the table above was not written: {exc}") from None
+
+
+def _table_of_no_rows(json_path):
+    """The file at `--out` is a table of no rows: no `@N` was ever recorded from it, so a retry owes it no `--overwrite`."""
+    try:
+        with open(json_path, encoding="utf-8") as fh:
+            data = json.load(fh)
+    except (OSError, ValueError):
+        return False
+    return isinstance(data, dict) and data.get("rows") == []
 
 
 def _coupled_doc_emit(args, joint_name, doc, text):
@@ -3615,6 +3648,7 @@ def _coupled_part(args, space, channels, stack, th, process_mod, joint, base_cls
     upper_codes = list(lower.codes) + list(upper.codes)
     main, lower_curves, notes = _load_capture(args, project_dir, upper_codes, [] if power else sub_codes, freqs, Branch("woofer", lower.codes), process_mod, short=power)
     notes += budget_notes
+    notes += [note for note in (_floor_note(upper.role, floor, fs_upper, hp_corners),) if note]
     points = ["centre"] if args.single_point else list(POSITIONS)
     pre_chains, held_filters, held_gains, held_eq = {}, {}, {}, {}
     for code in upper_codes:
@@ -3883,7 +3917,7 @@ def _coupled_part(args, space, channels, stack, th, process_mod, joint, base_cls
     cross_first = None
     if args.align and not args.no_cross_first:
         cross_first = _cross_first_block(_dc_replace(base_inp, sides=sides_on(pre_chains), bass=hold_on(pre_chains, None), decay=None, lower_eq=None), flat_limits)
-    ctx = {"sides": {name: (low, up) for name, low, up in pairs_of_sides}, "gains": gains, "eq": eq_bands, "held_filters": held_filters, "carried": carried or {}}
+    ctx = {"sides": {name: (low, up) for name, low, up in pairs_of_sides}, "gains": gains, "eq": eq_bands, "held_filters": held_filters, "carried": carried or {}, "polarity_decided": _polarity_decided(fixed_rows)}
     top = max(1, int(args.top))
     pub = [(_public_power if power else _public_coupled)(r, ctx) for r in res["rows"]]
     bands = {}
@@ -4224,6 +4258,7 @@ def _cli(argv=None):
     target = None
     upper_codes, lower_codes = list(upper.codes), list(joint.lower.codes)
     main, lower_curves, notes = _load_capture(args, project_dir, upper_codes, lower_codes, freqs, upper, _process)
+    notes += [note for note in (_floor_note(upper.role, floor, fs_upper, hp_corners),) if note]
     target = _read_target(args.house, freqs)
     marks = ("single-point",) if args.single_point else ()
     inp = _build_bass_input(joint, curves=main, lower_curves=lower_curves, freqs=freqs, single_point=args.single_point,
@@ -5080,7 +5115,7 @@ def _check_front_lp_moves_the_delay():
         done()
 
 
-_DECISION_WORDS = "nine points skipped; the joints run on one point"
+_DECISION_WORDS = "ellipsoid positions: nine points skipped; the joints run on one point"
 
 
 def _process_module():
@@ -7607,6 +7642,8 @@ def _check_single_point_refusal_is_the_sheets_line():
     try:
         argv, proj, _h, _s = _cli_3way(top)
         want = f'process.py {os.path.join(proj, "process")} decision "{_DECISION_WORDS}" "agreed: <the person\'s words>"'
+        with open(os.path.join(_HERE, "..", "references", "phases", "capture-session-sheet.md"), encoding="utf-8") as fh:
+            assert f'"{SINGLE_POINT_DECISION}"' in fh.read(), "the refusal's phrase is not the sheet's (and the flaw-map gate reads the words `ellipsoid` or `position`)"
         for flags in (_TINY, _WM_SMALL):
             rc, _out, err = _run(argv + flags + ["--single-point"])
             assert rc == 3 and want in err and f"process.py {proj} decision" not in err, (rc, err[-500:])
@@ -7722,6 +7759,177 @@ def _check_a_row_carries_a_delta_ready_for_propose():
         done()
 
 
+_BLANK_LEDGER_CHANNEL = {"hp": None, "lp": None, "gain_db": 0.0, "ta_ms": 0.0, "polarity": "NORM"}
+
+
+def _ledger_on(proj, channels):
+    """A real ledger on the project: v_001 holds `channels`, its preset the active one."""
+    _apply_module()          # puts `state/` on the path
+    import state as state_mod
+    root = os.path.join(proj, "state")
+    history = state_mod.PresetHistory(root, "SQ", project_dir=proj)
+    history.snapshot({"preset": "SQ", "sample_rate": 96000, "channels": channels}, note="raw")
+    state_mod.Registry(root).set_active("SQ")
+    return history
+
+
+def _bank_row(top, proj, row, name):
+    """`rows[N-1].delta` through `apply.py propose --on HEAD`, as the runbook says."""
+    import contextlib
+    import io as _io
+    path = os.path.join(top, f"delta-{name}.json")
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump(row["delta"], fh)
+    said = _io.StringIO()
+    with contextlib.redirect_stdout(said), contextlib.redirect_stderr(said):
+        rc = _apply_module()._main(["apply.py", proj, "propose", path, "--on", "HEAD", "--note", name])
+    assert rc == 0, (name, rc, said.getvalue()[-400:])
+
+
+def _banked_is_the_row(banked, row, before):
+    """Each channel of the row against the version banked from its delta, field by field; what the row says nothing about is the ledger's own."""
+    for code, channel in row["channels"].items():
+        got, was = banked["channels"][code], before[code]
+        for leg in ("hp", "lp"):
+            want = channel.get(leg)
+            assert got.get(leg) == ({"f": want[2], "type": want[0], "slope": want[1]} if want else was.get(leg)), (code, leg, got.get(leg), want)
+        assert got.get("gain_db") == (channel["gain_db"] if channel.get("gain_db") is not None else was.get("gain_db")), (code, "gain", got.get("gain_db"), channel.get("gain_db"))
+        assert got.get("ta_ms") == channel["delay_ms"], (code, "ta_ms", got.get("ta_ms"), channel["delay_ms"])
+        assert got.get("polarity") == (channel.get("polarity") or was.get("polarity")), (code, "polarity", got.get("polarity"), channel.get("polarity"))
+        assert (got.get("eq") or []) == (channel.get("eq") or []), (code, "eq", got.get("eq"), channel.get("eq"))
+
+
+def _row_from_banked(banked, codes):
+    """A woofer-mid row rebuilt from what the ledger holds: only the banked fields, for `--fixed`."""
+    def leg(value):
+        return None if not value or value == "OFF" else [value["type"], value["slope"], value["f"]]
+    channels = {code: {"hp": leg(banked["channels"][code].get("hp")), "lp": leg(banked["channels"][code].get("lp")), "eq": banked["channels"][code].get("eq") or [],
+                       "gain_db": banked["channels"][code].get("gain_db"), "polarity": banked["channels"][code].get("polarity"), "delay_ms": banked["channels"][code]["ta_ms"]}
+                for code in codes}
+    return {"joint": "woofer-midrange", "channels": channels, "delays_ms": {code: spec["delay_ms"] for code, spec in channels.items()}}
+
+
+def _check_a_chain_banks_what_was_scored():
+    """Acceptance A1 (#210): bass -> woofer-mid with `--align` -> mid-tweeter, each row's `delta` banked through `propose --on HEAD` onto a real ledger: the banked channels equal the row's `channels`
+    field by field, the woofers' EQ carried up from the joint that fitted it included, and the woofer-mid joint re-scored from the banked version gives the row's own numbers."""
+    top, done = _tmp()
+    try:
+        argv, proj, house, _solos = _cli_3way(top, tw=True)
+        _write_text(house, _HOUSE_HUMP)
+        bass_file, bass = _bass_row_file(top, argv)
+        wm = _doc(argv + _WM_SMALL + ["--no-dip", "--bass-drop", "6", "--fixed", f"{bass_file}@1", "--align", "--no-cross-first"])
+        assert wm["rows"], wm["rejected"]
+        assert wm["rows"][0]["channels"]["w-L"]["eq"], "the fixture must fit cuts on the woofers, or this check checks nothing"
+        wm_file = _write_doc(os.path.join(top, "wm.json"), wm)
+        mt = _doc(argv + _U_CLI + ["--fixed", f"{wm_file}@1", "--lower-drop", "6"])
+        assert mt["rows"], mt["rejected"]
+        before = {code: dict(_BLANK_LEDGER_CHANNEL) for code in ("sw", "w-L", "w-R", "m-L", "m-R", "tw-L", "tw-R")}
+        history = _ledger_on(proj, before)
+        chain = (("bass", bass["rows"][0]), ("wm", wm["rows"][0]), ("mt", mt["rows"][0]))
+        for name, row in chain:
+            _bank_row(top, proj, row, name)
+        for version, (name, row) in zip(("v_002", "v_003", "v_004"), chain):
+            try:
+                _banked_is_the_row(history.load(version), row, before)
+            except AssertionError as exc:
+                raise AssertionError(f"{name} row banked as {version} is not the row: {exc}") from None
+        row = mt["rows"][0]
+        assert row["channels"]["w-L"]["eq"] and row["delta"]["w-L"]["eq"] == row["channels"]["w-L"]["eq"], (row["channels"]["w-L"], row["delta"]["w-L"])
+        rebuilt = _write_doc(os.path.join(top, "banked-row.json"), _row_from_banked(history.load("v_004"), ("w-L", "w-R", "m-L", "m-R")))
+        again = _doc(argv + _U_CLI + ["--fixed", rebuilt, "--lower-drop", "6"])
+        assert again["rows"], again["rejected"]
+        for side, was in row["lower_joint"]["sides"].items():
+            now = again["rows"][0]["lower_joint"]["sides"][side]
+            assert abs(now["baseline_worst_oct"] - was["width_worst_oct"]) < 1e-6 and abs(now["baseline_median_oct"] - was["width_median_oct"]) < 1e-6, (side, now, was)
+    finally:
+        done()
+
+
+def _check_a_ledger_keeps_what_the_row_did_not_decide():
+    """Acceptance A1 (#210): EQ and INV polarity on a channel the row did not decide stay the ledger's; a polarity a row below did decide (the mid's, the sub's) goes on being stated when it is carried up."""
+    top, done = _tmp()
+    try:
+        argv, proj, _house, _solos = _cli_3way(top, tw=True)
+        bass_file, _bass = _bass_row_file(top, argv)
+        wm = _doc(argv + _WM_SMALL + ["--bass-drop", "6", "--fixed", f"{bass_file}@1"])
+        assert wm["rows"], wm["rejected"]
+        wm_file = _write_doc(os.path.join(top, "wm.json"), wm)
+        mt = _doc(argv + _U_CLI + ["--fixed", f"{wm_file}@1", "--lower-drop", "6"])
+        assert mt["rows"], mt["rejected"]
+        row = mt["rows"][0]
+        for code in ("w-L", "w-R"):
+            assert "polarity" not in row["delta"][code] and "eq" not in row["delta"][code], (code, row["delta"][code])
+        for code in ("m-L", "m-R"):
+            assert row["delta"][code].get("polarity") == row["channels"][code]["polarity"], (code, row["delta"][code])
+        assert row["delta"]["sw"].get("polarity") == row["channels"]["sw"]["polarity"], row["delta"]["sw"]
+        band = {"type": "PK", "f": 300.0, "gain_db": -3.0, "q": 2.0}
+        before = {code: dict(_BLANK_LEDGER_CHANNEL) for code in ("sw", "w-L", "w-R", "m-L", "m-R", "tw-L", "tw-R")}
+        before["w-L"].update(polarity="INV", eq=[band])
+        before["m-L"]["eq"] = [band]
+        history = _ledger_on(proj, before)
+        _bank_row(top, proj, row, "mt")
+        banked = history.load("v_002")["channels"]
+        assert banked["w-L"]["polarity"] == "INV" and banked["w-L"]["eq"] == [band], banked["w-L"]
+        assert banked["m-L"]["eq"] == [band], banked["m-L"]
+        assert banked["m-L"]["polarity"] == row["channels"]["m-L"]["polarity"], banked["m-L"]
+    finally:
+        done()
+
+
+def _check_the_hard_floor_binds_every_high_pass():
+    """Acceptance A3: `crossover_checks.FS_FLOOR` x Fs binds every high-pass the search proposes, a woofer's in the bass joint included: no row carries a corner under it, no row reads `REFUSE`, the refine
+    steps included, and the output says what the floor took out."""
+    top, done = _tmp()
+    try:
+        argv, proj, _house, _solos = _solo_project(top)
+        pj = _pj.Project(proj)
+        data = pj.load()
+        for row in data["channels"]:
+            if row["role"] == "woofer":
+                row["fs_hz"] = 52.0
+        pj.save(data)
+        bass = ["--lp-bounds", "63:80", "--hp-bounds", "40:80", "--gain", "2:8:2", "--no-leak", "--no-dip"]
+        doc = _doc(argv + bass)
+        floor = round(_cc.FS_FLOOR * 52.0, 1)
+        assert doc["conditions"]["hp_floor_hz"] == floor, doc["conditions"]["hp_floor_hz"]
+        assert doc["rows"], doc["rejected"]
+        assert all(r["hp"][2] >= floor for r in doc["rows"]), [r["hp"] for r in doc["rows"]][:5]
+        assert all(r["fs_margin"] != _cc.REFUSE for r in doc["rows"]), [r["fs_margin"] for r in doc["rows"]][:5]
+        assert all(o[2] >= floor for o in doc["grid"]["hp_options"]), doc["grid"]["hp_options"][:4]
+        said = [n for n in doc["notes"] if "Fs" in n and "took out" in n]
+        assert len(said) == 1 and "57.2" in said[0] and "40" in said[0] and "52" in said[0], doc["notes"]
+        rc, text, _err = _run(argv + bass)
+        assert rc == 0 and "took out" in text, text[-500:]
+        # nothing under the floor, nothing said
+        clear = _doc(argv + ["--lp-bounds", "63:80", "--hp-bounds", "63:80", "--gain", "2:8:2", "--no-leak", "--no-dip"])
+        assert not any("took out" in n for n in clear["notes"]), clear["notes"]
+        # a mid's floor says so too, on its own (default) multiple
+        os.makedirs(os.path.join(top, "three"))
+        three, _proj3, _h3, _s3 = _cli_3way(os.path.join(top, "three"))
+        wm = _doc(three + ["--joint", "woofer-midrange", "--lp-bounds", "250:260", "--hp-bounds", "50:315", "--shift-span", "1", "--no-leak", "--no-dip", "--no-default-run"])
+        assert any("took out" in n and "midrange" in n for n in wm["notes"]), wm["notes"]
+    finally:
+        done()
+
+
+def _check_an_empty_table_is_rerun_on_the_same_out():
+    """Acceptance A2: a run that gave no rows writes a table of none, so a retry on the same `--out` owes it no `--overwrite` (no `@N` was recorded from it), and "every row above" is not printed with no rows above."""
+    top, done = _tmp()
+    try:
+        argv, _proj, _house, _solos = _cli_3way(top, tw=True)
+        bass_file, _bass = _bass_row_file(top, argv)
+        out = os.path.join(top, "out")
+        empty = argv + ["--joint", "woofer-midrange", "--lp-bounds", "250:260", "--hp-bounds", "280:290", "--shift-span", "1", "--no-default-run", "--no-dip", "--bass-drop", "6",
+                        "--fixed", f"{bass_file}@1", "--leak-octave", "-200", "--out", out]
+        rc, text, err = _run(empty)
+        assert rc == 0 and "No variant came through" in text, (rc, err[-300:], text[-300:])
+        assert "Every row above" not in text, text
+        rc, text2, err2 = _run(empty)
+        assert rc == 0 and "not written" not in err2, (rc, err2[-300:], text2[-200:])
+    finally:
+        done()
+
+
 def _selftest():
     failures = []
     # Time (Windows runners are slower, and the runner's limit is per module): the frequency grid of the fixtures runs at 32 points an octave, not GRID_PPO's 96.
@@ -7769,7 +7977,8 @@ def _selftest():
                   _check_session_flags_refuse_where_unused, _check_a_dropped_pair_is_counted_once,
                   _check_the_fs_floor_is_a_default_over_a_hard_limit, _check_no_row_through_the_dip_shows_the_nearest, _check_a_crossing_under_one_khz_keeps_its_upward_leak,
                   _check_held_woofers_at_zero_take_a_placeable_pair, _check_single_point_refusal_is_the_sheets_line, _check_a_no_with_a_colon_is_no_decision,
-                  _check_out_keeps_the_table_it_holds, _check_a_row_carries_a_delta_ready_for_propose):
+                  _check_out_keeps_the_table_it_holds, _check_a_row_carries_a_delta_ready_for_propose,
+                  _check_a_chain_banks_what_was_scored, _check_a_ledger_keeps_what_the_row_did_not_decide, _check_the_hard_floor_binds_every_high_pass, _check_an_empty_table_is_rerun_on_the_same_out):
         try:
             check()
         except AssertionError as exc:
