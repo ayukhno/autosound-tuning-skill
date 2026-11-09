@@ -232,11 +232,11 @@
       "derive": "virtual-first, jeśli poziom 1 + loopback na tym samym taktowaniu + zweryfikowany model filtrów; w przeciwnym razie iteracyjnie"
     },
     "goal.desk_approach": {
-      "ask": "How should the desk work be done — joint by joint, with the Resonalyze engine, or both?",
+      "ask": "Jak wykonać strojenie przy biurku — punkt podziału po punkcie, silnikiem Resonalyze czy oboma sposobami?",
       "enum": {
-        "joint_by_joint": "Joint by joint (search and compare)",
-        "resonalyze_engine": "Resonalyze engine",
-        "both": "Both, then pick the best"
+        "joint_by_joint": "Punkt podziału po punkcie (szukaj i porównuj)",
+        "resonalyze_engine": "Silnik Resonalyze",
+        "both": "Oba, potem wybierz najlepszy"
       }
     },
     "goal.stage_priorities": {

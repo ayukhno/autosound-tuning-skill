@@ -58,7 +58,7 @@ Name it so it resolves later — a bundled curve's name, or the path under
 Before taking raw baseline measurements, prepare the clean starting preset in Helix PC-Tool:
 * **Clean Baseline Profile:** Start with a clean/reset preset in Helix PC-Tool (representing version `v0`).
 * **Basic Configuration Only:** Configure the input-to-output routing matrix (Input/Output Matrix) and assign correct output names (`tw-L/R`, `m-L/R`, `w-L/R`, `sw`) according to the glossary.
-* **Zero Acoustic Modifiers:** Ensure all acoustic modifiers are cleared: all delays set to exactly `0 ms / 0 cm / 0 samples`, all polarities set to NORM, all output EQs flat (bypass/0 dB), and initial output gains set to 0 dB (with protective crossovers applied to ВЧ/СЧ as described in Phase 1).
+* **Zero Acoustic Modifiers:** Ensure all acoustic modifiers are cleared: all delays set to exactly `0 ms / 0 cm / 0 samples`, all polarities set to NORM, all output EQs flat (bypass/0 dB), initial output gains set to 0 dB (with protective crossovers applied to ВЧ/СЧ as described in Phase 1), and every enhancer, filter and EQ off (the DSP's own list: `capture-session-sheet.md`, `v0`).
 * This forms the "pure routing preset" baseline from which all subsequent acoustic tuning is built.
 
 ### 3. Capture the Baseline (per-driver)

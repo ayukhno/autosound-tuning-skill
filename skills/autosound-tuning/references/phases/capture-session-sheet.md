@@ -139,8 +139,7 @@ APPENDIX · IMPEDANCE (a separate rig, another day)  — optional, not on the pa
   driver or wiring. Without a rig: Fs from the datasheet with margin, and say so.
 ```
 
-**One full raw capture for every project, whichever way the desk goes** (the Arbiter, 2026-11-08: «знімати все що потрібно щоб мати
-сиру машину для всіх варіацій проекта далі»): blocks A, B with the nine points, C and D, plus **block X** on a car that is already tuned
+**One full raw capture for every project, whichever way the desk goes** (the Arbiter, 2026-11-08: capture all a raw car needs, once, for every later variation): blocks A, B with the nine points, C and D, plus **block X** on a car that is already tuned
 (~10 min). On a 3-way + centre that is 63 point sweeps against the 36 this sheet used to ask for. Until 2026-11-08 the nine points
 were the one optional part; they are now the default.
 

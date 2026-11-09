@@ -232,11 +232,11 @@
       "derive": "Virtual-first, wenn Level 1 + Loopback im selben Takt + verifiziertes Filtermodell; sonst iterativ"
     },
     "goal.desk_approach": {
-      "ask": "How should the desk work be done — joint by joint, with the Resonalyze engine, or both?",
+      "ask": "Wie soll die Berechnung am Schreibtisch erfolgen — Übergang für Übergang, mit der Resonalyze-Engine oder beides?",
       "enum": {
-        "joint_by_joint": "Joint by joint (search and compare)",
-        "resonalyze_engine": "Resonalyze engine",
-        "both": "Both, then pick the best"
+        "joint_by_joint": "Übergang für Übergang (suchen und vergleichen)",
+        "resonalyze_engine": "Resonalyze-Engine",
+        "both": "Beides, dann das Beste wählen"
       }
     },
     "goal.stage_priorities": {

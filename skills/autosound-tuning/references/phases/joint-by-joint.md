@@ -74,7 +74,7 @@ add-step 1.J5 "the A/B verdict at matched loudness"
 
 ## 2. The capture
 
-The capture does not depend on the desk approach: **one full raw capture for every project**, whichever way the desk goes, and it
+The capture does not depend on the desk approach: **one full raw capture for every project**, whichever way the desk goes, and the desk approach
 can still be changed after the capture. Block B of [`capture-session-sheet.md`](references/phases/capture-session-sheet.md)
 is the recipe: the nine points for every front driver and the centre, on the fixed path in front of the nose; the tripod solos of
 every channel; the raw `v0` state. Everything below is computed on these curves. No re-measuring between desk variants: the same
@@ -97,8 +97,8 @@ joints below stay. Choose from the top down and every joint below pulls the top 
 **Align-then-cross** (`--align`): each driver alone is put on the target first (gain up ≤ 6 dB, ≤ 4 cuts of ≤ 6 dB), then the crossover
 is searched on the flattened chain. **Cross-first:** the crossover is searched as the drivers are, and the same EQ budget is spent on
 the sum after. Neither is the method. On the reference car they gave different things: the flatten-first variant had the better microdynamics
-(it kept 250–400 Hz off the door woofers that ring long there), the symmetric variant the steadier stage. `--align` runs both
-unless `--no-cross-first`. Compare them at this joint and in §7, not in principle.
+(it kept 250–400 Hz off the door woofers that ring long there), the symmetric variant (the same filters L and R, with the L−R offset held: §6) the steadier stage. `--align` runs both
+variants unless `--no-cross-first` is given. Compare them at this joint and in §7, not in principle.
 
 Where it fails: a flatten eats phase margin near a joint; cuts on the overlap can break fusion (§11). A flatten that cannot stay inside the
 DSP's gain range brings every channel down alike, not one side (`global_trim_db`).

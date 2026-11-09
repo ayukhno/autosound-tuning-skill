@@ -232,11 +232,11 @@
       "derive": "virtual-first, якщо рівень 1 + лупбек на одному тактуванні + перевірена модель фільтрів; інакше ітеративно"
     },
     "goal.desk_approach": {
-      "ask": "How should the desk work be done — joint by joint, with the Resonalyze engine, or both?",
+      "ask": "Як виконувати розрахунок за комп'ютером — стик за стиком, рушієм Resonalyze чи обома способами?",
       "enum": {
-        "joint_by_joint": "Joint by joint (search and compare)",
-        "resonalyze_engine": "Resonalyze engine",
-        "both": "Both, then pick the best"
+        "joint_by_joint": "Стик за стиком (пошук і порівняння)",
+        "resonalyze_engine": "Рушій Resonalyze",
+        "both": "Обидва, потім обрати найкращий"
       }
     },
     "goal.stage_priorities": {

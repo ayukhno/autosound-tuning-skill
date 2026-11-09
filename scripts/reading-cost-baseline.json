@@ -4,15 +4,15 @@
   "next_phase": "to its Goal-node",
   "phases": {
     "-1": {
-      "tokens": 63747,
-      "chars": 254989,
+      "tokens": 63743,
+      "chars": 254972,
       "files": {
         "SKILL.md": 23665,
         "references/phases/phase_-1_intake.md": 33177,
         "references/phases/phase_0_baseline.md (to its Goal-node)": 2375,
         "references/core/project-intake.md": 29219,
         "references/phases/virtual-first.md": 40478,
-        "references/phases/capture-session-sheet.md": 13385,
+        "references/phases/capture-session-sheet.md": 13368,
         "references/tooling/setup-critic-channel.md": 40865,
         "references/core/naming-and-structure.md": 38215,
         "references/core/review-loop.md": 10613,
@@ -20,14 +20,14 @@
       }
     },
     "0": {
-      "tokens": 38977,
-      "chars": 155906,
+      "tokens": 38995,
+      "chars": 155979,
       "files": {
         "SKILL.md": 23665,
-        "references/phases/phase_0_baseline.md": 26431,
+        "references/phases/phase_0_baseline.md": 26521,
         "references/phases/phase_1_foundation.md (to its Goal-node)": 5104,
         "references/phases/virtual-first.md": 40478,
-        "references/phases/capture-session-sheet.md": 13385,
+        "references/phases/capture-session-sheet.md": 13368,
         "references/core/naming-and-structure.md": 38215,
         "references/core/project-intake.md § ## 3.": 8628
       }
@@ -98,5 +98,5 @@
       }
     }
   },
-  "full_tune_tokens": 279486
+  "full_tune_tokens": 279500
 }
