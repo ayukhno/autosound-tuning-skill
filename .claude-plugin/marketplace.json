@@ -14,11 +14,11 @@
       "source": {
         "source": "url",
         "url": "https://github.com/ayukhno/autosound-tuning-skill.git",
-        "ref": "v3.2.0",
-        "sha": "a9952206468573743d2083b73c4b7e7f9d10dc6d"
+        "ref": "v3.3.0",
+        "sha": "c92978a60c3583e3540eb8e1e4537d7a4b2f0d9b"
       },
       "description": "Tune a car-audio DSP with REW — intake → crossovers → time alignment → phase → EQ → imaging → taste voicing, via a Generator-Critic-Arbiter review loop. Any car, any DSP. Bundles the review-loop method (independent multi-AI review + anti-anchoring).",
-      "version": "3.2.0",
+      "version": "3.3.0",
       "author": {
         "name": "ayukhno"
       },
