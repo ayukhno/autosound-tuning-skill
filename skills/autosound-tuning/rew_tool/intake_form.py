@@ -97,6 +97,11 @@ def _ask(lab, field):
     return row.get("ask") or field["ask"]
 
 
+def _note(lab, en, field):
+    """The field's own line for the person, when it has one: this language's, else the English."""
+    return (lab["fields"].get(field["id"]) or {}).get("note") or (en["fields"].get(field["id"]) or {}).get("note")
+
+
 def _options(lab, field):
     """`(value, label)` pairs. A numeric choice is its own label — 96000 needs no translation."""
     row = (lab["fields"].get(field["id"]) or {}).get("enum") or {}
@@ -139,7 +144,7 @@ def _tier_options(lab, tiers):
 
 def model(project_dir, lang=DEFAULT_LANG):
     """Everything the page renders: fields with their state and current value, tables, the gate."""
-    lab = labels(lang)
+    lab, en = labels(lang), labels("en")
     buckets = intake.missing(project_dir)
     state = {}
     for row in buckets["answered"]:
@@ -202,7 +207,7 @@ def model(project_dir, lang=DEFAULT_LANG):
         if f["id"] == "dsp.tiers":
             options, suggest = _tier_options(lab, intake.SUGGESTED_TIERS), []
         fields.append({
-            "id": f["id"], "group": f["group"], "ask": _ask(lab, f), "ask_en": f["ask"],
+            "id": f["id"], "group": f["group"], "ask": _ask(lab, f), "ask_en": f["ask"], "note": _note(lab, en, f),
             "required": f["required"], "multi": f["multi"], "per": f["per"],
             "couple": f["ask_with"], "writes": f["writes"], "lands": f["lands"],
             "options": options, "state": st,
@@ -957,7 +962,8 @@ def _field_html(f, ui):
             f"data-orig='{_esc(_orig(f['value']))}'{unit_id}>"
             f'<span id="f-{_esc(f["id"])}"></span>'
             f'<div class="q"><span class="dot d-{f["state"]}"></span>{_esc(f["ask"])}{mark}</div>'
-            f'{control}{unread}</div>')
+            + (f'<div class="meta">{_esc(f["note"])}</div>' if f.get("note") else "")
+            + f'{control}{unread}</div>')
 
 
 #: The page's own refusals (round 6), in English for a language whose file lacks them.
@@ -1961,6 +1967,22 @@ def _own_tempdir(selftest):
 
 
 @_own_tempdir
+def _check_the_desk_approach_says_what_it_needs_and_gives():
+    """Acceptance A4 (#210): the offer shows, on the page, what each way needs and gives, in every language: a language without the line falls back to the English one; only the fields that carry one show it."""
+    import tempfile
+    with tempfile.TemporaryDirectory(prefix="autosound_form_note_") as root:
+        project.Project(root).save({"schema_version": project.SCHEMA_VERSION, "channels": []})
+        field_id = "goal.desk_approach"
+        for lang in ("en", "uk", "de", "pl", "xx"):
+            page = render(model(root, lang))
+            head = page.split(f'id="f-{field_id}"', 1)[1].split('data-kind="field"', 1)[0]
+            for word in ("needs", "gives", "DSP memories", "Resonalyze", "one car"):
+                assert word in head, (lang, word, head[:400])
+        assert model(root, "en")["fields"][[f["id"] for f in model(root, "en")["fields"]].index(field_id)]["note"], "no note on the field"
+        other = next(f for f in model(root, "en")["fields"] if f["id"] == "car.body")
+        assert not other.get("note"), other
+
+
 def _selftest():
     import re
     import tempfile
@@ -1968,7 +1990,8 @@ def _selftest():
     failures = []
     for check in (_check_unreadable_profile_shown_and_refused, _check_unreadable_gate_file_named,
                   _check_save_answers_under_a_held_lock, _check_an_answer_holds_once, _check_a_busy_batch_waits_once,
-                  _check_unreadable_glossary_field_said, _check_unreadable_project_said_on_each_question):
+                  _check_unreadable_glossary_field_said, _check_unreadable_project_said_on_each_question,
+                  _check_the_desk_approach_says_what_it_needs_and_gives):
         try:
             check()
         except Exception as exc:  # noqa: BLE001 -- a check that raises is reported by name, like one that fails
@@ -2066,7 +2089,7 @@ def _selftest():
         assert "asks.push({kind: 'seat'" in page, "the first Save of the seat does not say it is final"
         assert labels("uk")["ui"]["seat_howto"] in page, "the unset seat does not say how to make another"
         # Round 6: once written, the seat is FIXED on the page -- no control, and the reason given.
-        locked = tempfile.mkdtemp(prefix="intake_form_seat_")
+        locked = tempfile.mkdtemp(prefix="intake_form_seat_", dir=root)
         intake.save(locked, "goal.reference_seat", "passenger")
         lpage = render(model(locked, lang="uk"))
         lseat = lpage.split('id="f-goal.reference_seat"', 1)[0].rsplit("<div", 1)[1]

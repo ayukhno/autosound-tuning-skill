@@ -233,6 +233,7 @@
     },
     "goal.desk_approach": {
       "ask": "How should the desk work be done — joint by joint, with the Resonalyze engine, or both?",
+      "note": "Joint by joint needs several DSP memories, a way to read a saved preset back and time for A/B listening; it gives a ranked set of variants with the reasons behind each, not one answer. The Resonalyze engine needs the engine's program or a .NET SDK; it gives the whole configuration at once and what each choice trades off. Both takes the time of the two and gives the best of two. For joint by joint the evidence so far is one car (3-way + centre + sub), nine days. The capture is the same either way, so this can still be changed after it.",
       "enum": {
         "joint_by_joint": "Joint by joint (search and compare)",
         "resonalyze_engine": "Resonalyze engine",
