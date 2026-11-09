@@ -309,7 +309,7 @@ Two new modules, numpy + scipy, not in `IMPORTABLE`:
 - *The metric follows each candidate's acoustic crossing.* Under 1 kHz, on the 5/500 ms window: the ±30° band through the crossing, worst then median of
   the points, then the summation loss (`dsp_math.sum_loss`). From 1 kHz, on the 1/4 ms window (it reads from 1 kHz up, `mt_search.py:14-15`): the power sum
   over the points, then the worst of the left-ear, right-ear and centre groups must not cancel, then the flattest response to the target. A joint whose
-  bounds straddle 1 kHz gets two lists, one per class, because their scores do not compare; a candidate whose ±½ oct scoring band itself crosses 1 kHz is scored in the upper class, on the band clipped at 1 kHz, and marked.
+  bounds straddle 1 kHz gets two lists, one per class, because their scores do not compare; a crossing under 1 kHz goes to the lower list, which can read it; what still reaches the upper class is marked as not tested at its crossing (as built).
 - *The ear groups.* The run's groups were fixed by hand after reading the arrivals (`mt_search.py:264-267`). The rule here: at each point the L−R arrival of the mids and of the tweeters (`windows.arrival_between`, 1–4 kHz),
   minus the centre points' mean of the same pair; both below −0.1 ms left, both above +0.1 ms right; between, or the two pairs disagreeing, unassigned. A group needs two points; otherwise only the nine-point
   sum applies and the output says so. Centre stays p1/p5/p9.
