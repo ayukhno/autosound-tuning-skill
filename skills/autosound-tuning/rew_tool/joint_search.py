@@ -2932,8 +2932,14 @@ def _channel_row(pub_row, lower, upper):
     return out
 
 
-def _ledger_delta(channels):
-    """A row's `channels` in the ledger's own fields, what `apply.py propose` takes: the delay as `ta_ms`, each filter as `{f, type, slope}`. A field the row does not state stays out, so the ledger keeps its own."""
+def _undecided(channels, sides, ctx):
+    """What a coupled row did not decide, so that its delta leaves the ledger's own: the polarity of a lower channel no held row named, and the EQ of a channel nothing fitted or held."""
+    no_polarity = [ctx["sides"][name][0] for name in sides if not ctx["held_filters"].get(ctx["sides"][name][0], {}).get("polarity")]
+    return no_polarity, [code for code in channels if code not in ctx["eq"]]
+
+
+def _ledger_delta(channels, no_polarity=(), no_eq=()):
+    """A row's `channels` in the ledger's own fields, what `apply.py propose` takes: the delay as `ta_ms`, each filter as `{f, type, slope}`. A field the search did not decide stays out (`no_polarity`, `no_eq`, and whatever the row leaves unset), so the ledger keeps its own: the table's `NORM` and empty EQ are only how a row prints what it did not touch."""
     delta = {}
     for code, channel in channels.items():
         fields = {}
@@ -2945,9 +2951,9 @@ def _ledger_delta(channels):
             fields["gain_db"] = channel["gain_db"]
         if channel.get("delay_ms") is not None:
             fields["ta_ms"] = channel["delay_ms"]
-        if channel.get("polarity"):
+        if channel.get("polarity") and code not in no_polarity:
             fields["polarity"] = channel["polarity"]
-        if channel.get("eq") is not None:
+        if channel.get("eq") is not None and code not in no_eq:
             fields["eq"] = channel["eq"]
         delta[code] = fields
     return delta
@@ -2974,7 +2980,7 @@ def _public_coupled(row, ctx):
     if row.get("lower_joint"):
         out["lower_joint"] = _rounded_lower_joint(row["lower_joint"])
     out["channels"] = _channels_of(row, sides, ctx)
-    out["delta"] = _ledger_delta(out["channels"])
+    out["delta"] = _ledger_delta(out["channels"], *_undecided(out["channels"], sides, ctx))
     return out
 
 
@@ -3032,7 +3038,7 @@ def _public_power(row, ctx):
     if row.get("lower_joint"):
         out["lower_joint"] = _rounded_lower_joint(row["lower_joint"])
     out["channels"] = _channels_of(row, sides, ctx)
-    out["delta"] = _ledger_delta(out["channels"])
+    out["delta"] = _ledger_delta(out["channels"], *_undecided(out["channels"], sides, ctx))
     return out
 
 
@@ -4259,7 +4265,7 @@ def _cli(argv=None):
         pub["delays_ms"] = _channel_delays(pub["ta_ms"], joint.lower, upper)
         pub["joint"] = joint.name
         pub["channels"] = _channel_row(pub, joint.lower, upper)
-        pub["delta"] = _ledger_delta(pub["channels"])
+        pub["delta"] = _ledger_delta(pub["channels"], no_polarity=upper.codes)   # a bass row never decides the fronts' polarity
         return pub
     bands = {k: [published(r) for r in v[:top]] for k, v in res["bands"].items()}
     grid = dict(res["grid"], ceiling=GRID_CEILING_PAIRS)
@@ -7678,10 +7684,14 @@ def _check_a_row_carries_a_delta_ready_for_propose():
         for row in bass["rows"]:
             for code, fields in row["delta"].items():
                 assert set(fields) <= legal and fields["ta_ms"] == row["delays_ms"][code], (code, fields)
+            for code in ("w-L", "w-R"):      # the search never decided a front channel's polarity: the ledger keeps its own
+                assert "polarity" not in row["delta"][code], (code, row["delta"][code])
         wm = _doc(argv + _WM_SMALL + ["--bass-drop", "6", "--fixed", f"{bass_file}@1"])
         assert wm["rows"], wm["rejected"]
         row = wm["rows"][0]
         assert set(row["delta"]) == set(row["channels"]), (row["delta"], row["channels"])
+        for code in ("w-L", "w-R"):          # not decided here, and no EQ was fitted: neither is overwritten
+            assert "polarity" not in row["delta"][code] and "eq" not in row["delta"][code], (code, row["delta"][code])
         for code, fields in row["delta"].items():
             assert set(fields) <= legal and "delay_ms" not in fields and fields["ta_ms"] == row["delays_ms"][code], (code, fields)
             for leg in ("hp", "lp"):

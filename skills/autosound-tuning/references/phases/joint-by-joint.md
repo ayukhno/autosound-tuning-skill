@@ -175,7 +175,7 @@ Whichever path built them, the comparison is the same; both paths in one table n
 python3 rew_tool/state/apply.py <p> propose <delta.json> --on HEAD --note "<the variant>"
 ```
 
-Every variant moves a delay, a corner or a polarity, so it is structural: **without evidence and a reviewer it banks as a candidate**, on the line and not in the slot, which `version_bench.py table` reads by its version. The next `propose` on that slot is refused without `--on` while the newest version is a candidate, and `--on HEAD` builds the next variant from HEAD, not on the candidate before it.
+A variant that moves a corner, a polarity or a delay by 0.5 ms or more is structural: **without evidence and a reviewer it banks as a candidate**, on the line and not in the slot, which `version_bench.py table` reads by its version. The next `propose` on that slot is refused without `--on` while the newest version is a candidate, and `--on HEAD` builds the next variant from HEAD, not on the candidate before it.
 
 **Each variant earns its place on its own:** evidence (the joint's kept JSON is a desk result; no car trip is needed) and a reviewer, once per variant:
 
