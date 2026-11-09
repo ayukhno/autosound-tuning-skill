@@ -237,7 +237,8 @@
         "joint_by_joint": "Punkt podziału po punkcie (szukaj i porównuj)",
         "resonalyze_engine": "Silnik Resonalyze",
         "both": "Oba, potem wybierz najlepszy"
-      }
+      },
+      "note": "Punkt podziału po punkcie podziału wymaga kilku komórek pamięci DSP, możliwości ponownego odczytania zapisanego presetu oraz czasu na odsłuchy A/B; daje to uszeregowany zestaw wariantów wraz z uzasadnieniem każdego z nich, a nie jedną odpowiedź. Silnik Resonalyze wymaga programu silnika lub .NET SDK; daje on całą konfigurację naraz i pokazuje kompromisy stojące za każdym wyborem. Oba podejścia łącznie zajmują czas obu i dają to, co najlepsze z obu. Dla metody „punkt podziału po punkcie podziału” dotychczasowe doświadczenie to jedno auto (3-drożny przód + kanał centralny + subwoofer), dziewięć dni. Pomiary są w obu przypadkach takie same, więc wybór ten można zmienić także po ich wykonaniu."
     },
     "goal.stage_priorities": {
       "ask": "Jaką scenę budujemy (nie da się zmaksymalizować wszystkiego)?",

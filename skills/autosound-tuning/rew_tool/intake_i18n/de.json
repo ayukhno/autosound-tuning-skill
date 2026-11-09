@@ -237,7 +237,8 @@
         "joint_by_joint": "Übergang für Übergang (suchen und vergleichen)",
         "resonalyze_engine": "Resonalyze-Engine",
         "both": "Beides, dann das Beste wählen"
-      }
+      },
+      "note": "Übergang für Übergang erfordert mehrere DSP-Speicherplätze, eine Möglichkeit, ein gespeichertes Preset wieder auszulesen, sowie Zeit für A/B-Hörvergleiche; das liefert eine nach Rang geordnete Reihe von Varianten mit den jeweiligen Gründen statt einer einzigen Antwort. Die Resonalyze-Engine benötigt das Engine-Programm oder ein .NET SDK; sie liefert die gesamte Konfiguration auf einmal und zeigt, welche Kompromisse jede Entscheidung mit sich bringt. Beides zusammen erfordert den Zeitaufwand von beidem und liefert das Beste aus beidem. Für „Übergang für Übergang“ stützt sich die Erfahrung bisher auf ein Fahrzeug (3-Wege + Center + Sub), neun Tage. Die Messung ist in beiden Fällen dieselbe, daher lässt sich das auch danach noch ändern."
     },
     "goal.stage_priorities": {
       "ask": "Welche Bühne soll aufgebaut werden (alles lässt sich nicht maximieren)?",

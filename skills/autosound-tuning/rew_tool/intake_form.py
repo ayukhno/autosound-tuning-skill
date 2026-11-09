@@ -1968,7 +1968,7 @@ def _own_tempdir(selftest):
 
 @_own_tempdir
 def _check_the_desk_approach_says_what_it_needs_and_gives():
-    """Acceptance A4 (#210): the offer shows, on the page, what each way needs and gives, in every language: a language without the line falls back to the English one; only the fields that carry one show it."""
+    """Acceptance A4 (#210): the offer shows, on the page, what each way needs and gives, in every language, translated, and a language without the line falls back to the English one; only the fields that carry one show it."""
     import tempfile
     with tempfile.TemporaryDirectory(prefix="autosound_form_note_") as root:
         project.Project(root).save({"schema_version": project.SCHEMA_VERSION, "channels": []})
@@ -1976,8 +1976,11 @@ def _check_the_desk_approach_says_what_it_needs_and_gives():
         for lang in ("en", "uk", "de", "pl", "xx"):
             page = render(model(root, lang))
             head = page.split(f'id="f-{field_id}"', 1)[1].split('data-kind="field"', 1)[0]
-            for word in ("needs", "gives", "DSP memories", "Resonalyze", "one car"):
-                assert word in head, (lang, word, head[:400])
+            if lang in ("en", "xx"):     # English, and the fallback for a language with no such line
+                for word in ("needs", "gives", "DSP memories", "Resonalyze", "one car"):
+                    assert word in head, (lang, word, head[:400])
+            else:                        # translated: said on the page in its own language
+                assert "Resonalyze" in head and "DSP" in head and "one car" not in head, (lang, head[:400])
         assert model(root, "en")["fields"][[f["id"] for f in model(root, "en")["fields"]].index(field_id)]["note"], "no note on the field"
         other = next(f for f in model(root, "en")["fields"] if f["id"] == "car.body")
         assert not other.get("note"), other
