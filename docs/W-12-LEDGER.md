@@ -15,6 +15,8 @@ Each checked at its main site. **Side by side on T2, T3, T6, T7:** found by both
 
 Minutes per call were not timed, except where noted.
 
+**Codex on the candidate (hub #334), 2026-11-09:** three parallel read-only passes hit the usage limit in 4 minutes, no report. The Arbiter dropped it for its token use: no Codex numbers in this wave.
+
 ## Claude seats on the code (the Opus seat, `feature-dev:code-reviewer`, opus · high)
 
 The trial's weight, on the Arbiter's word: code passes on Opus, a narrow check of each fix round, Fable on the last fixes. Findings as counted by the seat, blocker / important / minor; each was checked at its main site before a fix.
