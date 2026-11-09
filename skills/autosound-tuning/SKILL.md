@@ -140,6 +140,7 @@ Everything else — the inventory, the caveats, the previews, the reasoning, the
 | [tooling/installation.md](references/tooling/installation.md) | Install and update (the installer, or the plugin from the catalog plus `/autosound-tuning:setup`), which copy is running, troubleshooting. |
 | [core/process-phases.md](references/core/process-phases.md) | Phase transitions, the seven phases (−1…5). |
 | [core/happy-paths.md](references/core/happy-paths.md) | Short end-to-end session walkthroughs. |
+| [phases/joint-by-joint.md](references/phases/joint-by-joint.md) | The desk joint by joint (`goal.desk_approach`): read when that way or both is chosen; a library of rules and variants, not a recipe. |
 | [core/project-intake.md](references/core/project-intake.md) | The doctrine intake stands on: the briefing and the reviewer (§0), install verification and the protective-filter minima (§3), the DSP's capability level (§4). The interview and the files are the Phase −1 runbook. |
 | [core/intake-from-prose.md](references/core/intake-from-prose.md) | A project whose state is in prose and has no ledger — READ it across, never re-interview. `contract.py check` says when this is the case. |
 | [patterns/target-curves/target_curves_guide.md](references/patterns/target-curves/target_curves_guide.md) | Target curves + offsets. |

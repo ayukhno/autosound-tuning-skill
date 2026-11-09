@@ -112,7 +112,8 @@ Step names describe the action, not a command. The joint and L/R **phase** is th
   a blank passport; the bag.
 
 ### Phase 0 · Capture session (car, once) — *goal: one disciplined capture, then back only for Phase 3*
-Order of channels is the user's in TCC; the path only constrains: handheld before the tripod; the whole
+Order of channels is the user's in TCC; the path only constrains: all the tripod sweeps are one block and
+the RTA with the nine points another, either first; the whole
 tripod block in one go, **tripod untouched until Phase 3**; `m-L-ctl1` first and `m-L-ctl3` last in the
 tripod block; every channel both `(sw)` and `(rta)`.
 - **0.0** **open the capture round** — `capture-start` by the one recipe, [`capture-session-sheet.md`](capture-session-sheet.md) Block 0.
@@ -128,10 +129,12 @@ tripod block; every channel both `(sw)` and `(rta)`.
   garage noise −40 works, because a 12 s sweep × 4 reps accumulates; garage noise is low-frequency, so
   the sub and midbass suffer, not the tweeters). The judge is `capture-check` per measurement, not a
   number. **The same numbers in Phase 3.**
-- **0.3** **handheld**: RTA `<ch>_N (rta)` of every channel (~20–30 s of movement); the ellipsoid
-  `<ch> p1…p9_N (sw)` for w-L/R, m-L/R and any channel with EQ decisions in 0.2–2 kHz. Near-field
-  optional here or any time on the `v0` slot (the working sub LPF hides exactly the natural roll-off
-  near-field is taken to see).
+- **0.3** **handheld, one block**, timing = loopback from block A on (`predict.load_solo_rew` refuses a sweep off that base): RTA
+  `<ch>_N (rta)` of every channel (~20–30 s of movement); the nine points `<ch> p1…p9_N (sw)` for every
+  front driver and the centre, on the fixed path of [`capture-session-sheet.md`](capture-session-sheet.md) block B (the sub stays
+  at one point while its crossing is under 100 Hz; a person who refuses the points is told the limits, and the decision
+  is recorded, per the sheet). Near-field optional here or any time on the `v0` slot (the working sub LPF hides exactly the natural
+  roll-off near-field is taken to see).
 - **0.4** **tripod P0**: two tape sets — (a) to return the tripod: three distances from the capsule to
   fixed body points (windscreen, driver's door glass, roof) + a seat-rail mark; (b) for the desk:
   capsule → each driver's centre (the L/R arbiter, §23). Timing = loopback. Drift pair `m-L (sw)` ×2 →
@@ -162,6 +165,8 @@ tripod block; every channel both `(sw)` and `(rta)`.
 reveals a broken driver or wiring); without a rig, Fs from the datasheet with margin, and say so.
 
 ### Phases 1–2 · Desk (one sitting) — *goal: a full preset and a predicted sum before anything is entered*
+The desk runs the engine, the joints ([`joint-by-joint.md`](joint-by-joint.md)) or both, per `goal.desk_approach` (the capture is the same for all three), and the current tune is a candidate on either.
+
 - **1.1** de-embed the protectives from the solos (the round record is read by both the joint analysis
   and the prediction — `analyze-joints --process`, `predict --process`); **read the flaw map written
   in 0.8** (`project.py <project> flaws`) — per channel the peaks/nulls, stands/moves (from the
@@ -409,7 +414,7 @@ reveals a broken driver or wiring); without a rig, Fs from the datasheet with ma
 The measured half must be on the **same base** as the prediction — point switches from the tripod, not
 MMM. MMM fills the nulls a point prediction shows (a real residual: w-L +27 dB @165 Hz was exactly
 this), so it is kept **separate**, for the fine EQ and voicing. That is why the tripod stands from 0.4
-to 3.2 and everything handheld is done before it.
+to 3.2, and the hand-held block is its own: taken before it, or after it with the tripod brought back by tape set (a).
 
 ## Degradation — when the path falls back to iterative
 

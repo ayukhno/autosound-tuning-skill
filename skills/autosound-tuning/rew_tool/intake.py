@@ -97,6 +97,9 @@ MODES = ("new_tune", "improve_existing", "light_touch")
 #: How the tune is DESIGNED (`virtual-first.md`). Needs level 1 + a loopback on one clock + a
 #: hardware-verified filter model; miss one and the desk half degrades, the capture does not.
 DESIGN_PATHS = ("virtual_first", "iterative")
+#: How the desk half is done, inside the one order of phases (`references/phases/joint-by-joint.md`, #210; the
+#: Arbiter, 2026-11-08: two paths and a third choice of running both). The capture is the same for all three.
+DESK_APPROACHES = ("joint_by_joint", "resonalyze_engine", "both")
 #: Where a driver sits and how it is loaded (§1.5–§1.6). `position` and `enclosure` are asked of
 #: every channel, and both vary on the same car — a profile is a checklist, never a fact to cite.
 POSITIONS = ("door", "a_pillar", "kick", "dash", "deck", "rear_shelf", "under_seat", "trunk", "other")
@@ -1255,6 +1258,18 @@ FIELDS = (
             "filter model. Miss one and only the DESK half degrades — the Phase-0 capture session "
             "is run the same way regardless.",
        when="1", derive="virtual_first when level 1 + a loopback on one clock + a verified filter model, else iterative"),
+    _f("goal.desk_approach", "goal",
+       "How should the desk work be done — joint by joint, with the Resonalyze engine, or both?",
+       enum=DESK_APPROACHES, writes="project:goal.desk_approach",
+       lands="`project.json` `goal.desk_approach` -> `autosound_context.md` + a recorded decision; `handoff` names the route",
+       note="The person picks; nothing is pre-selected. Joint by joint (`references/phases/joint-by-joint.md`) needs several "
+            "DSP memories, a way to read a saved preset back and time for A/B listening; it gives a ranked set of variants "
+            "with the reasons behind each, not one answer. The Resonalyze engine needs the engine's binary or a .NET SDK; it "
+            "gives the whole configuration at once and its trade-off front. Both costs the time of the two and gives the best "
+            "of two. Evidence for joint by joint, stated as it is: one car, 3-way + centre + sub, nine days. The capture does "
+            "not depend on this answer, so it can be changed after the capture. A light touch has no capture session; for "
+            "it this answer changes nothing.",
+       when="now"),
     _f("goal.stage_priorities", "goal", "What stage are we building (you cannot maximise everything)?",
        enum=STAGE_PRIORITIES, multi=True, lands="`autosound_context.md` (Engineering Profile)",
        note="State the physical ceilings honestly: depth is limited by the mid's geometry, "
@@ -2318,11 +2333,47 @@ def _check_no_load_and_save_outside_update():
     assert not found, f"load-and-save outside Project.update: {found}"
 
 
+def _check_the_desk_approach():
+    """`goal.desk_approach` (#210): the person picks one of three, no default and nothing derived; each is saved and read
+    back, a later word replaces the earlier one (the capture does not depend on it), a value outside the three is refused,
+    and a project from before the field simply has none."""
+    import shutil
+    import tempfile
+    f = field("goal.desk_approach")
+    assert f["enum"] == ("joint_by_joint", "resonalyze_engine", "both"), f["enum"]
+    assert f["writes"] == "project:goal.desk_approach" and f["when"] == "now" and f["place"] == "now", f
+    assert f["default"] is None and f["derive"] is None and not f["multi"], f
+    for said in ("several DSP memories", "one car", "capture does not depend", "changed after"):
+        assert said in f["note"], f"the note does not say {said!r}: {f['note']}"
+    top = tempfile.mkdtemp(prefix="autosound_desk_approach_")
+    try:
+        for value in f["enum"]:
+            d = os.path.join(top, value)
+            project.Project(d).save(project._empty_project())
+            assert save(d, "goal.desk_approach", value) == value
+            assert project.Project(d).load()["goal"]["desk_approach"] == value, value
+        changed = os.path.join(top, "both")
+        save(changed, "goal.desk_approach", "joint_by_joint")
+        assert project.Project(changed).load()["goal"]["desk_approach"] == "joint_by_joint", "the later word"
+        legacy = os.path.join(top, "legacy")
+        project.Project(legacy).save(project._empty_project())
+        assert "desk_approach" not in (project.Project(legacy).load().get("goal") or {}), "a project from before the field"
+        try:
+            save(legacy, "goal.desk_approach", "by_ear")
+            raise AssertionError("a value outside the three was saved")
+        except IntakeError as exc:
+            assert "joint_by_joint" in str(exc), exc
+        assert "desk_approach" not in (project.Project(legacy).load().get("goal") or {}), "the refused value was written"
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
 def _selftest():
     import tempfile
 
     failures = []
-    for check in (_check_change_dsp_sets_an_unreadable_profile_aside, _check_gate_shut_over_an_unreadable_file,
+    for check in (_check_the_desk_approach,
+                  _check_change_dsp_sets_an_unreadable_profile_aside, _check_gate_shut_over_an_unreadable_file,
                   _check_an_unreadable_glossary_is_not_unanswered, _check_an_unreadable_project_is_not_unanswered,
                   _check_set_car_waits_for_the_lock, _check_a_bad_timeout_is_a_usage_error,
                   _check_composite_writers_hold_once, _check_save_controls_holds_once,

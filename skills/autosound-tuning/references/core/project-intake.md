@@ -157,6 +157,14 @@ A new/unfamiliar/long-unmeasured install. Each item is cheap; a skipped one cost
 >
 > **Also pick the MODE here:** a **new tune** (−1 → 0 → desk → 3 → 4) or **a car that is already tuned** (the same phases: the current tune into the ledger as the baseline, an "as is" block before the raw capture, the current tune as a candidate beside every variant — `virtual-first.md`, "Two ways in"), or **light touch** (Level 0 below). Both READ the current DSP settings into the ledger first; on a Helix that is a one-time transcription from the PC-Tool screens (no reader for PC-Tool 6), and the EQ is the slowest part — say that cost now.
 >
+> ### The desk: which way to do it (offered at the project's start, `goal.desk_approach`)
+> The order of phases is one (−1, 0, desk, 3, 4). Inside the desk there are two ways, and the person picks; nothing is pre-selected:
+> - **Joint by joint** ([`joint-by-joint.md`](references/phases/joint-by-joint.md)) — from the bottom up, each joint a search scored by explicit metrics, the best few compared, whole configurations ranked by the model and then by ear. Needs several DSP memories, a way to read a saved preset back, time for A/B. Gives a ranked set of variants with the reasons behind each, not one answer.
+> - **The Resonalyze engine** (`resonalyze_engine.py run`, `virtual-first.md` 1.3–1.7) — the whole configuration at once and its trade-off front. Needs the engine (a prebuilt binary or a .NET SDK).
+> - **Both** — two sittings, whole configurations compared at the end; more time, and the best of the two.
+>
+> Evidence for joint by joint, as it stands: one car, 3-way + centre + sub, nine days. The capture does not depend on this answer (one full raw capture for every project), so it can be changed after the capture. Not offered on a light touch, which has no capture session.
+>
 > ### Level 0 — light-touch entry (an INTENT, orthogonal to 1/2/3)
 > Levels 1–3 answer *what you CAN do*; **Level 0 answers how much you WANT to do this session.** For a **small fine-tune of an already-working system** — nudge the tone, chase one symptom, or swap the target curve — you can **skip reading/reversing the full DSP state** and work only from **the current measurement + the target + basic car/equipment info**. The measurement is the acoustic truth regardless of which DSP params produced it, so a correction *toward the target from measured reality* needs no full state dump. This is the low-friction door for "I just want it a bit better", not a from-scratch build (that's the full Phase −1→5).
 > - **Do:** measure the current result → compare to target → propose the correction from what's measured; don't first reconstruct the whole old DSP state.

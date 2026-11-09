@@ -4,99 +4,99 @@
   "next_phase": "to its Goal-node",
   "phases": {
     "-1": {
-      "tokens": 62270,
-      "chars": 249081,
+      "tokens": 63747,
+      "chars": 254989,
       "files": {
-        "SKILL.md": 23356,
+        "SKILL.md": 23665,
         "references/phases/phase_-1_intake.md": 33177,
         "references/phases/phase_0_baseline.md (to its Goal-node)": 2375,
-        "references/core/project-intake.md": 28005,
-        "references/phases/virtual-first.md": 39814,
-        "references/phases/capture-session-sheet.md": 10425,
+        "references/core/project-intake.md": 29219,
+        "references/phases/virtual-first.md": 40478,
+        "references/phases/capture-session-sheet.md": 13385,
         "references/tooling/setup-critic-channel.md": 40865,
-        "references/core/naming-and-structure.md": 37454,
+        "references/core/naming-and-structure.md": 38215,
         "references/core/review-loop.md": 10613,
         "knowledge/dsp/helix-dsp-ultra-s.md": 22997
       }
     },
     "0": {
-      "tokens": 37803,
-      "chars": 151212,
+      "tokens": 38977,
+      "chars": 155906,
       "files": {
-        "SKILL.md": 23356,
+        "SKILL.md": 23665,
         "references/phases/phase_0_baseline.md": 26431,
         "references/phases/phase_1_foundation.md (to its Goal-node)": 5104,
-        "references/phases/virtual-first.md": 39814,
-        "references/phases/capture-session-sheet.md": 10425,
-        "references/core/naming-and-structure.md": 37454,
+        "references/phases/virtual-first.md": 40478,
+        "references/phases/capture-session-sheet.md": 13385,
+        "references/core/naming-and-structure.md": 38215,
         "references/core/project-intake.md § ## 3.": 8628
       }
     },
     "1": {
-      "tokens": 37361,
-      "chars": 149445,
+      "tokens": 37605,
+      "chars": 150418,
       "files": {
-        "SKILL.md": 23356,
+        "SKILL.md": 23665,
         "references/phases/phase_1_foundation.md": 20550,
         "references/phases/phase_2_eq.md (to its Goal-node)": 2735,
-        "references/phases/virtual-first.md": 39814,
+        "references/phases/virtual-first.md": 40478,
         "references/core/project-intake.md § ## 3.": 8628,
         "references/tooling/rew-api-quirks.md": 37947,
         "references/core/filter-types-car-audio.md": 16415
       }
     },
     "2": {
-      "tokens": 46755,
-      "chars": 187020,
+      "tokens": 47056,
+      "chars": 188224,
       "files": {
-        "SKILL.md": 23356,
+        "SKILL.md": 23665,
         "references/phases/phase_2_eq.md": 20108,
         "references/phases/phase_3_control.md (to its Goal-node)": 2680,
-        "references/phases/virtual-first.md": 39814,
-        "references/core/diagnostic-techniques.md": 68841,
+        "references/phases/virtual-first.md": 40478,
+        "references/core/diagnostic-techniques.md": 68981,
         "references/patterns/listening-cheat-sheet.md": 14627,
-        "references/core/analysis-playbook.md": 17594
+        "references/core/analysis-playbook.md": 17685
       }
     },
     "3": {
-      "tokens": 31455,
-      "chars": 125820,
+      "tokens": 31774,
+      "chars": 127094,
       "files": {
-        "SKILL.md": 23356,
+        "SKILL.md": 23665,
         "references/phases/phase_3_control.md": 7877,
         "references/phases/phase_4_listening.md (to its Goal-node)": 2302,
-        "references/phases/virtual-first.md": 39814,
+        "references/phases/virtual-first.md": 40478,
         "references/core/review-loop.md": 10613,
-        "references/core/analysis-playbook.md": 17594,
-        "references/patterns/test-tracks.md": 24264
+        "references/core/analysis-playbook.md": 17685,
+        "references/patterns/test-tracks.md": 24474
       }
     },
     "4": {
-      "tokens": 30458,
-      "chars": 121831,
+      "tokens": 30610,
+      "chars": 122441,
       "files": {
-        "SKILL.md": 23356,
+        "SKILL.md": 23665,
         "references/phases/phase_4_listening.md": 11371,
         "references/phases/phase_5_variations.md (to its Goal-node)": 1802,
         "references/patterns/listening-cheat-sheet.md": 14627,
-        "references/patterns/test-tracks.md": 24264,
+        "references/patterns/test-tracks.md": 24474,
         "references/core/feedback-loop.md": 20075,
         "references/patterns/staging-depth.md": 8742,
-        "references/core/analysis-playbook.md": 17594
+        "references/core/analysis-playbook.md": 17685
       }
     },
     "5": {
-      "tokens": 29605,
-      "chars": 118418,
+      "tokens": 29717,
+      "chars": 118867,
       "files": {
-        "SKILL.md": 23356,
+        "SKILL.md": 23665,
         "references/phases/phase_5_variations.md": 8235,
         "references/patterns/voicing-by-ear.md": 10755,
         "references/core/preference-profile.md": 2369,
         "references/core/preset-strategy.md": 4862,
-        "references/core/diagnostic-techniques.md": 68841
+        "references/core/diagnostic-techniques.md": 68981
       }
     }
   },
-  "full_tune_tokens": 275707
+  "full_tune_tokens": 279486
 }

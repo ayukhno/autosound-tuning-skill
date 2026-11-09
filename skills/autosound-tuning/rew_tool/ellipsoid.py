@@ -3,7 +3,8 @@
 
 The six-point ear ellipsoid (Geddes; `diagnostic-techniques.md` §13) is captured hand-held as nine
 sweeps per driver: p1 / p5 / p9 at the centre (the tripod point, returned to three times), p2-p4
-and p6-p8 around it (±9 cm sideways, ±7 cm up/down). Averaging them gives the curve the literature
+and p6-p8 around it, on a fixed hand-held path (`capture-session-sheet.md` block B: left, up, down, back; right, up,
+down, back; each step 10-15 cm, down twice that). Averaging them gives the curve the literature
 trusts; keeping them SEPARATE gives the thing averaging destroys -- whether a feature is a
 property of the system (it stays put as the microphone moves) or of one position (it moves).
 Measured 2026-08-20: a dip near 800 Hz sat at 800 / 818 / 800 Hz across the three centre returns

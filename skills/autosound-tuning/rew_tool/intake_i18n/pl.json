@@ -231,6 +231,14 @@
       },
       "derive": "virtual-first, jeśli poziom 1 + loopback na tym samym taktowaniu + zweryfikowany model filtrów; w przeciwnym razie iteracyjnie"
     },
+    "goal.desk_approach": {
+      "ask": "How should the desk work be done — joint by joint, with the Resonalyze engine, or both?",
+      "enum": {
+        "joint_by_joint": "Joint by joint (search and compare)",
+        "resonalyze_engine": "Resonalyze engine",
+        "both": "Both, then pick the best"
+      }
+    },
     "goal.stage_priorities": {
       "ask": "Jaką scenę budujemy (nie da się zmaksymalizować wszystkiego)?",
       "enum": {

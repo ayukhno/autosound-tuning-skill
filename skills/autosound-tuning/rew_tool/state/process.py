@@ -971,10 +971,12 @@ def _ledger_heads(project_dir):
 
 
 def _route_line(project_dir):
-    """" The route: …" when the project is a car that is already tuned (`goal.mode`, skill #105), else "".
+    """" The route: …" for what the next session does differently, by `goal.mode` × `goal.desk_approach`, else "".
 
-    The route changes what the next session does in Phase 0 (block X) and at the desk (`run --current`), and
-    the mode lives in `project.json`, which a resumed session may not open before it acts. A UTF-8 BOM is read (#147,
+    A car that is already tuned (skill #105) changes Phase 0 (block X) and the desk (`run --current`); the desk approach
+    (#210) names the runbook of the joints. Both live in `project.json`, which a resumed session may not open before it
+    acts. An improved car on the engine or with no approach recorded keeps the sentence it always had; a new tune says
+    something only for joints or both; a light touch has no route, whatever is recorded. A UTF-8 BOM is read (#147,
     item 6). A `project.json` that is no object, or whose `goal` is none, is no route (group fix 1, item 4), as one it
     cannot read: `.get` raised `AttributeError` out of handoff's success path."""
     try:
@@ -983,13 +985,28 @@ def _route_line(project_dir):
     except (OSError, ValueError):
         return ""
     goal = data.get("goal") if isinstance(data, dict) else None
-    mode = goal.get("mode") if isinstance(goal, dict) else None
-    if isinstance(mode, dict):
-        mode = mode.get("value")
-    if mode != "improve_existing":
-        return ""
-    return (" The route: a car that is already tuned (goal.mode improve_existing) — `virtual-first.md`, "
-            "«Two ways in»: block X after the raw capture, `resonalyze_engine.py run --current` at the desk.")
+
+    def answer(key):
+        value = goal.get(key) if isinstance(goal, dict) else None
+        return value.get("value") if isinstance(value, dict) else value
+    mode, approach = answer("mode"), answer("desk_approach")
+    runbook = "the joints by `references/phases/joint-by-joint.md`"
+    if mode == "improve_existing":
+        head = (" The route: a car that is already tuned (goal.mode improve_existing) — `virtual-first.md`, "
+                "«Two ways in»: block X after the raw capture, ")
+        if approach == "joint_by_joint":
+            return f"{head}{runbook} at the desk (goal.desk_approach joint_by_joint), the current tune a candidate."
+        if approach == "both":
+            return (f"{head}`resonalyze_engine.py run --current` and {runbook} at the desk (goal.desk_approach both), "
+                    "the current tune a candidate on either.")
+        return f"{head}`resonalyze_engine.py run --current` at the desk."
+    if mode == "new_tune":
+        if approach == "joint_by_joint":
+            return f" The route: {runbook} at the desk (goal.desk_approach joint_by_joint)."
+        if approach == "both":
+            return (f" The route: `resonalyze_engine.py run` and {runbook} at the desk (goal.desk_approach both), "
+                    "whole configurations compared.")
+    return ""
 
 
 def continue_head_drift(project_dir):
@@ -7825,6 +7842,95 @@ def _check_route_line_reads_a_bom():
         shutil.rmtree(d, ignore_errors=True)
 
 
+def _check_route_line_by_mode_and_desk_approach():
+    """`_route_line` dispatches on `goal.mode` × `goal.desk_approach` (#210): an improved car on the engine, or with no
+    approach recorded, keeps today's sentence exactly; joints name block X and the runbook; both names both; a new tune
+    says something only for joints or both; a light touch and a value that is none of the three add nothing."""
+    import shutil
+    import tempfile
+    today = (" The route: a car that is already tuned (goal.mode improve_existing) — `virtual-first.md`, "
+             "«Two ways in»: block X after the raw capture, `resonalyze_engine.py run --current` at the desk.")
+    d = tempfile.mkdtemp(prefix="autosound_process_route_approach_")
+
+    def route(mode, approach):
+        goal = {"mode": mode}
+        if approach is not None:
+            goal["desk_approach"] = approach
+        with open(os.path.join(d, "project.json"), "w", encoding="utf-8") as fh:
+            json.dump({"goal": goal}, fh)
+        return _route_line(d)
+    try:
+        for approach in (None, "resonalyze_engine", "by_ear", {"value": "resonalyze_engine"}):
+            assert route("improve_existing", approach) == today, approach
+            assert route("new_tune", approach) == "", approach
+        joints = route("improve_existing", "joint_by_joint")
+        assert "Two ways in" in joints and "block X" in joints and "joint-by-joint.md" in joints, joints
+        assert "resonalyze_engine.py run" not in joints, joints
+        both = route("improve_existing", "both")
+        assert "block X" in both and "joint-by-joint.md" in both and "resonalyze_engine.py run --current" in both, both
+        assert route("improve_existing", {"value": "joint_by_joint"}) == joints, "the {value: …} form"
+        new_joints = route("new_tune", "joint_by_joint")
+        assert "joint-by-joint.md" in new_joints and "block X" not in new_joints, new_joints
+        assert "resonalyze_engine.py run" not in new_joints, new_joints
+        new_both = route("new_tune", "both")
+        assert "joint-by-joint.md" in new_both and "resonalyze_engine.py run" in new_both and "block X" not in new_both, new_both
+        assert "--current" not in new_both, new_both
+        for approach in (None, "joint_by_joint", "resonalyze_engine", "both"):
+            assert route("light_touch", approach) == "", approach
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+
+
+def _check_capture_list_does_not_depend_on_the_desk_approach():
+    """One raw capture whichever way the desk goes (#210; the Arbiter, 2026-11-08). The round's list -- the plan's titles and
+    the nine points typed beside them, for the channels block B of `capture-session-sheet.md` names -- is the same under
+    every `goal.desk_approach`, under none, and after the approach changes. Tweeters and the centre are in the points; the
+    sub, which stays at one point, is not."""
+    import shutil
+    import tempfile
+    sheet_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+                              "references", "phases", "capture-session-sheet.md")
+    with open(sheet_path, encoding="utf-8") as fh:
+        block_b = re.search(r"<ch> p1…p9_N \(sw\)\s+for ((?:[\w-]+ )+)\(", fh.read())
+    assert block_b, "block B of the sheet names no channels for the nine points"
+    point_codes = block_b.group(1).split()
+    assert {"tw-L", "tw-R", "c", "m-L", "w-L"} <= set(point_codes) and "sw" not in point_codes, point_codes
+    channels = ("sw", "w-L", "w-R", "m-L", "m-R", "tw-L", "tw-R", "c")
+    top = tempfile.mkdtemp(prefix="autosound_process_capture_approach_")
+
+    def write(root, approach):
+        goal = {"mode": "new_tune"}
+        if approach is not None:
+            goal["desk_approach"] = approach
+        with open(os.path.join(root, "project.json"), "w", encoding="utf-8") as fh:
+            json.dump({"goal": goal, "channels": [{"code": c} for c in channels],
+                       "glossary": {"channels": [{"code": c, "active": True} for c in channels],
+                                    "pairs": {"Ws": ["w-L", "w-R"]}, "sides": {"L": ["w-L", "m-L"], "R": ["w-R", "m-R"]},
+                                    "joints": {"SW+Ws": ["sw", "w-L", "w-R"]}}}, fh)
+
+    def round_list(root, series):
+        points = [f"{c} p{i}_{series} (sw)" for c in point_codes for i in range(1, 10)]
+        rnd = Process(os.path.join(root, "process")).start_capture(series, points, phase="0", plan=True)
+        return [t.replace(f"_{series} ", "_N ") for t in rnd["expected"]]
+    try:
+        lists = {}
+        for n, approach in enumerate((None, "joint_by_joint", "resonalyze_engine", "both")):
+            root = os.path.join(top, f"p{n}")
+            os.makedirs(root)
+            write(root, approach)
+            lists[approach] = round_list(root, "5")
+        assert len(set(map(tuple, lists.values()))) == 1, lists
+        got = lists[None]
+        for title in ("tw-L p1_N (sw)", "tw-R p9_N (sw)", "c p5_N (sw)", "sw_N (sw)", "tw-L_N (sw)", "c_N (rta)"):
+            assert title in got, f"{title} is not on the list: {got}"
+        assert not any(t.startswith("sw p") for t in got), got
+        changed = os.path.join(top, "p1")
+        write(changed, "resonalyze_engine")
+        assert round_list(changed, "6") == got, "after the approach changed"
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
 def _check_route_line_over_a_project_json_no_object():
     """`_route_line` over a `project.json` that is valid JSON and no object -- an array, a string, a number -- or whose
     `goal` is none, is no route (group fix 1, item 4), as one it cannot read: `.get` raised `AttributeError` out of
@@ -11707,7 +11813,8 @@ def _selftest():
                   _check_value_flag_last, _check_help_writes_nothing, _check_usage_before_the_read,
                   _check_handoff_says_an_unreadable_changelog, _check_handoff_reads_the_changelog_at_the_root,
                   _check_handoff_says_a_cut_changelog_as_cut, _check_route_line_reads_a_bom,
-                  _check_route_line_over_a_project_json_no_object, _check_plan_over_a_word_says_neither,
+                  _check_route_line_over_a_project_json_no_object, _check_route_line_by_mode_and_desk_approach,
+                  _check_capture_list_does_not_depend_on_the_desk_approach, _check_plan_over_a_word_says_neither,
                   _check_handoff_names_a_changelog_copy_that_differs, _check_superseded_not_taken,
                   _check_check_never_invents_taken, _check_a_check_judges_unplanned_takes,
                   _check_unplanned_takes_stay_off_the_rounds_readers,

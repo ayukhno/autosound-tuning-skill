@@ -9,10 +9,14 @@
 
 1. **Back up the current tune** to a file (the DSP slot is left alone — the car stays drivable, and it
    is the "before" for A/B in Phase 4).
-2. **The `v0` preset**: every channel with the protective filters from −1.3 only, gains level, delays 0,
-   polarity normal, EQ empty, effects and dynamic processing **off** (the vendor's names for those:
-   `dsp_profile.py effects <profile.json>`; it exits 3 if this DSP has none recorded) → into the
-   ledger as version 0
+2. **The `v0` preset, the raw state**: every channel with the protective filters from −1.3 only, gains level, delays 0,
+   polarity normal, EQ empty, **every enhancer, filter and EQ off (the protective filters stay on), equal levels in the DSP**,
+   and preferably the amplifier gains already set (the method does not do that part; say so, any AI can advise how). The vendor's
+   names for what to switch off: `dsp_profile.py effects <profile.json>` (it exits 3 if this DSP has none recorded). On an
+   Audiotec Fischer DSP that list, from its profile, is RealCenter, DynamicBass, SubXpander, ActiveToneControl,
+   RemoteToneControl, SubRC and RearRC, and the input levels are set equal too. On another DSP: every enhancer, loudness or
+   bass tool and dynamic block off, the input levels equal, as far as its screens show them. A save that can be read back
+   is checked against this list; otherwise the screen is. → into the ledger as version 0
    (at the desk if PC-Tool allows it without the DSP, otherwise the first thing in 0.1). `v0` stays in
    its own permanent slot — near-field can be captured on it any time later.
 3. **REW** — Measure → Sweep: Length **512k**, **Repetitions 4** (not "Sequential measurements"),
@@ -35,8 +39,8 @@ where they exist.
 **The series number is the PROJECT's, never an example's** (#56 item 10, #57 P4): `naming.py <project>
 next-series` prints it (`1` for a new project, the number after its highest for any other). A sheet that
 said `_2` from these examples, on a project at `_49`, brought 47 measurements back under the wrong number.
-The tripod block and the MMM block of one visit are ONE series unless the DSP changes between them, and
-the day runs all sweeps, then all MMM. The questions the tools will ask later go on the page and are
+The tripod block and the hand-held block of one visit are ONE series unless the DSP changes between them, and
+all the tripod sweeps are one block, the RTA with the nine points the other, either first. The questions the tools will ask later go on the page and are
 answered in the car: the level as a quantity (`capture-start … --level "-25 dB rel. max"`), the knobs
 (`capture-knobs`), and what protective filter was in the chain (`capture-protective`).
 
@@ -47,9 +51,11 @@ BLOCK 0 · OPEN THE ROUND (laptop, ~1 min)                      [0.0]
   process.py <project>/process enter-phase 0
                                         → first: the round is stamped Phase 0, and --plan reads it
   naming.py <project> next-series       → N, this project's own (1 on a new one)
-  process.py <project>/process capture-start <N> --plan [--level "<dB rel. max>"]
+  process.py <project>/process capture-start <N> --plan "<ch> p1_<N> (sw)" … [--level "<dB rel. max>"]
                                         → the titles this session owes, from the method's plan;
-                                          what it prints is the message to the Arbiter
+                                          what it prints is the message to the Arbiter.
+                                          The plan does not list the nine points: their titles
+                                          are typed on this same line (block B's channels, p1…p9)
   without it blocks E and F have nothing to write on: capture-taken,
     -protective, -knobs and -check all refuse while no round is open
 
@@ -60,32 +66,42 @@ BLOCK A · SESSION LEVELS (handheld, ~5 min, nothing saved)     [0.2]
   one REW output level for ALL sweeps · one HU/Conductor level for ALL RTA
   → both numbers to the passport; the SAME numbers in Phase 3
 
-BLOCK B · HANDHELD (before the tripod)                          [0.3]
-  RTA:        <ch>_N (rta)  for every channel         (~20–30 s of movement)
-  ellipsoid:  <ch> p1…p9_N (sw)  for w-L w-R m-L m-R (+ any channel with an
-              EQ decision in 0.2–2 kHz) — OPTIONAL; the RTA is not
+  timing = loopback, from here on, for every sweep that is saved:
+    `predict.load_solo_rew` refuses a sweep off the loopback base, the hand-held ones too
+
+BLOCK B · HANDHELD, ONE BLOCK: THE RTA AND THE NINE POINTS      [0.3]
+  (the tripod sweeps, blocks C–D, are the other block; either may go first. If the
+   tripod went first, it comes out for this block and tape set (a) brings it back)
+  RTA:          <ch>_N (rta)  for every channel       (~20–30 s of movement)
+  nine points:  <ch> p1…p9_N (sw)  for w-L w-R m-L m-R tw-L tw-R c (every front driver and the centre, the default)
+                on a 3-way + centre that is 63 sweeps. The sub stays at one point while
+                its crossing is under 100 Hz (a front sub included); above that it needs them too
   (near-field optional here or any time later on the v0 slot)
 
-      the nine sweeps of one driver (hand-held, seen from the seat):
+      the nine sweeps of one driver: a fixed hand-held path, in a vertical plane
+      in front of the nose, parallel to the windscreen (seen from the seat):
 
-                         ▲ +7 cm
-                    ·    ·    ·          ·  = one of p2–p4 / p6–p8, the six
-              ◄ −9 cm   [p1·p5·p9]   +9 cm ►     AROUND the tripod point
-                    ·    ·    ·        [ ]  = the tripod point itself: p1 FIRST,
-                         ▼ −7 cm               p5 in the MIDDLE, p9 LAST — the
-                                               same point three times
+             p3 ·                               · p7      a step above the side point
+                |                               |
+      left   p2 · ──step── p1 · p5 · p9 ──step── · p6   right     p1/p5/p9 = the centre, in front
+                |                               |                 of the nose: the tripod point
+             p4 ·                               · p8      a step below the side point
+
+      p1 centre → p2 left → p3 up → p4 down → p5 back to the nose → p6 right → p7 up →
+      p8 down → p9 back to the nose. Each step is 10–15 cm; each "down" is twice that,
+      so it ends a step below the side point. Keep them alike between sets, they
+      cannot be exact; what is read from them is relative.
 
       p1/p5/p9 are not three positions: they are ONE position returned to at the
       start, the middle and the end. Their spread is the drift of the set (over
-      1 dB = not one set). The six around it, ±9 cm sideways and ±7 cm up/down,
-      are what shows which features STAY (the driver, the cabin) and which MOVE
-      (that spot). Which of p2–p8 is which side is yours to fix and write in the
-      passport — the method reads them as "the six", not by side.
+      1 dB = not one set). The six around it are what shows which features STAY (the
+      driver, the cabin) and which MOVE (that spot). p2–p4 are the left side, p6–p8 the
+      right, p1/p5/p9 the centre: the ear groups of the joints above 1 kHz follow from
+      this order (`joint_search`), and the arrival rule checks it.
 
 BLOCK C · TRIPOD P0                                             [0.4]
   place the tripod; tape (a) return set: capsule → windscreen, door glass,
     roof + seat-rail mark; tape (b) desk set: capsule → each driver centre
-  timing = loopback
   drift pair:  m-L (sw) ×2 in a row → < 0.1 sample   (not saved)
 
 BLOCK D · TRIPOD BLOCK (tripod does NOT move until Phase 3)     [0.5]
@@ -123,9 +139,22 @@ APPENDIX · IMPEDANCE (a separate rig, another day)  — optional, not on the pa
   driver or wiring. Without a rig: Fs from the datasheet with margin, and say so.
 ```
 
-Minimum viable set = **Block A, the RTA of block B, and D** (~30 min); a car that is already tuned adds **block X** (~10 min). The
-ellipsoid of block B is the one optional part (the Arbiter, 2026-10-02: «RTA MMM знімаємо обовʼязково, а от 9 свіпів —
-то да»). Cutting for time, drop the ellipsoid first; the RTA and the tripod block (D) are mandatory.
+**One full raw capture for every project, whichever way the desk goes** (the Arbiter, 2026-11-08: «знімати все що потрібно щоб мати
+сиру машину для всіх варіацій проекта далі»): blocks A, B with the nine points, C and D, plus **block X** on a car that is already tuned
+(~10 min). On a 3-way + centre that is 63 point sweeps against the 36 this sheet used to ask for. Until 2026-11-08 the nine points
+were the one optional part; they are now the default.
+
+**They can still be cut for time, and that is the person's call, informed.** Before the capture the session says the limits in
+words: the Resonalyze engine loses nothing (it reads the tripod solos); the joints run only with `joint_search.py --single-point`, on
+the centre point, every row marked, with no margin over the head's positions and no left/right ear groups; the EQ has no
+stay-or-move reading of its own. If the person still says no, the decision is recorded so the joints accept it, in these words:
+
+```
+python3 rew_tool/state/process.py <project>/process decision "ellipsoid positions: nine points skipped; the joints run on one point" "agreed: <the person's words>"
+```
+
+The exact phrase is the one `joint_search.py --single-point` asks for, and it refuses without it; an answer that opens with a bare no reads as no decision, so the
+answer opens with «agreed». The RTA and the tripod block (D) are mandatory either way: minimum viable set = **Block A, the RTA of block B, and D** (~30 min).
 
 ## The session passport
 
