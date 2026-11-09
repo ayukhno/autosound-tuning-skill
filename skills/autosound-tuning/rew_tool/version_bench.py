@@ -28,8 +28,8 @@ VERSION is `PRESET/v_014`, `v_014` (on the active preset) or `PRESET` (its head)
                at 80 phon, labelled as less exact when the versions differ in the bass. A playing channel with no curve or no model refuses it unless
                --allow-missing: a missing sub moves the level match.
   lr-phase     L against R, 250-800 Hz: the phase and the group-delay difference, acoustic and electrical, centre and nine points.
-  round-check  each tripod sum of the glossary against the complex sum of its solos, read through the method's window (0.5 s from a fixed time, 1/24-oct complex
-               average, `s4_6b_vs_model.py:39,44-49`; the whole record by --whole-record, and which was used is said): rms and maximum over 1/3-oct bands, no offset
+  round-check  each tripod sum of the glossary against the complex sum of its solos, read through the method's window (0.5 s from a fixed time, 1/12-oct complex
+               average, +-1/24 oct each way, `s4_6b_vs_model.py:39,44-49`; the whole record by --whole-record, and which was used is said): rms and maximum over 1/3-oct bands, no offset
                removed; over 1 dB rms is flagged as a working threshold, not `verify_prediction`'s validated criterion, which means something else.
 
 In every subcommand a playing channel that is left out (no curve, or no model) is named. Read-only. Each refusal is one line, `refusing: <why>`, exit 3. Deps: numpy + scipy (through `predict`); `mosqito` is optional, imported only for Zwicker.
@@ -85,11 +85,11 @@ DECAY_SPAN_RATIO = 2.5
 EAR_BAND_OCT = 0.5
 DECAY_BAND_HZ = (50.0, 2500.0)
 #: The round-check's reading (`s4_6b_vs_model.py:39,44-49`): 0.5 s from `from_ms` absolute (or 5 ms before the peak, whichever is earlier), a raised-cosine tail over the
-#: last tenth, the bulk delay out for a 1/24-oct complex average and back. `from_ms` lies before every channel's direct sound in the series it was made on; it is a default.
+#: last tenth, the bulk delay out for a complex average over 1/12 oct (+-1/24 oct: `s4_6b_vs_model.py:48`, `k = 2 ** (1 / 24)`) and back. `from_ms` lies before every channel's direct sound in the series it was made on; it is a default.
 ROUND_WINDOW = {"seconds": 0.5, "from_ms": 2.0}
 ROUND_WINDOW_PRE_PEAK_MS = 5.0
 ROUND_WINDOW_TAIL = 0.1
-ROUND_AVERAGE_OCT = 1.0 / 24.0
+ROUND_AVERAGE_OCT = 1.0 / 12.0
 #: The preset settings that change level or sound, the input gain apart (that one is in the chains): `state.py`'s `_PRESET_FIELDS`, the model carries none of these.
 SOUND_SETTINGS = ("sources.main", "sources.hec", "sources.digital", "fx.realcenter", "fx.dynamic_bass", "fx.subxpander", "rtc.on", "rtc.curve")
 ZWICKER_INSTALL = "-m pip install mosqito"
@@ -680,7 +680,7 @@ def _band_levels(h, masks):
 
 def _round_window_h(ir_info, freqs, spec):
     """The method's reading of one kept IR (`s4_6b_vs_model.py:39,44-49`) on `freqs`: `spec["seconds"]` from `spec["from_ms"]` absolute, or 5 ms before the peak when that is
-    earlier, a raised-cosine tail over the last tenth, the bulk delay out for a 1/24-oct complex average and back, the absolute time base kept. The window opens at a
+    earlier, a raised-cosine tail over the last tenth, the bulk delay out for a 1/12-oct complex average (+-1/24 oct) and back, the absolute time base kept. The window opens at a
     fixed time and not at the peak: a late peak would cut the direct sound (the method's first run: 2.5-3.6 dB rms on its sums)."""
     x = np.asarray(ir_info["ir"], float)
     fs = float(ir_info["sample_rate"])
@@ -707,7 +707,7 @@ def _round_window_h(ir_info, freqs, spec):
 
 def _window_words(spec):
     return "the whole record" if spec is None else (f"a {spec['seconds']:g} s window from {spec['from_ms']:g} ms (or {ROUND_WINDOW_PRE_PEAK_MS:g} ms before the peak if earlier), "
-                                                    "1/24-oct complex average (`s4_6b_vs_model.py`)")
+                                                    "1/12-oct complex average, +-1/24 oct (`s4_6b_vs_model.py`)")
 
 
 def _sum_rows(freqs, sums, band_of, floor_db):
@@ -1149,7 +1149,7 @@ def _parser():
     rnd.add_argument("--sum-band", dest="sum_band", action="append", default=[], metavar="CODE=LO:HI",
                      help="one sum's band, by hand (default: the contiguous 1/3-oct bands within --floor-db of its loudest)")
     rnd.add_argument("--whole-record", dest="whole_record", action="store_true",
-                     help="read the whole record instead of the method's window, 0.5 s from a fixed time with a 1/24-oct complex average")
+                     help="read the whole record instead of the method's window, 0.5 s from a fixed time with a 1/12-oct complex average")
     rnd.add_argument("--window-s", dest="window_s", type=float, default=ROUND_WINDOW["seconds"], metavar="S", help=f"the window's length (default {ROUND_WINDOW['seconds']:g})")
     rnd.add_argument("--window-from-ms", dest="window_from_ms", type=float, default=ROUND_WINDOW["from_ms"], metavar="MS",
                      help=f"where the window opens, absolute: before every channel's direct sound (default {ROUND_WINDOW['from_ms']:g})")
@@ -1633,7 +1633,10 @@ def _check_round_check_on_planted_sums():
     doc = _doc(["round-check", "--project", proj, "--solos", solos])
     rows = {r["sum"]: r for r in doc["rows"]}
     assert set(rows) == {"L w+m", "R w+m"}, list(rows)
-    assert rows["L w+m"]["rms_db"] < 0.15 and rows["L w+m"]["max_db"] < 0.35 and not rows["L w+m"]["flagged"], rows["L w+m"]   # the method's window: each record's bulk delay out for the 1/24-oct average
+    # the method's window: each record's bulk delay out for the 1/12-oct average, which over 5 kHz spans the comb of the planted arrivals (rms 0.5, max 0.9 dB there; under 5 kHz max 0.08)
+    assert rows["L w+m"]["rms_db"] < 0.3 and rows["L w+m"]["max_db"] < 1.0 and not rows["L w+m"]["flagged"], rows["L w+m"]
+    low = _doc(["round-check", "--project", proj, "--solos", solos, "--sum-band", "L w+m=100:5000"])["rows"][0]
+    assert low["sum"] == "L w+m" and low["rms_db"] < 0.05 and low["max_db"] < 0.15, low
     assert abs(rows["R w+m"]["rms_db"] - 2.0) < 0.1 and rows["R w+m"]["flagged"], rows["R w+m"]
     doc = _doc(["round-check", "--project", proj, "--solos", solos, "--whole-record"])
     rows = {r["sum"]: r for r in doc["rows"]}
@@ -1960,11 +1963,11 @@ def _late_round_project():
 
 
 def _check_round_check_window():
-    """Default: the method's 0.5 s window from a fixed time, 1/24-oct complex average; `--whole-record` the whole record; which was used is said, the default beside a changed one (I4)."""
+    """Default: the method's 0.5 s window from a fixed time, 1/12-oct complex average; `--whole-record` the whole record; which was used is said, the default beside a changed one (I4)."""
     proj, solos = _late_round_project()
     args = ["round-check", "--project", proj, "--solos", solos, "--sum-band", "L w+m=200:2000"]
     doc = _doc(args)
-    assert "0.5 s" in doc["window"] and "1/24" in doc["window"], doc.get("window")
+    assert "0.5 s" in doc["window"] and "1/12" in doc["window"], doc.get("window")
     assert doc["rows"][0]["rms_db"] < 0.3 and not doc["rows"][0]["flagged"], doc["rows"]
     whole = _doc(args + ["--whole-record"])
     assert "whole record" in whole["window"], whole.get("window")
@@ -1982,6 +1985,30 @@ def _check_round_check_window():
     m = (f >= 40.0) & (f <= 120.0)
     gap_db = 20.0 * np.log10(np.abs(h[m]) / np.abs(np.interp(f[m], bins, np.abs(reference))))
     assert float(np.max(np.abs(gap_db))) < 0.5, float(np.max(np.abs(gap_db)))
+
+
+def _check_round_check_averages_over_the_codes_width():
+    """`s4_6b_vs_model.py:48` is `k = 2 ** (1 / 24)`: each point averages over +-1/24 oct, 1/12 oct in all. The reading against those lines written out, on a comb the average's width shows on."""
+    fs = 48000.0
+    x = np.zeros(1 << 15)
+    x[480], x[1000] = 1.0, 0.7
+    f = P.grid(*GRID)
+    h = _round_window_h({"ir": x, "sample_rate": fs, "t0_s": 0.0}, f, ROUND_WINDOW)
+    t = np.arange(x.size) / fs
+    pk = int(np.argmax(np.abs(x)))
+    a = max(0, min(pk - int(0.005 * fs), int(np.searchsorted(t, 2.0 * 1e-3))))
+    seg = x[a:min(x.size, a + int(0.5 * fs))].copy()
+    tail = int(0.1 * seg.size)
+    seg[-tail:] *= 0.5 * (1 + np.cos(np.linspace(0, np.pi, tail)))
+    nfft = 1 << int(np.ceil(np.log2(seg.size * 4)))
+    bins = np.fft.rfftfreq(nfft, 1.0 / fs)
+    tau0 = t[pk] - (t[0] + a / fs)
+    spectrum = np.fft.rfft(seg, nfft) * np.exp(2j * np.pi * bins * tau0)
+    k = 2 ** (1 / 24)
+    m = (f >= 200.0) & (f <= 8000.0)
+    want = np.array([spectrum[(bins >= fc / k) & (bins <= fc * k)].mean() for fc in f[m]])
+    gap_db = 20.0 * np.log10(np.abs(h[m]) / np.abs(want))
+    assert float(np.max(np.abs(gap_db))) < 0.05, float(np.max(np.abs(gap_db)))
 
 
 def _check_bad_inputs_refuse():
@@ -2118,7 +2145,7 @@ def _selftest():
                       _check_differing_joint_sets_lose_the_joint_terms, _check_virtual_tier_named, _check_round_check_window,
                       _check_bad_inputs_refuse, _check_documented_level_db_form, _check_loudness_sum_is_coherent,
                       _check_bass_marker_across_versions, _check_table_flags_show_their_effect, _check_tripod_fallback_says_tripod,
-                      _check_broken_mosqito_says_why, _check_round_check_names_what_it_did_not_read):
+                      _check_broken_mosqito_says_why, _check_round_check_names_what_it_did_not_read, _check_round_check_averages_over_the_codes_width):
             try:
                 check()
             except AssertionError as exc:
