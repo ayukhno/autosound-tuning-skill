@@ -15,6 +15,30 @@ Each checked at its main site. **Side by side on T2, T3, T6, T7:** found by both
 
 Minutes per call were not timed, except where noted.
 
+## Claude seats on the code (the Opus seat, `feature-dev:code-reviewer`, opus · high)
+
+The trial's weight, on the Arbiter's word: code passes on Opus, a narrow check of each fix round, Fable on the last fixes. Findings as counted by the seat, blocker / important / minor; each was checked at its main site before a fix.
+
+| pass | B / I / M | what it caught that no local check had |
+|---|---|---|
+| installers (T9) | 1 / 0 / 3 | a test red on both non-Mac CI jobs (no `xcode-select` stand-in) |
+| its narrow check | 0 / 0 / 1 | a refused install told to open a terminal |
+| versions (T1–T3) | 2 / 4 / 4 | an unreviewed structural change reaching HEAD through `--on`; a selftest leaking temp folders |
+| its narrow check | 0 / 3 / 2 | a candidate promoted by `variant switch`; a removed row not counted as a move |
+| TCC contract (T4–T7) | 0 / 3 / 3 | `save` committing after a failed step; a key file reaching the remote |
+| its narrow check | 0 / 0 / 5 | |
+| `joint_search` slice 1 | 2 / 7 / 8 | two subs modelled and output differently; filters offered that the model does not build |
+| its narrow check | 0 / 0 / 7 | |
+| slice 2 | 1 / 11 / 7 | a `--fixed` row rewriting the sub's delay and polarity |
+| its narrow check | 0 / 2 / 5 | |
+| slice 3 | 1 / 6 / 6 | a printed row number not the one `--fixed` reads |
+| `version_bench` | 2 / 6 / 8 | a pick from no curves; a channel left out with no word |
+| narrow check of both | 0 / 3 / 1 | a crossing near 1 kHz with no upward leak test |
+| the branch (final) | 0 / 5 / 5 | no step from a chosen row to a ledger version |
+| Fable on the last fixes | 0 / 1 / 2 | a delta that would wipe a ledger's EQ and flip a polarity the search never decided |
+
+Replays on real curves caught what no reviewer did: the claim on C, the leak limit, an Fs floor above the reference tune's own mid HP, an empty default table.
+
 ## Backlog, named for the act
 
 - `save`: a file `git rm --cached` by hand, covered by `.gitignore` but not by the housekeeping list, stops `save` at «could not commit» until a manual commit. Rare.
