@@ -169,6 +169,26 @@ The table gives the front's picks on its four terms, with the joint widths, ear 
 `round-check` compares each tripod sum against the complex sum of its solos, `lr-phase` shows L against R. Versions on different point coverage refuse rather than compare.
 Whichever path built them, the comparison is the same; both paths in one table need nothing more.
 
+**From a chosen row to a version.** A row is not a delta: the table's `delay_ms` is the ledger's `ta_ms`, and `propose` refuses it under the old name. Every row of `joint-<name>.json` carries `delta`, the row in the ledger's own fields, so `rows[N-1].delta` (N the row's `#N`) is what goes in. The top joint's row carries the channels below it. Write it to a file:
+
+```
+python3 rew_tool/state/apply.py <p> propose <delta.json> --on HEAD --note "<the variant>"
+```
+
+Every variant moves a delay, a corner or a polarity, so it is structural: **without evidence and a reviewer it banks as a candidate**, on the line and not in the slot, which `version_bench.py table` reads by its version. The next `propose` on that slot is refused without `--on` while the newest version is a candidate, and `--on HEAD` builds the next variant from HEAD, not on the candidate before it.
+
+**Each variant earns its place on its own:** evidence (the joint's kept JSON is a desk result; no car trip is needed) and a reviewer, once per variant:
+
+```
+python3 rew_tool/state/apply.py <p> propose <{}.json> --on <the candidate> --evidence <joint-<name>.json> --reviewed <the review file>
+```
+
+(`{}.json` is an empty delta; a relative path in `--evidence` and `--reviewed` is read from the project folder; the reviewer's file is what `scripts/autosound_ai.py critic <package> --record` wrote.) `propose` prints the settings sheet the person keys in. **`attest` comes after the keying in**, on the version that `propose` just made, not on the candidate, which `attest` refuses:
+
+```
+python3 rew_tool/state/apply.py <p> attest <v_NNN>
+```
+
 ## 8. A/B only at matched loudness, and only against a preset read back
 
 Before any A/B: the loudness matched (`version_bench.py loudness`: Zwicker ISO 532-1 through `mosqito` where installed, otherwise ISO 226 at 80 phon, labelled as less exact when versions differ in

@@ -953,15 +953,20 @@ def order_by_setup(groups, first):
     A sweep is the mic on the tripod, the driver out of the seat; the points (#198) are sweeps with the mic in hand
     around the head; an RTA is the driver in the seat with the mic in hand. Each is a setup of its own (`group_setup`),
     so the list takes `first` -- the setup the car is in, normally the last one captured -- in full, then the others,
-    each once, tripod before hand-held before RTA. With `first` unknown the plan's order stands. Stable: within a setup
-    the plan's order (solo, then group) is kept.
+    each once, tripod before hand-held before RTA. The hand-held points and the RTA are one block (the sheet: the tripod
+    sweeps are one block, the RTA with the nine points the other, either first), so the tripod stands before or after
+    both, never between them; `method_switches` still counts each change. With `first` unknown the plan's order stands.
+    Stable: within a setup the plan's order (solo, then group) is kept.
     """
     if not first:
         return list(groups)
 
+    def block(setup):
+        return METHOD_RTA if setup == SETUP_HAND_HELD else setup
+
     def rank(group):
         setup = group_setup(group)
-        return setup != first, _SETUP_ORDER.index(setup) if setup in _SETUP_ORDER else len(_SETUP_ORDER)
+        return block(setup) != block(first), setup != first, _SETUP_ORDER.index(setup) if setup in _SETUP_ORDER else len(_SETUP_ORDER)
     return sorted(groups, key=rank)
 
 
@@ -1811,8 +1816,9 @@ def _selftest():
     # No prior setup, and starting from each of the three setups.
     assert order_by_setup(pts, None) == pts, "nothing known about the setup: the plan's order"
     assert labels(order_by_setup(pts, "sw")) == ["Solo (sw)", "Points (sw)", "Solo (rta)", "Group (rta)"]
-    assert labels(order_by_setup(pts, "rta")) == ["Solo (rta)", "Group (rta)", "Solo (sw)", "Points (sw)"]
-    assert labels(order_by_setup(pts, SETUP_HAND_HELD)) == ["Points (sw)", "Solo (sw)", "Solo (rta)", "Group (rta)"]
+    assert labels(order_by_setup(pts, "rta")) == ["Solo (rta)", "Group (rta)", "Points (sw)", "Solo (sw)"], "the points with the RTA, the tripod apart"
+    assert labels(order_by_setup(pts, SETUP_HAND_HELD)) == ["Points (sw)", "Solo (rta)", "Group (rta)", "Solo (sw)"], "the RTA with the points, the tripod apart"
+    assert method_switches([group_setup(g) for g in order_by_setup(pts, SETUP_HAND_HELD)]) == 2, "hand-held -> RTA -> tripod are two changes, one block or not"
     # One identity for the three setups: a group's and a title's agree, and the count is the setups', not the methods'.
     assert [group_setup(x) for x in pts] == ["sw", SETUP_HAND_HELD, "rta", "rta"], pts
     assert title_setup(parse_name("m-L p1_55 (sw)")) == SETUP_HAND_HELD

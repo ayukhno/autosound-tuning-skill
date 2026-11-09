@@ -301,7 +301,8 @@ def _coverage_of(chains, curves):
     playing = _playing(chains)
     no_curve = [c for c in playing if curves[c]["tripod"] is None and not curves[c]["points"]]
     measured = [c for c in playing if c not in no_curve]
-    fronts = [c for c in measured if not P._is_sub(c)]
+    # A rear has no nine points of its own: counted here it left the version with no shared point at all.
+    fronts = [c for c in measured if not P._is_sub(c) and not str(c).lower().startswith(("r-", "r_"))]
     points = set.intersection(*(set(curves[c]["points"]) for c in fronts)) if fronts else set()
     return {"points": [p for p in JS.POSITIONS if p in points],
             "tripod": bool(measured) and all(curves[c]["tripod"] is not None for c in measured),
@@ -1570,6 +1571,15 @@ def _check_table_beside_metrics():
     assert any("joint widths" in w and "points" in w for w in doc["not_computed"]), doc["not_computed"]
 
 
+def _check_rears_are_not_fronts():
+    """A version with rears playing keeps the fronts' points: a rear has no nine points of its own, and counted as a front it left no shared point at all (M5)."""
+    curve = lambda pts: {"tripod": object(), "points": {p: object() for p in pts}}  # noqa: E731
+    chains = {c: {} for c in ("sw", "w-L", "w-R", "r-L", "r-R")}
+    curves = {c: curve(JS.POSITIONS if c.startswith("w-") else ()) for c in chains}
+    cover = _coverage_of(chains, curves)
+    assert cover["points"] == list(JS.POSITIONS) and not cover["short"], cover
+
+
 def _check_coverage_refused():
     """A version that plays a channel measured only at the tripod and one that does not: not compared, each said by what it has."""
     rc, out, err = _run(_main_args("table") + ["A/v_001", "A/v_006"])
@@ -2137,7 +2147,7 @@ def _selftest():
     failures = []
     try:
         for check in (_check_table_picks_are_the_fronts, _check_table_names_a_missing_term, _check_table_beside_metrics,
-                      _check_coverage_refused, _check_lr_phase_on_planted_differences, _check_round_check_on_planted_sums,
+                      _check_coverage_refused, _check_rears_are_not_fronts, _check_lr_phase_on_planted_differences, _check_round_check_on_planted_sums,
                       _check_round_check_reads_rew_titles, _check_iso226_on_a_known_step, _check_install_line_and_label_when_absent,
                       _check_zwicker_match_on_a_known_step, _check_real_mosqito_when_installed, _check_input_trim_only,
                       _check_flags_show_their_effect, _check_refusals_are_one_line,

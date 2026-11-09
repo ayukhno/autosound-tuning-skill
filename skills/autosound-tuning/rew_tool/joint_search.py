@@ -19,7 +19,7 @@ sub, a front sub are the same code. Everything searched comes from the project: 
 corners (the profile's range and step), gain and delay limits, Fs. The grid is the joint's, not the hardware's: corner bounds
 from a role table, 1/6-oct steps. Its size is printed before the run and over a ceiling it refuses without a flag.
 
-    python3 rew_tool/joint_search.py --project DIR --house FILE --solos DIR [--joint bass|woofer-midrange|midrange-tweeter|woofer-tweeter] [--json] [--out DIR]
+    python3 rew_tool/joint_search.py --project DIR --house FILE --solos DIR [--joint bass|woofer-midrange|midrange-tweeter|woofer-tweeter] [--json] [--out DIR [--overwrite]]
                                      [--front-lp FAM ORD HZ] [--no-leak] [--no-dip] [--no-lr-offset]
                                      [--fixed FILE[@N]] [--move upper|lower] [--align] [--ears-from-arrivals] (the flags of each limit: --help)
     python3 rew_tool/joint_search.py --project DIR --house FILE --rew --ver N
@@ -2655,8 +2655,17 @@ def render(doc):
         lines.append("Rejected: " + (_reasons(doc["rejected"]) or "nothing"))
     else:
         lines.append("No variant came through the limits. Reasons, counted: " + (_reasons(doc["rejected"]) or "none recorded"))
+    lines.extend(_bank_words(doc["rows"]))
     lines.append("\nThis describes and never picks: the ear decides, the choice is the tuner's.")
     return "\n".join(lines)
+
+
+def _bank_words(rows):
+    """How a chosen row reaches the ledger, printed under every table that has a row: `joint-by-joint.md` §7."""
+    if not rows:
+        return []
+    return ["\nTo bank a row: its `delta` in the --json or --out file (`rows[N-1].delta`, N the row's #N) is the row in the ledger's own fields; "
+            "write it to a file, then `python3 rew_tool/state/apply.py <project> propose <file> --on HEAD` (runbook: `references/phases/joint-by-joint.md` §7)."]
 
 
 def _bounds(spec, label):
@@ -2923,6 +2932,27 @@ def _channel_row(pub_row, lower, upper):
     return out
 
 
+def _ledger_delta(channels):
+    """A row's `channels` in the ledger's own fields, what `apply.py propose` takes: the delay as `ta_ms`, each filter as `{f, type, slope}`. A field the row does not state stays out, so the ledger keeps its own."""
+    delta = {}
+    for code, channel in channels.items():
+        fields = {}
+        for leg in ("hp", "lp"):
+            if channel.get(leg):
+                family, order, hz = channel[leg]
+                fields[leg] = {"f": hz, "type": family, "slope": order}
+        if channel.get("gain_db") is not None:
+            fields["gain_db"] = channel["gain_db"]
+        if channel.get("delay_ms") is not None:
+            fields["ta_ms"] = channel["delay_ms"]
+        if channel.get("polarity"):
+            fields["polarity"] = channel["polarity"]
+        if channel.get("eq") is not None:
+            fields["eq"] = channel["eq"]
+        delta[code] = fields
+    return delta
+
+
 def _public_coupled(row, ctx):
     """A coupled row as a reader gets it: rounded, each channel's settings in `channels` for the table and for a later `--fixed`."""
     out = dict(row)
@@ -2944,6 +2974,7 @@ def _public_coupled(row, ctx):
     if row.get("lower_joint"):
         out["lower_joint"] = _rounded_lower_joint(row["lower_joint"])
     out["channels"] = _channels_of(row, sides, ctx)
+    out["delta"] = _ledger_delta(out["channels"])
     return out
 
 
@@ -3001,6 +3032,7 @@ def _public_power(row, ctx):
     if row.get("lower_joint"):
         out["lower_joint"] = _rounded_lower_joint(row["lower_joint"])
     out["channels"] = _channels_of(row, sides, ctx)
+    out["delta"] = _ledger_delta(out["channels"])
     return out
 
 
@@ -3057,6 +3089,7 @@ def _render_coupled(doc):
         lines.append("Rejected: " + (_reasons_coupled(doc["rejected"]) or "nothing"))
     else:
         lines.append("No variant came through the limits. Reasons, counted: " + (_reasons_coupled(doc["rejected"]) or "none recorded"))
+    lines.extend(_bank_words(doc["rows"]))
     lines.append("\nThis describes and never picks: the ear decides, the choice is the tuner's.")
     return "\n".join(lines)
 
@@ -3110,6 +3143,7 @@ def _render_power(doc):
         lines.append("Rejected: " + (_reasons_coupled(doc["rejected"]) or "nothing"))
     else:
         lines.append("No variant came through the limits. Reasons, counted: " + (_reasons_coupled(doc["rejected"]) or "none recorded"))
+    lines.extend(_bank_words(doc["rows"]))
     lines.append("\nThis describes and never picks: the ear decides, the choice is the tuner's.")
     return "\n".join(lines)
 
@@ -3419,15 +3453,26 @@ def _class_flags(args, lower, upper):
             raise JointSearchError("--no-dip: from 1 kHz up the dip is not a condition (the run's robust list read the joint's own cancellation, a driver's own dip is EQ's); --dip-limit DB turns it on")
 
 
+def _write_out(args, joint_name, doc, text):
+    """`--out`: the table and the JSON, after the table was printed. A file already there holds a table and the `@N` numbers recorded from it, so a re-run refuses unless `--overwrite` says otherwise."""
+    if not args.out:
+        return
+    paths = [os.path.join(args.out, f"joint-{joint_name}.{ext}") for ext in ("json", "txt")]
+    there = [os.path.basename(path) for path in paths if os.path.exists(path)]
+    if there and not args.overwrite:
+        raise JointSearchError(f"--out {args.out}: the table above was not written: {' and '.join(there)} already there, with the @N numbers recorded from it: "
+                               "give another --out, or --overwrite to replace it")
+    try:
+        project_io.atomic_write_json(paths[0], doc, makedirs=True)
+        project_io.atomic_write_text(paths[1], text + "\n", makedirs=True)
+    except OSError as exc:
+        raise JointSearchError(f"--out {args.out}: the table above was not written: {exc}") from None
+
+
 def _coupled_doc_emit(args, joint_name, doc, text):
     """Print a joint's document or table, and `--out` both."""
     print(json.dumps(doc, indent=2, ensure_ascii=False) if args.json else text)
-    if args.out:
-        try:
-            project_io.atomic_write_json(os.path.join(args.out, f"joint-{joint_name}.json"), doc, makedirs=True)
-            project_io.atomic_write_text(os.path.join(args.out, f"joint-{joint_name}.txt"), text + "\n", makedirs=True)
-        except OSError as exc:
-            raise JointSearchError(f"--out {args.out}: the table above was not written: {exc}") from None
+    _write_out(args, joint_name, doc, text)
     return 0
 
 
@@ -3526,9 +3571,7 @@ def _coupled_part(args, space, channels, stack, th, process_mod, joint, base_cls
         raise JointSearchError(f"{pairs} filter pairs is over the ceiling {GRID_CEILING_PAIRS}: narrow --lp-bounds / --hp-bounds or pass --allow-large-grid")
     front_lp = _front_lp_spec(args.front_lp, space) if args.front_lp else None
     if args.single_point and not _single_point_decided(process_mod, project_dir):
-        raise JointSearchError("--single-point needs the person's recorded decision: the session says the limits, the person "
-                               f"decides, and it is recorded in these words: `process.py {project_dir} decision "
-                               f"\"{SINGLE_POINT_DECISION}\" \"<the person's words>\"`")
+        raise JointSearchError(_single_point_refusal(project_dir))
     freqs = P.grid(cls.grid_hz[0], cls.grid_hz[1], GRID_PPO)
     _joint_bands_readable(cls, th, freqs)
     align_table = _align_band_table(args.align_band, freqs) if args.align else None
@@ -4018,7 +4061,8 @@ def _cli(argv=None):
                          "memory with the filter options (about 11 kB each), the row buffer stays bounded")
     ap.add_argument("--top", type=int, default=TOP_DEFAULT, help="rows per crossing band")
     ap.add_argument("--json", action="store_true")
-    ap.add_argument("--out", metavar="DIR", help="write the table and the JSON here")
+    ap.add_argument("--out", metavar="DIR", help="write the table and the JSON here; a file already there refuses (it holds the @N numbers recorded from it)")
+    ap.add_argument("--overwrite", action="store_true", help="with --out: replace a table already there")
     # every method threshold, a default until changed: only what the hardware cannot do and driver safety refuse
     ap.add_argument("--phase-window", dest="phase_window_deg", type=float, metavar="DEG", help=f"the ±band of the in-phase run (default {PHASE_WINDOW_DEG:g})")
     ap.add_argument("--leak-near", dest="leak_near_db", type=float, metavar="DB", help=f"bass: the sub's leak at the near frequency (default {LEAK_NEAR_DB:g})")
@@ -4061,6 +4105,8 @@ def _cli(argv=None):
     ap.add_argument("--align-cut-max", dest="align_cut_max_db", type=float, metavar="DB", help=f"--align depth of each cut (default {ALIGN_CUT_MAX_DB:g})")
     ap.add_argument("--no-cross-first", action="store_true", help="--align: skip the cross-first comparison (the same search on the chains before the flatten)")
     args = ap.parse_args(argv)
+    if args.overwrite and not args.out:
+        raise JointSearchError("--overwrite: there is nothing to replace without --out")
     th = _limits_of(args)
     if bool(args.solos) == bool(args.rew):
         raise JointSearchError("give exactly one of --solos DIR or --rew --ver N")
@@ -4166,9 +4212,7 @@ def _cli(argv=None):
     front_lp = _front_lp_spec(args.front_lp, space) if args.front_lp else None
     # the capture
     if args.single_point and not _single_point_decided(_process, project_dir):
-        raise JointSearchError("--single-point needs the person's recorded decision: the session says the limits, the person "
-                               f"decides, and it is recorded in these words: `process.py {project_dir} decision "
-                               f"\"{SINGLE_POINT_DECISION}\" \"<the person's words>\"`")
+        raise JointSearchError(_single_point_refusal(project_dir))
     freqs = P.grid(cls.grid_hz[0], cls.grid_hz[1], GRID_PPO)
     _joint_bands_readable(cls, th, freqs)
     target = None
@@ -4215,6 +4259,7 @@ def _cli(argv=None):
         pub["delays_ms"] = _channel_delays(pub["ta_ms"], joint.lower, upper)
         pub["joint"] = joint.name
         pub["channels"] = _channel_row(pub, joint.lower, upper)
+        pub["delta"] = _ledger_delta(pub["channels"])
         return pub
     bands = {k: [published(r) for r in v[:top]] for k, v in res["bands"].items()}
     grid = dict(res["grid"], ceiling=GRID_CEILING_PAIRS)
@@ -4243,12 +4288,7 @@ def _cli(argv=None):
         doc["empty"] = {"said": "no variant came through the limits", "reasons": _reasons(res["rejected"])}
     text = render(doc)
     print(json.dumps(doc, indent=2, ensure_ascii=False) if args.json else text)
-    if args.out:
-        try:
-            project_io.atomic_write_json(os.path.join(args.out, f"joint-{joint.name}.json"), doc, makedirs=True)
-            project_io.atomic_write_text(os.path.join(args.out, f"joint-{joint.name}.txt"), text + "\n", makedirs=True)
-        except OSError as exc:
-            raise JointSearchError(f"--out {args.out}: the table above was not written: {exc}") from None
+    _write_out(args, joint.name, doc, text)
     return 0
 
 
@@ -4281,6 +4321,13 @@ def _front_lp_spec(values, space):
     return fam, ord_, hz_
 
 
+def _single_point_refusal(project_dir):
+    """The refusal's words: the sheet's own command (`capture-session-sheet.md`). `process.py` takes the process folder, and the answer opens with `agreed:` so that it reads as agreement."""
+    return ("--single-point needs the person's recorded decision: the session says the limits, the person decides, and it is recorded in "
+            f"these words: `python3 rew_tool/state/process.py {os.path.join(project_dir, 'process')} decision "
+            f"\"{SINGLE_POINT_DECISION}\" \"agreed: <the person's words>\"`")
+
+
 def _single_point_decided(process_mod, project_dir):
     """Has the person decided to run on one point? The latest `user_decision` whose question or answer says both that the nine points
     were skipped and that the joints run on one point (`SINGLE_POINT_*`) decides: its answer is not a bare no to the question that
@@ -4295,7 +4342,7 @@ def _single_point_decided(process_mod, project_dir):
         said = f"{question} {answer}"
         if SINGLE_POINT_SKIP_WORDS not in said or SINGLE_POINT_ONE_WORDS not in said:
             continue
-        return SINGLE_POINT_SKIP_WORDS in answer or (answer.split() or [""])[0].rstrip(".,!") not in _NO_WORDS
+        return SINGLE_POINT_SKIP_WORDS in answer or (answer.split() or [""])[0].rstrip(".,!:;") not in _NO_WORDS
     return False
 
 
@@ -4515,12 +4562,21 @@ def _fixture(top, *, fs=True, profile=None, roles=None):
     return proj, house
 
 
+_FIXTURE_IR_TEXT = {}
+
+
 def _write_ir(path, at, *, rew_source=None, level=0.5):
+    """One impulse as a v7 file. Short and written once per distinct impulse: the selftest writes thousands of the same few."""
     import resonalyze_ir as ri
-    x = np.zeros(1 << 13)
-    x[at] = level
-    doc = ri.build_v7(x, 96000, 0.0, low_hz=20.0, high_hz=20000.0, rew_source=rew_source)
-    ri.write_v7(doc[0] if isinstance(doc, tuple) else doc, path)
+    key = (at, level, json.dumps(rew_source, sort_keys=True))
+    if key not in _FIXTURE_IR_TEXT:
+        x = np.zeros(1 << 11)
+        x[at] = level
+        doc = ri.build_v7(x, 96000, 0.0, low_hz=20.0, high_hz=20000.0, rew_source=rew_source)
+        doc = doc[0] if isinstance(doc, tuple) else doc
+        ri.validate_v7(doc)
+        _FIXTURE_IR_TEXT[key] = ri.dumps_v7(doc)
+    project_io.atomic_write_text(path, _FIXTURE_IR_TEXT[key], newline="\n")
 
 
 def _write_solos(solos, codes, *, points=None, at=None, rew_source=None):
@@ -7538,8 +7594,134 @@ def _check_held_woofers_at_zero_take_a_placeable_pair():
     assert all(min(r["delays_ms"].values()) >= -1e-9 for r in power["rows"]), power["rows"][0]["delays_ms"]
 
 
+def _check_single_point_refusal_is_the_sheets_line():
+    """`--single-point`'s refusal prints the sheet's command whole (`capture-session-sheet.md`): `process.py` takes the process folder, not the project (given the project it writes a stray journal
+    there and the refusal comes back), and the answer opens with `agreed:`. On the bass joint and a joint above it. The line works: the answer it says to give passes."""
+    proc = _process_module()
+    top, done = _tmp()
+    try:
+        argv, proj, _h, _s = _cli_3way(top)
+        want = f'process.py {os.path.join(proj, "process")} decision "{_DECISION_WORDS}" "agreed: <the person\'s words>"'
+        for flags in (_TINY, _WM_SMALL):
+            rc, _out, err = _run(argv + flags + ["--single-point"])
+            assert rc == 3 and want in err and f"process.py {proj} decision" not in err, (rc, err[-500:])
+        proc.Process(os.path.join(proj, "process")).record_decision(_DECISION_WORDS, "agreed: the person's words, whatever they were")
+        rc, _out, err = _run(argv + _TINY + ["--single-point"])
+        assert rc == 0, (rc, err[-300:])
+    finally:
+        done()
+
+
+def _check_a_no_with_a_colon_is_no_decision():
+    """An answer opening `no:` or `ni:` is a no: the colon is punctuation, as a comma is. The sheet's `agreed:` is still agreement."""
+    proc = _process_module()
+    top, done = _tmp()
+    try:
+        argv, proj, _h, _s = _solo_project(top, points=None)
+        cmd = argv + _TINY + ["--single-point"]
+        p = proc.Process(os.path.join(proj, "process"))
+        for said in ("no: we keep the nine points", "ні: вимірюємо всі дев'ять"):
+            p.record_decision(_DECISION_WORDS, said)
+            assert _run(cmd)[0] == 3, f"{said!r} read as agreement"
+        p.record_decision(_DECISION_WORDS, "agreed: one point only")
+        assert _run(cmd)[0] == 0, "agreed: is agreement"
+    finally:
+        done()
+
+
+def _check_out_keeps_the_table_it_holds():
+    """`--out` holds the table and the `@N` numbers recorded from it: a re-run onto a file there prints its table and refuses, the file as it was; `--overwrite` writes over it. The bass joint and a joint above it."""
+    top, done = _tmp()
+    try:
+        argv, _p, _h, _s = _cli_3way(top)
+        out_dir = os.path.join(top, "kept")
+        for flags in (_TINY, _WM_SMALL):
+            before = set(os.listdir(out_dir)) if os.path.isdir(out_dir) else set()
+            rc, _out, err = _run(argv + flags + ["--out", out_dir])
+            assert rc == 0, (rc, err[-300:])
+            mine = sorted(set(os.listdir(out_dir)) - before)
+            assert len(mine) == 2, mine
+            for name in mine:
+                _write_text(os.path.join(out_dir, name), "the table the numbers came from")
+            rc, out, err = _run(argv + flags + ["--out", out_dir])
+            refused = [ln for ln in err.strip().splitlines() if ln.startswith("refusing:")]
+            assert rc == 3 and "never picks" in out and len(refused) == 1 and "--overwrite" in refused[0], (rc, err[-300:])
+            for name in mine:
+                assert open(os.path.join(out_dir, name), encoding="utf-8").read() == "the table the numbers came from", name
+            rc, _out, err = _run(argv + flags + ["--out", out_dir, "--overwrite"])
+            assert rc == 0, (rc, err[-300:])
+            for name in mine:
+                assert open(os.path.join(out_dir, name), encoding="utf-8").read() != "the table the numbers came from", name
+    finally:
+        done()
+
+
+def _apply_module():
+    state_dir = os.path.join(_HERE, "state")
+    if state_dir not in sys.path:
+        sys.path.insert(0, state_dir)
+    import apply
+    return apply
+
+
+def _check_a_row_carries_a_delta_ready_for_propose():
+    """A chosen row reaches the ledger through its `delta`: the row in the ledger's own fields, `ta_ms` for the delay and the filters as `{f, type, slope}` (a row's `delay_ms` is refused by `propose`).
+    The delta goes through `propose --on HEAD` as it stands; the next variant needs that `--on`; the text says how."""
+    import contextlib
+    import io as _io
+    apply_mod = _apply_module()
+    import state as state_mod
+    legal = {"hp", "lp", "gain_db", "ta_ms", "polarity", "eq"}
+    top, done = _tmp()
+    try:
+        argv, proj, _h, _s = _cli_3way(top)
+        bass_file, bass = _bass_row_file(top, argv)
+        for row in bass["rows"]:
+            for code, fields in row["delta"].items():
+                assert set(fields) <= legal and fields["ta_ms"] == row["delays_ms"][code], (code, fields)
+        wm = _doc(argv + _WM_SMALL + ["--bass-drop", "6", "--fixed", f"{bass_file}@1"])
+        assert wm["rows"], wm["rejected"]
+        row = wm["rows"][0]
+        assert set(row["delta"]) == set(row["channels"]), (row["delta"], row["channels"])
+        for code, fields in row["delta"].items():
+            assert set(fields) <= legal and "delay_ms" not in fields and fields["ta_ms"] == row["delays_ms"][code], (code, fields)
+            for leg in ("hp", "lp"):
+                if row["channels"][code].get(leg):
+                    family, order, hz = row["channels"][code][leg]
+                    assert fields[leg] == {"f": hz, "type": family, "slope": order}, (code, leg, fields[leg])
+        root = os.path.join(proj, "state")
+        history = state_mod.PresetHistory(root, "SQ", project_dir=proj)
+        blank = {"hp": None, "lp": None, "gain_db": 0.0, "ta_ms": 0.0, "polarity": "NORM"}
+        history.snapshot({"preset": "SQ", "sample_rate": 96000, "channels": {c: dict(blank) for c in ("sw", "w-L", "w-R", "m-L", "m-R")}}, note="raw")
+        state_mod.Registry(root).set_active("SQ")
+        delta_file = os.path.join(top, "delta.json")
+        with open(delta_file, "w", encoding="utf-8") as fh:
+            json.dump(row["delta"], fh)
+        said = _io.StringIO()
+        with contextlib.redirect_stdout(said), contextlib.redirect_stderr(said):
+            first = apply_mod._main(["apply.py", proj, "propose", delta_file, "--on", "HEAD", "--note", "variant A"])
+            without_on = apply_mod._main(["apply.py", proj, "propose", delta_file, "--note", "variant B"])
+            second = apply_mod._main(["apply.py", proj, "propose", delta_file, "--on", "HEAD", "--note", "variant B"])
+        assert (first, without_on, second) == (0, 1, 0), (first, without_on, second, said.getvalue()[-400:])
+        banked = history.load("v_002")
+        assert banked["variant"] == "candidate" and history.head() == "v_001", (banked.get("variant"), history.head())
+        assert banked["channels"]["m-L"]["ta_ms"] == row["delays_ms"]["m-L"], banked["channels"]["m-L"]
+        for flags in (_TINY, _WM_SMALL):
+            rc, text, err = _run(argv + flags)
+            assert rc == 0 and "delta" in text and "propose" in text and "--on HEAD" in text, (rc, err[-300:], text[-400:])
+    finally:
+        done()
+
+
 def _selftest():
     failures = []
+    # Time (Windows runners are slower, and the runner's limit is per module): the frequency grid of the fixtures runs at 32 points an octave, not GRID_PPO's 96.
+    # One end-to-end check first stands on the real grid, so the density users get is still run.
+    try:
+        _check_cli_end_to_end()
+    except AssertionError as exc:
+        failures.append(f"_check_cli_end_to_end on the real grid: {exc}")
+    undo_grid = _patched("GRID_PPO", 32)
     for check in (_check_joints_from_roles, _check_planted_delay_polarity_corners, _check_family_outside_profile_never_returned,
                   _check_lr_offset_condition, _check_leak_and_dip_conditions, _check_sub_one_point_limit, _check_hp_floor,
                   _check_refusals_are_one_line, _check_protective_refusal_passed_on, _check_cli_end_to_end,
@@ -7577,11 +7759,13 @@ def _selftest():
                   _check_each_side_bounds_only_what_it_can_know, _check_no_lr_offset_refuses_where_it_frees_nothing, _check_default_run_needs_the_lower_rule,
                   _check_session_flags_refuse_where_unused, _check_a_dropped_pair_is_counted_once,
                   _check_the_fs_floor_is_a_default_over_a_hard_limit, _check_no_row_through_the_dip_shows_the_nearest, _check_a_crossing_under_one_khz_keeps_its_upward_leak,
-                  _check_held_woofers_at_zero_take_a_placeable_pair):
+                  _check_held_woofers_at_zero_take_a_placeable_pair, _check_single_point_refusal_is_the_sheets_line, _check_a_no_with_a_colon_is_no_decision,
+                  _check_out_keeps_the_table_it_holds, _check_a_row_carries_a_delta_ready_for_propose):
         try:
             check()
         except AssertionError as exc:
             failures.append(f"{check.__name__}: {exc}")
+    undo_grid()
     assert not failures, "\n".join(failures)
     print("selftest OK -- the joints come from the roles; a planted delay, polarity and corner pair are found by a margin, "
           "on either side of the delay; a family outside the profile never comes back; the ±30 degree band ranks, worst and median "

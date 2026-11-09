@@ -989,7 +989,8 @@ def _route_line(project_dir):
     def answer(key):
         value = goal.get(key) if isinstance(goal, dict) else None
         return value.get("value") if isinstance(value, dict) else value
-    mode, approach = answer("mode"), answer("desk_approach")
+    # No `goal.mode` is an older project, and intake's default for it is `new_tune`.
+    mode, approach = answer("mode") or "new_tune", answer("desk_approach")
     runbook = "the joints by `references/phases/joint-by-joint.md`"
     if mode == "improve_existing":
         head = (" The route: a car that is already tuned (goal.mode improve_existing) — `virtual-first.md`, "
@@ -7877,6 +7878,13 @@ def _check_route_line_by_mode_and_desk_approach():
         assert "--current" not in new_both, new_both
         for approach in (None, "joint_by_joint", "resonalyze_engine", "both"):
             assert route("light_touch", approach) == "", approach
+        # An older project, no `goal.mode` at all: intake's default, `new_tune`, not silence.
+        with open(os.path.join(d, "project.json"), "w", encoding="utf-8") as fh:
+            json.dump({"goal": {"desk_approach": "joint_by_joint"}}, fh)
+        assert _route_line(d) == new_joints, _route_line(d)
+        with open(os.path.join(d, "project.json"), "w", encoding="utf-8") as fh:
+            json.dump({"goal": {}}, fh)
+        assert _route_line(d) == "", "no mode and no approach: nothing to say"
     finally:
         shutil.rmtree(d, ignore_errors=True)
 
@@ -12673,15 +12681,16 @@ def _selftest():
         pt.record_capture(title, at=f"2026-09-26T10:0{at}:00")
     pr61 = pt.start_capture("61", ["m-L_61 (rta)", "m-L_61 (sw)", "m-L p1_61 (sw)"], phase="2")
     assert pr61["setup"] == {"first": _load_naming().SETUP_HAND_HELD, "from": "m-L p2_60 (sw)", "switches": 2}, pr61["setup"]
-    assert [g["label"] for g in pr61["groups"]] == ["Points (sw)", "Solo (sw)", "Solo (rta)"], pr61["groups"]
-    assert "  Solo (sw)   <- switch: hand-held → tripod" in render_round_list(pr61), render_round_list(pr61)
+    assert [g["label"] for g in pr61["groups"]] == ["Points (sw)", "Solo (rta)", "Solo (sw)"], pr61["groups"]
+    assert "  Solo (rta)   <- switch: hand-held → RTA" in render_round_list(pr61), render_round_list(pr61)
+    assert "  Solo (sw)   <- switch: tripod in, driver out" in render_round_list(pr61), render_round_list(pr61)
     # Late optional points on a planned round, from either method: in their place, and still optional.
     late = pt.start_capture("62", phase="2", plan=True, start_method="sw", optional=["m-L p1_62 (sw)"])
     assert [g["label"] for g in late["groups"]][:3] == ["Solo (sw)", "Points (sw)", "Solo (rta)"], late["groups"]
     assert late["optional"] == ["m-L p1_62 (sw)"] and late["setup"]["switches"] == 2, late
     assert "    m-L p1_62 (sw)   (optional)" in render_round_list(late), render_round_list(late)
     from_rta = pt.start_capture("63", phase="2", plan=True, start_method="rta", optional=["m-L p1_63 (sw)"])
-    assert [g["label"] for g in from_rta["groups"]][-2:] == ["Solo (sw)", "Points (sw)"], from_rta["groups"]
+    assert [g["label"] for g in from_rta["groups"]] == ["Solo (rta)", "Group (rta)", "Points (sw)", "Solo (sw)"], from_rta["groups"]
     # A title at `x0` is on the tripod, and a method-only round reads as it did.
     assert _last_method_taken({"taken": {"m-L_1 (sw) x0": {"at": "2026-10-07T10:00:00"}}}) == ("sw", "m-L_1 (sw) x0")
     assert _last_method_taken({"taken": {"m-L_1 (rta)": {"at": "2026-10-07T10:00:00"}}}) == ("rta", "m-L_1 (rta)")

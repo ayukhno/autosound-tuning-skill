@@ -806,6 +806,13 @@ def attest(history, version=None, note=None, source_file=None):
             settings["status"] = "applied"
             flipped.append(_state.PRESET_SETTINGS)
         if source_file is not None:
+            held = s.get(_state.PRESET_SETTINGS) or {}
+            if not set(held) - {"status", "source_file"}:
+                # `preset_settings` would hold only the file: a dict of dicts, which a 3.2 copy reads as a tier instead
+                # of refusing the field by name as it does a number. The ledger stays as it is, and the file is not lost.
+                raise ValueError(f"--source-file: {version} has no preset setting, and a {_state.PRESET_SETTINGS}.source_file "
+                                 f"alone is misread by a 3.2 copy of the method as a tier of its own. Attest without "
+                                 f"--source-file, or bank a preset setting first (`propose` with `preset_settings`)")
             s.setdefault(_state.PRESET_SETTINGS, {})["source_file"] = source_file
         v = history.snapshot(s, note=note or f"attested applied ({', '.join(flipped) or 'no proposed rows'})")
         if history._project():
@@ -1403,6 +1410,29 @@ def _check_preset_settings_merge_and_refusals():
         shutil.rmtree(top, ignore_errors=True)
 
 
+def _check_source_file_needs_a_preset_setting():
+    """`--source-file` on a version with no preset setting refuses and banks nothing: `preset_settings` would hold only the
+    file, and a 3.2 copy reads that dict of dicts as a tier instead of refusing it by name, as it refuses a number."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_apply_source_alone_")
+    try:
+        h = _ledger_with_a_baseline(top, "project")
+        r = _proposed(h, {"w-L": {"gain_db": -7.0}}, note="no settings")
+        before = h.versions()
+        try:
+            attest(h, r["version"], source_file={"name": "5S.preset"})
+        except ValueError as exc:
+            assert "source_file" in str(exc) and "preset setting" in str(exc), str(exc)
+        else:
+            raise AssertionError("a source file on a version with no preset setting was banked")
+        assert h.versions() == before, h.versions()
+        said = attest(h, r["version"])
+        assert "preset_settings" not in h.load(said["version"]), h.load(said["version"])
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
 def _check_preset_settings_candidate_and_source_file():
     """Held with a structural move that has not earned its proposal, the settings are held with it and promoted with
     it. The source file is `attest`'s (`--source-file`): kept by it, dropped by the next `propose`, which is a new
@@ -1437,6 +1467,7 @@ def _check_preset_settings_candidate_and_source_file():
     try:
         h = _ledger_with_a_baseline(top, "project")
         _state.Registry(h.root).set_active("SQ")
+        _proposed(h, {"preset_settings": {"input_gain_db": -0.5}}, note="the file's setting")
         with open(os.path.join(top, "read.json"), "w", encoding="utf-8") as fh:
             json.dump(source, fh)
         import contextlib
@@ -1446,10 +1477,11 @@ def _check_preset_settings_candidate_and_source_file():
             rc = _main(["apply.py", top, "attest", "--source-file", "read.json"])
         assert rc == 0, (rc, err.getvalue())
         assert h.load(h.head())["preset_settings"]["source_file"] == source, h.load(h.head())
-        # A field that held only the file goes with it: a state with no settings is one with no field.
+        # A field that held only the file (banked before `attest` refused that) goes with it: a state with no settings is one with no field.
+        h.snapshot(dict(h.load(h.head()), preset_settings={"source_file": source}), note="an older ledger")
         n = _proposed(h, {"w-L": {"gain_db": -7.0}}, note="a new state")
         assert "preset_settings" not in h.load(n["version"]), h.load(n["version"])
-        attest(h, n["version"], source_file=source)
+        _proposed(h, {"preset_settings": {"input_gain_db": -0.4}}, note="a setting to attest against")
         before = h.versions()
         with open(os.path.join(top, "bad.json"), "w", encoding="utf-8") as fh:
             json.dump({"sha": "x"}, fh)
@@ -1883,7 +1915,7 @@ def _selftest():
                   _check_a_delta_after_a_candidate_is_refused, _check_a_fix_on_a_candidate_stays_held,
                   _check_a_candidate_is_promoted_with_evidence_and_a_reviewer,
                   _check_a_trim_is_a_row_with_no_reviewer, _check_preset_settings_merge_and_refusals,
-                  _check_preset_settings_candidate_and_source_file,
+                  _check_preset_settings_candidate_and_source_file, _check_source_file_needs_a_preset_setting,
                   _check_a_candidate_switched_into_the_slot_is_held_then_promoted, _check_attest_refuses_a_candidate,
                   _check_a_base_that_is_not_head_answers_to_the_slot, _check_rows_the_sheet_lists_are_proposed,
                   _check_a_candidate_base_is_no_candidate, _check_a_device_read_vouches_only_for_the_rows_it_read,
@@ -2137,7 +2169,8 @@ _USAGE = """usage: apply.py <project-dir> propose <delta.json> [--preset P] [--n
             proposal is a version on his screen, never files on disk; `eq_propose --accept` writes the delta).
             --on names the base: a version of this slot, or HEAD; past a candidate not in the slot it is required (#199)
   attest    the Arbiter entered it: flip the proposed rows to green, as a new version.
-            --source-file: a JSON object, the saved preset this version was read from (state/schema.md, #200)
+            --source-file: a JSON object, the saved preset this version was read from (state/schema.md, #200);
+            refused on a version with no preset setting (it would stand alone in `preset_settings`)
 """
 
 
