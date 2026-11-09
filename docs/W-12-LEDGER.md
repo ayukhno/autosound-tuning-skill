@@ -26,6 +26,7 @@ Minutes per call were not timed, except where noted.
 - The run's three candidates under the conditions all pass the leak. A relative limit, tried first, dropped one: it was replaced by the validated absolute limits, scaled only above a 65 Hz crossing.
 - Every width peak is one delay step wide (C: 0.58 / 0.98 / 0.57 oct at 10.65 / 10.70 / 10.75 ms). Ranked by the width kept over ±0.10 ms, C has 0.55 and would rank 108 of 238; the Arbiter's ear chose it. The table describes; the ear decides.
 - A shortlist by the reference-point width does not keep the run's own candidates; the top rows are of the same pattern (woofer HP above sub LP, the sub later). Not widened.
+- Woofer↔mid and mid↔tweeter (later): the engine scores what the run scored, within 0.004 oct and 0.00 dB, on the run's own pairs and shifts. On mid↔tweeter the banked pairs sit near the top. On woofer↔mid at the defaults (same filters L and R, 1/6-oct corners) the rows are weak: margin 0.00, worst up to 0.23 oct against the run's 0.99, because the run's banked pairs have different filters L and R or corners off that grid. `--corners-per-side --no-same-family` admits them. So the defaults find the symmetric family; the runbook says so.
 - Cost on these curves: 28.2 s, 112 MB with the conditions on; 45 s with them off. Slice 1's selftest: 41 s.
 
 ## Probes

@@ -115,6 +115,8 @@ The commands run on the whole raw capture; `--out` keeps the table and JSON for 
 
 `--rew --ver <N>` reads live REW instead of `--solos`. The table is what a person keys in: every row names filters, delays and gains on the DSP's own steps. It never picks.
 
+On the reference car the defaults at the woofer ↔ mid joint (the same filters L and R, the 1/6-oct corners) gave only weak rows; the pairs the run banked had different filters on the two sides or corners off that grid. `--corners-per-side --no-same-family` admits them, at the price of the stage conditions they relax. When a table is thin, widen it and say what you loosened.
+
 **Which metric answers what.** A metric is a question; pick by what the joint can answer at that frequency.
 
 - **Under 1 kHz: the ±30° band.** The width, in octaves, of the band around the acoustic crossing where the two drivers' phases stay
