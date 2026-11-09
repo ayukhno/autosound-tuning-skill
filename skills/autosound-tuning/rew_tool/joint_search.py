@@ -83,7 +83,7 @@ LEAK_FAR_DB = -30.0
 #: The hard floor of every high-pass the search proposes, times the driver's installed Fs, woofer, mid and tweeter alike: under it the driver is asked to play its own resonance (`crossover_checks.FS_FLOOR`). `--hp-fs-floor` cannot go under it.
 HP_FS_HARD_FLOOR = _cc.FS_FLOOR
 #: The default floor of a high-pass, times the driver's installed Fs: a default, not safety. A corner under it is listed only with `--hp-fs-floor`, the effect shown. Mid: 1.4 x Fs, the reference tune's working 280 Hz stays inside it; tweeter: `fs_margin`'s convention.
-#: A woofer is not on this list (`xover_wishes.FRAGILE_ROLES`): its margin is shown per row, not filtered on.
+#: A woofer is not on this list (`xover_wishes.FRAGILE_ROLES`): it has only the hard floor above; over that its margin is shown per row, not filtered on.
 HP_FS_FLOOR = {"midrange": 1.4, "tweeter": _cc.FS_MARGIN_DEFAULT}
 #: (delay L - delay R) = -(raw arrival L - raw arrival R) within this: `stage_lock.py:7-12`.
 LR_OFFSET_TOLERANCE_MS = 0.10
@@ -2220,6 +2220,8 @@ def _finish_pair(inp, pair, label, shifts, lp_bank, hp_bank, kernel, rejected, d
     margin = min(s["margin_oct"] for s in sides_out.values())
     losses = [s["loss_median_db"] for s in sides_out.values() if s["loss_median_db"] is not None]
     delays = dict(placed["delays"])
+    for code, spec in (inp.carried or {}).items():
+        delays.setdefault(code, float(spec["delay_ms"]))
     if bass is not None and inp.bass.sub_codes:
         delta = bass["sub_delay_ms"] - float(inp.bass.sub_delay_ms)
         delays.update({code: round(float(v) + delta, 6) for code, v in inp.bass.sub_codes.items()})
@@ -2955,14 +2957,24 @@ def _polarity_decided(fixed_rows):
     return decided
 
 
+def _eq_decided(fixed_rows):
+    """The channels whose EQ a `--fixed` row stated in its delta, an empty one included: a flatten that fitted no cuts below is carried up as that, not as nothing said."""
+    decided = set()
+    for row in fixed_rows:
+        delta = row.get("delta")
+        if isinstance(delta, dict):
+            decided |= {code for code, fields in delta.items() if isinstance(fields, dict) and "eq" in fields}
+    return decided
+
+
 def _undecided_polarity(sides, ctx):
     """The channels whose polarity this row has not decided: a joint's lower channels and the channels carried from below, unless a held row settled it. The upper channels' polarity is searched, the sub's was."""
     unset = [ctx["sides"][name][0] for name in sides] + list(ctx["carried"])
     return [code for code in unset if code not in ctx["polarity_decided"]]
 
 
-def _ledger_delta(channels, no_polarity=()):
-    """A row's `channels` in the ledger's own fields, what `apply.py propose` takes: the delay as `ta_ms`, each filter as `{f, type, slope}`. What the row has nothing to say about stays out, so the ledger keeps its own: an undecided polarity (the table's `NORM` is only how a row prints what it did not touch), an EQ that is empty, a field left unset. An EQ the row fitted, held or carried is stated: it is in what was scored."""
+def _ledger_delta(channels, no_polarity=(), eq_stated=()):
+    """A row's `channels` in the ledger's own fields, what `apply.py propose` takes: the delay as `ta_ms`, each filter as `{f, type, slope}`. What the row has nothing to say about stays out, so the ledger keeps its own: an undecided polarity (the table's `NORM` is only how a row prints what it did not touch), an EQ that is empty on a channel no flatten ran on, a field left unset. An EQ the row fitted, held or carried is stated: it is in what was scored. `eq_stated` are the channels whose empty EQ is stated too, as `[]`: a flatten ran on them and fitted no cuts, so the row was scored with no EQ there."""
     delta = {}
     for code, channel in channels.items():
         fields = {}
@@ -2976,8 +2988,8 @@ def _ledger_delta(channels, no_polarity=()):
             fields["ta_ms"] = channel["delay_ms"]
         if channel.get("polarity") and code not in no_polarity:
             fields["polarity"] = channel["polarity"]
-        if channel.get("eq"):
-            fields["eq"] = channel["eq"]
+        if channel.get("eq") or ("eq" in channel and code in eq_stated):
+            fields["eq"] = channel["eq"] or []
         delta[code] = fields
     return delta
 
@@ -3003,7 +3015,7 @@ def _public_coupled(row, ctx):
     if row.get("lower_joint"):
         out["lower_joint"] = _rounded_lower_joint(row["lower_joint"])
     out["channels"] = _channels_of(row, sides, ctx)
-    out["delta"] = _ledger_delta(out["channels"], _undecided_polarity(sides, ctx))
+    out["delta"] = _ledger_delta(out["channels"], _undecided_polarity(sides, ctx), ctx["eq_stated"])
     return out
 
 
@@ -3061,7 +3073,7 @@ def _public_power(row, ctx):
     if row.get("lower_joint"):
         out["lower_joint"] = _rounded_lower_joint(row["lower_joint"])
     out["channels"] = _channels_of(row, sides, ctx)
-    out["delta"] = _ledger_delta(out["channels"], _undecided_polarity(sides, ctx))
+    out["delta"] = _ledger_delta(out["channels"], _undecided_polarity(sides, ctx), ctx["eq_stated"])
     return out
 
 
@@ -3667,7 +3679,8 @@ def _coupled_part(args, space, channels, stack, th, process_mod, joint, base_cls
             if spec is None:
                 raise JointSearchError(f"--fixed {below_words} has no channel {code}")
             held_lower[code] = float(spec["delay_ms"])
-            held_gains[code] = float(spec.get("gain_db") or 0.0)
+            if spec.get("gain_db") is not None:           # a row that states none leaves the gain the ledger's: the model reads it as 0 dB (`flattened`), the row says nothing
+                held_gains[code] = float(spec["gain_db"])
             pre_chains[code] = _held_chain(pre_chains[code], spec, freqs)
             if spec.get("hp"):
                 held_filters.setdefault(code, {})["hp"] = list(spec["hp"])
@@ -3758,7 +3771,8 @@ def _coupled_part(args, space, channels, stack, th, process_mod, joint, base_cls
         notes.append("no --fixed bass row: the bass joint is not in this model and is not re-scored")
     if carried:
         for code, spec in carried.items():
-            held_gains.setdefault(code, float(spec.get("gain_db") or 0.0))
+            if spec.get("gain_db") is not None:
+                held_gains.setdefault(code, float(spec["gain_db"]))
     if lower_hold is not None:
         notes.append(f"the {fixed_below['joint']} joint below is held from its row and re-scored with each candidate's low-pass; a fall past --lower-drop rejects, no recovery: a row searched without this low-pass reads a fall under any (run that joint with --front-lp, or raise --lower-drop)")
     elif power and fixed_bass is None:
@@ -3811,7 +3825,9 @@ def _coupled_part(args, space, channels, stack, th, process_mod, joint, base_cls
 
     chains, gains, eq_bands, align_doc = flattened(flat_limits, align_table)
     if align_doc and align_doc["global_trim_db"]:
-        notes.append(f"a channel left the gain range after the align: every channel moves by {align_doc['global_trim_db']:+g} dB alike, the sub and the channels not in this joint included")
+        unstated = [code for code in (carried or {}) if code not in gains]
+        notes.append(f"a channel left the gain range after the align: every channel moves by {align_doc['global_trim_db']:+g} dB alike, the sub and the channels not in this joint included"
+                     + (f"; the row states no gain on {', '.join(unstated)}, so the ledger keeps theirs: move them by the same amount by hand" if unstated else ""))
     # the sides
     decay_ranges = None if power else _ring_freqs(cls.ring_band)
     pairs_of_sides = (("L", lower.left, upper.left), ("R", lower.right, upper.right)) if not lower.single else (("", lower.codes[0], upper.codes[0]),)
@@ -3917,7 +3933,7 @@ def _coupled_part(args, space, channels, stack, th, process_mod, joint, base_cls
     cross_first = None
     if args.align and not args.no_cross_first:
         cross_first = _cross_first_block(_dc_replace(base_inp, sides=sides_on(pre_chains), bass=hold_on(pre_chains, None), decay=None, lower_eq=None), flat_limits)
-    ctx = {"sides": {name: (low, up) for name, low, up in pairs_of_sides}, "gains": gains, "eq": eq_bands, "held_filters": held_filters, "carried": carried or {}, "polarity_decided": _polarity_decided(fixed_rows)}
+    ctx = {"sides": {name: (low, up) for name, low, up in pairs_of_sides}, "gains": gains, "eq": eq_bands, "held_filters": held_filters, "carried": carried or {}, "polarity_decided": _polarity_decided(fixed_rows), "eq_stated": set(eq_bands) | _eq_decided(fixed_rows)}
     top = max(1, int(args.top))
     pub = [(_public_power if power else _public_coupled)(r, ctx) for r in res["rows"]]
     bands = {}
@@ -7330,6 +7346,10 @@ def _check_the_lower_list_rescores_the_joint_below():
         low = _doc(run + ["--lower-drop", "6"])["lists"][0]
         assert low["rows"] and all(r.get("lower_joint", {}).get("judged") for r in low["rows"]), (low["rejected"], low["rows"][:1])
         assert "woofer-midrange joint held" in _render_coupled(low), _render_coupled(low)[:900]
+        held = wm["rows"][0]["delays_ms"]
+        for row in low["rows"]:              # the channels under the held row are carried onto this list too, as in the list from 1 kHz and the runbook
+            for code in ("w-L", "w-R"):
+                assert code in row["channels"] and code in row["delta"] and abs(row["delays_ms"][code] - held[code]) < 1e-6, (code, row["delays_ms"], held)
         strict = _doc(run + ["--lower-drop", "0"])["lists"][0]
         assert strict["rejected"]["lower_joint"] > 0, strict["rejected"]
     finally:
@@ -7862,16 +7882,60 @@ def _check_a_ledger_keeps_what_the_row_did_not_decide():
         for code in ("m-L", "m-R"):
             assert row["delta"][code].get("polarity") == row["channels"][code]["polarity"], (code, row["delta"][code])
         assert row["delta"]["sw"].get("polarity") == row["channels"]["sw"]["polarity"], row["delta"]["sw"]
+        for code in ("m-L", "m-R"):          # the woofer-mid row ran without `--align`: nobody decided the mids' gain
+            assert "gain_db" not in row["delta"][code], (code, row["delta"][code])
+        unheld = _write_doc(os.path.join(top, "wm-alone.json"), _doc(argv + _WM_SMALL))
+        carried = _doc(argv + _U_CLI + ["--fixed", f"{unheld}@1", "--lower-drop", "6"])
+        assert carried["rows"], carried["rejected"]
+        for code in ("w-L", "w-R"):          # carried from a row that did not state them either
+            assert "gain_db" not in carried["rows"][0]["delta"][code], (code, carried["rows"][0]["delta"][code])
+        over = _doc(argv + _WM_SMALL)        # a common trim cannot be stated on a channel with no gain in the row: the note says so instead of a move that is not in the delta
+        over["rows"][0]["channels"]["m-L"]["gain_db"] = 30.0
+        trimmed = _doc(argv + _U_CLI + ["--fixed", f"{_write_doc(os.path.join(top, 'wm-over.json'), over)}@1", "--lower-drop", "6", "--align", "--no-cross-first"])
+        said = [n for n in trimmed["notes"] if "every channel moves by" in n]
+        assert trimmed["align"]["global_trim_db"] and said and "no gain on w-L, w-R" in said[0], (trimmed["align"]["global_trim_db"], said)
         band = {"type": "PK", "f": 300.0, "gain_db": -3.0, "q": 2.0}
         before = {code: dict(_BLANK_LEDGER_CHANNEL) for code in ("sw", "w-L", "w-R", "m-L", "m-R", "tw-L", "tw-R")}
         before["w-L"].update(polarity="INV", eq=[band])
         before["m-L"]["eq"] = [band]
+        before["m-L"]["gain_db"] = -6.0
         history = _ledger_on(proj, before)
         _bank_row(top, proj, row, "mt")
         banked = history.load("v_002")["channels"]
         assert banked["w-L"]["polarity"] == "INV" and banked["w-L"]["eq"] == [band], banked["w-L"]
-        assert banked["m-L"]["eq"] == [band], banked["m-L"]
+        assert banked["m-L"]["eq"] == [band] and banked["m-L"]["gain_db"] == -6.0, banked["m-L"]
         assert banked["m-L"]["polarity"] == row["channels"]["m-L"]["polarity"], banked["m-L"]
+    finally:
+        done()
+
+
+def _check_an_align_that_cut_nothing_clears_the_older_eq():
+    """Acceptance A1 (#210): an `--align` that fits no cuts scored its channels with no EQ: the row states `eq: []` on them, the top joint's row carries that up, and the ledger's older EQ goes. A channel no flatten ran on keeps its own."""
+    top, done = _tmp()
+    try:
+        argv, proj, _house, _solos = _cli_3way(top, tw=True)
+        bass_file, _bass = _bass_row_file(top, argv)
+        wm = _doc(argv + _WM_SMALL + ["--no-dip", "--bass-drop", "6", "--fixed", f"{bass_file}@1", "--align", "--no-cross-first", "--align-cuts", "0"])
+        assert wm["rows"], wm["rejected"]
+        flattened = ("w-L", "w-R", "m-L", "m-R")
+        for code in flattened:
+            assert wm["rows"][0]["delta"][code].get("eq") == [], (code, wm["rows"][0]["delta"][code])
+        wm_file = _write_doc(os.path.join(top, "wm.json"), wm)
+        mt = _doc(argv + _U_CLI + ["--fixed", f"{wm_file}@1", "--lower-drop", "6"])
+        assert mt["rows"], mt["rejected"]
+        row = mt["rows"][0]
+        for code in flattened:
+            assert row["delta"][code].get("eq") == [], (code, row["delta"][code])
+        assert "eq" not in row["delta"]["tw-L"], row["delta"]["tw-L"]
+        band = {"type": "PK", "f": 300.0, "gain_db": -3.0, "q": 2.0}
+        before = {code: dict(_BLANK_LEDGER_CHANNEL) for code in ("sw", "w-L", "w-R", "m-L", "m-R", "tw-L", "tw-R")}
+        for code in ("w-L", "m-L", "tw-L"):
+            before[code]["eq"] = [band]
+        history = _ledger_on(proj, before)
+        _bank_row(top, proj, row, "mt")
+        banked = history.load("v_002")["channels"]
+        assert banked["w-L"]["eq"] == [] and banked["m-L"]["eq"] == [], (banked["w-L"], banked["m-L"])
+        assert banked["tw-L"]["eq"] == [band], banked["tw-L"]
     finally:
         done()
 
@@ -7978,7 +8042,7 @@ def _selftest():
                   _check_the_fs_floor_is_a_default_over_a_hard_limit, _check_no_row_through_the_dip_shows_the_nearest, _check_a_crossing_under_one_khz_keeps_its_upward_leak,
                   _check_held_woofers_at_zero_take_a_placeable_pair, _check_single_point_refusal_is_the_sheets_line, _check_a_no_with_a_colon_is_no_decision,
                   _check_out_keeps_the_table_it_holds, _check_a_row_carries_a_delta_ready_for_propose,
-                  _check_a_chain_banks_what_was_scored, _check_a_ledger_keeps_what_the_row_did_not_decide, _check_the_hard_floor_binds_every_high_pass, _check_an_empty_table_is_rerun_on_the_same_out):
+                  _check_a_chain_banks_what_was_scored, _check_a_ledger_keeps_what_the_row_did_not_decide, _check_an_align_that_cut_nothing_clears_the_older_eq, _check_the_hard_floor_binds_every_high_pass, _check_an_empty_table_is_rerun_on_the_same_out):
         try:
             check()
         except AssertionError as exc:

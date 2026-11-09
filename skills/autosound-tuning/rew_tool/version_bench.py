@@ -30,7 +30,8 @@ VERSION is `PRESET/v_014`, `v_014` (on the active preset) or `PRESET` (its head)
   lr-phase     L against R, 250-800 Hz: the phase and the group-delay difference, acoustic and electrical, centre and nine points.
   round-check  each tripod sum of the glossary against the complex sum of its solos, read through the method's window (0.5 s from a fixed time, 1/12-oct complex
                average, +-1/24 oct each way, `s4_6b_vs_model.py:39,44-49`; the whole record by --whole-record, and which was used is said): rms and maximum over 1/3-oct bands, no offset
-               removed; over 1 dB rms is flagged as a working threshold, not `verify_prediction`'s validated criterion, which means something else.
+               removed; a sum is flagged only when both readings are over 1 dB rms, the method's window and the whole record beside it (with --whole-record, that one reading): a working
+               threshold, not `verify_prediction`'s validated criterion, which means something else.
 
 In every subcommand a playing channel that is left out (no curve, or no model) is named. Read-only. Each refusal is one line, `refusing: <why>`, exit 3. Deps: numpy + scipy (through `predict`); `mosqito` is optional, imported only for Zwicker.
 """
@@ -1181,7 +1182,7 @@ def _parser():
     rnd = sp.add_parser("round-check", help="each tripod sum against the complex sum of its solos")
     _common(rnd)
     rnd.add_argument("--flag-rms-db", dest="flag_rms_db", type=float, default=ROUND_FLAG_RMS_DB, metavar="DB",
-                     help=f"flag a sum over this rms: a working threshold (default {ROUND_FLAG_RMS_DB:g})")
+                     help=f"flag a sum only when both readings are over this rms, on the default window (with --whole-record, that one reading): a working threshold (default {ROUND_FLAG_RMS_DB:g})")
     rnd.add_argument("--floor-db", dest="floor_db", type=float, default=ROUND_FLOOR_DB, metavar="DB",
                      help=f"a sum's band: the 1/3-oct bands within this of its loudest (default {ROUND_FLOOR_DB:g})")
     rnd.add_argument("--sum-band", dest="sum_band", action="append", default=[], metavar="CODE=LO:HI",
