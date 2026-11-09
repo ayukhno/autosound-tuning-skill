@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""joint_search -- the search behind the joint-by-joint approach (#210): the joints from the roles, the bass and the woofer-mid joint.
+"""joint_search -- the search behind the joint-by-joint approach (#210): the joints from the roles: the bass joint, the woofer-mid joint, the joints from 1 kHz up.
 
 One raw capture, then the joints from the bottom up, each joint a search over the filter space that scores and ranks
 the variants: a candidate's delay and rank come from the margin, the narrowest band within the delay tolerance of it, not the peak (the
 replay of #210). This module holds the engine, the BASS joint (sub low-pass x next role's high-pass x sub level x polarity x
 sub/front delay, the front's L-R offset held) and the WOOFER-MID joint: every pair that passes the leak on both sides, scored on all the
 points per side, the sides paired under the stage conditions, the bass joint below held by `--fixed` and re-scored (`docs/PLAN-W-12.md`,
-T14; above 1 kHz comes next, on the same engine).
+T14); and the joints from 1 kHz up (mid-tweeter, a 2-way's woofer-tweeter): on the 1/4 ms window, the power sum over the points, no ear group cancelling, then the
+flattest response to the target, the delay's margin the robust sum kept over +-0.02 ms. A joint whose bounds straddle 1 kHz gets two lists, one per class: their scores do not compare.
 
 A library, not the method (the Arbiter, 2026-11-08): only the DSP's families, ranges and steps and the driver's Fs floor refuse; every other
 threshold (±30 degrees, the leak, the dip, the delay tolerance, the shortlist, the bands, the rank, the stage conditions) is a named default
@@ -18,9 +19,9 @@ sub, a front sub are the same code. Everything searched comes from the project: 
 corners (the profile's range and step), gain and delay limits, Fs. The grid is the joint's, not the hardware's: corner bounds
 from a role table, 1/6-oct steps. Its size is printed before the run and over a ceiling it refuses without a flag.
 
-    python3 rew_tool/joint_search.py --project DIR --house FILE --solos DIR [--joint bass|woofer-midrange] [--json] [--out DIR]
+    python3 rew_tool/joint_search.py --project DIR --house FILE --solos DIR [--joint bass|woofer-midrange|midrange-tweeter|woofer-tweeter] [--json] [--out DIR]
                                      [--front-lp FAM ORD HZ] [--no-leak] [--no-dip] [--no-lr-offset]
-                                     [--fixed FILE[@N]] [--move upper|lower] [--align] (the flags of each limit: --help)
+                                     [--fixed FILE[@N]] [--move upper|lower] [--align] [--ears-from-arrivals] (the flags of each limit: --help)
     python3 rew_tool/joint_search.py --project DIR --house FILE --rew --ver N
     python3 rew_tool/joint_search.py --selftest
 
@@ -165,6 +166,36 @@ ALIGN_BANDS = {"sub": ((25.0, 130.0), (25.0, 130.0)), "woofer": ((100.0, 560.0),
 BAND_WIDTH_OCT = 0.25
 POSITIONS = tuple(f"p{i}" for i in range(1, 10))
 CENTRE_POINTS = ("p1", "p5", "p9")
+#: The fixed order of the nine points (the Arbiter, 2026-11-08): p1 centre, p2 left, p3 up, p4 down, p5 centre, p6 right, p7 up, p8 down, p9 centre.
+EAR_GROUPS = {"left": ("p2", "p3", "p4"), "right": ("p6", "p7", "p8"), "centre": CENTRE_POINTS}
+# ---- from 1 kHz up: a candidate's class is its acoustic crossing, its scoring band a +-1/2 oct around it
+#: The short window reads from here up (`mt_search.py:14-15`): a joint is scored on the power sum, not the ±30 degree band.
+CLASS_SPLIT_HZ = 1000.0
+#: A crossing at or under this has its ±1/2 oct scoring band wholly under 1 kHz, in the class under it; above it the candidate is scored in the upper class.
+CLASS_BOUNDARY_HZ = CLASS_SPLIT_HZ / math.sqrt(2.0)
+#: A clipped band keeps at least this much (a crossing just above the boundary would otherwise score on nothing).
+SCORE_BAND_MIN_OCT = 1.0 / 3.0
+#: The reading from 1 kHz up: 1 ms before the peak, 4 ms after, a half-Hann tail over the last 2 ms (`mt_search.py:71-73`).
+SHORT_WINDOW_BEFORE_MS = 1.0
+SHORT_WINDOW_AFTER_MS = 4.0
+SHORT_WINDOW_TAIL_FRACTION = 0.4
+#: The worst of the left-ear, right-ear and centre sums may not fall under this, dB (`stage_lock.py:231`, `good = rob >= 0`).
+GROUP_FLOOR_DB = 0.0
+#: Margins nearer than this rank as equal, so the flattest response decides among them (a power sum's tenths are within a re-measurement).
+MARGIN_STEP_DB = 0.25
+#: The rank's reach from 1 kHz up, ms: about one DSP delay step and the arrival read's own noise. The head's movement is already in the nine points; the band turns ±0.05 ms by
+#: 40-60 degrees at 3 kHz, and on the reference run's raw curves (`mt_raw.npz`, twelve sampled candidates, 2026-11-09) ±0.05 ms already put all twelve below zero, ±0.02 ms left the good ones above it.
+UPPER_DELAY_TOLERANCE_MS = 0.02
+#: The upper driver's delay against the lower, around the raw arrival: `mt_search.py:DLY` (±1 ms), on a 0.02 ms step.
+UPPER_SHIFT_SPAN_MS = 1.0
+UPPER_SHIFT_STEP_MS = 0.02
+#: The arrival read that checks the order of the points (the mids and tweeters over 1-4 kHz), its tolerance against the centre points' mean.
+EAR_ARRIVAL_READ = ((1000.0, 4000.0), 5.0)
+EAR_ARRIVAL_TOLERANCE_MS = 0.10
+#: The joint below may lose no more than this under a candidate's low-pass (worst and median, ±30 degree band): as the bass joint, `wm_search.py:19`, with no recovery (PLAN-W-12).
+LOWER_JOINT_DROP_OCT = 0.1
+#: Rows of a joint from 1 kHz up finished per crossing band, of which the top `ROWS_PER_BAND` stay: the flatness ranks after the walk, so the walk must reach past the first rows.
+UPPER_ROWS_PER_BAND = 200
 
 
 @dataclass(frozen=True)
@@ -184,6 +215,9 @@ class JointClass:
     leak_floor_hz: float = None
     leak_ceil_hz: float = None
     ring_band: tuple = None
+    #: From 1 kHz up: scored on the power sum over the short window (`_side_sums`), not the ±30 degree band.
+    power_sum: bool = False
+    shift_step_ms: float = SHIFT_STEP_MS
 
 
 @dataclass(frozen=True)
@@ -216,6 +250,11 @@ class Limits:
     width_band: tuple = None
     leak_floor_hz: float = None
     leak_ceil_hz: float = None
+    group_floor_db: float = GROUP_FLOOR_DB
+    margin_step_db: float = MARGIN_STEP_DB
+    max_crossing_hz: float = None
+    ear_tolerance_ms: float = EAR_ARRIVAL_TOLERANCE_MS
+    lower_drop_oct: float = LOWER_JOINT_DROP_OCT
 
 
 #: Bounds per joint (PLAN-W-12: "bass 40-125 Hz"), overridable by `--lp-bounds` / `--hp-bounds`; the crossing window, the dip
@@ -229,6 +268,13 @@ JOINT_CLASSES = {
                                   (700.0, 1500.0), band_width_oct=0.5, width_band=(100.0, 1600.0), rms_band=(150.0, 600.0),
                                   leak_floor_hz=90.0, leak_ceil_hz=1600.0, ring_band=(150.0, 630.0)),
 }
+#: The joints from 1 kHz up: the run's bounds and bands (`mt_search.py:40-41,56-58,87`): the mid's low-pass 1.6-5 kHz, the tweeter's high-pass 2-5 kHz, the crossing 1.2-7 kHz, the leak's
+#: floor 1 kHz and ceiling 16 kHz, flatness 1.25-10 kHz. Width band: the grid, unused here (`--width-band` is the ±30 degree run's).
+_UPPER_JOINT = JointClass("midrange-tweeter", (1600.0, 5000.0), (2000.0, 5000.0), (1200.0, 7000.0), (400.0, 20000.0), (1600.0, 6300.0), (700.0, 1500.0),
+                          band_width_oct=0.5, width_band=(400.0, 20000.0), rms_band=(1250.0, 10000.0), leak_floor_hz=1000.0, leak_ceil_hz=16000.0,
+                          power_sum=True, shift_step_ms=UPPER_SHIFT_STEP_MS)
+JOINT_CLASSES["midrange-tweeter"] = _UPPER_JOINT
+JOINT_CLASSES["woofer-tweeter"] = _dc_replace(_UPPER_JOINT, name="woofer-tweeter")
 
 
 # ---------------------------------------------------------------- the stack of joints
@@ -1065,6 +1111,106 @@ class CoupledInput:
     xo: dict = None
     refine: bool = True
     eq: EqLimits = EqLimits()
+    #: From 1 kHz up: {group name: point indexes}, or None when only the nine-point sum applies.
+    ear_groups: dict = None
+    #: The joint below, held and re-scored with each candidate's low-pass (`_lower_judge`); {upper code of that joint: complex EQ} of `--align` on its grid.
+    lower_hold: object = None
+    lower_eq: dict = None
+    #: The lower role's L-R rule, held when `--move lower` moves that role.
+    lower_stage_ms: float = None
+    #: Given a straddling joint: pairs that belong to the class under 1 kHz, left out here and counted.
+    exclude_pairs: object = None
+    #: Channels of the joints below, not searched here: carried as they stand onto every row.
+    carried: dict = None
+
+
+@dataclass
+class LowerHold:
+    """The coupled joint below, held from its row: per side the two chains on the class-under-1-kHz reading (`lower` with its low-pass in, `upper` without the one each candidate brings)
+    and the delays the row left them at. Re-scored with each candidate's low-pass (`_lower_judge`); no recovery: a fall past the limit rejects (PLAN-W-12)."""
+    freqs: np.ndarray
+    sides: list
+    cls: JointClass
+    cache: dict = field(default_factory=dict)
+    lp_bank: dict = field(default_factory=dict)
+    kernel: np.ndarray = None
+
+    def __post_init__(self):
+        self.lp_bank = _Bank(np.asarray(self.freqs, float), "lp")
+        self.kernel = _third_oct(np.asarray(self.freqs, float))
+
+
+def _lower_score(hold, side, lp, eq, shift_ms, tolerance_ms):
+    """A held side's in-phase band at the delay difference `shift_ms`: the margin (worst band over the delay tolerance) and the worst and median at it; None: no crossing."""
+    f, cls = np.asarray(hold.freqs, float), hold.cls
+    step = float(np.log2(f[1] / f[0]))
+    low = side["lower"]
+    up = side["upper"]
+    if lp is not None:
+        up = up * hold.lp_bank.get(lp)[0]
+    if eq is not None:
+        up = up * eq
+    win = np.flatnonzero((f >= cls.crossing_window[0]) & (f <= cls.crossing_window[1]))
+    dd = _power_db(hold.kernel @ np.mean(np.abs(low) ** 2, 0)) - _power_db(hold.kernel @ np.mean(np.abs(up) ** 2, 0))
+    found = _coupled_crossing(dd, win, f, float(side["near_hz"]))
+    if found is None:
+        return None
+    c, fx = found
+    mask = (f >= cls.width_band[0]) & (f <= cls.width_band[1])
+    off = int(np.flatnonzero(mask)[0])
+    fb = f[mask]
+    n_tol = int(round(tolerance_ms / SHIFT_STEP_MS))
+    probes = np.round(shift_ms + np.arange(-n_tol, n_tol + 1) * SHIFT_STEP_MS, 6)
+    rot = (360.0 * fb[None, :] * probes[:, None] * 1e-3).astype(np.float32)
+    base = (np.degrees(np.angle(low))[:, mask] - np.degrees(np.angle(up))[:, mask]).astype(np.float32)
+    widths = np.zeros((low.shape[0], len(probes)))
+    for p in range(low.shape[0]):
+        widths[p] = _widths(_wrap_ok(base[p], rot, PHASE_WINDOW_DEG), c - off, step)
+    worst = widths.min(0)
+    at = int(np.argmin(np.abs(probes - shift_ms)))
+    return {"margin_oct": float(worst.min()), "width_worst_oct": float(worst[at]), "width_median_oct": float(np.median(widths[:, at])), "crossing_hz": fx}
+
+
+def _lower_judge(hold, lps, eq, delays, th):
+    """Is the joint below still there under this candidate (its low-pass, and with `--move lower` its delay)? Each side against its baseline, the row as it stood, within
+    `--lower-drop`, worst and median (the bass joint's rule, `wm_search.py:19`); a side that falls takes the candidate with it. `kept` False: rejected, counted, no recovery. A row with no crossing
+    of its own cannot be re-scored: said by `judged`."""
+    sides, kept, judged = {}, True, False
+    for side in hold.sides:
+        tol = DELAY_TOLERANCE_MS
+        key = (side["name"], tol)
+        if key not in hold.cache:
+            hold.cache[key] = _lower_score(hold, side, side.get("base_lp"), None, side["up_ms"] - side["low_ms"], tol)
+        base = hold.cache[key]
+        code_low, code_up = side["lower_code"], side["upper_code"]
+        shift = float(delays[code_up]) - float(delays.get(code_low, side["low_ms"]))
+        now = _lower_score(hold, side, lps.get(code_up), (eq or {}).get(code_up), shift, tol)
+        if base is None:
+            sides[side["name"]] = {"judged": False, "kept": True}
+            continue
+        judged = True
+        falls = now is None or now["width_worst_oct"] < base["width_worst_oct"] - th.lower_drop_oct - 1e-9 or now["width_median_oct"] < base["width_median_oct"] - th.lower_drop_oct - 1e-9
+        kept = kept and not falls
+        sides[side["name"]] = {"judged": True, "kept": not falls, "width_worst_oct": None if now is None else now["width_worst_oct"], "width_median_oct": None if now is None else now["width_median_oct"],
+                               "baseline_worst_oct": base["width_worst_oct"], "baseline_median_oct": base["width_median_oct"]}
+    values = [v for v in sides.values() if v.get("judged")]
+    return {"joint": hold.cls.name, "kept": kept, "judged": judged, "sides": sides,
+            "width_worst_oct": min((v["width_worst_oct"] for v in values if v["width_worst_oct"] is not None), default=0.0) if values else None,
+            "width_median_oct": min((v["width_median_oct"] for v in values if v["width_median_oct"] is not None), default=0.0) if values else None,
+            "baseline_worst_oct": min((v["baseline_worst_oct"] for v in values), default=None) if values else None,
+            "baseline_median_oct": min((v["baseline_median_oct"] for v in values), default=None) if values else None}
+
+
+def _power_rank(row, th):
+    """The order from 1 kHz up: the robust sum kept over the delay tolerance (the margin, the ±30 degree band's analogue), compared on `--margin-step`, then the flattest response to the target.
+    `--rank worst` / `loss` puts the robust value at the delay / the nine-point sum in front of the same step, `flat` the flattest of the rows above the floor (the run's order, `stage_lock.py:241`)."""
+    rms = row["target_rms_db"]
+    if th.rank == "flat":
+        return (-rms, row["margin_db"], row["robust_db"], row["sum_db"])
+    lead = {"worst": row["robust_db"], "loss": row["sum_db"]}.get(th.rank, row["margin_db"])
+    step = th.margin_step_db
+    bucket = math.floor(lead / step + 1e-9) * step if step else lead
+    return (bucket, -rms, row["margin_db"], row["robust_db"], row["sum_db"])
 
 
 def _third_oct(f):
@@ -1085,8 +1231,9 @@ def _shift_grid(inp):
     arrivals = [float(s.arrival_ms) for s in inp.sides]
     lo = min(arrivals) - inp.th.shift_span_ms
     hi = max(arrivals) + inp.th.shift_span_ms
-    n = int(math.floor((hi - lo) / SHIFT_STEP_MS + 1e-9))
-    raw = lo + np.arange(n + 1) * SHIFT_STEP_MS
+    step_ms = inp.joint.shift_step_ms
+    n = int(math.floor((hi - lo) / step_ms + 1e-9))
+    raw = lo + np.arange(n + 1) * step_ms
     if inp.delay_step_ms:
         raw = np.unique(np.round(raw / inp.delay_step_ms) * inp.delay_step_ms)
     return np.round(raw, 6)
@@ -1270,6 +1417,127 @@ def _side_curves(inp, side, pairs, shifts, fit, lp_bank, hp_bank, step, rejected
     return out
 
 
+def _score_band(fx):
+    """The candidate's scoring band in Hz, its crossing's ±1/2 oct, clipped at 1 kHz: `(lo, hi, clipped)`."""
+    lo = max(float(fx) / math.sqrt(2.0), CLASS_SPLIT_HZ)
+    hi = max(float(fx) * math.sqrt(2.0), lo * 2.0 ** SCORE_BAND_MIN_OCT)
+    return lo, hi, float(fx) / math.sqrt(2.0) < CLASS_SPLIT_HZ
+
+
+def _group_tables(side, groups):
+    """The closed form's tables: per point group Sum|m|^2, Sum|w|^2, Sum(m conj w): `{name: (pm, pw, cross)}`, "all" and each ear group."""
+    n = side.lower.shape[0]
+    named = [("all", list(range(n)))] + list((groups or {}).items())
+    return {name: (np.sum(np.abs(side.lower[ix]) ** 2, 0), np.sum(np.abs(side.upper[ix]) ** 2, 0), np.sum(side.lower[ix] * np.conj(side.upper[ix]), 0)) for name, ix in named}
+
+
+def _power_key(margin, robust, sum9, rank):
+    """One number per shift for pairing, as `_rank_key`: the rank's field first."""
+    if rank == "worst":
+        return robust + 1e-3 * margin + 1e-6 * sum9
+    if rank == "loss":
+        return sum9 + 1e-3 * margin + 1e-6 * robust
+    return margin + 1e-3 * robust + 1e-6 * sum9
+
+
+def _side_sums(inp, side, pairs, shifts, fit, lp_bank, hp_bank, step, rejected, lost):
+    """A side of a joint from 1 kHz up: every pair that passed the leak on both sides, the power sum per shift in closed form, both polarities (`mt_search.search3`, `stage_lock.mt_curves`):
+    `Sum|m + w e^-jws|^2 = Sum|m|^2 + Sum|w|^2 + 2 Re(e^jws Sum m conj w)`, as `10 log10(coherent / incoherent)` averaged over the candidate's scoring band. The robust value is the worst of the
+    ear groups (only the nine-point sum when a group is too small). The rows mirror `_side_curves`', `robust` per shift and `margin` kept over the delay tolerance standing for the band widths."""
+    f, th, cls = np.asarray(inp.freqs, float), inp.th, inp.joint
+    tables = _group_tables(side, inp.ear_groups)
+    groups_named = [g for g in tables if g != "all"]
+    lo_w, hi_w = _tol_windows(shifts, th.delay_tolerance_ms)
+    rot = np.exp(2j * np.pi * f[None, :] * shifts[:, None] * 1e-3).astype(np.complex64)
+    rot_re, rot_im = rot.real, rot.imag
+    edges = _band_edges(cls, th)
+    keep_n = _shortlist(th, SHORTLIST_COUPLED_PER_BAND)
+    groups = {}
+    for (lp, hp), info in pairs.items():
+        groups.setdefault((lp[:2], hp[:2]), []).append((lp, hp, info))
+    kept, per_pair = {}, {}
+    pols = ("NORM", "INV")
+    for key in sorted(groups):
+        items = groups[key]
+        for first in range(0, len(items), COUPLED_CHUNK_PAIRS):
+            chunk = items[first:first + COUPLED_CHUNK_PAIRS]
+            sum9 = {p: np.zeros((len(chunk), len(shifts)), np.float32) for p in pols}
+            robust = {p: np.zeros((len(chunk), len(shifts)), np.float32) for p in pols}
+            for n, (lp, hp, info) in enumerate(chunk):
+                xl, xh = lp_bank.get(lp)[0], hp_bank.get(hp)[0]
+                lo_hz, hi_hz, _clipped = _score_band(info[1])
+                i0 = int(np.searchsorted(f, lo_hz, side="left"))
+                i1 = max(int(np.searchsorted(f, hi_hz, side="right")), i0 + 2)
+                a2, b2 = np.abs(xl[i0:i1]) ** 2, np.abs(xh[i0:i1]) ** 2
+                xx = xl[i0:i1] * np.conj(xh[i0:i1])
+                per_group = {}
+                for name, (pm, pw, cr) in tables.items():
+                    inc = pm[i0:i1] * a2 + pw[i0:i1] * b2
+                    z = cr[i0:i1] * xx
+                    cross = 2.0 * (rot_re[:, i0:i1] * z.real - rot_im[:, i0:i1] * z.imag)
+                    base = np.log10(np.maximum(inc, 1e-30))
+                    per_group[name] = (10.0 * (np.log10(np.maximum(inc + cross, 1e-30)) - base).mean(1),
+                                       10.0 * (np.log10(np.maximum(inc - cross, 1e-30)) - base).mean(1))
+                for k, pol in enumerate(pols):
+                    sum9[pol][n] = per_group["all"][k]
+                    robust[pol][n] = (np.minimum.reduce([per_group[g][k] for g in groups_named]) if groups_named else per_group["all"][k])
+            for pol in pols:
+                margin = np.empty_like(robust[pol])
+                for i in range(len(shifts)):
+                    margin[:, i] = robust[pol][:, lo_w[i]:hi_w[i]].min(1)
+                keys = np.where(fit, _power_key(margin, robust[pol], sum9[pol], th.rank).astype(np.float64), -np.inf)
+                for n, (lp, hp, info) in enumerate(chunk):
+                    label = _band_label(edges, info[1])
+                    why = None
+                    if label is None:
+                        why = "no_crossing"
+                    elif not fit.any():
+                        why = "delay"
+                    elif robust[pol][n][fit].max() < th.group_floor_db - 1e-9:
+                        why = "cancels"
+                    if why is not None:
+                        per_pair.setdefault((lp, hp), {})[pol] = why
+                        continue
+                    kept.setdefault(label, []).append(
+                        {"lp": lp, "hp": hp, "pol": pol, "c": info[0], "fx": info[1], "up_db": info[2], "dn_db": info[3], "label": label,
+                         "sum9": sum9[pol][n].copy(), "robust": robust[pol][n].copy(), "margin": margin[n].copy(), "key": keys[n].copy()})
+                for label, rows in kept.items():
+                    if len(rows) > 2 * keep_n:
+                        rows.sort(key=lambda r: -r["key"].max())
+                        rejected["past_shortlist"] += len(rows) - keep_n
+                        del rows[keep_n:]
+    for key, by_pol in per_pair.items():
+        if len(by_pol) == 2:
+            lost.setdefault(key, next(iter(by_pol.values())))
+    out = []
+    for label, rows in kept.items():
+        rows.sort(key=lambda r: -r["key"].max())
+        if len(rows) > keep_n:
+            rejected["past_shortlist"] += len(rows) - keep_n
+        out += rows[:keep_n]
+    return out
+
+
+def _sums_at(inp, side, cand, shift_ms, lp_bank, hp_bank):
+    """The side's power sums at its chosen delay, summed plainly over its scoring band: the nine-point sum, each group's, the robust value, as the row prints them."""
+    f = np.asarray(inp.freqs, float)
+    xl, xh = lp_bank.get(cand["lp"])[0], hp_bank.get(cand["hp"])[0]
+    sign = -1.0 if cand["pol"] == "INV" else 1.0
+    lower = side.lower * xl
+    upper = sign * side.upper * xh * np.exp(-2j * np.pi * f * shift_ms * 1e-3)
+    lo_hz, hi_hz, clipped = _score_band(cand["fx"])
+    m = (f >= lo_hz) & (f <= hi_hz)
+
+    def group(ix):
+        coh = np.sum(np.abs(lower[ix] + upper[ix]) ** 2, 0)[m]
+        inc = np.sum(np.abs(lower[ix]) ** 2 + np.abs(upper[ix]) ** 2, 0)[m]
+        return float(np.mean(10.0 * np.log10(np.maximum(coh, 1e-30) / np.maximum(inc, 1e-30))))
+
+    every = group(list(range(lower.shape[0])))
+    groups = {name: group(ix) for name, ix in (inp.ear_groups or {}).items()}
+    return {"sum": every, "groups": groups, "robust": min(groups.values()) if groups else every, "clipped": clipped, "band_hz": (lo_hz, hi_hz)}
+
+
 def _refine_pairs(inp, rows_by_side, coarse):
     """The filter pairs +-1/12 oct around the best of each side's shortlist that the coarse grid does not hold, the Fs floor applied to the new corners
     (the bass joint's walk, `scan_bass`, on the top `REFINE_TOP_PER_BAND`)."""
@@ -1320,6 +1588,14 @@ def _lower_offset(inp):
     return float(inp.lower_rule_ms or 0.0)
 
 
+def _upper_offset(inp):
+    """(upper L delay - upper R delay) the candidate starts from with the upper group standing: held by a row, else the rule."""
+    sides = inp.sides
+    if inp.held_upper:
+        return float(inp.held_upper[sides[0].upper_code]) - float(inp.held_upper[sides[1].upper_code])
+    return _snap_ms(inp.lr_rule_ms or 0.0, inp.delay_step_ms)
+
+
 def _pair_sides(inp, rows_by_side, shifts, rejected):
     """The L/R pairs under the stage conditions, each with its pair of delays: the L-R rule on the upper delays couples them when the group
     above moves (`stage_lock.wm_pairs`); with the lower group moving each side aligns alone. Returns `[(key, a, b, i, j)]`, best first."""
@@ -1341,9 +1617,11 @@ def _pair_sides(inp, rows_by_side, shifts, rejected):
     b_peak = b_key.max(1)
     b_fx = np.array([b["fx"] for b in B])
     constrained = inp.lr_rule_ms is not None and not inp.free_lr and inp.move == "upper"
+    lower_held = inp.lower_stage_ms is not None and not inp.free_lr and inp.move == "lower"
     lo, hi = None, None
-    if constrained:
-        offset = float(inp.lr_rule_ms) - _lower_offset(inp)
+    if constrained or lower_held:
+        # (delay L - delay R) of the upper role on the rule, or under `--move lower` of the lower role: the same offset between the two sides' shifts
+        offset = (float(inp.lr_rule_ms) - _lower_offset(inp)) if constrained else (_upper_offset(inp) - float(inp.lower_stage_ms))
         tol = th.lr_tolerance_ms
         lo = np.searchsorted(shifts, shifts - offset - tol - 1e-9, side="left")
         hi = np.searchsorted(shifts, shifts - offset + tol + 1e-9, side="right")
@@ -1359,7 +1637,7 @@ def _pair_sides(inp, rows_by_side, shifts, rejected):
         idx = idx[near]
         if not idx.size:
             continue
-        if constrained:
+        if constrained or lower_held:
             sub = b_key[idx]
             best_j = np.full(sub.shape, -np.inf)
             for i in range(len(shifts)):
@@ -1448,6 +1726,10 @@ def _place_coupled(inp, shifts, polarities):
     if two and inp.lr_rule_ms is not None and not inp.free_lr:
         offset = delays[sides[0].upper_code] - delays[sides[1].upper_code]
         if check_stage(rule_ms=inp.lr_rule_ms, lr_delay_ms=offset, tolerance_ms=inp.th.lr_tolerance_ms):
+            return None, "stage"
+    if two and inp.lower_stage_ms is not None and not inp.free_lr and inp.move == "lower":
+        offset = delays[sides[0].lower_code] - delays[sides[1].lower_code]
+        if check_stage(rule_ms=inp.lower_stage_ms, lr_delay_ms=offset, tolerance_ms=inp.th.lr_tolerance_ms):
             return None, "stage"
     for code in above_out:
         above_out[code]["delay_ms"] = delays[code]
@@ -1577,7 +1859,7 @@ def _gd_ms(opt, kind, f_hz, cache={}):  # noqa: B006 -- a cache over the option'
     return cache[key]
 
 
-def _side_numbers(inp, side, cand, shift_ms, lp_bank, hp_bank, kernel):
+def _side_numbers(inp, side, cand, shift_ms, lp_bank, hp_bank, kernel, band=None):
     """A side's filters on its curves at its delay: the sum's dip and rms against the target, the summation loss, the lower driver's share."""
     f, cls = np.asarray(inp.freqs, float), inp.joint
     xl, xh = lp_bank.get(cand["lp"])[0], hp_bank.get(cand["hp"])[0]
@@ -1591,7 +1873,7 @@ def _side_numbers(inp, side, cand, shift_ms, lp_bank, hp_bank, kernel):
     target = inp.target_db
     dev = level - float(np.mean((level - target)[fit])) - target
     fx = float(cand["fx"])
-    band = (fx / math.sqrt(2.0), fx * math.sqrt(2.0))
+    band = band or (fx / math.sqrt(2.0), fx * math.sqrt(2.0))
     losses = []
     for p in range(lower.shape[0]):
         loss = dsp_math.sum_loss(f, lower[p], upper[p], band)["avg_db"]
@@ -1617,26 +1899,39 @@ def scan_coupled(inp):
     f = np.asarray(inp.freqs, float)
     step = float(np.log2(f[1] / f[0]))
     th, cls = inp.th, inp.joint
-    rejected = {"leak": 0, "no_crossing": 0, "phase": 0, "lr_crossing": 0, "stage": 0, "dip": 0, "delay": 0, "bass": 0, "past_shortlist": 0}
+    rejected = {"leak": 0, "no_crossing": 0, "phase": 0, "lr_crossing": 0, "stage": 0, "dip": 0, "delay": 0, "bass": 0, "past_shortlist": 0, "cancels": 0, "max_crossing": 0, "lower_joint": 0,
+                "other_class": 0}
     lp_bank, hp_bank = _Bank(f, "lp"), _Bank(f, "hp")
     kernel = _third_oct(f)
     n_pairs = len(inp.lp_options) * len(inp.hp_options)
     coarse = [(tuple(lp), tuple(hp)) for lp in inp.lp_options for hp in inp.hp_options]
+    if inp.exclude_pairs is not None:
+        other = inp.exclude_pairs(coarse)
+        rejected["other_class"] += len(other)
+        coarse = [pair for pair in coarse if pair not in other]
     lost = {}
     leak_sides, common = _leak_of_sides(inp, coarse, lp_bank, hp_bank, kernel, lost)
+    common = _within_max_crossing(inp, leak_sides, common, lost)
+    side_scan = _side_sums if cls.power_sum else _side_curves
+    finish = _finish_power if cls.power_sum else _finish_pair
     shifts = _shift_grid(inp)
     fits = [_shift_fits(inp, n, shifts) for n in range(len(inp.sides))]
-    rows_by_side = [_side_curves(inp, side, {k: leak_sides[n][k] for k in common}, shifts, fits[n], lp_bank, hp_bank, step, rejected, lost)
+    rows_by_side = [side_scan(inp, side, {k: leak_sides[n][k] for k in common}, shifts, fits[n], lp_bank, hp_bank, step, rejected, lost)
                     for n, side in enumerate(inp.sides)]
     refined, n_common = [], len(common)
     if inp.refine:
         refined = _refine_pairs(inp, rows_by_side, set(coarse))
+        if inp.exclude_pairs is not None and refined:
+            other = inp.exclude_pairs(refined)
+            rejected["other_class"] += len(other)
+            refined = [pair for pair in refined if pair not in other]
     if refined:
         leak_fresh, fresh = _leak_of_sides(inp, refined, lp_bank, hp_bank, kernel, lost)
+        fresh = _within_max_crossing(inp, leak_fresh, fresh, lost)
         n_common += len(fresh)
         keep_n = _shortlist(th, SHORTLIST_COUPLED_PER_BAND)
         for n, side in enumerate(inp.sides):
-            more = _side_curves(inp, side, {k: leak_fresh[n][k] for k in fresh}, shifts, fits[n], lp_bank, hp_bank, step, rejected, lost)
+            more = side_scan(inp, side, {k: leak_fresh[n][k] for k in fresh}, shifts, fits[n], lp_bank, hp_bank, step, rejected, lost)
             rows_by_side[n] = _keep_top(rows_by_side[n] + more, keep_n, rejected)
     for reason in lost.values():
         rejected[reason] += 1
@@ -1651,17 +1946,29 @@ def scan_coupled(inp):
             continue
         by_band.setdefault(label, []).append(pair)
     rows = []
+    finish_n = UPPER_ROWS_PER_BAND if cls.power_sum else ROWS_PER_BAND
     for label, members in by_band.items():
         done = 0
         for k, pair in enumerate(members):
-            if done >= ROWS_PER_BAND or k >= WALK_PER_BAND:
+            if done >= finish_n or k >= WALK_PER_BAND:
                 rejected["past_shortlist"] += len(members) - k
                 break
-            row = _finish_pair(inp, pair, label, shifts, lp_bank, hp_bank, kernel, rejected)
+            row = finish(inp, pair, label, shifts, lp_bank, hp_bank, kernel, rejected)
             if row is not None:
                 rows.append(row)
                 done += 1
-    rows.sort(key=lambda r: _row_key(r, th.rank), reverse=True)
+    if cls.power_sum:
+        rows.sort(key=lambda r: _power_rank(r, th), reverse=True)
+        counted, kept_rows = {}, []
+        for row in rows:
+            counted[row["band"]] = counted.get(row["band"], 0) + 1
+            if counted[row["band"]] <= ROWS_PER_BAND:
+                kept_rows.append(row)
+            else:
+                rejected["past_shortlist"] += 1
+        rows = kept_rows
+    else:
+        rows.sort(key=lambda r: _row_key(r, th.rank), reverse=True)
     bands = {}
     for r in rows:
         bands.setdefault(r["band"], []).append(r)
@@ -1669,6 +1976,77 @@ def scan_coupled(inp):
             "grid": {"pairs": n_pairs, "lp_options": [list(o) for o in inp.lp_options], "hp_options": [list(o) for o in inp.hp_options],
                      "shifts": len(shifts), "shift_range_ms": [float(shifts[0]), float(shifts[-1])], "passing_leak": n_common, "refined_pairs": len(refined),
                      "candidates_per_side": [len(r) for r in rows_by_side], "pairs_considered": len(pairs)}}
+
+
+def _within_max_crossing(inp, leak_sides, pairs, lost):
+    """The pairs whose crossing, on every side, is at or under `--max-crossing` (the project's bound, off by default: the run's 4.5 kHz was its 3-4 inch mid); the rest are out, counted."""
+    limit = inp.th.max_crossing_hz
+    if limit is None:
+        return pairs
+    out = []
+    for key in pairs:
+        if any(side[key][1] > limit for side in leak_sides):
+            lost.setdefault(key, "max_crossing")
+        else:
+            out.append(key)
+    return out
+
+
+def _finish_power(inp, pair, label, shifts, lp_bank, hp_bank, kernel, rejected):
+    """One L/R pair of a joint from 1 kHz up, finished: the delays, the dip when asked for, no group under the floor, the joints below, the row."""
+    f, th, cls = np.asarray(inp.freqs, float), inp.th, inp.joint
+    _key, a, b, i, j = pair
+    items = [(inp.sides[0], a, i)] + ([(inp.sides[1], b, j)] if b is not None else [])
+    placed, why = _place_coupled(inp, {s.name: float(shifts[k]) for s, _c, k in items}, {s.name: c["pol"] for s, c, _k in items})
+    if placed is None:
+        rejected[why] += 1
+        return None
+    numbers = []
+    for s, c, k in items:
+        band = _score_band(c["fx"])
+        numbers.append((s, c, k, _side_numbers(inp, s, c, float(shifts[k]), lp_bank, hp_bank, kernel, band=band[:2]), _sums_at(inp, s, c, float(shifts[k]), lp_bank, hp_bank)))
+    if inp.dip_on and min(n[3]["dip_db"] for n in numbers) < th.dip_limit_db:
+        rejected["dip"] += 1
+        return None
+    if min(n[4]["robust"] for n in numbers) < th.group_floor_db - 1e-9:
+        rejected["cancels"] += 1
+        return None
+    lower_joint = None
+    if inp.lower_hold is not None:
+        lower_joint = _lower_judge(inp.lower_hold, {s.lower_code: tuple(c["lp"]) for s, c, _k, _n, _u in numbers}, inp.lower_eq,
+                                   {k: v for k, v in placed["delays"].items()}, th)
+        if not lower_joint["kept"]:
+            rejected["lower_joint"] += 1
+            return None
+    bass = None
+    if inp.bass is not None:
+        lps = {s.name: tuple(c["lp"]) for s, c, _k, _n, _u in numbers}
+        woofers_at = {s.name: placed["delays"][s.lower_code] for s, _c, _k, _n, _u in numbers}
+        bass = _bass_judge(inp.bass, lps, woofers_at, _dc_replace(th, delay_tolerance_ms=DELAY_TOLERANCE_MS))
+        if not bass["kept"]:
+            rejected["bass"] += 1
+            return None
+    sides_out, clipped = {}, False
+    for s, c, k, n, u in numbers:
+        clipped = clipped or u["clipped"]
+        sides_out[s.name] = {"lp": list(c["lp"]), "hp": list(c["hp"]), "polarity": c["pol"], "shift_ms": round(float(shifts[k]), 6), "crossing_hz": float(c["fx"]),
+                             "sum_db": u["sum"], "groups_db": u["groups"], "robust_db": u["robust"], "margin_db": float(c["margin"][k]),
+                             "score_band_hz": list(u["band_hz"]), "clipped": u["clipped"], "loss_median_db": n["loss_median_db"], "dip_db": n["dip_db"], "dip_at_hz": n["dip_at_hz"],
+                             "target_rms_db": n["target_rms_db"], "leak_up_db": c["up_db"], "leak_down_db": c["dn_db"],
+                             "fs_margin": None if not inp.fs_upper_hz else _cc.fs_margin(c["hp"][2], inp.fs_upper_hz, order=max(c["hp"][1] // 6, 1))["verdict"]}
+    delays = dict(placed["delays"])
+    for code, spec in (inp.carried or {}).items():
+        delays.setdefault(code, float(spec["delay_ms"]))
+    if bass is not None and inp.bass.sub_codes:
+        delta = bass["sub_delay_ms"] - float(inp.bass.sub_delay_ms)
+        delays.update({code: round(float(v) + delta, 6) for code, v in inp.bass.sub_codes.items()})
+    marks = list(inp.marks) + (["band clipped at 1 kHz"] if clipped else [])
+    if not inp.ear_groups and "nine-point sum only" not in marks:
+        marks.append("nine-point sum only")
+    return {"joint": cls.name, "sides": sides_out, "band": label, "move": inp.move, "margin_db": min(s["margin_db"] for s in sides_out.values()), "robust_db": min(s["robust_db"] for s in sides_out.values()),
+            "sum_db": min(s["sum_db"] for s in sides_out.values()), "loss_median_db": None, "dip_db": min(s["dip_db"] for s in sides_out.values()),
+            "target_rms_db": max(s["target_rms_db"] for s in sides_out.values()), "delays_ms": delays, "above": placed["above"], "moved_ms": placed["moved"], "bass": bass,
+            "lower_joint": lower_joint, "marks": marks}
 
 
 def _finish_pair(inp, pair, label, shifts, lp_bank, hp_bank, kernel, rejected):
@@ -1856,8 +2234,9 @@ def ring_band(lower_ms, upper_ms, freqs_hz, ratio):
 
 
 # ---------------------------------------------------------------- the input
-def read_window(ir_info, freqs):
-    """The bass reading of one kept IR: 5 ms before to 500 ms after its peak, a cosine tail, 1/6-oct vector average, on `freqs`.
+def read_window(ir_info, freqs, short=False):
+    """The reading of one kept IR, on `freqs`, 1/6-oct vector-averaged: 5 ms before to 500 ms after its peak with a cosine tail (under 1 kHz), or, `short`, 1 ms before to 4 ms after with a
+    half-Hann tail over the last 2 ms (from 1 kHz up, `mt_search.py:71-73`).
 
     The bulk delay comes out before the average and goes back after, so the average does not smear the phase and the absolute
     time base stays (`t0_s` is sample 0's time, as `predict` keeps it)."""
@@ -1866,10 +2245,11 @@ def read_window(ir_info, freqs):
     t0 = float(ir_info.get("t0_s") or 0.0) - float(ir_info.get("drift_samples") or 0.0) / fs
     f_grid = np.asarray(freqs, float)
     pk = int(np.argmax(np.abs(x)))
-    a = max(0, pk - int(WINDOW_BEFORE_MS * 1e-3 * fs))
-    b = min(x.size, pk + int(WINDOW_AFTER_MS * 1e-3 * fs))
+    before_ms, after_ms, tail_fraction = (SHORT_WINDOW_BEFORE_MS, SHORT_WINDOW_AFTER_MS, SHORT_WINDOW_TAIL_FRACTION) if short else (WINDOW_BEFORE_MS, WINDOW_AFTER_MS, WINDOW_TAIL_FRACTION)
+    a = max(0, pk - int(before_ms * 1e-3 * fs))
+    b = min(x.size, pk + int(after_ms * 1e-3 * fs))
     seg = x[a:b].copy()
-    tail = int(WINDOW_TAIL_FRACTION * seg.size)
+    tail = int(tail_fraction * seg.size)
     if tail:
         seg[-tail:] *= 0.5 * (1.0 + np.cos(np.linspace(0.0, np.pi, tail)))
     nfft = 1 << int(math.ceil(math.log2(max(seg.size * 4, 8))))
@@ -1888,7 +2268,7 @@ def read_window(ir_info, freqs):
     return avg * np.exp(-2j * np.pi * f_grid * (tau0 + t0 + a / fs))
 
 
-def load_channels(codes, freqs, *, solos=None, ver=None, api=None, record=None):
+def load_channels(codes, freqs, *, solos=None, ver=None, api=None, record=None, short=False):
     """Every channel's curves, tripod and points, each windowed, keeping `info` (IR, timing, protection), the protective
     filter taken out once (`predict.de_embed_solos`, its refusal passed on as it stands).
 
@@ -1919,7 +2299,7 @@ def load_channels(codes, freqs, *, solos=None, ver=None, api=None, record=None):
                 if title not in have:
                     continue
                 _h, info = P.load_solo_rew(title, freqs, api=api, keep_ir=True)
-            groups.setdefault(key, {})[code] = (read_window(info["ir"], freqs), info)
+            groups.setdefault(key, {})[code] = (read_window(info["ir"], freqs, short=short), info)
     notes = []
     for key, loaded in groups.items():
         try:
@@ -2153,7 +2533,8 @@ _LIMIT_FLAGS = (("phase_window_deg", "--phase-window"), ("leak_near_db", "--leak
                 ("rank", "--rank"), ("sub_one_point_max_hz", "--sub-one-point-max"), ("shift_span_ms", "--shift-span"), ("bass_drop_oct", "--bass-drop"),
                 ("ring_ratio", "--ring-ratio"), ("align_gain_max_db", "--align-gain-max"), ("align_cuts", "--align-cuts"), ("align_cut_max_db", "--align-cut-max"),
                 ("crossing_window", "--crossing-window"), ("dip_band", "--dip-band"), ("dip_fit_band", "--dip-fit-band"), ("rms_band", "--rms-band"),
-                ("width_band", "--width-band"), ("leak_floor_hz", "--leak-floor"), ("leak_ceil_hz", "--leak-ceil"))
+                ("width_band", "--width-band"), ("leak_floor_hz", "--leak-floor"), ("leak_ceil_hz", "--leak-ceil"),
+                ("group_floor_db", "--group-floor"), ("margin_step_db", "--margin-step"), ("max_crossing_hz", "--max-crossing"), ("ear_tolerance_ms", "--ear-tolerance"), ("lower_drop_oct", "--lower-drop"))
 #: Flags with no effect on the joints above the bass, then on the bass joint: they refuse there, in one line naming the joint they belong to.
 _BASS_ONLY_LIMITS = (("leak_near_db", "--leak-near"), ("leak_far_db", "--leak-far"), ("sub_one_point_max_hz", "--sub-one-point-max"))
 _ABOVE_ONLY_LIMITS = (("leak_octave_db", "--leak-octave"), ("lr_crossing_oct", "--lr-crossing-oct"), ("shift_span_ms", "--shift-span"), ("bass_drop_oct", "--bass-drop"),
@@ -2161,6 +2542,10 @@ _ABOVE_ONLY_LIMITS = (("leak_octave_db", "--leak-octave"), ("lr_crossing_oct", "
                       ("rms_band", "--rms-band"), ("width_band", "--width-band"), ("leak_floor_hz", "--leak-floor"), ("leak_ceil_hz", "--leak-ceil"))
 #: The flags that shape `--align` and do nothing without it.
 _ALIGN_LIMITS = (("align_gain_max_db", "--align-gain-max"), ("align_cuts", "--align-cuts"), ("align_cut_max_db", "--align-cut-max"))
+#: The class from 1 kHz up: refused on a joint that has only the class under it.
+_UPPER_ONLY_LIMITS = (("group_floor_db", "--group-floor"), ("margin_step_db", "--margin-step"), ("max_crossing_hz", "--max-crossing"), ("ear_tolerance_ms", "--ear-tolerance"), ("lower_drop_oct", "--lower-drop"))
+#: The ±30 degree band's flags: no effect on a joint with only the class from 1 kHz up.
+_LOWER_ONLY_LIMITS = (("phase_window_deg", "--phase-window"), ("width_band", "--width-band"), ("ring_ratio", "--ring-ratio"))
 
 
 def _limits_of(args):
@@ -2200,6 +2585,14 @@ def _limits_of(args):
         need(values["align_gain_max_db"] >= 0.0, f"--align-gain-max takes 0 or more dB, got {values['align_gain_max_db']:g}")
     if "align_cut_max_db" in values:
         need(values["align_cut_max_db"] >= 0.0, f"--align-cut-max takes 0 or more dB, got {values['align_cut_max_db']:g}")
+    if "margin_step_db" in values:
+        need(values["margin_step_db"] >= 0.0, f"--margin-step takes 0 or more dB, got {values['margin_step_db']:g}")
+    if "max_crossing_hz" in values:
+        need(values["max_crossing_hz"] > 0.0, f"--max-crossing takes Hz above 0, got {values['max_crossing_hz']:g}")
+    if "ear_tolerance_ms" in values:
+        need(values["ear_tolerance_ms"] >= 0.0, f"--ear-tolerance takes 0 or more ms, got {values['ear_tolerance_ms']:g}")
+    if "lower_drop_oct" in values:
+        need(values["lower_drop_oct"] >= 0.0, f"--lower-drop takes 0 or more octaves, got {values['lower_drop_oct']:g}")
     for name, label in (("leak_floor_hz", "--leak-floor"), ("leak_ceil_hz", "--leak-ceil")):
         if name in values:
             need(values[name] > 0.0, f"{label} takes Hz above 0, got {values[name]:g}")
@@ -2244,7 +2637,8 @@ def _limits_report(th, own):
         value, default = getattr(th, name), getattr(defaults, name)
         if name in own:
             default = own[name]
-            value = default if not getattr(th, name) else getattr(th, name)
+            # the joint's own stands for a limit left at its zero value; 0 ms of tolerance is a value of its own
+            value = getattr(th, name) if name == "delay_tolerance_ms" or getattr(th, name) else default
         out[name] = {"value": list(value) if isinstance(value, tuple) else value, "default": list(default) if isinstance(default, tuple) else default,
                      "changed": value != default, "flag": flag}
     return out
@@ -2252,7 +2646,8 @@ def _limits_report(th, own):
 
 def _own_of(cls, shortlist):
     """What a limit left at "the joint's own" means on this joint."""
-    return {"shortlist": shortlist, "band_width_oct": cls.band_width_oct, "crossing_window": cls.crossing_window, "dip_band": cls.dip_band, "dip_fit_band": cls.dip_fit_band,
+    own = {"delay_tolerance_ms": UPPER_DELAY_TOLERANCE_MS, "shift_span_ms": UPPER_SHIFT_SPAN_MS} if cls.power_sum else {}
+    return {**own, "shortlist": shortlist, "band_width_oct": cls.band_width_oct, "crossing_window": cls.crossing_window, "dip_band": cls.dip_band, "dip_fit_band": cls.dip_fit_band,
             "rms_band": cls.rms_band, "width_band": cls.width_band, "leak_floor_hz": cls.leak_floor_hz, "leak_ceil_hz": cls.leak_ceil_hz}
 
 
@@ -2279,6 +2674,11 @@ def _best_summary_bass(row):
     return {"lp": row["lp"], "hp": row["hp"], "margin_oct": _round(row["margin_oct"]), "width_worst_oct": _round(row["width_worst_oct"])}
 
 
+def _best_summary_power(row):
+    side = next(iter(row["sides"]))
+    return {"lp": row["sides"][side]["lp"], "hp": row["sides"][side]["hp"], "margin_db": _round(row["margin_db"]), "target_rms_db": _round(row["target_rms_db"])}
+
+
 def _best_summary_coupled(row):
     side = next(iter(row["sides"]))
     return {"lp": row["sides"][side]["lp"], "hp": row["sides"][side]["hp"], "margin_oct": _round(row["margin_oct"]), "width_worst_oct": _round(row["width_worst_oct"])}
@@ -2290,8 +2690,12 @@ def _default_line(default_run, here_rows, here_best):
     if default_run.get("could_not"):
         return f"Changed from the defaults: {words}. The comparison on the defaults could not be run: {default_run['could_not']}."
     best = default_run["best"]
-    theirs = f"{default_run['rows']} rows" + (f", best margin {best['margin_oct']:.2f} oct" if best else "")
-    mine = f"{here_rows} rows" + (f", best margin {here_best['margin_oct']:.2f} oct" if here_best else "")
+
+    def line(rows, one):
+        if not one:
+            return f"{rows} rows"
+        return f"{rows} rows, best margin " + (f"{one['margin_oct']:.2f} oct" if "margin_oct" in one else f"{one['margin_db']:+.2f} dB")
+    theirs, mine = line(default_run["rows"], best), line(here_rows, here_best)
     return f"Changed from the defaults: {words}. On the defaults it gives {theirs}; these settings give {mine}."
 
 
@@ -2381,21 +2785,60 @@ def _public_coupled(row, ctx):
         for key in ("margin_oct", "width_worst_oct", "width_median_oct", "baseline_worst_oct", "baseline_median_oct", "crossing_hz"):
             b[key] = _round(b.get(key), 2)
         out["bass"] = b
+    out["channels"] = _channels_of(row, sides, ctx)
+    return out
+
+
+def _channels_of(row, sides, ctx):
+    """What a person keys in, channel by channel: also what `--fixed` reads back. The lower channel keeps a polarity a held row gave it; channels carried from the joints below stand as they did."""
     channels = {}
     for name, side in sides.items():
         low_code, up_code = ctx["sides"][name]
-        channels[low_code] = {"lp": side["lp"], "hp": ctx["held_filters"].get(low_code, {}).get("hp"), "polarity": "NORM", "gain_db": ctx["gains"].get(low_code),
+        low_held = ctx["held_filters"].get(low_code, {})
+        channels[low_code] = {"lp": side["lp"], "hp": low_held.get("hp"), "polarity": low_held.get("polarity") or "NORM", "gain_db": ctx["gains"].get(low_code),
                               "delay_ms": row["delays_ms"][low_code], "eq": ctx["eq"].get(low_code, [])}
         channels[up_code] = {"hp": side["hp"], "lp": ctx["held_filters"].get(up_code, {}).get("lp"), "polarity": side["polarity"], "gain_db": ctx["gains"].get(up_code),
                              "delay_ms": row["delays_ms"][up_code], "eq": ctx["eq"].get(up_code, [])}
     for code, spec in (row.get("above") or {}).items():
         channels[code] = {"delay_ms": spec["delay_ms"], "polarity": spec["polarity"]}
+    carried = ctx.get("carried") or {}
     for code in row["delays_ms"]:
-        if code not in channels:
-            sub = ctx["held_filters"].get(code, {})
-            bass = row.get("bass") or {}
-            channels[code] = {"lp": sub.get("lp"), "polarity": bass.get("sub_polarity", sub.get("polarity")), "gain_db": ctx["gains"].get(code), "delay_ms": row["delays_ms"][code]}
-    out["channels"] = channels
+        if code in channels:
+            continue
+        if code in carried:
+            channels[code] = dict(carried[code], gain_db=ctx["gains"].get(code, carried[code].get("gain_db")), delay_ms=row["delays_ms"][code])
+            continue
+        sub = ctx["held_filters"].get(code, {})
+        bass = row.get("bass") or {}
+        channels[code] = {"lp": sub.get("lp"), "polarity": bass.get("sub_polarity", sub.get("polarity")), "gain_db": ctx["gains"].get(code), "delay_ms": row["delays_ms"][code]}
+    return channels
+
+
+def _public_power(row, ctx):
+    """A row from 1 kHz up as a reader gets it: its sums and margin in dB, each channel's settings in `channels`."""
+    out = dict(row)
+    for key, n in (("margin_db", 2), ("robust_db", 2), ("sum_db", 2), ("dip_db", 2), ("target_rms_db", 2)):
+        out[key] = _round(out[key], n)
+    sides = {}
+    for name, side in row["sides"].items():
+        s = dict(side)
+        for key, n in (("margin_db", 2), ("robust_db", 2), ("sum_db", 2), ("loss_median_db", 2), ("dip_db", 2), ("dip_at_hz", 1), ("target_rms_db", 2), ("leak_up_db", 1), ("leak_down_db", 1), ("crossing_hz", 1)):
+            s[key] = _round(s[key], n)
+        s["groups_db"] = {g: _round(v, 2) for g, v in side["groups_db"].items()}
+        s["score_band_hz"] = [round(float(v), 1) for v in side["score_band_hz"]]
+        sides[name] = s
+    out["sides"] = sides
+    if row.get("bass"):
+        b = dict(row["bass"])
+        for key in ("margin_oct", "width_worst_oct", "width_median_oct", "baseline_worst_oct", "baseline_median_oct", "crossing_hz"):
+            b[key] = _round(b.get(key), 2)
+        out["bass"] = b
+    if row.get("lower_joint"):
+        low = dict(row["lower_joint"])
+        for key in ("width_worst_oct", "width_median_oct", "baseline_worst_oct", "baseline_median_oct"):
+            low[key] = _round(low.get(key), 2)
+        out["lower_joint"] = low
+    out["channels"] = _channels_of(row, sides, ctx)
     return out
 
 
@@ -2455,6 +2898,64 @@ def _render_coupled(doc):
     return "\n".join(lines)
 
 
+def _render_power(doc):
+    """The table of a joint from 1 kHz up: two lines to a row, L and R, what a person keys in and the sums it was ranked on."""
+    joint, cond = doc["joint"], doc["conditions"]
+    lines = [f"Joint {joint} from 1 kHz: {doc['grid']['pairs']} filter pairs, {doc['grid']['passing_leak']} pass the leak on both sides, each scored over {doc['grid']['shifts']} delay steps on the power sum "
+             f"of the 1/4 ms window. Stack: {' / '.join(doc['joints_in_stack'])}."]
+    if doc.get("default_line"):
+        lines.append(doc["default_line"])
+    lines.append(f"Delay moves on the {cond['move']} group. L-R offset of the upper role: {cond['lr_words']}. Same polarity L/R: {cond['same_polarity']}; "
+                 f"same family/order L/R: {cond['same_family']}; corners {'per side' if cond['per_side_corners'] else 'alike L/R'}.")
+    lines.append(f"Ear groups: {doc['ear_words']}.")
+    lines.append(f"Ranked on the margin (the robust sum kept over +-{doc['limits']['delay_tolerance_ms']['value']:g} ms, compared on {doc['limits']['margin_step_db']['value']:g} dB steps), then the rms to the target. "
+                 f"A row needs its robust sum at or above {doc['limits']['group_floor_db']['value']:+g} dB.")
+    for label, rows in doc["bands"].items():
+        lines.append(f"\nCrossing {label}:")
+        for r in rows:
+            sides = list(r["sides"].items())
+            for k, (name, s) in enumerate(sides):
+                lead = f"{('#' + str(r['n'])) if k == 0 else '':>5} {name or 'mono':>4}"
+                d = r["delays_ms"]
+                low_code, up_code = _codes_of_side(doc, name)
+                groups = "  ".join(f"{g} {v:+.2f}" for g, v in s["groups_db"].items())
+                lines.append(f"  {lead} LP {_filter_name(s['lp']):>14}  HP {_filter_name(s['hp']):>14}  {s['polarity']:>4}  {low_code} {d[low_code]:>6.2f} ms  {up_code} {d[up_code]:>6.2f} ms"
+                             f"  fx {s['crossing_hz']:>6.0f}  sum {s['sum_db']:+.2f}" + (f"  {groups}" if groups else "") + f"  margin {s['margin_db']:+.2f}  rms {s['target_rms_db']:.2f}  dip {s['dip_db']:+.1f}"
+                             f"  leak {s['leak_up_db'] if s['leak_up_db'] is not None else float('nan'):+.0f}/{s['leak_down_db'] if s['leak_down_db'] is not None else float('nan'):+.0f}"
+                             + (f"  Fs {s['fs_margin']}" if s["fs_margin"] else "") + (f"  [{', '.join(r['marks'])}]" if r["marks"] and k == 0 else ""))
+            head = f"       pair margin {r['margin_db']:+.2f} dB, robust {r['robust_db']:+.2f} dB, sum {r['sum_db']:+.2f} dB, rms {r['target_rms_db']:.2f} dB"
+            if r.get("lower_joint"):
+                low = r["lower_joint"]
+                if low.get("judged"):
+                    head += f"; {low['joint']} joint held {low['width_worst_oct']:.2f}/{low['width_median_oct']:.2f} oct (was {low['baseline_worst_oct']:.2f}/{low['baseline_median_oct']:.2f})"
+                else:
+                    head += f"; {low['joint']} joint not re-scored (no crossing in the held row)"
+            if r.get("bass"):
+                b = r["bass"]
+                head += f"; bass joint held {b['width_worst_oct']:.2f}/{b['width_median_oct']:.2f} oct (was {b['baseline_worst_oct']:.2f}/{b['baseline_median_oct']:.2f})"
+            lines.append(head)
+    lines.append("")
+    held = _held_lines(doc.get("held") or {})
+    if held:
+        lines.append("Every row above also takes, channel by channel:")
+        lines.extend(f"  {line}" for line in held)
+        lines.append("")
+    if doc.get("align"):
+        lines.append(_align_words(doc["align"]))
+    if doc.get("cross_first"):
+        lines.append(_cross_first_words(doc["cross_first"]))
+    if doc["notes"]:
+        lines.append("Notes:")
+        lines.extend(f"  - {n}" for n in doc["notes"])
+        lines.append("")
+    if doc["rows"]:
+        lines.append("Rejected: " + (_reasons_coupled(doc["rejected"]) or "nothing"))
+    else:
+        lines.append("No variant came through the limits. Reasons, counted: " + (_reasons_coupled(doc["rejected"]) or "none recorded"))
+    lines.append("\nThis describes and never picks: the ear decides, the choice is the tuner's.")
+    return "\n".join(lines)
+
+
 def _held_lines(held):
     """A person's keys for what is the same in every row: each channel's gain after the common trim, its held filters, its EQ bands."""
     lines = []
@@ -2462,6 +2963,8 @@ def _held_lines(held):
         parts = []
         if spec.get("gain_db") is not None:
             parts.append(f"gain {spec['gain_db']:+.2f} dB")
+        if spec.get("polarity") == "INV":
+            parts.append("polarity INV")
         if spec.get("hp"):
             parts.append(f"HP {_filter_name(spec['hp'])}")
         if spec.get("lp"):
@@ -2508,6 +3011,8 @@ def _cross_first_words(cross):
 
 _REJECT_WORDS_COUPLED = dict(_REJECT_WORDS, leak="leak limit (either side)", phase="no in-phase band on any delay",
                              lr_crossing="L and R crossings too far apart", bass="the bass joint below could not be held", stage="L-R rule off the delay step",
+                             cancels="a group under the floor (no delay rescues it)", max_crossing="crossing above --max-crossing", lower_joint="the joint below fell past its limit",
+                             other_class="in the other class's list",
                              delay="delay outside 0..max_ms", past_shortlist="not looked at, past the shortlist")
 
 
@@ -2529,10 +3034,10 @@ def _sub_points(chan, code, points, single, one_point):
     return _points_of(chan, code, points, single, "sub")
 
 
-def _arrival_centre(a, b, side_name):
+def _arrival_centre(a, b, side_name, read=ARRIVAL_READ["woofer"]):
     """Where the shift search centres: minus the raw arrival of the upper against the lower at the centre points, or 0 and a note."""
     values, reasons = [], []
-    band, gate = ARRIVAL_READ["woofer"]
+    band, gate = read
     for key in ("tripod",) + CENTRE_POINTS:
         ia, ib = (a["info"].get(key) or {}).get("ir"), (b["info"].get(key) or {}).get("ir")
         if ia is None or ib is None:
@@ -2581,13 +3086,233 @@ def _align_budget(th, peq, given):
     return th, notes
 
 
+def _held_chain(chain, spec, freqs):
+    """A held channel on this reading: the row's high-pass, EQ, gain and polarity (the low-pass and the delay belong to the joint being searched)."""
+    out = chain
+    hp = spec.get("hp")
+    if hp:
+        out = out * dsp_math.xo_response(freqs, hp[2], hp[1], "hp", hp[0])
+    if spec.get("eq"):
+        out = out * _eq_response(freqs, spec["eq"], 0.0)
+    if spec.get("gain_db"):
+        out = out * 10.0 ** (float(spec["gain_db"]) / 20.0)
+    if spec.get("polarity") == "INV":
+        out = -out
+    return out
+
+
+def _lower_hold_of(args, project_dir, channels, row, points, process_mod):
+    """The coupled joint below, from its `--fixed` row, on its own reading (5/500 ms, the class under 1 kHz): `(LowerHold, notes)`. Re-scored by `_lower_judge`."""
+    found = joints_of(channels, cls=row["joint"])
+    cls = JOINT_CLASSES.get(row["joint"])
+    if not found or cls is None or cls.power_sum:
+        raise JointSearchError(f"--fixed row of {row['joint']}: no such joint below in this stack to re-score")
+    below = found[0]
+    freqs = P.grid(cls.grid_hz[0], cls.grid_hz[1], GRID_PPO)
+    codes = list(below.lower.codes) + list(below.upper.codes)
+    main, _lower, notes = _load_capture(args, project_dir, codes, [], freqs, Branch(below.lower.role, below.lower.codes), process_mod)
+    sides_of = (("L", below.lower.left, below.upper.left), ("R", below.lower.right, below.upper.right)) if not below.lower.single else (("", below.lower.codes[0], below.upper.codes[0]),)
+    sides = []
+    for name, low, up in sides_of:
+        for code in (low, up):
+            if code not in row["channels"]:
+                raise JointSearchError(f"--fixed row of {row['joint']} has no channel {code}")
+        low_spec, up_spec = row["channels"][low], row["channels"][up]
+        lower_chain = _held_chain(_points_of(main[low], low, points, args.single_point, "front"), low_spec, freqs)
+        lp = low_spec.get("lp")
+        if lp:
+            lower_chain = lower_chain * dsp_math.xo_response(freqs, lp[2], lp[1], "lp", lp[0])
+        upper_chain = _held_chain(_points_of(main[up], up, points, args.single_point, "front"), up_spec, freqs)
+        hp = up_spec.get("hp")
+        near = math.sqrt(float(lp[2]) * float(hp[2])) if lp and hp else math.sqrt(cls.crossing_window[0] * cls.crossing_window[1])
+        sides.append({"name": name, "lower_code": low, "upper_code": up, "lower": lower_chain, "upper": upper_chain, "low_ms": float(low_spec["delay_ms"]), "up_ms": float(up_spec["delay_ms"]),
+                      "near_hz": near, "base_lp": tuple(up_spec["lp"]) if up_spec.get("lp") else None})
+    return LowerHold(freqs=freqs, sides=sides, cls=cls), notes
+
+
+def _ear_order(points):
+    """The ear groups from the fixed order of the points, as `{name: indexes}`; a point not in `points` is simply not there."""
+    index = {p: i for i, p in enumerate(points)}
+    return {name: [index[p] for p in pts if p in index] for name, pts in EAR_GROUPS.items()}
+
+
+def _ear_arrivals(main, lower, upper, tolerance_ms):
+    """Per point, the L-R arrival of the lower pair and of the upper pair (`windows.arrival_between`, 1-4 kHz), minus the centre points' mean of the same pair: both below -tolerance left,
+    both above +tolerance right; between, or the pairs disagreeing, unassigned. Returns `({point: "left"|"right"|None}, {point: (lower ms, upper ms)})` or `(None, why)`."""
+    band, gate = EAR_ARRIVAL_READ
+    rel = {}
+    for branch in (lower, upper):
+        values = {}
+        for pos in POSITIONS:
+            left, right = (main[branch.left]["info"].get(pos) or {}).get("ir"), (main[branch.right]["info"].get(pos) or {}).get("ir")
+            if left is None or right is None:
+                values[pos] = None
+                continue
+            ms, _info = windows.arrival_between(left["ir"], right["ir"], float(left["sample_rate"]), band=band, gate_ms=gate, t0_a=float(left["t0_s"]), t0_b=float(right["t0_s"]))
+            values[pos] = ms
+        centre = [values[p] for p in CENTRE_POINTS if values.get(p) is not None]
+        if not centre:
+            return None, f"the L-R arrival of the {branch.role} could not be read at the centre points"
+        mean = sum(centre) / len(centre)
+        rel[branch.role] = {p: (None if v is None else v - mean) for p, v in values.items()}
+    assigned, read = {}, {}
+    for pos in POSITIONS:
+        a, b = rel[lower.role][pos], rel[upper.role][pos]
+        read[pos] = (None if a is None else round(a, 3), None if b is None else round(b, 3))
+        if a is None or b is None:
+            assigned[pos] = None
+        elif a < -tolerance_ms and b < -tolerance_ms:
+            assigned[pos] = "left"
+        elif a > tolerance_ms and b > tolerance_ms:
+            assigned[pos] = "right"
+        else:
+            assigned[pos] = None
+    return assigned, read
+
+
+def _ear_setup(main, lower, upper, points, th, from_arrivals):
+    """The ear groups of a joint from 1 kHz up: from the fixed order of the points, checked against the arrivals (or taken from them with `--ears-from-arrivals`); a group under two points leaves
+    only the nine-point sum. Returns `(groups, words, block for the doc, notes)`."""
+    order = _ear_order(points)
+    block = {"from": "order", "assigned": None, "disagrees": None, "read_ms": None, "tolerance_ms": th.ear_tolerance_ms}
+    notes = []
+    groups = order
+    can_check = not lower.single and not upper.single and len(points) == len(POSITIONS)
+    if from_arrivals and not can_check:
+        raise JointSearchError("--ears-from-arrivals reads the L-R arrivals: it needs both sides of the joint at the nine points")
+    if can_check:
+        assigned, read = _ear_arrivals(main, lower, upper, th.ear_tolerance_ms)
+        if assigned is None:
+            notes.append(f"the arrivals could not check the order of the points: {read}; the groups are the order's")
+        else:
+            expected = dict((p, "left") for p in EAR_GROUPS["left"])
+            expected.update((p, "right") for p in EAR_GROUPS["right"])
+            disagrees = [p for p in POSITIONS if assigned[p] != expected.get(p)]
+            block.update({"assigned": assigned, "disagrees": disagrees, "read_ms": {p: list(v) for p, v in read.items()}})
+            if disagrees:
+                notes.append(f"the arrivals disagree with the fixed order of the points at {', '.join(disagrees)} (the L-R arrival of the {lower.role} and of the {upper.role}, 1-4 kHz, against the centre "
+                             f"points' mean, ±{th.ear_tolerance_ms:g} ms): the groups stay the order's; --ears-from-arrivals takes them from the arrivals")
+            if from_arrivals:
+                block["from"] = "arrivals"
+                index = {p: i for i, p in enumerate(points)}
+                groups = {"left": [index[p] for p in POSITIONS if assigned[p] == "left"], "right": [index[p] for p in POSITIONS if assigned[p] == "right"], "centre": order["centre"]}
+    elif len(points) == len(POSITIONS):
+        notes.append("one channel a side: no L-R pair to read the arrivals on, the groups are the order's, unchecked")
+    too_small = [name for name, ix in groups.items() if len(ix) < 2]
+    if too_small or not groups:
+        words = ", ".join(f"{name} {len(groups.get(name, ()))}" for name in EAR_GROUPS)
+        notes.append(f"a group of fewer than two points ({words}): only the nine-point sum applies, no ear group")
+        return None, "none (only the nine-point sum applies)", block, notes
+    words = "; ".join(f"{'left ear' if name == 'left' else 'right ear' if name == 'right' else 'centre'} {', '.join(points[i] for i in ix)}" for name, ix in groups.items())
+    words += f" ({'from the arrivals' if block['from'] == 'arrivals' else 'from the fixed order of the points'}" + (", checked against the arrivals" if can_check and block["assigned"] is not None and block["from"] == "order" else "") + ")"
+    return groups, words, block, notes
+
+
+def _upper_limits(th, args=None):
+    """The limits of the class from 1 kHz up: what the flags left at their defaults takes the class's own (`UPPER_*`)."""
+    tol_given = args is not None and args.delay_tolerance_ms is not None
+    span_given = args is not None and args.shift_span_ms is not None
+    return _dc_replace(th, delay_tolerance_ms=th.delay_tolerance_ms if tol_given else UPPER_DELAY_TOLERANCE_MS, shift_span_ms=th.shift_span_ms if span_given else UPPER_SHIFT_SPAN_MS)
+
+
+def _lower_class_pairs(lower_inp):
+    """Which filter pairs the class under 1 kHz takes: a crossing in its window, on every side, read on its own curves. Every candidate is listed in one class; those it leaves go to the upper list."""
+    f = np.asarray(lower_inp.freqs, float)
+    lp_bank, hp_bank, kernel = _Bank(f, "lp"), _Bank(f, "hp"), _third_oct(f)
+    probe = _dc_replace(lower_inp, leak_on=False)
+
+    def of(pairs):
+        _passing, common = _leak_of_sides(probe, pairs, lp_bank, hp_bank, kernel, {})
+        return set(common)
+    return of
+
+
+def _class_flags(args, lower, upper):
+    """A flag of a class this joint does not list refuses in one line, naming the class it belongs to."""
+    if not upper:
+        for name, flag in _UPPER_ONLY_LIMITS:
+            if getattr(args, name) is not None:
+                raise JointSearchError(f"{flag} belongs to the joints from 1 kHz up (--joint midrange-tweeter, woofer-tweeter, or bounds across 1 kHz)")
+        if args.ears_from_arrivals:
+            raise JointSearchError("--ears-from-arrivals belongs to the joints from 1 kHz up (--joint midrange-tweeter, woofer-tweeter, or bounds across 1 kHz)")
+        if args.rank == "flat":
+            raise JointSearchError("--rank flat is for the joints from 1 kHz up (under 1 kHz the rank is margin, worst, median or loss)")
+    if not lower:
+        for name, flag in _LOWER_ONLY_LIMITS:
+            if getattr(args, name) is not None:
+                raise JointSearchError(f"{flag} shapes the ±30 degree band of the joints under 1 kHz, which this joint does not list")
+        if args.rank == "median":
+            raise JointSearchError("--rank median is the ±30 degree band's, which this joint does not list (from 1 kHz up: margin, worst, loss, flat)")
+        if args.no_dip:
+            raise JointSearchError("--no-dip: from 1 kHz up the dip is not a condition (the run's robust list read the joint's own cancellation, a driver's own dip is EQ's); --dip-limit DB turns it on")
+
+
+def _coupled_doc_emit(args, joint_name, doc, text):
+    """Print a joint's document or table, and `--out` both."""
+    print(json.dumps(doc, indent=2, ensure_ascii=False) if args.json else text)
+    if args.out:
+        try:
+            project_io.atomic_write_json(os.path.join(args.out, f"joint-{joint_name}.json"), doc, makedirs=True)
+            project_io.atomic_write_text(os.path.join(args.out, f"joint-{joint_name}.txt"), text + "\n", makedirs=True)
+        except OSError as exc:
+            raise JointSearchError(f"--out {args.out}: the table above was not written: {exc}") from None
+    return 0
+
+
 def _run_coupled(args, space, channels, stack, th, process_mod):
-    """The woofer-mid joint from the command line; the bass path's helpers, the coupled scan, one table."""
-    project_dir = args.project
+    """A joint above the bass from the command line: its class or, across 1 kHz, its two classes, each its own list."""
     found = joints_of(channels, cls=args.joint)
     if not found:
         raise JointSearchError(f"no {args.joint} joint in this stack ({' / '.join(stack) or 'no joints'})")
     joint = found[0]
+    if joint.cls not in JOINT_CLASSES:
+        raise JointSearchError(f"joint {args.joint!r}: this build has no class for it")
+    base_cls = JOINT_CLASSES[joint.cls]
+    lp_bounds = _bounds(args.lp_bounds, "--lp-bounds") if args.lp_bounds else base_cls.lp_bounds
+    hp_bounds = _bounds(args.hp_bounds, "--hp-bounds") if args.hp_bounds else base_cls.hp_bounds
+    lo, hi = min(lp_bounds[0], hp_bounds[0]), max(lp_bounds[1], hp_bounds[1])
+    straddles = lo < CLASS_SPLIT_HZ < hi or (th.crossing_window is not None and th.crossing_window[0] < CLASS_SPLIT_HZ < th.crossing_window[1])
+    _class_flags(args, lower=not base_cls.power_sum or straddles, upper=base_cls.power_sum or straddles)
+    if straddles and args.align:
+        raise JointSearchError("--align flattens one reading's bands, and bounds across 1 kHz give two lists, two readings: narrow --lp-bounds / --hp-bounds to one side of 1 kHz for the flatten")
+    if not straddles:
+        # a window the bounds reach past: the crossing can only happen inside it
+        if base_cls.power_sum and (args.lp_bounds or args.hp_bounds) and th.crossing_window is None:
+            cw = (min(base_cls.crossing_window[0], lo / math.sqrt(2.0)), max(base_cls.crossing_window[1], hi * math.sqrt(2.0)))
+            cw = (max(cw[0], base_cls.grid_hz[0]), min(cw[1], base_cls.grid_hz[1]))
+            base_cls = _dc_replace(base_cls, crossing_window=cw)
+        doc, text, _inp = _coupled_part(args, space, channels, stack, th, process_mod, joint, base_cls)
+        return _coupled_doc_emit(args, joint.name, doc, text)
+    # two lists, one per class: their scores do not compare
+    window = th.crossing_window or (min(lo / math.sqrt(2.0), JOINT_CLASSES["woofer-midrange"].crossing_window[0]), max(hi * math.sqrt(2.0), _UPPER_JOINT.crossing_window[1]))
+    low_cls = _dc_replace(JOINT_CLASSES["woofer-midrange"], name=joint.name, crossing_window=(max(window[0], JOINT_CLASSES["woofer-midrange"].width_band[0]), CLASS_BOUNDARY_HZ))
+    up_cls = _dc_replace(_UPPER_JOINT, name=joint.name, crossing_window=(CLASS_BOUNDARY_HZ / 2.0 ** 0.25, min(window[1], _UPPER_JOINT.grid_hz[1])))
+    part_th = _dc_replace(th, crossing_window=None)
+    low_doc, low_text, low_inp = _coupled_part(args, space, channels, stack, part_th, process_mod, joint, low_cls)
+    up_doc, up_text, _inp = _coupled_part(args, space, channels, stack, part_th, process_mod, joint, up_cls, exclude_pairs=_lower_class_pairs(low_inp))
+    low_doc["class"], up_doc["class"] = "under 1 kHz", "from 1 kHz"
+    if th.crossing_window is not None:
+        words = f"--crossing-window {th.crossing_window[0]:g}:{th.crossing_window[1]:g}: split at {CLASS_BOUNDARY_HZ:.0f} Hz between the two lists"
+        low_doc["notes"].append(words)
+        up_doc["notes"].append(words)
+    numbered = 0
+    for part in (low_doc, up_doc):
+        for row in part["rows"]:
+            numbered += 1
+            row["n"] = numbered
+    doc = {"joint": joint.name, "joint_class": joint.cls, "two_lists": True, "lists": [low_doc, up_doc], "rows": low_doc["rows"] + up_doc["rows"],
+           "note": "Two lists, one per class: their scores do not compare, so nothing ranks one list against the other."}
+    head = (f"Joint {joint.name}: two lists, one per class of the acoustic crossing: under 1 kHz on the ±30 degree band, from 1 kHz on the power sum. Their scores do not compare.\n")
+    text = head + "\n--- under 1 kHz ---\n" + low_text + "\n\n--- from 1 kHz ---\n" + up_text
+    return _coupled_doc_emit(args, joint.name, doc, text)
+
+
+def _coupled_part(args, space, channels, stack, th, process_mod, joint, base_cls, *, exclude_pairs=None):
+    """One list of a joint above the bass (the woofer-mid class, or from 1 kHz up: `base_cls.power_sum`): the held rows, the flatten, the scan and its table. Returns `(doc, text, the input)`; the caller prints."""
+    project_dir = args.project
+    power = base_cls.power_sum
+    if power:
+        th = _upper_limits(th, args)
     lower, upper = joint.lower, joint.upper
     if lower.single != upper.single:
         raise JointSearchError(f"{joint.name}: one side has an L/R pair and the other one channel: this tool cannot pair them")
@@ -2609,7 +3334,6 @@ def _run_coupled(args, space, channels, stack, th, process_mod):
         fs_values.append(fs)
     fs_upper = max(fs_values)
     floor = HP_FS_FLOOR.get(upper.role, 0.0) * fs_upper
-    base_cls = JOINT_CLASSES[joint.cls]
     lp_bounds = _bounds(args.lp_bounds, "--lp-bounds") if args.lp_bounds else base_cls.lp_bounds
     hp_bounds = _bounds(args.hp_bounds, "--hp-bounds") if args.hp_bounds else base_cls.hp_bounds
     cls = _joint_under(base_cls, th, lp_bounds, hp_bounds)
@@ -2645,20 +3369,29 @@ def _run_coupled(args, space, channels, stack, th, process_mod):
     target = _read_target(args.house, freqs)
     # what is held: the joint below, and any row naming this joint's upper channels
     fixed_bass = next((r for r in fixed_rows if r["joint"].startswith("sub-")), None)
-    fixed_upper = next((r for r in fixed_rows if any(c in r["channels"] for c in upper.codes) and not r["joint"].startswith("sub-")), None)
+    fixed_below = next((r for r in fixed_rows if r["joint"].endswith(f"-{lower.role}")), None)
+    fixed_upper = next((r for r in fixed_rows if r is not fixed_below and not r["joint"].startswith("sub-") and any(c in r["channels"] for c in upper.codes)), None)
     if args.sub_solos and fixed_bass is None:
         raise JointSearchError("--sub-solos without a --fixed bass row: the sub is read only to re-score the joint below")
     if args.bass_drop_oct is not None and fixed_bass is None:
         raise JointSearchError("--bass-drop limits the bass joint below, and without a --fixed bass row it is not in this model")
+    if args.lower_drop_oct is not None and (fixed_below is None or fixed_below["joint"].startswith("sub-")):
+        raise JointSearchError(f"--lower-drop limits the joint below, and without a --fixed row of that joint it is not in this model ({joint.name}: a row of the joint under {lower.role})")
     bass_joints = joints_of(channels, cls="bass") if fixed_bass is not None else []
     if fixed_bass is not None and not bass_joints:
         raise JointSearchError("--fixed names a bass row, and this stack has no bass joint")
-    sub_codes = list(bass_joints[0].lower.codes) if bass_joints else []
+    # the bass joint is scored only when its channels are this joint's lower role; otherwise (mid-tweeter over a 3-way's bass) this joint leaves it untouched
+    bass_in_model = bool(bass_joints) and bass_joints[0].upper.role == lower.role
+    if fixed_bass is not None and not bass_in_model:
+        for flag, given in (("--sub-solos", args.sub_solos), ("--bass-drop", args.bass_drop_oct is not None)):
+            if given:
+                raise JointSearchError(f"{flag} limits the bass joint, which this joint's channels do not touch")
+    sub_codes = list(bass_joints[0].lower.codes) if bass_in_model else []
     upper_codes = list(lower.codes) + list(upper.codes)
-    main, lower_curves, notes = _load_capture(args, project_dir, upper_codes, sub_codes, freqs, Branch("woofer", lower.codes), process_mod)
+    main, lower_curves, notes = _load_capture(args, project_dir, upper_codes, [] if power else sub_codes, freqs, Branch("woofer", lower.codes), process_mod, short=power)
     notes += budget_notes
     points = ["centre"] if args.single_point else list(POSITIONS)
-    pre_chains, held_filters, held_gains = {}, {}, {}
+    pre_chains, held_filters, held_gains, held_eq = {}, {}, {}, {}
     for code in upper_codes:
         pre_chains[code] = _points_of(main[code], code, points, args.single_point, "front")
     if front_lp:
@@ -2666,20 +3399,24 @@ def _run_coupled(args, space, channels, stack, th, process_mod):
         for code in upper.codes:
             pre_chains[code] = pre_chains[code] * lp_h
             held_filters.setdefault(code, {})["lp"] = list(front_lp)
-    held_lower, held_upper, upper_pol, above = None, None, None, None
-    if fixed_bass is not None:
+    held_lower, held_upper, upper_pol, above, carried = None, None, None, None, None
+    if fixed_below is not None:
         held_lower = {}
+        below_words = "bass row" if fixed_below["joint"].startswith("sub-") else f"row of {fixed_below['joint']}"
         for code in lower.codes:
-            spec = fixed_bass["channels"].get(code)
+            spec = fixed_below["channels"].get(code)
             if spec is None:
-                raise JointSearchError(f"--fixed bass row has no channel {code}")
+                raise JointSearchError(f"--fixed {below_words} has no channel {code}")
             held_lower[code] = float(spec["delay_ms"])
             held_gains[code] = float(spec.get("gain_db") or 0.0)
-            hp = spec.get("hp")
-            if hp:
-                pre_chains[code] = pre_chains[code] * dsp_math.xo_response(freqs, hp[2], hp[1], "hp", hp[0])
-                held_filters.setdefault(code, {})["hp"] = list(hp)
-            pre_chains[code] = pre_chains[code] * 10.0 ** (held_gains[code] / 20.0)
+            pre_chains[code] = _held_chain(pre_chains[code], spec, freqs)
+            if spec.get("hp"):
+                held_filters.setdefault(code, {})["hp"] = list(spec["hp"])
+            if spec.get("polarity") == "INV":
+                held_filters.setdefault(code, {})["polarity"] = "INV"
+            if spec.get("eq"):
+                held_eq[code] = list(spec["eq"])
+        carried = {code: dict(spec) for code, spec in fixed_below["channels"].items() if code not in upper_codes and code not in sub_codes}
     if fixed_upper is not None:
         held_upper, upper_pol = {}, {}
         for code in upper.codes:
@@ -2692,6 +3429,13 @@ def _run_coupled(args, space, channels, stack, th, process_mod):
             if lp and not front_lp and fixed_upper["joint"] != joint.name:
                 pre_chains[code] = pre_chains[code] * dsp_math.xo_response(freqs, lp[2], lp[1], "lp", lp[0])
                 held_filters.setdefault(code, {})["lp"] = list(lp)
+            if fixed_upper["joint"] != joint.name:          # a row of the joint above holds the mid's EQ and gain: the woofer-mid joint is judged on the mid as it plays
+                if spec.get("eq"):
+                    pre_chains[code] = pre_chains[code] * _eq_response(freqs, spec["eq"], 0.0)
+                    held_eq[code] = list(spec["eq"])
+                if spec.get("gain_db"):
+                    pre_chains[code] = pre_chains[code] * 10.0 ** (float(spec["gain_db"]) / 20.0)
+                    held_gains[code] = float(spec["gain_db"])
         order = {role: i for i, role in enumerate(_xw.ROLE_ORDER)}
         for code, spec in fixed_upper["channels"].items():
             role = (channels.get(code) or {}).get("role")
@@ -2700,10 +3444,21 @@ def _run_coupled(args, space, channels, stack, th, process_mod):
             follow = next((c for c in upper.codes if c.split("-")[-1] == code.split("-")[-1] and len(upper.codes) > 1), upper.codes[0])
             above = above or {}
             above[code] = {"delay_ms": float(spec["delay_ms"]), "polarity": spec.get("polarity") or "NORM", "follows": follow}
+    # the joint below, held from its row and re-scored under each candidate's low-pass: on its own reading, the class under 1 kHz
+    lower_hold = None
+    if fixed_below is not None and not fixed_below["joint"].startswith("sub-"):
+        lower_hold, more = _lower_hold_of(args, project_dir, channels, fixed_below, points, process_mod)
+        notes += [n for n in more if n not in notes]
     # the bass joint below: scored on the chain the row was found on; the flatten changes only what each candidate is judged with
     hold_base = None
+    bass_freqs = freqs
     sides_lower = (("L", lower.left), ("R", lower.right)) if not lower.single else (("", lower.codes[0]),)
-    if fixed_bass is not None:
+    if bass_in_model:
+        bass_main, bass_lower = main, lower_curves
+        if power:           # the sub's joint is read under 1 kHz, whatever this joint's class
+            bass_freqs = P.grid(JOINT_CLASSES["bass"].grid_hz[0], JOINT_CLASSES["bass"].grid_hz[1], GRID_PPO)
+            bass_main, bass_lower, more = _load_capture(args, project_dir, list(lower.codes), sub_codes, bass_freqs, Branch("woofer", lower.codes), process_mod)
+            notes += [n for n in more if n not in notes]
         bass_joint = bass_joints[0]
         sub_row = fixed_bass["channels"]
         if not all(c in sub_row for c in bass_joint.lower.codes):
@@ -2714,65 +3469,94 @@ def _run_coupled(args, space, channels, stack, th, process_mod):
         lp = sub_row[ref_code].get("lp") or fixed_bass.get("lp")
         if not lp:
             raise JointSearchError(f"--fixed bass row: {ref_code} has no low-pass")
-        low_h = dsp_math.xo_response(freqs, lp[2], lp[1], "lp", lp[0])
+        low_h = dsp_math.xo_response(bass_freqs, lp[2], lp[1], "lp", lp[0])
         gain = 10.0 ** (float(sub_row[ref_code].get("gain_db") or 0.0) / 20.0)
-        sub_one = not any(lower_curves[c]["points"] for c in bass_joint.lower.codes)
-        stacks = [_sub_points(lower_curves[c], c, points, args.single_point, sub_one) for c in bass_joint.lower.codes]
+        sub_one = not any(bass_lower[c]["points"] for c in bass_joint.lower.codes)
+        stacks = [_sub_points(bass_lower[c], c, points, args.single_point, sub_one) for c in bass_joint.lower.codes]
         base_delay = sub_delays[ref_code]
-        sub = stacks[0] * np.exp(-2j * np.pi * freqs * (sub_delays[ref_code] - base_delay) * 1e-3)
+        sub = stacks[0] * np.exp(-2j * np.pi * bass_freqs * (sub_delays[ref_code] - base_delay) * 1e-3)
         if not one:
-            sub = sub + stacks[1] * np.exp(-2j * np.pi * freqs * (sub_delays[bass_joint.lower.codes[1]] - base_delay) * 1e-3)
+            sub = sub + stacks[1] * np.exp(-2j * np.pi * bass_freqs * (sub_delays[bass_joint.lower.codes[1]] - base_delay) * 1e-3)
         sub = sub * low_h * gain
         row_front_lp = fixed_bass.get("front_lp")
-        before = {name: pre_chains[code] for name, code in sides_lower}
-        hold_base = BassHold(freqs=freqs, sub=sub, woofers=before, sub_delay_ms=base_delay, sub_polarity=sub_row[ref_code].get("polarity") or "NORM",
+        if power:
+            before = {name: _held_chain(_points_of(bass_main[code], code, points, args.single_point, "front"), sub_row[code] if code in sub_row else fixed_below["channels"][code], bass_freqs)
+                      for name, code in sides_lower}
+        else:
+            before = {name: pre_chains[code] for name, code in sides_lower}
+        hold_base = BassHold(freqs=bass_freqs, sub=sub, woofers=before, sub_delay_ms=base_delay, sub_polarity=sub_row[ref_code].get("polarity") or "NORM",
                              base_delays={name: held_lower[code] for name, code in sides_lower},
                              base_lps={name: (tuple(row_front_lp) if row_front_lp else None) for name, _code in sides_lower},
                              max_ms=space.delay_max_ms, delay_step_ms=space.delay_step_ms, sub_codes=sub_delays, base_woofers=before)
         held_gains.update({c: float(sub_row[c].get("gain_db") or 0.0) for c in bass_joint.lower.codes})
         held_filters.update({c: {"lp": list(lp), "polarity": sub_row[c].get("polarity")} for c in bass_joint.lower.codes})
         notes.append("the bass joint below is held from its row and re-scored with each candidate's low-pass (recovered by the sub's own delay and polarity when it falls)")
-    else:
+    elif fixed_bass is not None:
+        notes.append(f"the bass joint is carried as its row has it and not re-scored: this joint does not touch its channels ({fixed_bass['joint']})")
+    elif not power:
         notes.append("no --fixed bass row: the bass joint is not in this model and is not re-scored")
+    if carried:
+        for code, spec in carried.items():
+            held_gains.setdefault(code, float(spec.get("gain_db") or 0.0))
+    if lower_hold is not None:
+        notes.append(f"the {fixed_below['joint']} joint below is held from its row and re-scored with each candidate's low-pass; a fall past --lower-drop rejects, no recovery: a row searched without this low-pass reads a fall under any (run that joint with --front-lp, or raise --lower-drop)")
+    elif power and fixed_bass is None:
+        notes.append("no --fixed row below: the joints below are not in this model and are not re-scored")
 
     def flattened(limits, bands):
         """The chains after `--align` on this budget and these bands, the gains after their common trim, the EQ bands, the align block; a budget that cannot be
         trimmed into the range refuses. Without `--align`, the chains as held."""
         if not args.align:
-            return pre_chains, dict(held_gains), {}, None
-        out, out_gains, out_bands, block = dict(pre_chains), dict(held_gains), {}, {"channels": {}, "bands": {}}
+            return pre_chains, dict(held_gains), dict(held_eq), None
+        out, out_gains, out_bands, block = dict(pre_chains), dict(held_gains), {c: list(v) for c, v in held_eq.items()}, {"channels": {}, "bands": {}}
         for code in upper_codes:
             role = lower.role if code in lower.codes else upper.role
-            fit, anchor = bands[role]
+            role_key = ("midrange-upper" if code in lower.codes else "tweeter") if power else role
+            fit, anchor = bands[role_key]
             fs_here = _xw._fs_of(channels[code])[0]
             if role in _xw.FRAGILE_ROLES and fs_here:
                 fit = (max(fit[0], float(fs_here)), fit[1])
             if fit[0] >= fit[1]:
                 raise JointSearchError(f"--align: {code}'s fit band ends at {fit[1]:g} Hz, under the driver's Fs {float(fs_here):g} Hz")
-            eq, info = _flatten_channel(pre_chains[code], target, freqs, fit, anchor, limits, gain_step=space.gain_step_db, peq=space.eq)
+            here = limits if space.eq.bands is None else _dc_replace(limits, align_cuts=max(0, min(limits.align_cuts, space.eq.bands - len(held_eq.get(code, [])))))
+            eq, info = _flatten_channel(pre_chains[code], target, freqs, fit, anchor, here, gain_step=space.gain_step_db, peq=space.eq)
             out[code] = pre_chains[code] * eq
-            out_bands[code] = info["bands"]
+            out_bands[code] = out_bands.get(code, []) + info["bands"]
             out_gains[code] = out_gains.get(code, 0.0) + info["net_gain_db"]
             block["channels"][code] = info
             block["bands"][code] = {"fit": list(fit), "anchor": list(anchor)}
-        trim = _common_trim({c: out_gains.get(c, 0.0) for c in upper_codes + sub_codes}, space.gain_range, space.gain_step_db)
+        trim = _common_trim({c: out_gains.get(c, 0.0) for c in upper_codes + sub_codes + list(carried or ())}, space.gain_range, space.gain_step_db)
         if trim is None:
             raise JointSearchError(f"after the align the channel gains span past the DSP's range {space.gain_range} at both ends: no common trim fits")
         block["global_trim_db"] = trim
         return out, {code: round(value + trim, 6) for code, value in out_gains.items()}, out_bands, block
 
-    def hold_on(chain_set):
-        return None if hold_base is None else _dc_replace(hold_base, woofers={name: chain_set[code] for name, code in sides_lower})
+    def hold_on(chain_set, block=None):
+        """The bass joint under this chain set: a joint from 1 kHz up is judged on the bass reading, the flatten's cuts carried over onto it."""
+        if hold_base is None:
+            return None
+        if not power:
+            return _dc_replace(hold_base, woofers={name: chain_set[code] for name, code in sides_lower})
+        if not block:
+            return hold_base
+        eq = {code: _eq_response(bass_freqs, block["channels"][code]["bands"], block["channels"][code]["net_gain_db"]) for code in lower.codes}
+        return _dc_replace(hold_base, woofers={name: hold_base.woofers[name] * eq[code] for name, code in sides_lower})
+
+    def lower_eq_of(block):
+        """The flatten of the lower channels, on the reading of the joint below: what the re-score sees of the align."""
+        if lower_hold is None or not block:
+            return None
+        return {code: _eq_response(lower_hold.freqs, block["channels"][code]["bands"], block["channels"][code]["net_gain_db"]) for code in lower.codes}
 
     chains, gains, eq_bands, align_doc = flattened(flat_limits, align_table)
     if align_doc and align_doc["global_trim_db"]:
         notes.append(f"a channel left the gain range after the align: every channel moves by {align_doc['global_trim_db']:+g} dB alike, the sub and the channels not in this joint included")
     # the sides
-    decay_ranges = _ring_freqs(cls.ring_band)
+    decay_ranges = None if power else _ring_freqs(cls.ring_band)
     pairs_of_sides = (("L", lower.left, upper.left), ("R", lower.right, upper.right)) if not lower.single else (("", lower.codes[0], upper.codes[0]),)
     centres, sides_doc = {}, {}
     for name, low_code, up_code in pairs_of_sides:
-        centres[name], why = _arrival_centre(main[up_code], main[low_code], name)
+        centres[name], why = _arrival_centre(main[up_code], main[low_code], name, read=EAR_ARRIVAL_READ if power else ARRIVAL_READ["woofer"])
         if why:
             notes.append(why)
         sides_doc[name] = {"lower": low_code, "upper": up_code}
@@ -2780,18 +3564,21 @@ def _run_coupled(args, space, channels, stack, th, process_mod):
     def sides_on(chain_set):
         return [CoupledSide(name, low, up, chain_set[low], chain_set[up], arrival_ms=centres[name]) for name, low, up in pairs_of_sides]
 
-    table = decay_table(main, upper_codes, decay_ranges)
-    bands_of_ring = {}
-    decay_input = {}
-    for name, low_code, up_code in pairs_of_sides:
-        band = ring_band(table["ms"][low_code], table["ms"][up_code], table["freqs_hz"], th.ring_ratio)
-        bands_of_ring[name] = band
-        decay_input[name] = None if band is None else {"band": band["band"], "gd_at_hz": band["gd_at_hz"]}
-    decay_doc = {"table": table, "ring_ratio": th.ring_ratio, "bands": bands_of_ring}
-    rule_ms, lower_rule = None, 0.0
+    decay_input, decay_doc = None, None
+    if not power:
+        table = decay_table(main, upper_codes, decay_ranges)
+        bands_of_ring = {}
+        decay_input = {}
+        for name, low_code, up_code in pairs_of_sides:
+            band = ring_band(table["ms"][low_code], table["ms"][up_code], table["freqs_hz"], th.ring_ratio)
+            bands_of_ring[name] = band
+            decay_input[name] = None if band is None else {"band": band["band"], "gd_at_hz": band["gd_at_hz"]}
+        decay_doc = {"table": table, "ring_ratio": th.ring_ratio, "bands": bands_of_ring}
+    rule_ms, lower_rule, lower_read = None, 0.0, False
     if not lower.single:
         try:
             lower_rule = lr_rule_ms(main[lower.left], main[lower.right], lower.role, positions=_rule_positions(main[lower.left], main[lower.right], args.single_point))
+            lower_read = True
         except JointSearchError as exc:
             if not (args.no_lr_offset or held_lower is not None):     # only a free offset or held woofers go on without it
                 raise
@@ -2803,11 +3590,22 @@ def _run_coupled(args, space, channels, stack, th, process_mod):
                 raise
             notes.append(f"the upper role's L-R rule could not be read: {exc}")
     marks = ("single-point",) if args.single_point else ()
+    # from 1 kHz up: the groups the sum is read over, the dip off unless asked for (the run's robust list read the joint's own cancellation, not a driver's dip)
+    ear_groups, ear_words, ear_block, order_groups = None, None, None, None
+    if power:
+        ear_groups, ear_words, ear_block, more = _ear_setup(main, lower, upper, points, th, args.ears_from_arrivals)
+        notes += more
+        order_groups = _ear_order(points) if len(points) == len(POSITIONS) else None
+    dip_on = (not args.no_dip) if not power else (args.dip_limit_db is not None and not args.no_dip)
+    if power and args.dip_limit_db is None:
+        notes.append("from 1 kHz up the dip is reported and not a condition (--dip-limit DB turns it on): a driver's own dip is EQ's after the joint")
+    lower_stage = lower_rule if power and lower_read and not lower.single and not args.no_lr_offset else None
     base_inp = CoupledInput(freqs=freqs, points=points, sides=sides_on(chains), lp_options=lp_options, hp_options=hp_options, target_db=target, max_ms=space.delay_max_ms, th=th,
                             lr_rule_ms=rule_ms, free_lr=args.no_lr_offset, same_polarity=not args.no_same_polarity, same_family=not args.no_same_family,
-                            per_side_corners=args.corners_per_side, leak_on=not args.no_leak, dip_on=not args.no_dip, move=args.move, held_lower=held_lower, held_upper=held_upper,
-                            upper_polarity=upper_pol, above=above, bass=hold_on(chains), decay=decay_input, delay_step_ms=space.delay_step_ms, lower_rule_ms=lower_rule, joint=cls,
-                            fs_upper_hz=fs_upper, hp_floor_hz=floor, marks=marks, xo=space.xo, eq=space.eq)
+                            per_side_corners=args.corners_per_side, leak_on=not args.no_leak, dip_on=dip_on, move=args.move, held_lower=held_lower, held_upper=held_upper,
+                            upper_polarity=upper_pol, above=above, bass=hold_on(chains, align_doc), decay=decay_input, delay_step_ms=space.delay_step_ms, lower_rule_ms=lower_rule, joint=cls,
+                            fs_upper_hz=fs_upper, hp_floor_hz=floor, marks=marks, xo=space.xo, eq=space.eq, ear_groups=ear_groups, lower_hold=lower_hold, lower_eq=lower_eq_of(align_doc),
+                            lower_stage_ms=lower_stage, exclude_pairs=exclude_pairs, carried=carried)
     res = scan_coupled(base_inp)
     words_extra = []
     if args.no_lr_offset:
@@ -2824,6 +3622,8 @@ def _run_coupled(args, space, channels, stack, th, process_mod):
         words_extra.append("--no-dip")
     if args.align_band:
         words_extra.append("--align-band " + " ".join(args.align_band))
+    if power and args.ears_from_arrivals:
+        words_extra.append("--ears-from-arrivals")
     report = _limits_report(th, _own_of(base_cls, SHORTLIST_COUPLED_PER_BAND))
     changed = _changed_words(report, words_extra)
 
@@ -2835,52 +3635,54 @@ def _run_coupled(args, space, channels, stack, th, process_mod):
         default_hp = filter_options(space.families, corner_grid(hp_bounds, space.xo, CORNER_STEP_OCT), floor_hz=floor)
         if len(default_lp) * len(default_hp) > GRID_CEILING_PAIRS and not args.allow_large_grid:
             raise JointSearchError(f"the default corner grid is {len(default_lp) * len(default_hp)} filter pairs, over the ceiling {GRID_CEILING_PAIRS}")
-        chain_set = flattened(default_flat, ALIGN_BANDS)[0]
-        return _dc_replace(base_inp, th=Limits(), joint=default_cls, free_lr=False, same_polarity=True, same_family=True, per_side_corners=False, leak_on=True, dip_on=True,
-                           lp_options=default_lp, hp_options=default_hp, sides=sides_on(chain_set), bass=hold_on(chain_set))
+        chain_set, _gains, _eq, block = flattened(default_flat, ALIGN_BANDS)
+        return _dc_replace(base_inp, th=_upper_limits(Limits()) if power else Limits(), joint=default_cls, free_lr=False, same_polarity=True, same_family=True, per_side_corners=False, leak_on=True,
+                           dip_on=not power, lp_options=default_lp, hp_options=default_hp, sides=sides_on(chain_set), bass=hold_on(chain_set, block), lower_eq=lower_eq_of(block), ear_groups=order_groups)
 
-    default_run = None if args.no_default_run or not changed else _default_run(scan_coupled, default_input, changed, _best_summary_coupled)
+    default_run = None if args.no_default_run or not changed else _default_run(scan_coupled, default_input, changed, _best_summary_power if power else _best_summary_coupled)
     # cross first: the same search on the chains before the flatten, the same EQ budget on each side's sum
     cross_first = None
     if args.align and not args.no_cross_first:
-        cross_first = _cross_first_block(_dc_replace(base_inp, sides=sides_on(pre_chains), bass=hold_on(pre_chains), decay=None), flat_limits)
-    ctx = {"sides": {name: (low, up) for name, low, up in pairs_of_sides}, "gains": gains, "eq": eq_bands, "held_filters": held_filters}
+        cross_first = _cross_first_block(_dc_replace(base_inp, sides=sides_on(pre_chains), bass=hold_on(pre_chains, None), decay=None, lower_eq=None), flat_limits)
+    ctx = {"sides": {name: (low, up) for name, low, up in pairs_of_sides}, "gains": gains, "eq": eq_bands, "held_filters": held_filters, "carried": carried or {}}
     top = max(1, int(args.top))
-    pub = [_public_coupled(r, ctx) for r in res["rows"]]
+    pub = [(_public_power if power else _public_coupled)(r, ctx) for r in res["rows"]]
     bands = {}
     for n, r in enumerate(pub, start=1):
         r["n"] = n
         bands.setdefault(r["band"], [])
         if len(bands[r["band"]]) < top:
             bands[r["band"]].append(r)
-    held = {code: {"gain_db": gains.get(code), "hp": held_filters.get(code, {}).get("hp"), "lp": held_filters.get(code, {}).get("lp"), "eq": eq_bands.get(code, [])}
+    held = {code: {"gain_db": gains.get(code), "hp": held_filters.get(code, {}).get("hp"), "lp": held_filters.get(code, {}).get("lp"), "eq": eq_bands.get(code, []),
+                   "polarity": held_filters.get(code, {}).get("polarity")}
             for code in list(upper_codes) + list(sub_codes)}
+    for code, spec in (carried or {}).items():
+        held[code] = {"gain_db": gains.get(code, spec.get("gain_db")), "hp": spec.get("hp"), "lp": spec.get("lp"), "eq": spec.get("eq") or [], "polarity": spec.get("polarity")}
     conditions = {"move": args.move, "same_polarity": not args.no_same_polarity, "same_family": not args.no_same_family, "per_side_corners": bool(args.corners_per_side),
                   "lr_offset_free": bool(args.no_lr_offset) or rule_ms is None, "lr_rule_ms": None if rule_ms is None else round(rule_ms, 3),
                   "lr_words": ("free (--no-lr-offset)" if args.no_lr_offset else (f"{rule_ms:+.2f} ms within +-{th.lr_tolerance_ms:g} ms" if rule_ms is not None else "one channel per side")),
                   "lower_lr_rule_ms": None if lower.single else round(lower_rule, 3), "hp_floor_hz": round(floor, 1), "front_lp": list(front_lp) if front_lp else None,
                   "shift_range_ms": res["grid"]["shift_range_ms"], "single_point": bool(args.single_point)}
+    if power:
+        conditions.update({"class": "from 1 kHz", "dip_a_condition": dip_on, "group_floor_db": th.group_floor_db, "max_crossing_hz": th.max_crossing_hz, "lower_stage_ms": lower_stage})
     doc = {"joint": joint.name, "joint_class": joint.cls, "joints_in_stack": stack, "channels": {"lower": list(lower.codes), "upper": list(upper.codes)},
            "sides": sides_doc, "grid": dict(res["grid"], ceiling=GRID_CEILING_PAIRS), "rows": pub, "bands": bands, "rejected": res["rejected"], "held": held,
            "dropped_options": list(space.dropped), "conditions": conditions, "limits": report, "default_run": default_run, "align": align_doc, "cross_first": cross_first,
            "decay": decay_doc, "fixed": [r["joint"] for r in fixed_rows], "notes": notes + base_inp.notes,
            "note": "This never picks: the table describes, the margin ranks on what survives a head moving, the ear decides and the choice is the tuner's."}
+    if power:
+        doc["ear_check"] = ear_block
+        doc["groups"] = None if not ear_groups else {name: [points[i] for i in ix] for name, ix in ear_groups.items()}
+        doc["ear_words"] = ear_words
     if default_run:
         best = pub[0] if pub else None
-        doc["default_line"] = _default_line(default_run, len(pub), {"margin_oct": best["margin_oct"]} if best else None)
+        here = None if not best else ({"margin_db": best["margin_db"]} if power else {"margin_oct": best["margin_oct"]})
+        doc["default_line"] = _default_line(default_run, len(pub), here)
     if space.dropped:
         doc["notes"].append(f"the profile also offers {', '.join(space.dropped)}: the model does not build those exactly, so they were left out of the search")
     if not res["rows"]:
         doc["empty"] = {"said": "no variant came through the limits", "reasons": _reasons_coupled(res["rejected"])}
-    text = _render_coupled(doc)
-    print(json.dumps(doc, indent=2, ensure_ascii=False) if args.json else text)
-    if args.out:
-        try:
-            project_io.atomic_write_json(os.path.join(args.out, f"joint-{joint.name}.json"), doc, makedirs=True)
-            project_io.atomic_write_text(os.path.join(args.out, f"joint-{joint.name}.txt"), text + "\n", makedirs=True)
-        except OSError as exc:
-            raise JointSearchError(f"--out {args.out}: the table above was not written: {exc}") from None
-    return 0
+    return doc, (_render_power if power else _render_coupled)(doc), base_inp
 
 
 def _ring_freqs(band):
@@ -2947,8 +3749,8 @@ def _read_target(path, freqs):
     return target
 
 
-def _load_capture(args, project_dir, codes, lower_codes, freqs, level_branch, process_mod):
-    """The capture: `(main curves, lower curves, notes)`. `lower_codes` may come from another session (`--sub-solos`, `--sub-ver`), levelled
+def _load_capture(args, project_dir, codes, lower_codes, freqs, level_branch, process_mod, short=False):
+    """The capture: `(main curves, lower curves, notes)`; `short` is the reading from 1 kHz up. `lower_codes` may come from another session (`--sub-solos`, `--sub-ver`), levelled
     over `--level-step`."""
     if args.level_step:
         band = _bounds(args.level_step, "--level-step")
@@ -2965,7 +3767,7 @@ def _load_capture(args, project_dir, codes, lower_codes, freqs, level_branch, pr
             record = process_mod.Process(os.path.join(project_dir, "process")).protective_record_for(args.ver)
         except process_mod.ProcessError as exc:
             raise JointSearchError(f"the capture record of series {args.ver}: {exc}") from None
-    sources = {"solos": args.solos, "ver": args.ver, "api": None, "record": record}
+    sources = {"solos": args.solos, "ver": args.ver, "api": None, "record": record, "short": short}
     main, notes = load_channels(list(codes) + ([] if two_sessions else list(lower_codes)), freqs, **sources)
     lower_curves = main
     if two_sessions:
@@ -2976,7 +3778,7 @@ def _load_capture(args, project_dir, codes, lower_codes, freqs, level_branch, pr
             except process_mod.ProcessError as exc:
                 raise JointSearchError(f"the capture record of series {args.sub_ver}: {exc}") from None
         sub_side, more = load_channels(list(codes) + list(lower_codes), freqs, solos=args.sub_solos or args.solos,
-                                       ver=args.sub_ver or args.ver, api=None, record=sub_record)
+                                       ver=args.sub_ver or args.ver, api=None, record=sub_record, short=short)
         notes += [n for n in more if n not in notes]
         step = _level_step_db(sub_side, main, level_branch, freqs, _bounds(args.level_step, "--level-step"))
         factor = 10.0 ** (step / 20.0)
@@ -2994,7 +3796,7 @@ def _load_capture(args, project_dir, codes, lower_codes, freqs, level_branch, pr
 def _cli(argv=None):
     """`_main`'s work; its refusals are `_main`'s to say."""
     import argparse
-    ap = argparse.ArgumentParser(description="the joint-by-joint search: the bass joint and the woofer-mid joint, described, not chosen")
+    ap = argparse.ArgumentParser(description="the joint-by-joint search: the bass joint, the woofer-mid joint and the joints from 1 kHz up, described, not chosen")
     ap.add_argument("--project", required=True, metavar="DIR")
     ap.add_argument("--house", required=True, metavar="FILE", help="the target curve (REW text)")
     ap.add_argument("--solos", metavar="DIR", help="v7 impulse files, `m_L.json` and `m_L-p1.json`")
@@ -3004,7 +3806,7 @@ def _cli(argv=None):
     ap.add_argument("--sub-ver", help="the sub's series in REW when it differs (needs --level-step)")
     ap.add_argument("--level-step", metavar="LO:HI", help="the control band two capture sessions are levelled over")
     ap.add_argument("--single-point", action="store_true", help="run on the centre point; needs the person's recorded decision")
-    ap.add_argument("--joint", default="bass", help="which joint: bass, woofer-midrange (the build's joints)")
+    ap.add_argument("--joint", default="bass", help="which joint: bass, woofer-midrange, midrange-tweeter, woofer-tweeter (bounds across 1 kHz give two lists, one per class)")
     ap.add_argument("--lp-bounds", metavar="LO:HI", help="the lower driver's LP corners, Hz")
     ap.add_argument("--hp-bounds", metavar="LO:HI", help="the upper driver's HP corners, Hz")
     ap.add_argument("--gain", metavar="LO:HI:STEP", help="sub level relative to the front, dB (the bass joint)")
@@ -3028,15 +3830,15 @@ def _cli(argv=None):
     ap.add_argument("--leak-far", dest="leak_far_db", type=float, metavar="DB", help=f"bass: the sub's leak over the far band (default {LEAK_FAR_DB:g})")
     ap.add_argument("--leak-octave", dest="leak_octave_db", type=float, metavar="DB", help=f"above the bass: each driver under the other an octave out (default {LEAK_OCTAVE_DB:g})")
     ap.add_argument("--dip-limit", dest="dip_limit_db", type=float, metavar="DB", help=f"reject a sum under the target by more than this (default {DIP_LIMIT_DB:g})")
-    ap.add_argument("--delay-tolerance", dest="delay_tolerance_ms", type=float, metavar="MS", help=f"the margin's reach, a head moving (default {DELAY_TOLERANCE_MS:g})")
+    ap.add_argument("--delay-tolerance", dest="delay_tolerance_ms", type=float, metavar="MS", help=f"the margin's reach, a head moving (default {DELAY_TOLERANCE_MS:g}; from 1 kHz up {UPPER_DELAY_TOLERANCE_MS:g})")
     ap.add_argument("--lr-tolerance", dest="lr_tolerance_ms", type=float, metavar="MS", help=f"the L-R rule's tolerance (default {LR_OFFSET_TOLERANCE_MS:g})")
     ap.add_argument("--lr-crossing-oct", dest="lr_crossing_oct", type=float, metavar="OCT", help=f"L and R acoustic crossings within this (default {LR_CROSSING_OCT:.2f})")
     ap.add_argument("--shortlist", dest="shortlist", type=int, metavar="N", help=f"per crossing band (bass default {SHORTLIST_PER_BAND}, per side above it {SHORTLIST_COUPLED_PER_BAND}; over {SHORTLIST_CEILING} needs --allow-large-grid)")
     ap.add_argument("--band-width", dest="band_width_oct", type=float, metavar="OCT", help="the crossing-band width (bass default 0.25, above it 0.5)")
     ap.add_argument("--corner-step", dest="corner_step_oct", type=float, metavar="OCT", help=f"the corner grid (default {CORNER_STEP_OCT:.3f})")
-    ap.add_argument("--rank", dest="rank", choices=("margin", "worst", "median", "loss"), help="the first ranking key (default margin, the width that survives a moving head)")
+    ap.add_argument("--rank", dest="rank", choices=("margin", "worst", "median", "loss", "flat"), help="the first ranking key (default margin, what survives a moving head; from 1 kHz up: margin, worst, loss, flat)")
     ap.add_argument("--sub-one-point-max", dest="sub_one_point_max_hz", type=float, metavar="HZ", help=f"a sub measured once is scored only below this crossing (default {SUB_ONE_POINT_MAX_HZ:g})")
-    ap.add_argument("--shift-span", dest="shift_span_ms", type=float, metavar="MS", help=f"the upper's delay search, each way around the raw arrival (default {SHIFT_SPAN_MS:g}; over {SHIFT_SPAN_CEILING_MS:g} needs --allow-large-grid)")
+    ap.add_argument("--shift-span", dest="shift_span_ms", type=float, metavar="MS", help=f"the upper's delay search, each way around the raw arrival (default {SHIFT_SPAN_MS:g}, from 1 kHz up {UPPER_SHIFT_SPAN_MS:g}; over {SHIFT_SPAN_CEILING_MS:g} needs --allow-large-grid)")
     ap.add_argument("--bass-drop", dest="bass_drop_oct", type=float, metavar="OCT", help=f"the most the bass joint below may lose, worst and median (default {BASS_RESCORE_DROP_OCT:g})")
     ap.add_argument("--ring-ratio", dest="ring_ratio", type=float, metavar="X", help=f"the lower driver ringing this many times longer is named in the decay report (default {RING_RATIO:g})")
     ap.add_argument("--crossing-window", dest="crossing_window", metavar="LO:HI", help="where the acoustic crossing is looked for and which bands are listed (default the joint's)")
@@ -3046,6 +3848,12 @@ def _cli(argv=None):
     ap.add_argument("--width-band", dest="width_band", metavar="LO:HI", help="above the bass: the band the in-phase run walks (default the joint's)")
     ap.add_argument("--leak-floor", dest="leak_floor_hz", type=float, metavar="HZ", help="above the bass: the lowest frequency the leak is read at (default the joint's)")
     ap.add_argument("--leak-ceil", dest="leak_ceil_hz", type=float, metavar="HZ", help="above the bass: the highest frequency the leak is read at (default the joint's)")
+    ap.add_argument("--group-floor", dest="group_floor_db", type=float, metavar="DB", help=f"from 1 kHz up: the worst of the ear and centre sums may not fall under this (default {GROUP_FLOOR_DB:g})")
+    ap.add_argument("--margin-step", dest="margin_step_db", type=float, metavar="DB", help=f"from 1 kHz up: margins nearer than this compare equal and the flatness decides (default {MARGIN_STEP_DB:g}; 0 ranks on the margin alone)")
+    ap.add_argument("--max-crossing", dest="max_crossing_hz", type=float, metavar="HZ", help="from 1 kHz up: a project bound on the acoustic crossing (off by default; the run's 4.5 kHz was its 3-4 inch mid)")
+    ap.add_argument("--ears-from-arrivals", action="store_true", help="from 1 kHz up: take the ear groups from the arrivals, not the fixed order of the points")
+    ap.add_argument("--ear-tolerance", dest="ear_tolerance_ms", type=float, metavar="MS", help=f"from 1 kHz up: the arrival read against the centre points' mean (default {EAR_ARRIVAL_TOLERANCE_MS:g})")
+    ap.add_argument("--lower-drop", dest="lower_drop_oct", type=float, metavar="OCT", help=f"from 1 kHz up: the most the joint below may lose, worst and median (default {LOWER_JOINT_DROP_OCT:g})")
     ap.add_argument("--no-default-run", action="store_true", help="do not rerun the same grid on the defaults to show what the changed limits did")
     # above the bass
     ap.add_argument("--fixed", action="append", metavar="FILE[@N]", help="a row held from an earlier joint's output (repeatable); a document's row is named @N, the number the table prints")
@@ -3081,15 +3889,22 @@ def _cli(argv=None):
     if state_dir not in sys.path:
         sys.path.insert(0, state_dir)
     import process as _process
-    if args.joint not in ("bass", "woofer-midrange"):
-        raise JointSearchError(f"joint {args.joint!r}: this build searches the bass and woofer-midrange joints (--joint bass or --joint woofer-midrange)")
-    if args.joint == "woofer-midrange":
+    if args.joint not in ("bass", "woofer-midrange", "midrange-tweeter", "woofer-tweeter"):
+        raise JointSearchError(f"joint {args.joint!r}: this build searches the bass, woofer-midrange, midrange-tweeter and woofer-tweeter joints (--joint bass, --joint woofer-midrange, ...)")
+    if args.joint != "bass":
         if args.gain:
             raise JointSearchError("--gain is the sub level of the bass joint; the woofer-mid joint searches no level (use --align to flatten)")
         for name, flag in _BASS_ONLY_LIMITS:
             if getattr(args, name) is not None:
                 raise JointSearchError(f"{flag} belongs to the bass joint (--joint bass)")
         return _run_coupled(args, space, channels, stack, th, _process)
+    for name, flag in _UPPER_ONLY_LIMITS:
+        if getattr(args, name) is not None:
+            raise JointSearchError(f"{flag} belongs to the joints from 1 kHz up (--joint midrange-tweeter or woofer-tweeter)")
+    if args.ears_from_arrivals:
+        raise JointSearchError("--ears-from-arrivals belongs to the joints from 1 kHz up (--joint midrange-tweeter or woofer-tweeter)")
+    if args.rank == "flat":
+        raise JointSearchError("--rank flat is for the joints from 1 kHz up; the bass joint ranks on margin, worst, median or loss")
     for name, flag in _ABOVE_ONLY_LIMITS:
         if getattr(args, name) is not None:
             raise JointSearchError(f"{flag} belongs to the joints above the bass (--joint woofer-midrange)")
@@ -5104,8 +5919,8 @@ def _check_only_the_woofer_mid_row_table():
     top, done = _tmp()
     try:
         argv, _proj, _house, _solos = _cli_3way(top, tw=True)
-        rc, _o, err = _run(argv + ["--joint", "midrange-tweeter"])
-        assert rc == 3 and "midrange-tweeter" in err, (rc, err[-300:])
+        rc, _o, err = _run(argv + ["--joint", "woofer-tweeter"])
+        assert rc == 3 and "woofer-tweeter" in err, (rc, err[-300:])
         rc, _o, err = _run(argv + _TINY + ["--align"])
         assert rc == 3 and "--align" in err, (rc, err[-300:])
         rc, _o, err = _run(argv + _WM_TINY + ["--gain", "0:2:1"])
@@ -5743,6 +6558,384 @@ def _check_each_pair_is_counted_once():
     assert not res["rows"] and rej["phase"] + rej["no_crossing"] == res["grid"]["pairs"] * res["grid"]["gains"], (rej, res["grid"]["pairs"], res["grid"]["gains"])
 
 
+# -------- from 1 kHz up (#210, slice 3): the power sum over the short window, the ear groups, the shared conditions
+_U_FAMS = [("LR", 24), ("BW", 24), ("LR", 36)]
+_U_LP = ("LR", 24, 2500.0)
+_U_HP = ("LR", 24, 3150.0)
+_U_ORDER = {"left": [1, 2, 3], "right": [5, 6, 7], "centre": [0, 4, 8]}
+_U_TH = Limits(delay_tolerance_ms=UPPER_DELAY_TOLERANCE_MS, shift_span_ms=UPPER_SHIFT_SPAN_MS)
+_U_CLI = ["--joint", "midrange-tweeter", "--lp-bounds", "2500:2600", "--hp-bounds", "3150:3200", "--shift-span", "0.5", "--no-leak", "--no-default-run"]
+_U_CLI_D = _U_CLI[:-1]
+_U_2WAY = ["--joint", "woofer-tweeter", "--lp-bounds", "2500:2600", "--hp-bounds", "3150:3200", "--shift-span", "0.5", "--no-leak", "--no-default-run"]
+_U_ROLES = {"m-L": "midrange", "m-R": "midrange", "tw-L": "tweeter", "tw-R": "tweeter"}
+_HOUSE_TOP_HUMP = "20 0\n2000 0\n2500 -8\n4000 -8\n5000 0\n20000 0\n"
+
+
+def _u_grid():
+    return P.grid(400.0, 20000.0, 48)
+
+
+def _u_side(f, name, lp, hp, delay, sign, *, n=9, jitter=0.02, signs=None, upper_extra=None, codes=None):
+    """A side planted in phase through `lp`, `hp` and the upper's `delay`, the points differing by a small arrival; `signs` flips the upper at each point."""
+    lower, upper = _c_driver(f, lp, hp, delay, sign)
+    pts = _c_points(upper, f, n, jitter)
+    if signs is not None:
+        pts = pts * np.array(signs)[:, None]
+    if upper_extra is not None:
+        pts = pts * upper_extra
+    low_code, up_code = codes or (f"m-{name}", f"tw-{name}")
+    return CoupledSide(name, low_code, up_code, np.tile(lower, (n, 1)), pts, arrival_ms=0.0)
+
+
+def _u_input(spec, *, lp_corners=(2000, 2500, 3150), hp_corners=(2500, 3150, 4000), fams=None, signs=None, rule=None, groups=_U_ORDER, sides=None, n=9, **kw):
+    f = _u_grid()
+    sides = sides or [_u_side(f, name, lp, hp, delay, sign, n=n, signs=signs) for name, lp, hp, delay, sign in spec]
+    first = spec[0]
+    target = 20.0 * np.log10(np.abs(dsp_math.xo_response(f, first[1][2], first[1][1], "lp", first[1][0]))
+                             + np.abs(dsp_math.xo_response(f, first[2][2], first[2][1], "hp", first[2][0])))
+    fams = fams or _U_FAMS
+    args = dict(freqs=f, points=list(POSITIONS)[:n], sides=sides, lp_options=_options(fams, lp_corners), hp_options=_options(fams, hp_corners), target_db=target, max_ms=20.0, lr_rule_ms=rule,
+                refine=False, th=_U_TH, joint=JOINT_CLASSES["midrange-tweeter"], ear_groups=groups, dip_on=False, leak_on=False)
+    args.update(kw)
+    return CoupledInput(**args)
+
+
+def _power_rows(res):
+    """The rows of a power-sum run, or the failure that says none came back."""
+    assert res["rows"] and "margin_db" in res["rows"][0], ("no power-sum rows", {k: v for k, v in res.items() if k != "rows"}, res["rows"][:1])
+    return res["rows"]
+
+
+def _u_direct(side, f, lp, hp, pol, shift_ms, idx, band):
+    """A group's power sum in dB, summed plainly: what the closed form must give."""
+    lo = side.lower[idx] * dsp_math.xo_response(f, lp[2], lp[1], "lp", lp[0])
+    up = pol * side.upper[idx] * dsp_math.xo_response(f, hp[2], hp[1], "hp", hp[0]) * np.exp(-2j * np.pi * f * shift_ms * 1e-3)
+    m = (f >= band[0]) & (f <= band[1])
+    return float(np.mean(10.0 * np.log10(np.sum(np.abs(lo + up) ** 2, 0)[m] / np.sum(np.abs(lo) ** 2 + np.abs(up) ** 2, 0)[m])))
+
+
+def _check_power_sum_finds_the_planted_pair():
+    """Planted pair, polarity and per-side delay: found by a margin over a pair with another corner; the row's sums, the nine points and each group, are what a plain sum gives
+    over the crossing's ±1/2 oct; the margin is not above the robust value at its delay."""
+    spec = [("L", _U_LP, _U_HP, 0.30, 1.0), ("R", _U_LP, _U_HP, -0.10, 1.0)]
+    other = ("LR", 24, 4000.0)
+    inp = _u_input(spec, rule=0.4, lp_corners=(2500,), hp_corners=(3150, 4000), fams=[("LR", 24)])
+    rows = _power_rows(scan_coupled(inp))
+    planted = _c_row(rows, _U_LP, _U_HP)
+    assert planted is not None and rows[0] is planted, [(r["sides"]["L"]["hp"], r["margin_db"]) for r in rows]
+    off = _c_row(rows, _U_LP, other)
+    assert off is None or planted["margin_db"] - off["margin_db"] >= 0.3, (planted["margin_db"], off and off["margin_db"])
+    for name, want in (("L", 0.30), ("R", -0.10)):
+        assert abs(planted["sides"][name]["shift_ms"] - want) <= 0.06 and planted["sides"][name]["polarity"] == "NORM", planted["sides"][name]
+    f, side = inp.freqs, inp.sides[0]
+    row = planted["sides"]["L"]
+    fx, shift = row["crossing_hz"], row["shift_ms"]
+    band = (fx / math.sqrt(2.0), fx * math.sqrt(2.0))
+    assert abs(row["sum_db"] - _u_direct(side, f, _U_LP, _U_HP, 1, shift, list(range(9)), band)) < 0.02, row
+    for name, ix in _U_ORDER.items():
+        assert abs(row["groups_db"][name] - _u_direct(side, f, _U_LP, _U_HP, 1, shift, ix, band)) < 0.02, (name, row["groups_db"])
+    assert row["margin_db"] <= min(row["groups_db"].values()) + 1e-6 and planted["robust_db"] == min(min(s["groups_db"].values()) for s in planted["sides"].values()), row
+    wider = _power_rows(scan_coupled(_u_input(spec, rule=0.4, lp_corners=(2500,), hp_corners=(3150,), fams=[("LR", 24)], th=_dc_replace(_U_TH, delay_tolerance_ms=0.06))))[0]
+    assert wider["margin_db"] <= planted["margin_db"] - 0.15, (wider["margin_db"], planted["margin_db"])
+    assert planted["target_rms_db"] is not None and planted["sum_db"] is not None, planted
+    inv = [("L", _U_LP, _U_HP, 0.30, -1.0), ("R", _U_LP, _U_HP, -0.10, -1.0)]
+    back = _power_rows(scan_coupled(_u_input(inv, rule=0.4, lp_corners=(2500,), hp_corners=(3150,), fams=[("LR", 24)])))[0]
+    assert all(back["sides"][s]["polarity"] == "INV" for s in ("L", "R")), back["sides"]
+
+
+def _check_a_group_that_cancels_is_rejected():
+    """The tweeter flipped at p2-p4 only: the nine-point sum stays above zero while the left ear cancels; the candidate is rejected and counted, and no delay rescues it. Without the floor
+    the row comes back and shows it. Only the nine-point sum left (no groups): it passes and is marked."""
+    signs = [1.0, -1.0, -1.0, -1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+    spec = [("", _U_LP, _U_HP, 0.2, 1.0)]
+    one = {"lp_corners": (2500,), "hp_corners": (3150,), "fams": [("LR", 24)], "signs": signs}
+    inp = _u_input(spec, **one)
+    res = scan_coupled(inp)
+    assert not res["rows"] and res["rejected"].get("cancels", 0) >= 1, res["rejected"]
+    f, side = inp.freqs, inp.sides[0]
+    fx = math.sqrt(2500.0 * 3150.0)
+    sum9 = _u_direct(side, f, _U_LP, _U_HP, 1, 0.2, list(range(9)), (fx / math.sqrt(2.0), fx * math.sqrt(2.0)))
+    assert sum9 >= 0.5, sum9
+    kept = _power_rows(scan_coupled(_u_input(spec, th=_dc_replace(_U_TH, group_floor_db=-90.0), **one)))[0]
+    assert kept["robust_db"] < 0.0 and set(kept["sides"][""]["groups_db"]) == {"left", "right", "centre"}, kept["sides"][""]
+    alone = _power_rows(scan_coupled(_u_input(spec, groups=None, **one)))[0]
+    assert alone["sides"][""]["groups_db"] == {} and alone["robust_db"] == alone["sides"][""]["sum_db"], alone["sides"][""]
+    assert any("nine-point sum" in m for m in alone["marks"]), alone["marks"]
+
+
+def _write_arrivals(solos, codes, at):
+    """Each `code` at the nine points: `at(code, position)` is the impulse's sample, the points differing as a real ellipsoid does."""
+    for code in codes:
+        stem = code.replace("-", "_")
+        for pos in POSITIONS:
+            _write_ir(os.path.join(solos, f"{stem}-{pos}.json"), at(code, pos))
+
+
+def _ear_at(left_early=29, delta=0):
+    """Left points arrive `left_early` samples early on the L channels, right points late, centre even (1 sample is 10.4 microseconds); `delta`: an extra shift at p3."""
+    def at(code, pos):
+        base = 800 if code.startswith("tw") else 1000
+        if not code.endswith("-L"):
+            return base
+        if pos in ("p2", "p3", "p4"):
+            return base - left_early + (delta if pos == "p3" else 0)
+        if pos in ("p6", "p7", "p8"):
+            return base + left_early
+        return base
+    return at
+
+
+def _check_ear_groups_from_the_order_and_the_check():
+    """The groups come from the fixed order of the points; the arrivals (planted) agree with it, and the output says so. Plant p3 on the other side: the output names it and keeps the
+    order; `--ears-from-arrivals` takes the arrivals' groups. No L-R difference at any point: the arrivals give no group, and the nine-point sum alone applies, said."""
+    top, done = _tmp()
+    try:
+        argv, _proj, _house, solos = _solo_project(top, roles=_U_ROLES, at={c: 800 for c in _U_ROLES}, points={c: POSITIONS for c in _U_ROLES})
+        _write_arrivals(solos, tuple(_U_ROLES), _ear_at())
+        doc = _doc(argv + _U_CLI)
+        assert doc["ear_check"]["from"] == "order" and doc["ear_check"]["disagrees"] == [], doc.get("ear_check")
+        assert doc["ear_check"]["assigned"]["p2"] == "left" and doc["ear_check"]["assigned"]["p7"] == "right", doc["ear_check"]["assigned"]
+        assert doc["groups"] == {"left": ["p2", "p3", "p4"], "right": ["p6", "p7", "p8"], "centre": ["p1", "p5", "p9"]}, doc["groups"]
+        rc, out, _e = _run(argv + _U_CLI)
+        assert rc == 0 and "left ear" in out.lower() and "centre" in out.lower(), out[:600]
+        # p3 planted on the right: the check names it, the order stands
+        _write_arrivals(solos, tuple(_U_ROLES), _ear_at(delta=58))
+        doc = _doc(argv + _U_CLI)
+        assert doc["ear_check"]["disagrees"] == ["p3"] and doc["ear_check"]["from"] == "order", doc["ear_check"]
+        assert doc["groups"]["left"] == ["p2", "p3", "p4"], doc["groups"]
+        assert any("p3" in n and "--ears-from-arrivals" in n for n in doc["notes"]), doc["notes"]
+        mine = _doc(argv + _U_CLI + ["--ears-from-arrivals"])
+        assert mine["ear_check"]["from"] == "arrivals" and mine["groups"]["left"] == ["p2", "p4"] and "p3" in mine["groups"]["right"], mine["groups"]
+        # a point within the tolerance stays unassigned: --ear-tolerance moves that line
+        _write_arrivals(solos, tuple(_U_ROLES), _ear_at(left_early=14))
+        loose = _doc(argv + _U_CLI + ["--ear-tolerance", "0.2"])
+        assert loose["limits"]["ear_tolerance_ms"]["changed"] and loose["ear_check"]["assigned"]["p2"] is None and "p2" in loose["ear_check"]["disagrees"], loose["ear_check"]
+        tight = _doc(argv + _U_CLI)
+        assert tight["ear_check"]["assigned"]["p2"] == "left", tight["ear_check"]
+        # no L-R difference at any point: too small a group, only the nine-point sum
+        _write_arrivals(solos, tuple(_U_ROLES), _ear_at(left_early=0))
+        lean = _doc(argv + _U_CLI + ["--ears-from-arrivals"])
+        assert lean["groups"] is None and any("nine-point sum" in n and "fewer than two" in n for n in lean["notes"]), (lean["groups"], lean["notes"])
+        assert lean["rows"] and all(not r["sides"]["L"]["groups_db"] for r in lean["rows"]), lean["rows"][:1]
+    finally:
+        done()
+
+
+def _check_a_straddling_joint_gives_two_lists():
+    """Bounds across 1 kHz: two lists, one per class, under their own metrics, numbered on through both for `--fixed`, and the words say their scores do not compare."""
+    top, done = _tmp()
+    try:
+        argv, _p, _h, solos = _solo_project(top, roles=_U_ROLES, at={c: 800 for c in _U_ROLES}, points={c: POSITIONS for c in _U_ROLES})
+        straddle = ["--joint", "midrange-tweeter", "--lp-bounds", "450:1400", "--hp-bounds", "450:1400", "--corner-step", "1", "--shift-span", "0.5", "--no-leak", "--no-default-run"]
+        rc, out, err = _run(argv + straddle)
+        assert rc == 0 and "two lists" in out.lower() and "under 1 khz" in out.lower() and "from 1 khz" in out.lower(), (rc, err[-400:], out[:400])
+        doc = _doc(argv + straddle)
+        assert doc["two_lists"] is True and [p["class"] for p in doc["lists"]] == ["under 1 kHz", "from 1 kHz"], doc.get("lists")
+        low, up = doc["lists"]
+        assert low["rows"] and up["rows"], (low["rejected"], up["rejected"])
+        assert all("margin_oct" in r and "margin_db" not in r for r in low["rows"]) and all("margin_db" in r and "margin_oct" not in r for r in up["rows"]), (low["rows"][:1], up["rows"][:1])
+        assert all(r["sides"]["L"]["crossing_hz"] <= CLASS_BOUNDARY_HZ + 1e-6 for r in low["rows"]), [r["sides"]["L"]["crossing_hz"] for r in low["rows"]][:5]
+        assert up["rejected"].get("other_class", 0) >= 1, up["rejected"]
+        numbers = [r["n"] for r in doc["rows"]]
+        assert numbers == list(range(1, len(numbers) + 1)) and doc["rows"][0] is not None, numbers[:5]
+        # a row from the second list keys `--fixed` by the number the table prints
+        path = _write_doc(os.path.join(top, "fx", "mt.json"), doc)
+        n = up["rows"][0]["n"]
+        rc, _o, err = _run(argv + _U_CLI + ["--fixed", f"{path}@{n}", "--move", "lower"])
+        assert rc == 0, (rc, err[-400:])
+    finally:
+        done()
+
+
+def _check_a_clipped_band_is_scored_and_marked():
+    """A crossing at 1.25 kHz: its ±1/2 oct band crosses 1 kHz, so it is scored in the upper class, on the band clipped at 1 kHz, and marked. Planted anti-phase under 1 kHz: the unclipped
+    band would sum lower, the row's sum is the clipped band's."""
+    lp, hp = ("LR", 24, 1250.0), ("LR", 24, 1250.0)
+    f = _u_grid()
+    flip_under = np.where(f < 1000.0, -1.0, 1.0)
+    side = _u_side(f, "", lp, hp, 0.1, 1.0, upper_extra=flip_under)
+    inp = _u_input([("", lp, hp, 0.1, 1.0)], sides=[side], lp_corners=(1250,), hp_corners=(1250,), fams=[("LR", 24)])
+    row = _power_rows(scan_coupled(inp))[0]
+    assert "band clipped at 1 kHz" in row["marks"], row["marks"]
+    s = row["sides"][""]
+    fx = s["crossing_hz"]
+    assert fx < 1000.0 * math.sqrt(2.0), s
+    clipped = _u_direct(side, f, lp, hp, 1, s["shift_ms"], list(range(9)), (1000.0, fx * math.sqrt(2.0)))
+    unclipped = _u_direct(side, f, lp, hp, 1, s["shift_ms"], list(range(9)), (fx / math.sqrt(2.0), fx * math.sqrt(2.0)))
+    assert abs(s["sum_db"] - clipped) < 0.02 and clipped - unclipped >= 0.5, (s["sum_db"], clipped, unclipped)
+    above = _u_input([("", _U_LP, _U_HP, 0.2, 1.0)], lp_corners=(2500,), hp_corners=(3150,), fams=[("LR", 24)])
+    assert "band clipped at 1 kHz" not in _power_rows(scan_coupled(above))[0]["marks"]
+
+
+def _check_two_way_woofer_tweeter():
+    """A 2-way's woofer-tweeter joint reaches the class from 1 kHz: the woofer's low-pass searched like the mid's, its row keyed by channel, the groups said; a 3-way has no such joint."""
+    top, done = _tmp()
+    try:
+        roles = {"w-L": "woofer", "w-R": "woofer", "tw-L": "tweeter", "tw-R": "tweeter"}
+        argv, _p, _h, _s = _solo_project(top, roles=roles, at={c: 800 for c in roles}, points={c: POSITIONS for c in roles})
+        doc = _doc(argv + _U_2WAY)
+        assert doc["joint"] == "woofer-tweeter" and doc["rows"], doc.get("rejected")
+        r = doc["rows"][0]
+        assert "margin_db" in r and r["channels"]["w-L"]["lp"] and r["channels"]["tw-L"]["hp"], r
+        assert doc["groups"]["centre"] == ["p1", "p5", "p9"], doc["groups"]
+        rc, _o, err = _run(argv + _U_CLI)
+        assert rc == 3 and "midrange-tweeter" in err, (rc, err[-300:])
+    finally:
+        done()
+
+
+def _check_fixed_above_and_from_a_mid_tweeter_row():
+    """`--fixed` for a woofer-mid row: the mid's delay, high-pass, polarity and the channels below are held and shown, and the joint below is re-scored. A mid-tweeter row into the woofer-mid
+    joint: the tweeter is carried; into the same joint with `--move lower`: the tweeters stand and the mid moves, the L-R rule on it."""
+    top, done = _tmp()
+    try:
+        argv, _p, _h, _s = _cli_3way(top, tw=True)
+        wm = _doc(argv + _WM_SMALL)
+        assert wm["rows"], wm["rejected"]
+        wm_file = _write_doc(os.path.join(top, "wm.json"), wm)
+        held_mid = wm["rows"][0]["channels"]["m-L"]
+        doc = _doc(argv + _U_CLI + ["--fixed", f"{wm_file}@1", "--lower-drop", "6"])
+        assert doc["rows"], doc["rejected"]
+        row = doc["rows"][0]
+        assert abs(row["delays_ms"]["m-L"] - held_mid["delay_ms"]) < 1e-6 and row["channels"]["m-L"]["hp"] == held_mid["hp"], (row["delays_ms"], row["channels"]["m-L"])
+        assert row["channels"]["w-L"]["lp"] == wm["rows"][0]["channels"]["w-L"]["lp"] and "w-L" in row["delays_ms"], row["channels"]
+        assert row["lower_joint"]["kept"] and row["lower_joint"]["baseline_worst_oct"] is not None, row.get("lower_joint")
+        mt_file = _write_doc(os.path.join(top, "mt.json"), doc)
+        # the woofer-mid joint searched again under a held mid-tweeter row: the tweeters are the group above
+        again = _doc(argv + _WM_SMALL + ["--fixed", f"{mt_file}@1", "--move", "lower"])
+        assert again["rows"], again["rejected"]
+        assert "tw-L" in again["rows"][0]["above"] and abs(again["rows"][0]["delays_ms"]["tw-L"] - row["delays_ms"]["tw-L"]) < 1e-6, again["rows"][0]["above"]
+        # the same joint, the mid moves: the tweeter stands, the mid L-R rule (on the DSP's step) still held
+        moved = _doc(argv + _U_CLI + ["--fixed", f"{wm_file}@1", "--fixed", f"{mt_file}@1", "--move", "lower", "--lr-tolerance", "0.2", "--lower-drop", "6"])
+        assert moved["rows"], moved["rejected"]
+        m = moved["rows"][0]
+        assert abs(m["delays_ms"]["tw-L"] - row["delays_ms"]["tw-L"]) < 1e-6 and abs(m["delays_ms"]["tw-R"] - row["delays_ms"]["tw-R"]) < 1e-6, m["delays_ms"]
+    finally:
+        done()
+
+
+def _check_a_joint_below_is_rescored_and_can_reject():
+    """A woofer-mid joint held below: a candidate's low-pass that leaves it alone keeps it; one that turns it past the limit rejects, with no recovery. The limit is a flag."""
+    f = _c_grid()
+    spec = dict(lower=_c_driver(f, _C_LP, _C_HP, 0.3)[0], upper=_c_driver(f, _C_LP, _C_HP, 0.3)[1])
+    bowl = np.exp(1j * np.radians(40.0 * np.log2(f / 280.0) ** 2))      # the band about 1.7 oct wide: a real joint's, not four octaves of flat curves
+    lower = np.tile(spec["lower"] * dsp_math.xo_response(f, _C_LP[2], _C_LP[1], "lp", _C_LP[0]), (3, 1))
+    upper = np.tile(spec["upper"] * dsp_math.xo_response(f, _C_HP[2], _C_HP[1], "hp", _C_HP[0]) * bowl, (3, 1))
+    hold = LowerHold(freqs=f, cls=JOINT_CLASSES["woofer-midrange"],
+                     sides=[{"name": "L", "lower_code": "w-L", "upper_code": "m-L", "lower": lower, "upper": upper, "low_ms": 0.0, "up_ms": 0.3, "near_hz": 280.0, "base_lp": None}])
+    judge = _lower_judge(hold, {"m-L": ("LR", 24, 5000.0)}, None, {"w-L": 0.0, "m-L": 0.3}, Limits())
+    assert judge is not None and judge["kept"] and judge["baseline_worst_oct"] >= 0.8, judge
+    fallen = _lower_judge(hold, {"m-L": ("LR", 36, 350.0)}, None, {"w-L": 0.0, "m-L": 0.3}, Limits())
+    assert fallen is not None and not fallen["kept"] and fallen["width_worst_oct"] <= judge["baseline_worst_oct"] - 0.1, fallen
+    assert _lower_judge(hold, {"m-L": ("LR", 36, 350.0)}, None, {"w-L": 0.0, "m-L": 0.3}, Limits(lower_drop_oct=6.0))["kept"], "a limit of 6 oct keeps it"
+
+
+def _check_lr_conditions_above_one_khz():
+    """The L-R conditions from 1 kHz up: the rule on the upper delays, the same polarity, the same family and order, the crossings within 1/3 oct, each with its flag off."""
+    spec = [("L", _U_LP, _U_HP, 0.30, 1.0), ("R", _U_LP, _U_HP, -0.10, 1.0)]
+    one = {"lp_corners": (2500,), "hp_corners": (3150,), "fams": [("LR", 24)]}
+    held = _power_rows(scan_coupled(_u_input(spec, rule=1.0, **one)))
+    assert all(abs(r["delays_ms"]["tw-L"] - r["delays_ms"]["tw-R"] - 1.0) <= 0.1 + 1e-9 for r in held), held[:1]
+    free = _power_rows(scan_coupled(_u_input(spec, rule=1.0, free_lr=True, **one)))[0]
+    assert free["robust_db"] >= held[0]["robust_db"] + 0.2, (free["robust_db"], held[0]["robust_db"])
+    mixed = [("L", _U_LP, _U_HP, 0.30, 1.0), ("R", _U_LP, _U_HP, -0.10, -1.0)]
+    same = _power_rows(scan_coupled(_u_input(mixed, rule=0.4, **one)))
+    assert all(r["sides"]["L"]["polarity"] == r["sides"]["R"]["polarity"] for r in same), same[:1]
+    apart = _power_rows(scan_coupled(_u_input(mixed, rule=0.4, same_polarity=False, **one)))
+    assert any(r["sides"]["L"]["polarity"] != r["sides"]["R"]["polarity"] for r in apart), apart[:1]
+    # the same family and order by default
+    alike = _power_rows(scan_coupled(_u_input(spec, rule=0.4, lp_corners=(2500,), hp_corners=(3150,), fams=[("LR", 24), ("BW", 24)])))
+    assert all(r["sides"]["L"]["lp"][:2] == r["sides"]["R"]["lp"][:2] and r["sides"]["L"]["hp"][:2] == r["sides"]["R"]["hp"][:2] for r in alike), alike[:1]
+    any_fam = _power_rows(scan_coupled(_u_input(spec, rule=0.4, same_family=False, lp_corners=(2500,), hp_corners=(3150,), fams=[("LR", 24), ("BW", 24)])))
+    assert any(r["sides"]["L"]["lp"][:2] != r["sides"]["R"]["lp"][:2] or r["sides"]["L"]["hp"][:2] != r["sides"]["R"]["hp"][:2] for r in any_fam), "family free changes nothing"
+    # the crossings within 1/3 oct: different corners per side, the limit
+    two = _u_input(spec, rule=0.4, per_side_corners=True, lp_corners=(2500, 5000), hp_corners=(3150,), fams=[("LR", 24)], th=_dc_replace(_U_TH, lr_crossing_oct=0.05))
+    near = _power_rows(scan_coupled(two))
+    assert all(abs(math.log2(r["sides"]["L"]["crossing_hz"] / r["sides"]["R"]["crossing_hz"])) <= 0.05 + 1e-9 for r in near) and two.th.lr_crossing_oct == 0.05, near[:1]
+
+
+def _check_max_crossing_is_a_bound():
+    """`--max-crossing` is a project bound, off by default: a crossing above it is out, counted."""
+    spec = [("", _U_LP, _U_HP, 0.2, 1.0)]
+    one = {"lp_corners": (2500,), "hp_corners": (3150,), "fams": [("LR", 24)]}
+    assert _power_rows(scan_coupled(_u_input(spec, **one))), "off by default"
+    out = scan_coupled(_u_input(spec, th=_dc_replace(_U_TH, max_crossing_hz=2000.0), **one))
+    assert not out["rows"] and out["rejected"].get("max_crossing", 0) >= 1, out["rejected"]
+
+
+def _check_align_uses_the_upper_bands():
+    """`--align` on a joint from 1 kHz up: the role table's mid-tweeter bands (mid 1250-5000/700-1500, tweeter 1600-10000/5000-10000, overridable), both sides flattened over what stands on the
+    target, the cross-first comparison beside it; a row of the woofer-mid joint below holds its EQ too."""
+    top, done = _tmp()
+    try:
+        argv, _p, house, _s = _solo_project(top, roles=_U_ROLES, at={c: 800 for c in _U_ROLES}, points={c: POSITIONS for c in _U_ROLES})
+        _write_text(house, _HOUSE_TOP_HUMP)
+        doc = _doc(argv + _U_CLI + ["--align"])
+        assert doc["align"]["bands"]["m-L"] == {"fit": [1250.0, 5000.0], "anchor": [700.0, 1500.0]}, doc["align"]["bands"]
+        assert doc["align"]["bands"]["tw-L"] == {"fit": [1600.0, 10000.0], "anchor": [5000.0, 10000.0]}, doc["align"]["bands"]
+        assert doc["align"]["channels"]["m-L"]["bands"], doc["align"]["channels"]["m-L"]
+        assert doc["cross_first"]["rows"] is not None, doc["cross_first"]
+        band = _doc(argv + _U_CLI + ["--align", "--align-band", "tweeter=3000:9000/5000:9000"])
+        assert band["align"]["bands"]["tw-L"]["fit"] == [3000.0, 9000.0], band["align"]["bands"]
+    finally:
+        done()
+
+
+def _check_each_power_sum_flag_is_said():
+    """Each flag of this class recorded, shown beside the run on the defaults, and the rank: margin within its step, then the flattest; `--rank flat` takes the flattest of those above the floor."""
+    # the rank in numbers: the margin leads past the step; inside the step the flattest; `flat` the flattest above the floor
+    a = {"margin_db": 1.40, "robust_db": 1.5, "sum_db": 2.0, "target_rms_db": 3.0, "band": "x"}
+    b = {"margin_db": 1.30, "robust_db": 1.5, "sum_db": 2.0, "target_rms_db": 1.0, "band": "x"}
+    c = {"margin_db": 0.40, "robust_db": 0.5, "sum_db": 2.0, "target_rms_db": 0.5, "band": "x"}
+    def order(rows, th):
+        return ["abc"[[a, b, c].index(r)] for r in sorted(rows, key=lambda r: _power_rank(r, th), reverse=True)]
+    assert order([a, b, c], Limits()) == ["b", "a", "c"], order([a, b, c], Limits())
+    assert order([a, b, c], Limits(margin_step_db=0.0)) == ["a", "b", "c"], "without a step the margin alone"
+    assert order([a, b, c], Limits(rank="flat")) == ["c", "b", "a"], "flat"
+    top, done = _tmp()
+    try:
+        argv, _p, _h, _s = _solo_project(top, roles=_U_ROLES, at={c: 800 for c in _U_ROLES}, points={c: POSITIONS for c in _U_ROLES})
+        doc = _doc(argv + _U_CLI_D + ["--group-floor", "-50", "--margin-step", "0.5", "--delay-tolerance", "0.05", "--max-crossing", "6000", "--rank", "flat"])
+        limits = doc["limits"]
+        for key, value in (("group_floor_db", -50.0), ("margin_step_db", 0.5), ("delay_tolerance_ms", 0.05), ("max_crossing_hz", 6000.0), ("rank", "flat")):
+            assert limits[key]["value"] == value and limits[key]["changed"], (key, limits[key])
+        assert limits["delay_tolerance_ms"]["default"] == UPPER_DELAY_TOLERANCE_MS and limits["shift_span_ms"]["value"] == 0.5, limits["delay_tolerance_ms"]
+        assert doc["default_run"]["rows"] is not None and doc["default_run"]["best"] is not None, doc["default_run"]
+        rc, out, _e = _run(argv + _U_CLI_D + ["--delay-tolerance", "0"])
+        assert rc == 0 and "default" in out.lower() and doc["default_line"], out[-300:]
+        assert _doc(argv + _U_CLI + ["--delay-tolerance", "0"])["limits"]["delay_tolerance_ms"]["changed"], "a tolerance of 0 is a value"
+    finally:
+        done()
+
+
+def _check_the_short_window_reading():
+    """The reading from 1 kHz up: 1 ms before the peak, 4 ms after, so a reflection 6 ms late is not in it; the 5/500 ms window of the class under 1 kHz does hold it."""
+    fs, x = 96000.0, np.zeros(1 << 13)
+    x[300] = 1.0
+    x[300 + int(0.006 * fs)] = 0.8
+    info = {"ir": x, "sample_rate": fs, "t0_s": 0.0}
+    f = P.grid(1000.0, 10000.0, 48)
+    short = _db(read_window(info, f, short=True))
+    long_ = _db(read_window(info, f))
+    band = (f >= 1000.0) & (f <= 2000.0)
+    assert np.ptp(short[band]) <= 0.5 and np.ptp(long_[band]) >= np.ptp(short[band]) + 1.0, (np.ptp(short[band]), np.ptp(long_[band]))
+
+
+def _check_a_flag_of_the_other_class_refuses():
+    """A flag with no effect on the chosen joint refuses in one line naming what it belongs to."""
+    top, done = _tmp()
+    try:
+        argv, _p, _h, _s = _cli_3way(top, tw=True)
+        _no_refusals([(argv + _WM_SMALL + ["--group-floor", "-3"], "--group-floor"), (argv + _WM_SMALL + ["--ears-from-arrivals"], "--ears-from-arrivals"),
+                      (argv + _WM_SMALL + ["--margin-step", "0.5"], "--margin-step"), (argv + _WM_SMALL + ["--rank", "flat"], "--rank"),
+                      (argv + _TINY + ["--max-crossing", "5000"], "--max-crossing"), (argv + _U_CLI + ["--phase-window", "40"], "--phase-window"),
+                      (argv + _U_CLI + ["--width-band", "500:9000"], "--width-band"), (argv + _U_CLI + ["--ring-ratio", "2"], "--ring-ratio"), (argv + _U_CLI + ["--no-dip"], "--no-dip"),
+                      (argv + _U_CLI + ["--rank", "median"], "--rank"), (argv + _U_CLI + ["--lower-drop", "0.2"], "--lower-drop"), (argv + _U_CLI + ["--margin-step", "-1"], "--margin-step"),
+                      (argv + _U_CLI + ["--joint", "tweeter-mid"], "tweeter-mid"), (argv + _U_CLI + ["--lp-bounds", "450:1400", "--hp-bounds", "450:1400", "--align"], "--align")])
+    finally:
+        done()
+
+
 def _selftest():
     failures = []
     for check in (_check_joints_from_roles, _check_planted_delay_polarity_corners, _check_family_outside_profile_never_returned,
@@ -5770,7 +6963,12 @@ def _selftest():
                   _check_a_flag_of_another_joint_refuses, _check_row_numbers_for_fixed, _check_the_aligned_table_is_keyable, _check_cross_first_is_the_same_model,
                   _check_more_refusals_are_one_line, _check_coupled_path_gates, _check_move_out_and_held_limits_at_the_cli, _check_phase_window_and_dip_band_are_read,
                   _check_changed_limits_print_the_joints_own, _check_ceilings_on_the_walk, _check_held_woofers_do_not_need_their_arrival,
-                  _check_coupled_refines_around_the_shortlist, _check_more_bands_are_flags, _check_each_pair_is_counted_once):
+                  _check_coupled_refines_around_the_shortlist, _check_more_bands_are_flags, _check_each_pair_is_counted_once,
+                  _check_power_sum_finds_the_planted_pair, _check_a_group_that_cancels_is_rejected, _check_ear_groups_from_the_order_and_the_check,
+                  _check_a_straddling_joint_gives_two_lists, _check_a_clipped_band_is_scored_and_marked, _check_two_way_woofer_tweeter,
+                  _check_fixed_above_and_from_a_mid_tweeter_row, _check_a_joint_below_is_rescored_and_can_reject, _check_lr_conditions_above_one_khz,
+                  _check_max_crossing_is_a_bound, _check_align_uses_the_upper_bands, _check_each_power_sum_flag_is_said, _check_the_short_window_reading,
+                  _check_a_flag_of_the_other_class_refuses):
         try:
             check()
         except AssertionError as exc:
@@ -5779,7 +6977,7 @@ def _selftest():
     print("selftest OK -- the joints come from the roles; a planted delay, polarity and corner pair are found by a margin, "
           "on either side of the delay; a family outside the profile never comes back; the ±30 degree band ranks, worst and median "
           "of the points apart, ranked on the margin a moving head leaves; the table is what a person keys in, stereo sub included; the L-R "
-          "rule holds on the DSP's step; the leak limit is the run's own, moved up with the crossing; every refusal is one line, exit 3; every drop is counted once; the woofer-mid joint holds a pair a one-point shortlist would lose, carries the bass joint below (recovered or rejected) and the group above; every limit is a flag and shows what changed; nothing is picked")
+          "rule holds on the DSP's step; the leak limit is the run's own, moved up with the crossing; every refusal is one line, exit 3; every drop is counted once; the woofer-mid joint holds a pair a one-point shortlist would lose, carries the bass joint below (recovered or rejected) and the group above; from 1 kHz up a joint is scored on the power sum of the 1/4 ms window, an ear group that cancels is rejected while the nine-point sum passes, the groups come from the order of the points and the arrivals check it, a joint across 1 kHz gives two lists, a band across it is clipped and marked, and the joint below is re-scored; every limit is a flag and shows what changed; nothing is picked")
     return 0
 
 
