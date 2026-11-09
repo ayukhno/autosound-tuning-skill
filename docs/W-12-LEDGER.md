@@ -39,6 +39,8 @@ The trial's weight, on the Arbiter's word: code passes on Opus, a narrow check o
 
 **The alarm of the trial: a critical found only in acceptance (2026-11-09, `docs/W-12-ACCEPTANCE.md`).** A row's `delta` lost the EQ of a channel carried from a lower joint, so what banked was not what was scored (woofer↔mid 0.00 / 0.77 oct against 1.29 / 1.83). It was brought in by the session's own fix (`b92ab2f`) of Fable's finding, the last change before the PR: no test compared what is banked with what was scored, and no review pass ran after that fix. Fixed with a test that banks a whole chain and re-scores it. A rule for the PMO: acceptance runs after the last code change, and a fix to the last pass is reviewed like any other.
 
+**The second acceptance (`docs/W-12-ACCEPTANCE-2.md`, at `17dd70e`):** a row banks as scored, 0 field differences on raw and planted ledgers; two new findings. A blend row wrote an empty EQ over the chain's (fixed at `fb9ddb5`). A row banked on an already-tuned base scores differently, because the search reads the raw solos and not the ledger: the runbook and the table now say to bank it on the raw version, with the current tune as a candidate beside it; the tool does not read the ledger in this wave. Re-run on `fb9ddb5`: the banked row re-scores as scored on a raw base, 0 field differences everywhere.
+
 Replays on real curves caught what no reviewer did: the claim on C, the leak limit, an Fs floor above the reference tune's own mid HP, an empty default table.
 
 ## Backlog, named for the act
