@@ -204,7 +204,7 @@ a version without the field is valid.
   `render_diff` by name; `verification_set` asks for the whole-system sum; `levelbase.changed_ranges` reads it as
   every band changed; `predict.chains_from_snapshot(snap, trim=True)` adds the input gain once, on the physical tier,
   for the `predict` view, off by default for the engine.
-- **`source_file` is `attest`'s**: `attest --source-file <file.json>` (`apply.attest(…, source_file=)`) records it, and
+- **`source_file` is `attest`'s**, and `attest` refuses it on a version with no other preset setting (a field holding only a source file would be misread by a 3.2 copy): `attest --source-file <file.json>` (`apply.attest(…, source_file=)`) records it, and
   `attest` keeps it. A delta cannot give it, and `propose` drops it, since a new version was not compared to that file.
   Not `provenance`: `propose`'s only door replaces the whole `provenance` and switches off the structural hold.
 - **Not harmless to an older copy.** A 3.2 copy of the method reads the dict as a tier and refuses the number in it. It

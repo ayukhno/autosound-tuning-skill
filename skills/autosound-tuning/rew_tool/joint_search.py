@@ -2121,7 +2121,7 @@ def _dip_stops(inp, pair, label, dips, rejected, dip_log):
 
 def _finish_power(inp, pair, label, shifts, lp_bank, hp_bank, kernel, rejected, dip_log=None):
     """One L/R pair of a joint from 1 kHz up, finished: the delays, the dip when asked for, no group under the floor, the joints below, the row."""
-    f, th, cls = np.asarray(inp.freqs, float), inp.th, inp.joint
+    th, cls = inp.th, inp.joint
     _key, a, b, i, j = pair
     items = [(inp.sides[0], a, i)] + ([(inp.sides[1], b, j)] if b is not None else [])
     placed, why = _place_coupled(inp, {s.name: float(shifts[k]) for s, _c, k in items}, {s.name: c["pol"] for s, c, _k in items})
@@ -2178,7 +2178,7 @@ def _finish_power(inp, pair, label, shifts, lp_bank, hp_bank, kernel, rejected, 
 
 def _finish_pair(inp, pair, label, shifts, lp_bank, hp_bank, kernel, rejected, dip_log=None):
     """One L/R pair of candidates finished: the ceiling, the dip, the bass joint below, the numbers of the row; None with the drop counted."""
-    f, th, cls = np.asarray(inp.freqs, float), inp.th, inp.joint
+    th, cls = inp.th, inp.joint
     _key, a, b, i, j = pair
     items = [(inp.sides[0], a, i)] + ([(inp.sides[1], b, j)] if b is not None else [])
     placed, why = _place_coupled(inp, {s.name: float(shifts[k]) for s, _c, k in items}, {s.name: c["pol"] for s, c, _k in items})
@@ -4375,7 +4375,6 @@ def _plant(lp, hp, *, gain_db=2.0, pol=-1, delay_ms=2.4, n_points=3, offset_ms=0
     xw = dsp_math.xo_response(f, hp[2], hp[1], "hp", hp[0])
     sub = pol * 10.0 ** (-gain_db / 20.0) * np.exp(-1j * np.angle(xs))
     front = np.exp(-1j * np.angle(xw)) * np.exp(2j * np.pi * f * delay_ms * 1e-3)
-    n = len(f)
     lower = np.tile(sub, (n_points, 1))
     if single_upper:
         up_l, up_r = np.tile(front, (n_points, 1)), None
