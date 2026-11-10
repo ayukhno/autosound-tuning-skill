@@ -1627,6 +1627,16 @@ S-062, S-064 (with TCC's half, hub #217 SKL-056), S-065, S-066. When he says to 
 four assessment lines, and nothing is built before his `ok` on that task. Resume: `hub/bin/role skill --resume
 6b9c70d1-4094-4337-a1fd-23976307dfc2`.
 
+## S-128 · Docs-only pushes to main run no `checks` (hub #338, ask 3)
+
+**Status**: done 2026-11-10 · PR #212, `2c91b36` on `main` · on the Arbiter's word "urgent"; asks 1 and 2 of hub #338 wait for W-13's milestone
+
+`checks.yml`'s push trigger has `paths-ignore`: `docs/*.md`, `docs/review-2026-09-09/*.md`, `community-inbox/**`,
+`promotion/**`, `assets/**`, `ROADMAP.md`, `CONTRIBUTING.md`, `SECURITY.md`, `CLAUDE.md`, only what no check reads
+(traced with an `open()` audit hook). Proof: this commit, docs-only, has no `checks` run. Every push to `main` still
+starts GitHub Pages' build. From 2026-11-10 no action that can start CI (push, PR, rerun, dispatch) without the
+Arbiter's OK. Resume: `hub/bin/role skill --resume 766d28a7-6c7a-4cea-9e5b-2d4bc8b8e2a1`.
+
 ## S-127 · Resonalyze has moved: its crossover project file is at format 13, our reader at 10; 11 ported files drifted
 
 **Status**: open 2026-11-10 · W-13's pool; recorded, not diagnosed; found on the Arbiter's question about Resonalyze after v3.3.0
