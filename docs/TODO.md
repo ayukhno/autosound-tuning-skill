@@ -1627,6 +1627,25 @@ S-062, S-064 (with TCC's half, hub #217 SKL-056), S-065, S-066. When he says to 
 four assessment lines, and nothing is built before his `ok` on that task. Resume: `hub/bin/role skill --resume
 6b9c70d1-4094-4337-a1fd-23976307dfc2`.
 
+## S-127 · Resonalyze has moved: its crossover project file is at format 13, our reader at 10; 11 ported files drifted
+
+**Status**: open 2026-11-10 · W-13's pool; recorded, not diagnosed; found on the Arbiter's question about Resonalyze after v3.3.0
+
+`python3 scripts/upstream-drift.py` (exit 0, 19 ok, 11 DRIFT, 1 FORMAT):
+
+- **FORMAT** — `rew_tool/resonalyze_vc.py:97`: `VirtualCrossoverProjectFile.cs`'s writer is at version 13, the
+  reader is pinned at 10, so a `.vc` project the current Resonalyze writes is refused by its number. The `ir`
+  reader (`resonalyze_ir.py`) is at 8, the same as upstream.
+- **DRIFT**, the skill's ports: `dsp_math.py:505` (`VirtualCrossoverAnalysis.cs`, 8 commits, among them a FIR
+  stage per channel in Virtual DSP), `phase_rotation.py:43` (1), `resonalyze_ir.py:103` (4), `windows.py:220`
+  (`fdw-group-delay.md`, 1).
+- **DRIFT**, the engine (`engines/resonalyze/`, pinned at `b0ce9fb`, 88 commits behind): `CrossoverJunctionTuner.cs`
+  (6), `AgentProposalValidator.cs` (7), `ImpulseResponseFile.cs` (3), `ExpSweepMeasurement.cs` (7),
+  `CrossoverAutoSetup.cs` (10), `AutoAlignmentEngine.cs` (15), `GainBalanceEngine.cs` (1).
+
+At the milestone: which drifts change a result and which are comments or docs; the format first, since it
+refuses the user's files.
+
 ## S-126 · A third approach at the first step: joint-by-joint upward (skill #210)
 
 **Status**: done v3.3.0 · on the candidate that carries it, beta-v3.3.0-rc2 · was: open 2026-11-09 · built and merged to `main` (PR #211), candidate `beta-v3.3.0-rc1` at `fe34a96`, CI green, two acceptance runs (`docs/W-12-ACCEPTANCE*.md`); next: TCC builds on it (hub #331), then both minors, skill `v3.3.0` and TCC `v1.3.0`, through `release` · was: open 2026-11-08 · the design is written into `docs/PLAN-W-12.md` lane F (his three answers in it: two paths or both, any stack, `mosqito` optional), Codex's findings on it and on the whole plan checked and taken in; the wave is the minor `v3.3.0` with #200, #201, #202, #204 back, no tag until TCC has worked on a candidate (hub #331); his answers on #200, #201, #204 in the plan, Gemini 4's and an Opus seat's findings on the returned tasks checked and taken in; next: his «го» on the build · was: on milestone `W-12 · v3.2.1` as #210 with `ok` (the Arbiter); feature, `Risk: high`, L; the Arbiter's «го» on the DESIGN only, in a new session (`hub/bin/role skill`, branch `wave-2026-10-30`): `docs/PLAN-W-12.md` lane F, the Passat project's `scripts/` against `rew_tool/`; the result replaces lane F's section; then Codex's plan review, then his «го» on the build
