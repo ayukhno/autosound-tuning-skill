@@ -248,8 +248,8 @@ and the phase slope 5–47 % more than τ. Junction timing through the direct so
 `rew_tool/resonalyze_ir.py` writes v7 impulse-response files REW → Resonalyze and READS v4..v8 (v8,
 their #153 of 31.08, carries the bulk arrays as base64 float32 — the file the current app saves; the
 writer stays on v7 on purpose, because their reader takes 4..CurrentVersion and migrates, so a v7 file
-opens in every build); `resonalyze_vc.py` reads a Virtual DSP session (v7..v10, migrated in memory by
-their own steps) back as ledger rows — zone and `phase_deg` included; `predict.py` is the method's own full-state predictor, checked against
+opens in every build); `resonalyze_vc.py` reads a Virtual DSP session (v7..v13, migrated in memory by
+their own steps; a FIR stage on a channel is refused, not read) back as ledger rows — zone and `phase_deg` included; `predict.py` is the method's own full-state predictor, checked against
 this engine's arithmetic to 3·10⁻¹⁴ dB on the real set-02. The **sum-loss** metric and the **two-stage
 delay** idea are already ours in `dsp_math`/`analyze-joints`; the **arrival-first, sum-second** split,
 the **long magnitude window vs gated phase**, and the **precedence exception for a shared sub** are the

@@ -1,0 +1,350 @@
+{
+  "format": "resonalyze-virtual-crossover",
+  "version": 13,
+  "savedAtUtc": "2026-11-10T11:33:22.143892+00:00",
+  "channels": [],
+  "pairs": [
+    {
+      "mono": true,
+      "measuredFromBothInputs": true,
+      "zone": "Sub",
+      "collapsed": false,
+      "enabled": true,
+      "bypass": false,
+      "showRawCurve": false,
+      "showProcessedCurve": true,
+      "left": {
+        "displayName": "sw",
+        "sourceFilePath": "C:\\set\\sw.json",
+        "sourceRelativePath": "sw.json",
+        "historyEntryId": null,
+        "gainDb": -3.5,
+        "delayMs": 0,
+        "invertPolarity": true,
+        "crossoverKind": "LowPass",
+        "lowPassEdge": {
+          "family": "LinkwitzRiley",
+          "frequencyHz": 80,
+          "slopeDbPerOctave": 24,
+          "rippleDb": 1
+        },
+        "highPassEdge": {
+          "family": "Butterworth",
+          "frequencyHz": 10,
+          "slopeDbPerOctave": 24,
+          "rippleDb": 1
+        },
+        "phaseRotationDegrees": 45,
+        "peqPreampDb": 0,
+        "peqBands": [
+          {
+            "frequencyHz": 45,
+            "q": 4,
+            "gainDb": -4,
+            "type": "Peaking",
+            "isTransparent": false
+          },
+          {
+            "frequencyHz": 120,
+            "q": 2.5,
+            "gainDb": 0,
+            "type": "AllPassSecondOrder",
+            "isTransparent": false
+          }
+        ],
+        "peqSourceName": null,
+        "hasSource": true
+      },
+      "right": {
+        "displayName": "",
+        "sourceFilePath": null,
+        "sourceRelativePath": null,
+        "historyEntryId": null,
+        "gainDb": 0,
+        "delayMs": 0,
+        "invertPolarity": false,
+        "crossoverKind": "Off",
+        "lowPassEdge": {
+          "family": "LinkwitzRiley",
+          "frequencyHz": 2000,
+          "slopeDbPerOctave": 24,
+          "rippleDb": 1
+        },
+        "highPassEdge": {
+          "family": "LinkwitzRiley",
+          "frequencyHz": 2000,
+          "slopeDbPerOctave": 24,
+          "rippleDb": 1
+        },
+        "phaseRotationDegrees": 0,
+        "peqPreampDb": 0,
+        "peqBands": [],
+        "peqSourceName": null,
+        "hasSource": false
+      }
+    },
+    {
+      "mono": false,
+      "measuredFromBothInputs": true,
+      "zone": "Front",
+      "collapsed": false,
+      "enabled": true,
+      "bypass": false,
+      "showRawCurve": false,
+      "showProcessedCurve": true,
+      "left": {
+        "displayName": "w_L",
+        "sourceFilePath": "C:\\set\\w_L.json",
+        "sourceRelativePath": "w_L.json",
+        "historyEntryId": null,
+        "gainDb": -1,
+        "delayMs": 1.25,
+        "invertPolarity": false,
+        "crossoverKind": "BandPass",
+        "lowPassEdge": {
+          "family": "LinkwitzRiley",
+          "frequencyHz": 450,
+          "slopeDbPerOctave": 24,
+          "rippleDb": 1
+        },
+        "highPassEdge": {
+          "family": "LinkwitzRiley",
+          "frequencyHz": 65,
+          "slopeDbPerOctave": 24,
+          "rippleDb": 1
+        },
+        "phaseRotationDegrees": 90,
+        "peqPreampDb": 0,
+        "peqBands": [
+          {
+            "frequencyHz": 180,
+            "q": 3,
+            "gainDb": -2.5,
+            "type": "Peaking",
+            "isTransparent": false
+          },
+          {
+            "frequencyHz": 300,
+            "q": 1,
+            "gainDb": 0,
+            "type": "Peaking",
+            "isTransparent": true
+          }
+        ],
+        "peqSourceName": null,
+        "hasSource": true
+      },
+      "right": {
+        "displayName": "w_R",
+        "sourceFilePath": "C:\\set\\w_R.json",
+        "sourceRelativePath": "w_R.json",
+        "historyEntryId": null,
+        "gainDb": -2,
+        "delayMs": 0,
+        "invertPolarity": false,
+        "crossoverKind": "BandPass",
+        "lowPassEdge": {
+          "family": "LinkwitzRiley",
+          "frequencyHz": 450,
+          "slopeDbPerOctave": 24,
+          "rippleDb": 1
+        },
+        "highPassEdge": {
+          "family": "LinkwitzRiley",
+          "frequencyHz": 65,
+          "slopeDbPerOctave": 24,
+          "rippleDb": 1
+        },
+        "phaseRotationDegrees": 0,
+        "peqPreampDb": 0,
+        "peqBands": [],
+        "peqSourceName": null,
+        "hasSource": true
+      }
+    },
+    {
+      "mono": false,
+      "measuredFromBothInputs": true,
+      "zone": "Front",
+      "collapsed": false,
+      "enabled": true,
+      "bypass": false,
+      "showRawCurve": false,
+      "showProcessedCurve": true,
+      "left": {
+        "displayName": "tw_L",
+        "sourceFilePath": "C:\\set\\tw_L.json",
+        "sourceRelativePath": "tw_L.json",
+        "historyEntryId": null,
+        "gainDb": -6,
+        "delayMs": 1.6,
+        "invertPolarity": false,
+        "crossoverKind": "HighPass",
+        "lowPassEdge": {
+          "family": "LinkwitzRiley",
+          "frequencyHz": 2000,
+          "slopeDbPerOctave": 24,
+          "rippleDb": 1
+        },
+        "highPassEdge": {
+          "family": "LinkwitzRiley",
+          "frequencyHz": 3500,
+          "slopeDbPerOctave": 24,
+          "rippleDb": 1
+        },
+        "phaseRotationDegrees": 0,
+        "peqPreampDb": 0,
+        "peqBands": [
+          {
+            "frequencyHz": 8000,
+            "q": 0.7,
+            "gainDb": 2,
+            "type": "HighShelf",
+            "isTransparent": false
+          }
+        ],
+        "peqSourceName": null,
+        "hasSource": true
+      },
+      "right": {
+        "displayName": "tw_R",
+        "sourceFilePath": "C:\\set\\tw_R.json",
+        "sourceRelativePath": "tw_R.json",
+        "historyEntryId": null,
+        "gainDb": -7,
+        "delayMs": 0.3,
+        "invertPolarity": false,
+        "crossoverKind": "HighPass",
+        "lowPassEdge": {
+          "family": "LinkwitzRiley",
+          "frequencyHz": 2000,
+          "slopeDbPerOctave": 24,
+          "rippleDb": 1
+        },
+        "highPassEdge": {
+          "family": "LinkwitzRiley",
+          "frequencyHz": 3500,
+          "slopeDbPerOctave": 24,
+          "rippleDb": 1
+        },
+        "phaseRotationDegrees": 0,
+        "peqPreampDb": 0,
+        "peqBands": [],
+        "peqSourceName": null,
+        "hasSource": true
+      }
+    },
+    {
+      "mono": true,
+      "measuredFromBothInputs": false,
+      "zone": "Center",
+      "collapsed": false,
+      "enabled": true,
+      "bypass": false,
+      "showRawCurve": false,
+      "showProcessedCurve": true,
+      "left": {
+        "displayName": "c",
+        "sourceFilePath": "C:\\set\\c.json",
+        "sourceRelativePath": "c.json",
+        "historyEntryId": null,
+        "gainDb": -4,
+        "delayMs": 0.5,
+        "invertPolarity": false,
+        "crossoverKind": "HighPass",
+        "lowPassEdge": {
+          "family": "LinkwitzRiley",
+          "frequencyHz": 2000,
+          "slopeDbPerOctave": 24,
+          "rippleDb": 1
+        },
+        "highPassEdge": {
+          "family": "LinkwitzRiley",
+          "frequencyHz": 300,
+          "slopeDbPerOctave": 24,
+          "rippleDb": 1
+        },
+        "phaseRotationDegrees": 0,
+        "peqPreampDb": 0,
+        "peqBands": [],
+        "peqSourceName": null,
+        "hasSource": true
+      },
+      "right": {
+        "displayName": "",
+        "sourceFilePath": null,
+        "sourceRelativePath": null,
+        "historyEntryId": null,
+        "gainDb": 0,
+        "delayMs": 0,
+        "invertPolarity": false,
+        "crossoverKind": "Off",
+        "lowPassEdge": {
+          "family": "LinkwitzRiley",
+          "frequencyHz": 2000,
+          "slopeDbPerOctave": 24,
+          "rippleDb": 1
+        },
+        "highPassEdge": {
+          "family": "LinkwitzRiley",
+          "frequencyHz": 2000,
+          "slopeDbPerOctave": 24,
+          "rippleDb": 1
+        },
+        "phaseRotationDegrees": 0,
+        "peqPreampDb": 0,
+        "peqBands": [],
+        "peqSourceName": null,
+        "hasSource": false
+      }
+    }
+  ],
+  "dspProcessorModelId": "helix-dsp-ultra-s",
+  "dspProcessorSampleRateHz": 96000,
+  "dspProcessorQConvention": "Rbj",
+  "stereoSceneOffsetMs": 0.25,
+  "stereoRightHandDrive": false,
+  "stereoLevelDifferenceDb": -1,
+  "activeSideRight": false,
+  "showSumCurve": true,
+  "showSumCurvePhase": null,
+  "showLossCurve": false,
+  "lossWindow": null,
+  "groupView": "FrontAndSub",
+  "stereoSum": "Off",
+  "stereoSumBlendHz": 300,
+  "rearFillOffsetMs": 15,
+  "showHybridCurves": false,
+  "showPhaseView": false,
+  "showImpulseView": false,
+  "showGroupDelayView": false,
+  "showStepView": false,
+  "showSumCurveGroupDelay": null,
+  "showSumCurveStep": null,
+  "showTargetCurve": false,
+  "targetLevelDb": 0,
+  "target": null,
+  "smoothingInverseOctaves": 12,
+  "psychoacousticSmoothing": false,
+  "dspPlotMode": "Magnitude",
+  "dspPlotCorrelationView": false,
+  "dspPlotCoherenceView": false,
+  "correlationPairIndex": 0,
+  "calibrationId": null,
+  "phaseGateLeft": {
+    "offsetMs": null,
+    "detrendMs": null
+  },
+  "phaseGateRight": {
+    "offsetMs": null,
+    "detrendMs": null
+  },
+  "phaseGateOffsetMs": null,
+  "phaseDetrendMs": null,
+  "phaseGateLeftMs": 1,
+  "phaseGatePlateauMs": 30,
+  "phaseGateRightMs": 10,
+  "phaseWindowMode": "FrequencyDependent",
+  "phaseFdwCycles": 8,
+  "phaseDetrendMode": "Auto"
+}

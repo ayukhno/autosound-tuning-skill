@@ -1,4 +1,4 @@
-"""Resonalyze Virtual DSP session (`resonalyze-virtual-crossover` v7..v10)  →  ledger rows.
+"""Resonalyze Virtual DSP session (`resonalyze-virtual-crossover` v7..v13)  →  ledger rows.
 
 The mirror of `resonalyze_ir.py`: that one writes REW measurements INTO Resonalyze, this one
 reads a tune BACK OUT of it. The occasion was a Resonalyze Virtual DSP session another tuner
@@ -61,7 +61,32 @@ pinned to v7 refused every file the current app saves, correctly and uselessly (
 `migrate_session` now brings any v7..v10 document to v10 IN MEMORY by the app's own `Migrate`
 steps, ported line for line (the header below pins them and `scripts/upstream-drift.py` compares
 the format version on every run); the file on disk is never touched, and the report says which
-steps ran and what each one guessed or dropped. A version above 10 is refused by its number.
+steps ran and what each one guessed or dropped. A version above 13 is refused by its number.
+
+v11..v13 (13.09 → 04.10) are bumps without a field to move: each guards a new feature from older
+builds, and each `Migrate` step only renumbers. What they add, and what this reader does with it:
+
+  * v11, a FIR stage per channel side -- `fir` (the kernel's taps), `firSourceName`, `firDesign`
+    (the FIR Constructor's corners). REFUSED, by pair and side: the kernel is part of the chain,
+    and when `crossoverKind` is Off the design's corners become the side's crossover. A row made
+    of the IIR part alone would be a different tune presented as this one. Reading it is
+    crossover maths, not format, and waits for its wave (S-127). A side with no source, or the
+    right side of a mono pair, is not a channel, and a kernel there is not refused.
+    `dspProcessorFirFilters` (session) is ignored: whether the DSP has a FIR stage is the
+    project's DSP profile's answer, not the session's.
+  * v12, a text frequency response (a REW export) as a channel's spatial average --
+    `spatialAverageFile` beside the `spatialAveragePath` older files have. Ignored: it is what
+    their analysis drew, not the tune, and the leg is bound by its measurement
+    (`historyEntryId` / `sourceFilePath`) as before.
+  * v13, `measuredFromBothInputs` on a pair (missing reads as true, their default): a mono
+    block measured with the signal in both inputs plays at half amplitude per side in their sum.
+    That is how their simulation draws the block, not a setting the DSP gets: `gainDb` stays the
+    trim to enter. Kept on a mono leg as `measured_from_both_inputs`, for whoever reads the leg.
+
+Ignored as well, added without a version bump since 23f2e70: `acousticLowPass` /
+`acousticHighPass` (the acoustic slope Tune junction aims for; the electrical edge is what runs,
+and that is read), `junctionTune`, `stereoSum`, `stereoSumBlendHz`, the correlation view's
+`correlationHide*`. Tools and views, not the tune.
 
 What v9 and v10 add to a row: the block's `zone` travels on the leg (the ledger has no such field,
 but it decides which crossover corner the phase control's angle is stated at), and a non-zero
@@ -94,19 +119,27 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 
-# upstream: DIMOSUS/Resonalyze source/Tools/VirtualCrossover/VirtualCrossoverProjectFile.cs @ 23f2e70 (MIT) --
-#   the session schema v7..v10 (`VirtualCrossoverChannelSettings`, `VirtualCrossoverChannelPairSettings`),
+# upstream: DIMOSUS/Resonalyze source/Tools/VirtualCrossover/VirtualCrossoverProjectFile.cs @ 140f6d2 (MIT) --
+#   the session schema v7..v13 (`VirtualCrossoverChannelSettings`, `VirtualCrossoverChannelPairSettings`),
 #   `Migrate` steps v7→v8 (the all-pass stage into the PEQ bank, `EqualizationCurve.MaxBandCount`),
-#   v8→v9 (the zone) and v9→v10 (the phase control), `PhaseReferenceHz` (LP on a Sub block, HP
-#   otherwise, AS CONFIGURED), `Validate()`'s ranges.
-# format-version: 10 -- their `CurrentVersion`; `scripts/upstream-drift.py` reads it out of the
+#   v8→v9 (the zone), v9→v10 (the phase control), v10→v11 (FIR kernels), v11→v12 (a response file
+#   as the spatial average) and v12→v13 (`MeasuredFromBothInputs`, default on), the last three
+#   renumbering only; `PhaseReferenceHz` (LP on a Sub block, HP otherwise, AS CONFIGURED),
+#   `Validate()`'s ranges.
+# format-version: 13 -- their `CurrentVersion`; `scripts/upstream-drift.py` reads it out of the
 #   upstream file and names a mismatch as a drift of the FORMAT.
+# reviewed: 140f6d2 (hub #340 HUB-099, 2026-11-10) -- the format half of S-127: the three bumps
+#           v11..v13 and the fields they guard, read in the file at 140f6d2 and in the bumps'
+#           commits (#188 FIR stage, #257 response file, #269 mono side level). The FIR stage is
+#           refused, not read (see the module docstring); the maths of it is S-127's other half.
 # reviewed: 23f2e70 (#187, 2026-09-13) -- one commit since 319e873, 20 lines: two view flags,
 #           `ShowStepView` and `ShowSumCurveStep` (with its `[JsonIgnore]` accessor), for their
 #           Virtual DSP step view. Presentation, not the session: no channel, pair or migration
 #           field changes, and `CurrentVersion` stays 10. This reader reads no view flag (the
 #           v10 fixture already carries `showPhaseView`). Re-pinned after reading the diff
 #           (hub PAS-007, 2026-09-13).
+# deviation: a sourced side carrying a FIR kernel (v11+) is refused by pair and side, where theirs
+#            runs it -- see `validate_session`.
 # deviation: reads and never writes -- the migration runs in memory and the file stays as it was;
 #            their `LoadOrDefault` rewrites the project on the next save. See `migrate_session`.
 # deviation: `IsTransparent` is recomputed here and a transparent band is DROPPED and listed,
@@ -117,11 +150,11 @@ if _HERE not in sys.path:
 # upstream: DIMOSUS/Resonalyze source/Tools/VirtualCrossover/VirtualCrossoverZone.cs @ f026276 (MIT) --
 #   `VirtualCrossoverZones.GuessForLegacyPair` (the v9 step's zone guess) and the zone names.
 CONVERTER = "autosound-tuning-skill rew_tool/resonalyze_vc.py"
-CONVERTER_VERSION = "1.1 (2026-09-08, reads format v7..v10 as of Resonalyze 319e873, migrated in memory)"
+CONVERTER_VERSION = "1.2 (2026-11-10, reads format v7..v13 as of Resonalyze 140f6d2, migrated in memory; a FIR stage refused)"
 
 FORMAT = "resonalyze-virtual-crossover"
-SUPPORTED_VERSIONS = (7, 8, 9, 10)   #: what `validate_session` accepts; `migrate_session` brings all to
-CURRENT_VERSION = 10                 #: ...this, their `CurrentVersion`
+SUPPORTED_VERSIONS = (7, 8, 9, 10, 11, 12, 13)   #: what `validate_session` accepts; `migrate_session`
+CURRENT_VERSION = 13                             #: ...brings all to this, their `CurrentVersion`
 MAX_BAND_COUNT = 32                  #: `EqualizationCurve.MaxBandCount` -- the v7→v8 step's full-bank rule
 ZONES = ("Front", "Rear", "Center", "Sub")   #: `VirtualCrossoverZone`, in their order
 #: `PhaseRotationControl.MaximumDegrees`: 360 − 360/64. Range only, like their `Validate()`; the
@@ -171,7 +204,7 @@ def load_session(path):
 
 
 def validate_session(doc, path="<session>"):
-    """Refuse anything that is not a v7..v10 Virtual DSP session, loudly and by name.
+    """Refuse anything that is not a v7..v13 Virtual DSP session, loudly and by name.
 
     A v2-era file carries its channels in the legacy flat `channels` list rather than in `pairs`.
     That is refused rather than read as "a session with no legs": an empty result from a file that
@@ -186,7 +219,7 @@ def validate_session(doc, path="<session>"):
     if version not in SUPPORTED_VERSIONS:
         raise SessionError(
             f"{path}: version {version!r}, this converter reads {list(SUPPORTED_VERSIONS)} "
-            f"(Resonalyze 319e873 writes {CURRENT_VERSION}); a later number means the upstream "
+            f"(Resonalyze 140f6d2 writes {CURRENT_VERSION}); a later number means the upstream "
             "writer moved -- `scripts/upstream-drift.py` names it")
     pairs = doc.get("pairs")
     if not isinstance(pairs, list):
@@ -196,11 +229,36 @@ def validate_session(doc, path="<session>"):
             f"{path}: no 'pairs', but the legacy flat 'channels' list has "
             f"{len(doc['channels'])} entr{'y' if len(doc['channels']) == 1 else 'ies'} -- this is "
             "a pre-pairs session and reading it as empty would lose the whole tune")
+    fir = _fir_sides(pairs)
+    if fir:
+        raise SessionError(
+            f"{path}: a FIR stage on {', '.join(fir)} -- the kernel is part of that channel's chain "
+            "(and with the crossover Off, its design's corners ARE the crossover), and this reader "
+            "has no FIR stage: the rows would describe a different tune. Reading a FIR stage is "
+            "the crossover maths of S-127, not this format fix; remove the kernel in Resonalyze "
+            "to read the rest")
     return doc
 
 
+def _fir_sides(pairs):
+    """`pair N left/right` for every CHANNEL side that carries a FIR kernel (v11 `fir`).
+
+    A channel as `legs_of` counts them: a side with a source, and only the left of a mono pair
+    (theirs plays a mono pair from its left set, `SideFor`). A kernel on anything else plays
+    nothing, so refusing over it would refuse a tune for a value no channel uses."""
+    out = []
+    for index, pair in enumerate(pairs):
+        if not isinstance(pair, dict):
+            continue
+        for name in ("left",) if pair.get("mono") else ("left", "right"):
+            side = pair.get(name)
+            if isinstance(side, dict) and _has_source(side) and side.get("fir") is not None:
+                out.append(f"pair {index} {name}")
+    return out
+
+
 def migrate_session(doc):
-    """A validated v7..v10 document -> (a v10 COPY, the notes of what each step did).
+    """A validated v7..v13 document -> (a v13 COPY, the notes of what each step did).
 
     Their `Migrate`, ported step for step; the input is not touched. Every step is additive or a
     move, so a migrated session describes the same tune -- the two places that is not exactly
@@ -268,6 +326,20 @@ def migrate_session(doc):
         notes.append("v9→v10: the channel phase control is absent, so every side opens with no "
                      "rotation (phase_deg 0)")
         doc["version"] = version = 10
+    # v10→v11→v12→v13 renumber only: each bump guards a feature from older builds (a FIR stage,
+    # a response file as the spatial average, a mono block's side level). Their default for the
+    # one new field a v13 reader meets on an old pair, `measuredFromBothInputs`, is ON.
+    if version == 10:
+        notes.append("v10→v11: renumbered only (the bump that guards a FIR stage per channel)")
+        doc["version"] = version = 11
+    if version == 11:
+        notes.append("v11→v12: renumbered only (the bump that guards a response file as the "
+                     "spatial average)")
+        doc["version"] = version = 12
+    if version == 12:
+        notes.append("v12→v13: renumbered; a mono block without `measuredFromBothInputs` reads it "
+                     "as on, their default -- how their sum draws it, not a DSP setting")
+        doc["version"] = version = 13
     return doc, notes
 
 
@@ -419,6 +491,10 @@ def _leg(pair_index, side, mono, pair, raw):
         "peq_preamp_db": _num(raw.get("peqPreampDb"), 0.0),
         "crossover_kind": kind,
         "zone": zone.lower(),
+        # v13: how their simulation sums a mono block (half amplitude per side when measured
+        # from both inputs; missing reads as on). Not a DSP setting -- `gain_db` is the trim to
+        # enter -- so it travels beside the row, on mono legs only; None on a stereo leg.
+        "measured_from_both_inputs": bool(pair.get("measuredFromBothInputs", True)) if mono else None,
         "phase_reference": phase_reference,
         "channel_hint": channel_hint(display or raw.get("sourceRelativePath") or ""),
         "channel": None,
@@ -1448,6 +1524,14 @@ def _session_v10(**over):
 FIXTURE = os.path.join(_HERE, "testdata", "virtual-dsp-session-v7.json")
 #: ...and its v10 twin, the shape the current app writes (`_session_v10`).
 FIXTURE_V10 = os.path.join(_HERE, "testdata", "virtual-dsp-session-v10.json")
+#: Two v13 sessions WRITTEN BY RESONALYZE'S OWN CODE, not by `_session*` (hub #340): their
+#: `VirtualCrossoverProjectFile.SaveTo` at upstream 4de20ec (format 13), driven by a harness that
+#: sets a synthetic tune (`Resonalyze-fork/scratchpad/vc13-writer`). Not regenerated by
+#: `--write-fixture`: what they prove is that the reader takes the writer's bytes. The one edit is
+#: the harness's temporary folder in `sourceFilePath`, replaced by `C:\set\`. The `-fir` twin
+#: carries one FIR kernel, on pair 2 right.
+FIXTURE_V13 = os.path.join(_HERE, "testdata", "virtual-dsp-session-v13.json")
+FIXTURE_V13_FIR = os.path.join(_HERE, "testdata", "virtual-dsp-session-v13-fir.json")
 
 
 def _fixture_text(builder=None):
@@ -1782,15 +1866,15 @@ def _selftest():
     else:
         raise AssertionError(f"missing fixture {FIXTURE_V10} -- write it with --write-fixture")
 
-    # ── versions: v7..v10 read, migrated in memory by their own steps; v11 refused by name ──
-    for v in (8, 9, 10):
+    # ── versions: v7..v13 read, migrated in memory by their own steps; v14 refused by name ──
+    for v in (8, 9, 10, 11, 12, 13):
         validate_session(_session(version=v))
     try:
-        validate_session(_session(version=11))
+        validate_session(_session(version=14))
     except SessionError as exc:
-        assert "11" in str(exc) and "upstream-drift" in str(exc), exc
+        assert "14" in str(exc) and "upstream-drift" in str(exc), exc
     else:
-        raise AssertionError("a v11 session was read")
+        raise AssertionError("a v14 session was read")
     # v7→v8: the all-pass stage becomes a band of the bank, per order (their test, pinned): a
     # second-order stage keeps its Q, a first-order one has none, a side without a stage gains
     # nothing, and the v7 document itself is not touched.
@@ -1799,7 +1883,7 @@ def _selftest():
     v7["pairs"][1]["right"].update(allPassType="FirstOrder", allPassFrequencyHz=300, allPassQ=4.0)
     v10, notes = migrate_session(v7)
     assert v7["version"] == 7 and "allPassType" in v7["pairs"][1]["left"], "the input was mutated"
-    assert v10["version"] == 10 and notes and notes[0].startswith("v7→v8"), notes
+    assert v10["version"] == 13 and notes and notes[0].startswith("v7→v8"), notes
     wl, wr = v10["pairs"][1]["left"], v10["pairs"][1]["right"]
     assert "allPassType" not in wl and wl["peqBands"][-1] == {
         "frequencyHz": 120.0, "q": 2.5, "gainDb": 0.0, "type": "AllPassSecondOrder", "isTransparent": False}, wl
@@ -1866,7 +1950,8 @@ def _selftest():
     phased = json.loads(json.dumps(profile))
     phased["dsp_profile"]["phase_control"] = {"range_deg": [0.0, 354.375], "step_deg": 5.625}
     pres = convert(t, profile=phased, proj=_Proj(), source_path="<v10>")
-    assert pres["source"]["version"] == 10 and pres["source"]["read_as"] == 10 and pres["source"]["migration"] == []
+    assert pres["source"]["version"] == 10 and pres["source"]["read_as"] == 13, pres["source"]
+    assert [n[:8] for n in pres["source"]["migration"]] == ["v10→v11:", "v11→v12:", "v12→v13:"], pres["source"]
 
     def pv(res, channel, field):
         return [c for leg in res["legs"] for c in leg["checks"] if c["channel"] == channel and c["field"] == field]
@@ -1903,7 +1988,72 @@ def _selftest():
     assert "zone front" in text10 and "phase 90 deg @ HP 65 Hz" in text10, text10
     assert "phase 45 deg @ HP 300 Hz  (that edge is dormant" in text10, text10
     text7 = report(convert(_session(), profile=phased, proj=_Proj(), source_path="<v7>"))
-    assert "v7 (read as v10)" in text7 and "migrated    v7→v8" in text7 and "GUESSED" in text7, text7
+    assert "v7 (read as v13)" in text7 and "migrated    v7→v8" in text7 and "GUESSED" in text7, text7
+
+    # ── v11..v13 (hub #340, S-127's format half) ───────────────────────────────
+    # A format-10 file reads EXACTLY as before: v10→v13 renumbers, so its rows and legs are the
+    # same as the same tune labelled v13, field for field (the one new leg field aside).
+    def _rows(d):
+        return [{k: v for k, v in leg.items() if k not in ("checks", "measured_from_both_inputs")}
+                for leg in convert(d, profile=phased, proj=_Proj())["legs"]]
+    as13 = _session_v10(version=13)
+    assert _rows(_session_v10()) == _rows(as13), "v10 → v13 changed a leg"
+    # v13's one field: on a mono leg, missing reads as on (their default), false is read; a
+    # stereo leg carries None, and the row is the same either way -- it is their sum, not a trim.
+    m13 = convert(as13, profile=phased, proj=_Proj())["legs"]
+    assert m13[0]["mono"] and m13[0]["measured_from_both_inputs"] is True, m13[0]
+    assert all(leg["measured_from_both_inputs"] is None for leg in m13 if not leg["mono"]), m13
+    off13 = _session_v10(version=13)
+    off13["pairs"][0]["measuredFromBothInputs"] = False
+    o13 = convert(off13, profile=phased, proj=_Proj())["legs"]
+    assert o13[0]["measured_from_both_inputs"] is False and o13[0]["row"] == m13[0]["row"], o13[0]
+    # Fields that are views or analysis inputs pass without changing a row.
+    noisy = _session_v10(version=13, stereoSum="Vector", stereoSumBlendHz=150.0, junctionTune={"acoustic": True})
+    noisy["pairs"][1]["left"].update(
+        spatialAveragePath="C:\\x\\rew.txt", spatialAverageFile={"smoothing": "1/6"},
+        acousticHighPass={"family": "LinkwitzRiley", "slopeDbPerOctave": 24})
+    assert _rows(noisy) == _rows(as13), "a view or analysis field changed a row"
+    # v11's FIR stage on a channel is REFUSED, by pair and side, with the reason and the way out.
+    kernel = {"sampleRateHz": 48000, "taps": [0.0, 1.0, 0.0]}
+    firred = _session_v10(version=13)
+    firred["pairs"][1]["right"]["fir"] = kernel
+    for attempt in (lambda: validate_session(firred), lambda: convert(firred, profile=phased, proj=_Proj())):
+        try:
+            attempt()
+        except SessionError as exc:
+            assert "pair 1 right" in str(exc) and "FIR" in str(exc) and "S-127" in str(exc), exc
+        else:
+            raise AssertionError("a FIR stage on a channel was read")
+    # ...but a kernel no channel plays -- a side with no source, the right of a mono pair -- is not.
+    idle = _session_v10(version=13)
+    idle["pairs"][0]["right"]["fir"] = kernel          # the mono sub's right side
+    idle["pairs"][2]["right"]["fir"] = kernel          # the mono Center's right side, no source
+    idle["pairs"][2]["right"]["hasSource"] = False
+    assert _rows(idle) == _rows(as13), "a kernel no channel plays changed a row"
+    assert "read as v13" not in report(convert(as13, profile=phased, proj=_Proj())), "v13 is not migrated"
+    # ...and on the files Resonalyze's own writer saved at format 13: the tune it was given comes
+    # back leg for leg, unmigrated, and the FIR twin is refused by pair and side.
+    real = convert(load_session(FIXTURE_V13), profile=phased, proj=None, source_path=FIXTURE_V13)
+    assert real["source"]["version"] == 13 and real["source"]["migration"] == [], real["source"]
+    got = {leg["display_name"]: leg for leg in real["legs"]}
+    assert sorted(got) == ["c", "sw", "tw_L", "tw_R", "w_L", "w_R"], sorted(got)
+    sw, wl, twl, c = got["sw"]["row"], got["w_L"]["row"], got["tw_L"]["row"], got["c"]["row"]
+    assert (sw["hp"], sw["lp"]["f"], sw["lp"]["slope"], sw["gain_db"], sw["polarity"], sw["phase_deg"]) == \
+        (None, 80, 24, -3.5, "INV", 45.0), sw
+    assert [b["type"] for b in sw["eq"]] == ["PK", "APF2"] and got["sw"]["dormant"]["hp"]["f"] == 10, sw["eq"]
+    assert got["sw"]["phase_reference"] == {"kind": "lp", "hz": 80, "dormant": False}, got["sw"]["phase_reference"]
+    assert (wl["hp"]["f"], wl["lp"]["f"], wl["ta_ms"], wl["phase_deg"]) == (65, 450, 1.25, 90.0), wl
+    assert len(wl["eq"]) == 1 and len(got["w_L"]["dropped_eq_bands"]) == 1, (wl["eq"], got["w_L"]["dropped_eq_bands"])
+    assert twl["eq"][0]["type"] == "HSH" and twl["lp"] is None and twl["gain_db"] == -6.0, twl
+    assert c["hp"]["f"] == 300 and got["c"]["zone"] == "center", c
+    assert got["sw"]["measured_from_both_inputs"] is True and got["c"]["measured_from_both_inputs"] is False
+    assert got["w_L"]["measured_from_both_inputs"] is None
+    try:
+        load_session(FIXTURE_V13_FIR)
+    except SessionError as exc:
+        assert "pair 2 right" in str(exc) and "S-127" in str(exc), exc
+    else:
+        raise AssertionError("the writer's FIR session was read")
 
     # Q bounded per band type (hub #36 / RES-002): a Helix takes a bell to Q 50 and a SHELF only
     # to 2, so one range for every type both refuses legitimate shelves and passes impossible ones.
@@ -1929,8 +2079,8 @@ def _selftest():
           f"dormant HP 10 Hz withheld; delay unverifiable without max_ms; "
           f"Q bounded per band type (shelf 0.3 ok, shelf 30 refused, bell 30 ok); "
           f"no profile => {blind['summary'][UNKNOWN]} unknown, 0 ok; "
-          f"v7..v10 read and migrated in memory (all-pass into the bank incl. a full one, zone guessed "
-          f"their way, v11 refused); v10 zone read, phase_deg with its reference (a dormant edge kept "
+          f"v7..v13 read and migrated in memory (all-pass into the bank incl. a full one, zone guessed "
+          f"their way, v14 refused, v10 reads as before, a channel's FIR stage refused, Resonalyze's own v13 files read and refused); v10 zone read, phase_deg with its reference (a dormant edge kept "
           f"with slope OFF), a sub angle bound to a non-sub code refused")
 
 
