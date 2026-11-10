@@ -15,9 +15,30 @@ name: checks
 # reads; no -- a merge without a PR, or GitHub's button making a new commit -- they run here. A work
 # branch runs nothing on push; `workflow_dispatch` runs it by hand, for a change that touches Windows
 # or the installers. 149 runs from 8 to 14.09 are what this replaces.
+#
+# A push to main that touches only the paths below runs nothing (hub #338, ask 3): 51 of the 60 latest
+# push runs were docs-only and ran in full. The hub's release gate rests such a commit on its nearest
+# green ancestor. Listed is only what no check here reads -- traced on 2026-11-10 with an open() audit
+# hook over every in-tree check the runner starts: the plans, ledgers and research in docs/, the
+# community inbox, promotion, the root's images, and four root pages. NOT listed, because a check reads
+# them: README* and FAQ* (installer-consistency, i18n-check, docs-check), ADVANCED.md and CHANGELOG.md
+# (docs-check), docs/changelog/ (changelog-fresh), everything under skills/ and commands/ (it ships).
+# secret-scan reads the whole tree; for these paths the pre-commit hook it installs holds that line.
+# Plain globs only: the hub's gate reads this list and refuses a pattern with ! [ { ? or +.
+# A pull request still runs everything.
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - "docs/*.md"
+      - "docs/review-2026-09-09/*.md"
+      - "community-inbox/**"
+      - "promotion/**"
+      - "assets/**"
+      - "ROADMAP.md"
+      - "CONTRIBUTING.md"
+      - "SECURITY.md"
+      - "CLAUDE.md"
   pull_request:
   workflow_dispatch:
 
