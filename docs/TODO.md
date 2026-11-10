@@ -1639,7 +1639,7 @@ Arbiter's OK. Resume: `hub/bin/role skill --resume 766d28a7-6c7a-4cea-9e5b-2d4bc
 
 ## S-127 · Resonalyze has moved: its crossover project file is at format 13, our reader at 10; 11 ported files drifted
 
-**Status**: open 2026-11-10 · the FORMAT half built for patch **v3.3.1** on the Arbiter's «терміново» (hub #340 HUB-099), branch `fix/s127-vc-format-13`, commit `2c16423` + bookkeeping, not pushed: reader v7..v13, a channel's FIR stage refused, fixtures written by Resonalyze's own `SaveTo` at 4de20ec (no app-saved v13 file exists; the fork fast-forwarded to upstream for it, harness in `Resonalyze-fork/scratchpad/vc13-writer`); next: the Arbiter's OK on the push and the PR's one CI run → merge `--ff-only` → `tag-check.sh v3.3.1` → tag → Latest → comment hub #340; the 11 DRIFTs and reading a FIR stage stay W-13's · was: open 2026-11-10 · W-13's pool; recorded, not diagnosed; found on the Arbiter's question about Resonalyze after v3.3.0
+**Status**: open 2026-11-10 · the FORMAT half done: **v3.3.1** released and `Latest` (tag on `8ae9095`, PR #213, hub #340 commented with tag and commit; the hub opens TCC's re-pin); reader v7..v13, a channel's FIR stage refused; still W-13's: the 11 DRIFTs and reading a FIR stage; resume: `hub/bin/role skill --resume cf677227-b29a-42f7-b42d-9de0455cbee2` · was: format half built, not pushed · was: open 2026-11-10 · W-13's pool; recorded, not diagnosed; found on the Arbiter's question about Resonalyze after v3.3.0
 
 `python3 scripts/upstream-drift.py` (exit 0, 19 ok, 11 DRIFT, 1 FORMAT):
 
