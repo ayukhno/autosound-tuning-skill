@@ -680,7 +680,8 @@ def load_journal(project_dir, version, preset=None):
     _name, snap = load_version(project_dir, version, preset)
     _check_kinds(snap)
     st = _state()
-    settings = (st._project_json(project_dir).get("dsp") or {}).get("settings")
+    dsp = st._project_json(project_dir).get("dsp")
+    settings = dsp.get("settings") if isinstance(dsp, dict) else None      # a `dsp` that is no object: none recorded
     return snap, st.project_channels(project_dir), settings if isinstance(settings, dict) else {}
 
 
@@ -1123,12 +1124,14 @@ def _pr_corner_set_row(corner, dsp_settings):
     have = corner.get("name")
     if recorded is None:
         return _said("crossover.corner_set", "preset", None, have, "unknown",
-                     "the journal records no corner set: the program's corner correction is asked, not recorded",
-                     category="system", path=_pr_at(2307))
-    want = PR_CORNER_SETS.get(recorded)
+                     "the project records no corner set: ask the tuner which corner set the preset's crossover "
+                     "correction is on, and record it: project.py <dir> set-dsp-setting corner_set "
+                     "default|minus_3db|minus_6db --source user", category="system", path=_pr_at(2307))
+    # A value that is no string (a list, an object) is no corner set either: the project's, never the file's fault.
+    want = PR_CORNER_SETS.get(recorded) if isinstance(recorded, str) else None
     if want is None:
         return _said("crossover.corner_set", "preset", recorded, have, "unknown",
-                     "project.json dsp.settings.corner_set is %r, no corner set (%s)"
+                     "project.json dsp.settings.corner_set is %r, not a corner set (%s)"
                      % (recorded, ", ".join(PR_CORNER_SETS)), category="system", path=_pr_at(2307))
     if have is None:
         return _said("crossover.corner_set", "preset", want, "code %s" % corner.get("code"), "unknown",

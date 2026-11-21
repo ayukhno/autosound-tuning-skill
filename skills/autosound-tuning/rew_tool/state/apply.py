@@ -2724,6 +2724,48 @@ def _check_compare_file_pr15_corner_set_against_the_project():
         shutil.rmtree(top, ignore_errors=True)
 
 
+def _check_compare_file_pr15_corner_set_the_project_cannot_settle():
+    """S-136.2, the review: a recorded corner set that is no corner set -- `minus_9db`, a list -- is the `unknown` row
+    "not a corner set", exit 0, never the file's refusal (a list was exit 2 `interpret`); a file code outside the
+    reader's table against a recorded answer is `unknown`, never `differs`; a `project.json` `dsp` that is no object
+    records nothing -- a `.PR15` row `unknown`, a `.pct6` compared as before -- never a traceback. With nothing
+    recorded the reason names how to record it."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_compare_pr15_corner_odd_")
+    try:
+        project, pr15 = _pico_project(top)
+        pj = os.path.join(project, "project.json")
+        with open(pj, encoding="utf-8") as fh:
+            data = json.load(fh)
+
+        def recorded(dsp):
+            data["dsp"] = dsp
+            with open(pj, "w", encoding="utf-8") as fh:
+                json.dump(data, fh)
+            return _row(_compared(project, pr15), "preset", "crossover.corner_set")
+        row = recorded({})
+        assert row["result"] == "unknown" and "set-dsp-setting corner_set" in row["reason"], row
+        for value in ("minus_9db", ["minus_3db"]):
+            row = recorded({"settings": {"corner_set": {"value": value, "source": "user"}}})
+            assert row["result"] == "unknown" and "not a corner set" in row["reason"], (value, row)
+        for dsp in ("Mosconi", ["Mosconi"]):
+            row = recorded(dsp)
+            assert row["result"] == "unknown" and "set-dsp-setting corner_set" in row["reason"], (dsp, row)
+        aya, pct6 = _aya_project(os.path.join(top, "aya"))
+        with open(os.path.join(aya, "project.json"), encoding="utf-8") as fh:
+            aya_data = json.load(fh)
+        aya_data["dsp"] = "Helix"
+        with open(os.path.join(aya, "project.json"), "w", encoding="utf-8") as fh:
+            json.dump(aya_data, fh)
+        assert _compared(aya, pct6)["rows"], "the .pct6 compared nothing"
+        _pr15_edit(pr15, {2307: str((_pr15_byte(pr15, 2307) & ~3) | 3)})        # code 3: outside the table
+        row = recorded({"settings": {"corner_set": {"value": "default", "source": "user"}}})
+        assert row["result"] == "unknown" and row["file"] == "code 3" and "outside" in row["reason"], row
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
 def _check_compare_file_pr15_numbering_not_settled_is_unknown():
     """Outputs reach a version's rows only by the profile's numbering: a profile that letters them (or none at all)
     leaves every row unknown with its reason -- never a guessed match."""
@@ -3104,6 +3146,28 @@ def _check_propose_from_file_writes_the_full_family_names():
         assert code == 0, (code, out, err)
         hp = _aya_history(project).load("v_002")["channels"]["w-L"]["hp"]
         assert hp["type"] == "CHEBYSHEV", hp
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_propose_from_file_keeps_a_base_leg_spelled_short():
+    """S-136.3, the review: a version banked with a leg spelled `CH`, and a file holding the same Chebyshev filter --
+    propose --from-file keeps the version's leg: no crossover moved on the sheet (`CH -> CHEBYSHEV`), no delta."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_from_file_short_leg_")
+    try:
+        def short(state):
+            state["channels"]["w-L"]["hp"] = dict(state["channels"]["w-L"]["hp"], type="CH")
+
+        project, pct6 = _aya_project(top, edit_state=short,
+                                     edit_xml=lambda root: _fils(root, 16)[31].set("T", "14"))   # Chebyshev HP
+        base = _aya_history(project).load("v_001")["channels"]["w-L"]["hp"]
+        code, out, err = _compare_cli(project, "propose", "--preset", "AYA", "--from-file", pct6)
+        assert code == 0, (code, out, err)
+        hp = _aya_history(project).load("v_002")["channels"]["w-L"]["hp"]
+        assert hp == base and base["type"] == "CH", (base, hp)
+        assert not [ln for ln in out.splitlines() if ln.startswith("| w-L | HP |")], out[-800:]
     finally:
         shutil.rmtree(top, ignore_errors=True)
 
@@ -3753,6 +3817,7 @@ def _selftest():
                   _check_compare_file_pr15_matches_differs_and_unknown,
                   _check_compare_file_pr15_numbering_not_settled_is_unknown,
                   _check_compare_file_pr15_corner_set_against_the_project,
+                  _check_compare_file_pr15_corner_set_the_project_cannot_settle,
                   _check_compare_file_pr15_unreadable_is_exit_2_and_changed_is_exit_3,
                   _check_attest_from_file_fills_the_source_file,
                   _check_from_file_and_source_file_together_are_a_usage_error,
@@ -3761,6 +3826,7 @@ def _selftest():
                   _check_propose_from_file_round_trips_through_compare_file,
                   _check_propose_from_file_on_an_unchecked_model_maps_nothing,
                   _check_from_file_tables_are_compare_files, _check_propose_from_file_writes_the_full_family_names,
+                  _check_propose_from_file_keeps_a_base_leg_spelled_short,
                   _check_propose_from_file_keeps_the_bands_it_does_not_decode,
                   _check_propose_from_file_keeps_values_that_are_not_finite,
                   _check_propose_from_file_merges_the_rtc_curve_key_by_key, _check_from_file_refuses_a_pr15,

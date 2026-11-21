@@ -456,6 +456,17 @@ def _kept_bands(code, row, bands, undecoded, why, kept):
     return sorted(bands, key=lambda b: b["i"])
 
 
+def _same_leg(taken, held):
+    """True when the leg taken from the file and the version's are the same filter once the family is spelled one way
+    (`XO_FAMILY`): a base banked with `CH` or `SD` against the file's `CHEBYSHEV` / `SELF_DEFINED` (S-136.3), which
+    `state.diff_states` would show as a crossover moved."""
+    if not (isinstance(taken, dict) and isinstance(held, dict)) or taken.keys() != held.keys():
+        return False
+    family = XO_FAMILY.get(str(taken.get("type", "")).upper())
+    return family is not None and family == XO_FAMILY.get(str(held.get("type", "")).upper()) \
+        and all(taken[k] == held[k] for k in taken if k != "type")
+
+
 def build(snap, identity, read):
     """What `propose --from-file` banks, from a version and a file `read_file` read: `{delta, kept, not_taken, notes}`.
 
@@ -491,6 +502,8 @@ def build(snap, identity, read):
         for leg in ("hp", "lp"):
             if leg in fields and fields[leg] is None and row.get(leg, "absent") in (None, "OFF"):
                 fields[leg] = row[leg]            # OFF either way: the base's spelling of it, no change on the sheet
+            elif _same_leg(fields.get(leg), row.get(leg)):
+                fields[leg] = row[leg]            # the same filter, the family spelled `CH` / `SD` in the base: no move
         if tier != "channels":
             for leg in ("hp", "lp"):
                 # A virtual channel with no leg in the version and none working in the file: nothing to take, and

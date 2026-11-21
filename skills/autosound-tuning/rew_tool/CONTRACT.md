@@ -809,8 +809,9 @@ assumed 96 kHz. A bundled profile of the model that cannot be read is named, fil
 `unknown` always: `phase_deg` (no phase control), `off`, `eq_bypass` and a band's `bypass` (not decoded), and under
 `preset` `input_gain_db` (the file holds one per input) and any other stated setting. `crossover.corner_set` (the
 file's global corner set) is set against `project.json` `dsp.settings.corner_set`, the tuner's recorded answer, in the
-reader's words: `match` or `differs`; `unknown` when none is recorded or the file's code is outside the reader's
-table. Not read: the mixer, the input EQ, the group EQ.
+reader's words: `match` or `differs`; `unknown` when none is recorded (the reason names `project.py <dir>
+set-dsp-setting corner_set ...`), when the recorded value is not a corner set, or when the file's code is outside the
+reader's table. Not read: the mixer, the input EQ, the group EQ.
 
 A key, a row's `parameter`, a category, an `error.kind` or an exit code added later is an addition (item 12);
 removing or renaming one is a contract change.
