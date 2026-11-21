@@ -85,6 +85,7 @@
     "map_new": "To nowy procesor: najpierw uzupełnij jego konfigurację bazową w osobnym formularzu (link powyżej) — wtedy pojawi się tu mapa.",
     "map_new_unsaved": "Tego procesora nie ma w profilach skilla. Zapisz go — wtedy otworzy się osobny formularz „Nowy procesor”.",
     "code_needed": "najpierw kod",
+    "slot_reslot": "to nie jest slot tego DSP: wyłącz go tutaj i włącz we właściwym slocie",
     "dsp_new_unsaved": "Nowy procesor: kliknij „Zapisz”, a następnie uzupełnij jego bazę w osobnym formularzu.",
     "new_dsp_link": "Nowy procesor — wypełnij osobno",
     "new_dsp_not_new": "Ten procesor ma profil w skillu — nie trzeba konfigurować jego bazy.",

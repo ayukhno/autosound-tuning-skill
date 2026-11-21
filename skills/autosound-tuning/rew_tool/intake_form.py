@@ -2167,7 +2167,11 @@ def _selftest():
         old_lettering = carried(page_g)["saved"]["groups"]
         assert [g.get("reslot") for g in old_lettering[:2]] == [["G"], []], old_lettering
         assert "g.slots.concat(g.reslot" in page_g and "slot-reslot" in page_g, "the page does not draw a re-slot"
-        assert carried(page_g)["t"]["slot_reslot"] == labels("en")["ui"]["slot_reslot"] == _SLOT_RESLOT_EN
+        assert labels("en")["ui"]["slot_reslot"] == _SLOT_RESLOT_EN, labels("en")["ui"]["slot_reslot"]
+        assert carried(page_g)["t"]["slot_reslot"] == labels("uk")["ui"]["slot_reslot"] != _SLOT_RESLOT_EN, \
+            carried(page_g)["t"]["slot_reslot"]
+        for lang in ("uk", "de", "pl"):    # the mark in every language the form ships, not the English fallback
+            assert labels(lang)["ui"].get("slot_reslot") not in (None, _SLOT_RESLOT_EN), lang
         # ── round 5: knobs outside the DSP -- the processor's own pre-seeded, others by name ─
         d2 = carried(render(m2))
         assert d2["saved"]["knobs"] == ["SubRC", "RearRC"], d2["saved"]["knobs"]

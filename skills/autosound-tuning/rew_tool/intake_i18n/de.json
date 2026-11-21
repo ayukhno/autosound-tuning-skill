@@ -85,6 +85,7 @@
     "map_new": "Das ist ein neuer DSP: Zuerst seine Basisdaten separat ausfüllen (Link oben) – dann erscheint hier die Kanalbelegung.",
     "map_new_unsaved": "Dieser DSP existiert nicht in den Skill-Profilen. Erst speichern – dann öffnet sich das separate Formular „Neuer DSP“.",
     "code_needed": "zuerst Code angeben",
+    "slot_reslot": "kein Slot dieses DSP: hier ausschalten und beim richtigen Slot einschalten",
     "dsp_new_unsaved": "Neuer DSP: Auf „Speichern“ klicken, danach Basisdaten im separaten Formular ausfüllen.",
     "new_dsp_link": "Neuer DSP – separat ausfüllen",
     "new_dsp_not_new": "Dieser DSP hat bereits ein Profil im Skill – Basisdaten müssen nicht abgefragt werden.",
