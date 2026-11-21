@@ -388,10 +388,44 @@ def _check_the_vendor_model_is_bound_for_one_run():
         shutil.rmtree(top, ignore_errors=True)
 
 
+def _check_the_vendor_model_unrecorded_refuses_and_recorded_offers_its_filters():
+    """S-136.1, the review: a Mosconi project with nothing recorded is one line, `refusing: ...`, exit 3, naming the
+    question and the command -- it was a traceback (`NotRecorded`); with the corner set recorded the candidates are
+    the profile's filters, none steeper than 24 dB/oct -- the generic LR36 refused every such run."""
+    import contextlib
+    import io
+    import shutil
+    import tempfile
+    for record in ((), P.VENDOR_MODEL_RECORDED):
+        top = tempfile.mkdtemp(prefix="autosound_xover_vendor_run_")
+        try:
+            proj, solos, house = P.vendor_model_two_way(top, record)
+            out, err = io.StringIO(), io.StringIO()
+            try:
+                with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                    rc = _main(["--solos", solos, "--project", proj, "--house", house, "--channel", "m-L",
+                                "--hp", "200:400:10", "--json"])
+            except BaseException as exc:  # noqa: BLE001 -- a traceback is the failure under test
+                rc = f"raised {type(exc).__name__}: {exc}"
+            out, err = out.getvalue(), err.getvalue()
+            assert dsp_math._MODEL["impl"] is None, "the run left the vendor model bound"
+            if not record:
+                said = P.unrecorded_said(rc, out, err, 3, "refusing: ")
+                assert said is None, said
+            else:
+                assert rc == 0, (rc, err[-500:])
+                orders = [c["order_db_oct"] for d in json.loads(out) for c in d["corners"].values()]
+                assert orders and max(orders) <= 24, orders
+        finally:
+            dsp_math.reset_response_model()
+            shutil.rmtree(top, ignore_errors=True)
+
+
 def _selftest():
     failures = []
     for check in (_check_cli_refuses_unreadable_profile, _check_unmodelled_protective_said,
-                  _check_predict_refusals_are_one_line, _check_the_vendor_model_is_bound_for_one_run):
+                  _check_predict_refusals_are_one_line, _check_the_vendor_model_is_bound_for_one_run,
+                  _check_the_vendor_model_unrecorded_refuses_and_recorded_offers_its_filters):
         try:
             check()
         except AssertionError as exc:
@@ -463,7 +497,9 @@ def _main(argv=None):
     try:
         return _cli(argv)
     except Exception as exc:  # noqa: BLE001 -- matched by its attribute; anything else still raises
-        if not getattr(type(exc), "is_refusal", False):
+        # `is_unmodelled`: a Mosconi / Gladen project's model with a setting it needs unrecorded (`NotRecorded`), its
+        # question and the command that records it in the line -- as predict says it (S-136.1).
+        if not (getattr(type(exc), "is_refusal", False) or getattr(type(exc), "is_unmodelled", False)):
             raise
         print(f"refusing: {exc}", file=sys.stderr)
         return 3
@@ -537,6 +573,13 @@ def _cli(argv=None):
         return 3
     if _mg_note:
         print(f"  {_mg_note}", file=sys.stderr)
+    # The bound vendor model builds only the filters its DSP has (LR/BW/BE to 24 dB/oct on a PICO): the candidates are
+    # the profile's families and orders (`dsp_math.options_for`, as joint_search takes them), never the generic
+    # `XO_OPTIONS` -- its LR36 refused every run (S-136.1). Any other project keeps the generic options.
+    xo_options = None
+    if dsp_math._MODEL["impl"] is not None:
+        import xover_wishes
+        xo_options = dsp_math.options_for((xover_wishes._profile_xo(args.project) or {}).get("types") or {}) or None
 
     f = P.grid(20, 20000, 96)
     preset, snap = P.load_project_state(args.project, args.preset)
@@ -572,7 +615,8 @@ def _cli(argv=None):
     hi = (lp[1] * 2) if lp else 20000.0
     trust = (max(20.0, lo), min(20000.0, hi))
     try:
-        cands = candidates(f, mag, targets[code], hp, lp, trust, top=args.top, trim_range_db=trim_range)
+        cands = candidates(f, mag, targets[code], hp, lp, trust, xo_options=xo_options, top=args.top,
+                           trim_range_db=trim_range)
     except ValueError as exc:
         print(f"refusing: {exc}", file=sys.stderr)
         return 3

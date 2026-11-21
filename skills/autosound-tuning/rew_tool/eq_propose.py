@@ -964,7 +964,10 @@ def main(argv=None):
     try:
         return _main(argv)
     except Exception as exc:  # noqa: BLE001 -- matched by its attribute below; anything else still raises
-        if not (getattr(type(exc), "is_unreadable", False) or getattr(type(exc), "is_refusal", False)):
+        # `is_unmodelled`: a Mosconi / Gladen project's model with a setting it needs unrecorded (`NotRecorded`), its
+        # question and the command that records it in the line -- as predict says it (S-136.1).
+        if not (getattr(type(exc), "is_unreadable", False) or getattr(type(exc), "is_refusal", False)
+                or getattr(type(exc), "is_unmodelled", False)):
             raise
         print(f"error: {exc}", file=sys.stderr)
         return 1
@@ -1413,6 +1416,37 @@ def _check_the_vendor_model_is_bound_for_one_run():
         shutil.rmtree(top, ignore_errors=True)
 
 
+def _check_the_vendor_model_unrecorded_refuses_and_recorded_models():
+    """S-136.1, the review: a Mosconi project with no corner set or peak mode recorded is one line, `error: ...`,
+    exit 1, naming the question and the command -- it was a traceback (`NotRecorded`); with both recorded the run
+    models on the bound model, says it bound once, and leaves the hook empty."""
+    import contextlib
+    import io
+    import shutil
+    import tempfile
+    for record in ((), P.VENDOR_MODEL_RECORDED):
+        top = tempfile.mkdtemp(prefix="autosound_eqpropose_vendor_run_")
+        try:
+            proj, solos, house = P.vendor_model_two_way(top, record)
+            out, err = io.StringIO(), io.StringIO()
+            try:
+                with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                    rc = main(["--project", proj, "--house", house, "--solos", solos])
+            except BaseException as exc:  # noqa: BLE001 -- a traceback is the failure under test
+                rc = f"raised {type(exc).__name__}: {exc}"
+            out, err = out.getvalue(), err.getvalue()
+            assert dsp_math._MODEL["impl"] is None, "the run left the vendor model bound"
+            if not record:
+                said = P.unrecorded_said(rc, out, err, 1, "error: ")
+                assert said is None, said
+            else:
+                assert rc == 0 and out.strip() and err.count("Mosconi / Gladen filter model bound (") == 1, \
+                    (rc, err[-500:])
+        finally:
+            dsp_math.reset_response_model()
+            shutil.rmtree(top, ignore_errors=True)
+
+
 @_own_tempdir
 def _selftest():
     """Anchored to the definitions: a driver resonance is cut where it is, a comb is not boosted,
@@ -1423,7 +1457,8 @@ def _selftest():
     failures = []
     for check in (_check_profile_read_strictly, _check_refusal_names_its_reason, _check_refused_notes_never_cut,
                   _check_junction_band_names_its_step, _check_no_boost_path_said,
-                  _check_predict_refusals_are_one_line, _check_the_vendor_model_is_bound_for_one_run):
+                  _check_predict_refusals_are_one_line, _check_the_vendor_model_is_bound_for_one_run,
+                  _check_the_vendor_model_unrecorded_refuses_and_recorded_models):
         try:
             check()
         except AssertionError as exc:

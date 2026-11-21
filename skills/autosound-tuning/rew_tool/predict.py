@@ -3271,6 +3271,48 @@ class VendorBindSpy:
         return False
 
 
+def vendor_model_on(project_dir, record=()):
+    """`project_dir` made a Mosconi PICO 6/8-2 project in place: the shipped profile as its `dsp_profile.json`, the
+    vendor in `project.json`, and each `(key, value)` of `record` recorded through `project.py set-dsp-setting` --
+    nothing recorded unless given. For a tool's fixture that reaches the model (S-136.1)."""
+    import shutil
+    import mosconi_gladen as mg
+    pj = mg._siblings().load("project.py")
+    profiles = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "knowledge", "dsp", "profiles")
+    shutil.copyfile(os.path.join(profiles, "mosconi-pico-6-8-2.json"), os.path.join(project_dir, "dsp_profile.json"))
+    pj.Project(project_dir).update(lambda d: d.setdefault("dsp", {}).update(vendor="Mosconi", model="PICO 6/8-2"))
+    for key, value in record:
+        rc, _out, err = pj._run_cli(pj._main, ["project.py", project_dir, "set-dsp-setting", key, value,
+                                                "--source", "user"])
+        assert rc in (0, None), (key, rc, err)
+    return project_dir
+
+
+def vendor_model_two_way(top, record=()):
+    """`(project, solos, house)`: `_two_way_fixture` made a Mosconi project (`vendor_model_on`) and a flat house curve
+    -- a run of a proposing tool on it reaches the model."""
+    proj, solos = _two_way_fixture(top)
+    vendor_model_on(proj, record)
+    house = os.path.join(top, "house.txt")
+    with open(house, "w", encoding="utf-8") as fh:
+        fh.write("20 0\n20000 0\n")
+    return proj, solos, house
+
+
+#: Recorded on a fixture whose run should model (`vendor_model_on`).
+VENDOR_MODEL_RECORDED = (("corner_set", "default"), ("peak_mode", "rew"))
+
+
+def unrecorded_said(rc, out, err, want_rc, prefix):
+    """None when a run on a Mosconi project with nothing recorded refused in one line -- `prefix`, exit `want_rc`,
+    naming the setting and the command that records it, no traceback, nothing on stdout -- else what it did."""
+    refusals = [ln for ln in err.strip().splitlines() if ln.startswith(prefix)]
+    if rc == want_rc and not out.strip() and len(refusals) == 1 and "Traceback" not in err \
+            and "set-dsp-setting corner_set" in refusals[0]:
+        return None
+    return rc, out[:200], err[-500:]
+
+
 #: What `VendorBindSpy.bound` holds after a run on `vendor_model_projects`' Mosconi folder.
 VENDOR_MODEL_BOUND = [("mosconi_gladen", "minus_3db", "gain_dependent")]
 

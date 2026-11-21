@@ -1348,7 +1348,10 @@ def _main(argv=None):
         if getattr(type(exc), "rew_state", None) is not None:
             print(f"refusing: REW: {exc.args[0] if exc.args else exc}", file=sys.stderr)
             return 3
-        if not (getattr(type(exc), "is_refusal", False) or getattr(type(exc), "is_unreadable", False)):
+        # `is_unmodelled`: a Mosconi / Gladen project's model with a setting it needs unrecorded (`NotRecorded`), its
+        # question and the command that records it in the line -- as predict says it (S-136.1).
+        if not (getattr(type(exc), "is_refusal", False) or getattr(type(exc), "is_unreadable", False)
+                or getattr(type(exc), "is_unmodelled", False)):
             raise
         print(f"refusing: {exc}", file=sys.stderr)
         return 3
@@ -2236,6 +2239,18 @@ def _check_the_vendor_model_is_bound_for_one_run():
     assert seen.bound == [] and seen.after is None, (seen.bound, seen.after)
 
 
+def _check_the_vendor_model_unrecorded_is_one_line():
+    """S-136.1, the review: a Mosconi project with no corner set or peak mode recorded is one line, `refusing: ...`,
+    exit 3, naming the question and the command, the hook empty after -- it was a traceback (`NotRecorded`)."""
+    top = os.path.join(_top(), "vendor_unrecorded")
+    os.makedirs(top)
+    proj, solos, _house = P.vendor_model_two_way(top)
+    rc, out, err = _run(["table", "--project", proj, "--solos", solos, "SQ/v_001", "SQ/v_001"])
+    assert P.dsp_math._MODEL["impl"] is None, "the run left the vendor model bound"
+    said = P.unrecorded_said(rc, out, err, 3, "refusing: ")
+    assert said is None, said
+
+
 def _selftest():
     import glob
     import shutil
@@ -2254,7 +2269,7 @@ def _selftest():
                       _check_bad_inputs_refuse, _check_documented_level_db_form, _check_loudness_sum_is_coherent,
                       _check_bass_marker_across_versions, _check_table_flags_show_their_effect, _check_tripod_fallback_says_tripod,
                       _check_broken_mosqito_says_why, _check_round_check_names_what_it_did_not_read, _check_round_check_averages_over_the_codes_width,
-                      _check_the_vendor_model_is_bound_for_one_run):
+                      _check_the_vendor_model_is_bound_for_one_run, _check_the_vendor_model_unrecorded_is_one_line):
             try:
                 check()
             except AssertionError as exc:

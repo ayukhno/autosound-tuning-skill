@@ -4420,7 +4420,10 @@ def _main(argv=None):
         if getattr(type(exc), "rew_state", None) is not None:
             print(f"refusing: REW: {_rew_words(exc)}", file=sys.stderr)
             return 3
-        if not (getattr(type(exc), "is_refusal", False) or getattr(type(exc), "is_unreadable", False)):
+        # `is_unmodelled`: a Mosconi / Gladen project's model with a setting it needs unrecorded (`NotRecorded`), its
+        # question and the command that records it in the line -- as predict says it (S-136.1).
+        if not (getattr(type(exc), "is_refusal", False) or getattr(type(exc), "is_unreadable", False)
+                or getattr(type(exc), "is_unmodelled", False)):
             raise
         print(f"refusing: {exc}", file=sys.stderr)
         return 3
@@ -4670,6 +4673,26 @@ def _run(argv):
 
 _TINY = ["--lp-bounds", "56:71", "--hp-bounds", "56:80", "--gain", "2:8:2"]
 _FRONT_POINTS = {"w-L": POSITIONS, "w-R": POSITIONS}
+
+
+def _check_the_vendor_model_unrecorded_is_one_line():
+    """S-136.1, the review: a Mosconi project with no corner set or peak mode recorded is one line, `refusing: ...`,
+    exit 3, naming the question and the command, the hook empty after -- it was a traceback (`NotRecorded`)."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_jointsearch_vendor_run_")
+    try:
+        proj, house = _fixture(top)
+        P.vendor_model_on(proj)
+        solos = os.path.join(top, "solos")
+        _write_solos(solos, ("sw", "w-L", "w-R"), points=_FRONT_POINTS, at={"w-L": 200, "w-R": 100})
+        rc, out, err = _run(["--project", proj, "--house", house, "--solos", solos] + _TINY)
+        assert dsp_math._MODEL["impl"] is None, "the run left the vendor model bound"
+        said = P.unrecorded_said(rc, out, err, 3, "refusing: ")
+        assert said is None, said
+    finally:
+        dsp_math.reset_response_model()
+        shutil.rmtree(top, ignore_errors=True)
 
 
 def _check_the_vendor_model_is_bound_for_one_run():
@@ -8132,7 +8155,7 @@ def _selftest():
                   _check_held_woofers_at_zero_take_a_placeable_pair, _check_single_point_refusal_is_the_sheets_line, _check_a_no_with_a_colon_is_no_decision,
                   _check_out_keeps_the_table_it_holds, _check_a_row_carries_a_delta_ready_for_propose,
                   _check_a_chain_banks_what_was_scored, _check_a_ledger_keeps_what_the_row_did_not_decide, _check_an_align_that_cut_nothing_clears_the_older_eq, _check_a_blend_states_only_the_eq_it_held, _check_the_hard_floor_binds_every_high_pass, _check_an_empty_table_is_rerun_on_the_same_out,
-                  _check_the_vendor_model_is_bound_for_one_run):
+                  _check_the_vendor_model_is_bound_for_one_run, _check_the_vendor_model_unrecorded_is_one_line):
         try:
             check()
         except AssertionError as exc:
