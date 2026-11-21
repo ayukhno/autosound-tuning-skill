@@ -1662,7 +1662,7 @@ once, together with S-132's credit. CI: none of its own. Resume: `hub/bin/role s
 
 ## S-129 · The candidate gate checks the wave's pool; «LAST candidate» rewording; main runs finish; hub rules by link (hub #338 asks 1–2)
 
-**Status**: open 2026-11-21 · on milestone `W-13 · v3.3.2` as #215, `ok` (the Arbiter: «Усі шість», 2026-11-21) · was: W-13's pool, order 1 of 5; recorded, not diagnosed; first because it guards this wave's own candidate
+**Status**: open 2026-11-21 · built `4853545` on `wave-2026-11-21`, the task review (opus · high) running · on milestone `W-13 · v3.3.2` as #215, `ok` (the Arbiter: «Усі шість», 2026-11-21); set to done in the release commit
 
 Asks 1 and 2 of hub #338 (ask 3 is S-128, done), plus the two lines from its comments: `cancel-in-progress` off on
 `main` in `checks.yml`, and links to the hub's rules instead of copies in `CLAUDE.md`, `checks.yml`, `tag-check.sh`.
