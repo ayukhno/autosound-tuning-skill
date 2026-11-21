@@ -1627,6 +1627,15 @@ S-062, S-064 (with TCC's half, hub #217 SKL-056), S-065, S-066. When he says to 
 four assessment lines, and nothing is built before his `ok` on that task. Resume: `hub/bin/role skill --resume
 6b9c70d1-4094-4337-a1fd-23976307dfc2`.
 
+## S-135 · Records quote the Arbiter's words in Ukrainian; a decision and a reference are enough
+
+**Status**: open 2026-11-21 · the next wave's pool; recorded, not diagnosed
+
+The Arbiter's rule, 2026-11-21: records carry the decision in English and a reference to him (the Arbiter, date),
+never his words. W-13's records (`docs/PLAN-W-13.md`, S-127 to S-134) follow it. The older records in `docs/`
+(`TODO.md` before S-127, plans, reviews, ledgers) still quote him in Ukrainian: about 200 lines in `TODO.md` alone.
+Not the product's Ukrainian texts (the interface strings, the language versions): those stay.
+
 ## S-134 · The method's texts still cite the deleted `ayukhno/autosound-measurements` by name
 
 **Status**: open 2026-11-21 · the next wave's pool; recorded, not diagnosed · found while doing #216 (S-130), whose asks named the link in three files
@@ -1639,9 +1648,9 @@ texts and data: `references/tooling/helix-eq-export.md:20`, `references/tooling/
 `knowledge/dsp/profiles/audiotec-fischer-helix-dsp-ultra-s.json:159,236,275`; `CHANGELOG.md:4311` is history. A reader
 sent to a repository that no longer exists; the facts it held may need a home in the skill.
 
-## S-133 · TCC's «Перевірити налаштування» button: pass it on to TCC once the reader is released (hub #346 RES-027)
+## S-133 · TCC's "Check settings" button: pass it on to TCC once the reader is released (hub #346 RES-027)
 
-**Status**: open 2026-11-21 · on milestone `W-13 · v3.3.2` as #220, `ok` (the Arbiter: «Усі шість», 2026-11-21) · was: W-13's pool, order 5 of 5; recorded, not diagnosed; the Arbiter's «так» to the order
+**Status**: open 2026-11-21 · on milestone `W-13 · v3.3.2` as #220, `ok` (the Arbiter's decision, 2026-11-21) · was: W-13's pool, order 5 of 5; recorded, not diagnosed; the Arbiter agreed to the order
 
 The build is TCC's (`dsp_check.py`, the DSP row); readdressed to us because the skill owns the contract with TCC.
 Ours: a `to:tcc` ticket carrying the comparison's JSON shape from `CONTRACT.md`, sent only after S-131 is in a
@@ -1649,17 +1658,17 @@ released skill (its `depends_on` is required). Resume: `hub/bin/role skill --res
 
 ## S-132 · Mosconi PICO 6/8-2: a selectable profile and the Mosconi / Gladen filter model (hub #345 RES-026, skill #214)
 
-**Status**: open 2026-11-21 · T5 (profile, sonnet · medium, the trial) and T6 (`mosconi_gladen`, opus · medium) with their implementers; T7 (`.PR15` reader) next · on milestone `W-13 · v3.3.2` as #219, `ok` (the Arbiter: «Усі шість», 2026-11-21) · was: W-13's pool, order 4 of 5; recorded, not diagnosed
+**Status**: open 2026-11-21 · T5 (profile, sonnet · medium, the trial) and T6 (`mosconi_gladen`, opus · medium) with their implementers; T7 (`.PR15` reader) next · on milestone `W-13 · v3.3.2` as #219, `ok` (the Arbiter's decision, 2026-11-21) · was: W-13's pool, order 4 of 5; recorded, not diagnosed
 
 The profile does not depend on anything and could go earlier, since the contributor of #214 is waiting. The filter
 library follows S-131's pattern: one library per vendor, no write path. The intake is the Arbiter's (hub #345 comments):
 our own texts built from his values, credit to Widar1979 with a link to #214, licence granted, the sample `.PR15`
 ships byte for byte. With the offsets and the sample in, the read-only preset reader (ask 3, "later") is now
-possible; it joins this wave (the Arbiter: «У цю хвилю», 2026-11-21). Resume: `hub/bin/role skill --resume 4cf06299-0cbf-40a3-bff9-923f6750b75e`.
+possible; it joins this wave (the Arbiter's decision, 2026-11-21). Resume: `hub/bin/role skill --resume 4cf06299-0cbf-40a3-bff9-923f6750b75e`.
 
 ## S-131 · Read `.pct6` in the skill: take research's `helix_pct6`, a comparison verb, never writes (hub #344 RES-025)
 
-**Status**: open 2026-11-21 · T1 built `0123561` + `380a4bf` (reviewed, fixed, re-reviewed); T2 built `974bdf1` (`compare-file`, CONTRACT.md item 13; the review's five findings fixed, the fix's re-review running; virtual letters = PC-Tool's ordinal among shown channels, the reader's own labels are index letters); T3 built `e8f5790` (its task review stopped before it reported: T3 goes to the group seats); T2's re-review findings fixed `ae4e1a5`; T4 texts `92e2b5c` · open 2026-11-21 · on milestone `W-13 · v3.3.2` as #218, `ok` (the Arbiter: «Усі шість», 2026-11-21) · was: W-13's pool, order 3 of 5; recorded, not diagnosed
+**Status**: open 2026-11-21 · T1 built `0123561` + `380a4bf` (reviewed, fixed, re-reviewed); T2 built `974bdf1` (`compare-file`, CONTRACT.md item 13; the review's five findings fixed, the fix's re-review running; virtual letters = PC-Tool's ordinal among shown channels, the reader's own labels are index letters); T3 built `e8f5790` (its task review stopped before it reported: T3 goes to the group seats); T2's re-review findings fixed `ae4e1a5`; T4 texts `92e2b5c` · open 2026-11-21 · on milestone `W-13 · v3.3.2` as #218, `ok` (the Arbiter's decision, 2026-11-21) · was: W-13's pool, order 3 of 5; recorded, not diagnosed
 
 The core of the wave. It sets the comparison's JSON shape in `CONTRACT.md` (S-133 needs it) and the pattern of one
 library per vendor with a never-writes test (S-132 repeats it). Ask 6 is decided: `AYA.pct6` ships byte for byte
@@ -1667,14 +1676,14 @@ library per vendor with a never-writes test (S-132 repeats it). Ask 6 is decided
 
 ## S-130 · Dead links to the deleted `ayukhno/autosound-measurements` (hub #342 RES-023)
 
-**Status**: open 2026-11-21 · `testdata/helix-bench/README.md` and the changelog archive done on `wave-2026-11-21` (the provenance in our words, no link); `NOTICE.md` waits for #219's T5, one edit for both · on milestone `W-13 · v3.3.2` as #216, `ok` (the Arbiter: «Усі шість», 2026-11-21); set to done in the release commit
+**Status**: open 2026-11-21 · `testdata/helix-bench/README.md` and the changelog archive done on `wave-2026-11-21` (the provenance in our words, no link); `NOTICE.md` waits for #219's T5, one edit for both · on milestone `W-13 · v3.3.2` as #216, `ok` (the Arbiter's decision, 2026-11-21); set to done in the release commit
 
 Text only: `LICENSES/NOTICE.md`, `testdata/helix-bench/README.md`, `docs/changelog/` archive. `NOTICE.md` is edited
 once, together with S-132's credit. CI: none of its own. Resume: `hub/bin/role skill --resume 4cf06299-0cbf-40a3-bff9-923f6750b75e`.
 
 ## S-129 · The candidate gate checks the wave's pool; «LAST candidate» rewording; main runs finish; hub rules by link (hub #338 asks 1–2)
 
-**Status**: open 2026-11-21 · built `4853545` on `wave-2026-11-21`; the task review (opus · high) found one defect — a failed `installers` added no reason, so `releasable: yes` could print beside it — fixed in `c5933c8` (red then green), the fix's re-review clean; noted, not changed: `installer-consistency.py` holds `install.cmd`'s PS1URL to the CHANGELOG's newest heading, so an EARLY candidate with its heading already renamed is refused through `installers` · on milestone `W-13 · v3.3.2` as #215, `ok` (the Arbiter: «Усі шість», 2026-11-21); set to done in the release commit
+**Status**: open 2026-11-21 · built `4853545` on `wave-2026-11-21`; the task review (opus · high) found one defect — a failed `installers` added no reason, so `releasable: yes` could print beside it — fixed in `c5933c8` (red then green), the fix's re-review clean; noted, not changed: `installer-consistency.py` holds `install.cmd`'s PS1URL to the CHANGELOG's newest heading, so an EARLY candidate with its heading already renamed is refused through `installers` · on milestone `W-13 · v3.3.2` as #215, `ok` (the Arbiter's decision, 2026-11-21); set to done in the release commit
 
 Asks 1 and 2 of hub #338 (ask 3 is S-128, done), plus the two lines from its comments: `cancel-in-progress` off on
 `main` in `checks.yml`, and links to the hub's rules instead of copies in `CLAUDE.md`, `checks.yml`, `tag-check.sh`.
@@ -1692,7 +1701,7 @@ Arbiter's OK. Resume: `hub/bin/role skill --resume 766d28a7-6c7a-4cea-9e5b-2d4bc
 
 ## S-127 · Resonalyze has moved: its crossover project file is at format 13, our reader at 10; 11 ported files drifted
 
-**Status**: open 2026-11-21 · the five re-pins built on `wave-2026-11-21` (#217): `upstream-drift.py` 0 DRIFT for the Python ports, the engine's 7 stay; one correction to the triage below — 7334d3b's 40 dB channel-presence gate does reach `sum_loss`'s read-out (their `SumLossCurve`), declared as a `# deviation:` (the read-out only draws `predict`'s plot, the junction band keeps a channel playing); reading a FIR stage and the `NonCausalLoopback` check stay in the pool · was: the 11 DRIFTs triaged (below): nothing critical, the engine stays pinned; the FIR stage stays in the pool (the Arbiter: «FIR не ставлю — лишай у пулі»); to W-13's milestone go only the five re-pins; the `NonCausalLoopback` check stays in the pool (the Arbiter: «ми не міряємо — ми використовуємо REW») · was: open 2026-11-10 · the FORMAT half done: **v3.3.1** released and `Latest` (tag on `8ae9095`, PR #213, hub #340 commented with tag and commit; the hub opens TCC's re-pin); reader v7..v13, a channel's FIR stage refused; still W-13's: the 11 DRIFTs and reading a FIR stage; resume: `hub/bin/role skill --resume cf677227-b29a-42f7-b42d-9de0455cbee2` · was: format half built, not pushed · was: open 2026-11-10 · W-13's pool; recorded, not diagnosed; found on the Arbiter's question about Resonalyze after v3.3.0
+**Status**: open 2026-11-21 · the five re-pins built on `wave-2026-11-21` (#217): `upstream-drift.py` 0 DRIFT for the Python ports, the engine's 7 stay; one correction to the triage below — 7334d3b's 40 dB channel-presence gate does reach `sum_loss`'s read-out (their `SumLossCurve`), declared as a `# deviation:` (the read-out only draws `predict`'s plot, the junction band keeps a channel playing); reading a FIR stage and the `NonCausalLoopback` check stay in the pool · was: the 11 DRIFTs triaged (below): nothing critical, the engine stays pinned; the FIR stage stays in the pool (the Arbiter's decision: no FIR, it stays in the pool); to W-13's milestone go only the five re-pins; the `NonCausalLoopback` check stays in the pool (the Arbiter's decision: we measure in REW) · was: open 2026-11-10 · the FORMAT half done: **v3.3.1** released and `Latest` (tag on `8ae9095`, PR #213, hub #340 commented with tag and commit; the hub opens TCC's re-pin); reader v7..v13, a channel's FIR stage refused; still W-13's: the 11 DRIFTs and reading a FIR stage; resume: `hub/bin/role skill --resume cf677227-b29a-42f7-b42d-9de0455cbee2` · was: format half built, not pushed · was: open 2026-11-10 · W-13's pool; recorded, not diagnosed; found on the Arbiter's question about Resonalyze after v3.3.0
 
 `python3 scripts/upstream-drift.py` (exit 0, 19 ok, 11 DRIFT, 1 FORMAT):
 
@@ -1709,7 +1718,7 @@ Arbiter's OK. Resume: `hub/bin/role skill --resume 766d28a7-6c7a-4cea-9e5b-2d4bc
 At the milestone: which drifts change a result and which are comments or docs; the format first, since it
 refuses the user's files.
 
-**Triage, 2026-11-21** (the Arbiter: «зроби швидкий аналіз, щоб розуміти чи варто брати в цій хвилі»). Upstream
+**Triage, 2026-11-21** (on the Arbiter's request: a quick analysis of whether to take it this wave). Upstream
 `DIMOSUS/Resonalyze` has not moved since `4de20ec` (2026-10-15), so the list is the same as on 10.11. Read-only,
 two Sonnet readers, two claims checked by hand.
 
