@@ -190,6 +190,13 @@ In the new project's root (a git repo; layout and the "what's in git, what isn't
     VFL w-L,m-L,tw-L`): which physical outputs each virtual channel feeds. A fact that has to be
     retyped on every run is one session away from being wrong, and it is never inferable from names —
     `VFL` looking like "virtual front left" is a convention, not a wiring diagram.
+  - **A Mosconi / Gladen DSP: ask the tuner two settings and record them** — which peak mode the PC
+    program is set to, «REW-compatible peak» or «gain-dependent bandwidth peak» (a setting of the
+    program, not of the preset), and which corner set the crossovers use (default corners,
+    normalised to −3 dB or to −6 dB): `project.py <dir> set-dsp-setting peak_mode rew|gain_dependent
+    --source user`, `... set-dsp-setting corner_set default|minus_3db|minus_6db --source user`. The
+    desk predicts this DSP with its own filter model (`mosconi_gladen.py`), and without them a peak
+    band or a crossover leg is refused with the question, never modelled on a guess.
   - If the channel = `@google/gemini-cli` (closed since 2026-09-08 — a key did not reopen it, `setup-critic-channel.md` §2; use `agy`) or the CWD ≠ the project root — add **`rew_analitic/.critic-env`** (`GEMINI_BIN=…`, and `PROJECT_MIRROR=…` if needed). Detail → `references/tooling/setup-critic-channel.md`.
 - The first changelog entry: "project created; intake done; candidate target: X; preset targets: …".
 

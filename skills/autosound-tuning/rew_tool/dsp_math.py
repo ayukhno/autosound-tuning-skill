@@ -173,6 +173,20 @@ def _design(order_db_per_oct, wn, btype, ftype):
     return sig.butter(n, wn, btype=btype, output="sos")
 
 
+# ── a vendor's own response model, bound per session (#219) ────────────────────────────────────
+#: None: the generic model below. Otherwise an object with `xo_response(freqs, corner, order, kind, ftype, fs)` and
+#: `eq_complex(freqs, bands, fs)` -- `mosconi_gladen.Model`, bound by `mosconi_gladen.bind_for_project`.
+_MODEL = {"impl": None}
+
+
+def bind_response_model(impl):
+    _MODEL["impl"] = impl
+
+
+def reset_response_model():
+    _MODEL["impl"] = None
+
+
 def xo_response(freqs_hz, corner_hz, order_db_per_oct, kind, ftype, fs=None):
     """Complex response of one HPF/LPF slot. kind: 'hp'|'lp'. ftype: 'BW'|'BE'|'LR', as spelled; any other type
     raises `Unmodelled` (#134, R49) -- a Chebyshev was built as a Butterworth.
@@ -181,6 +195,8 @@ def xo_response(freqs_hz, corner_hz, order_db_per_oct, kind, ftype, fs=None):
     (`processing_rate()`). scipy designs digitally — `warped = 2*fs*tan(pi*Wn/fs)` then the
     bilinear transform — so this rate is not a formality: it sets the prewarping, and getting it
     wrong bends the shape upward from the corner."""
+    if _MODEL["impl"] is not None:
+        return _MODEL["impl"].xo_response(freqs_hz, corner_hz, order_db_per_oct, kind, ftype, _fs(fs))
     sosfreqz = _scipy_signal().sosfreqz
     fs = _fs(fs)
     wn = min(max(corner_hz / (fs / 2.0), 1e-4), 0.999)
@@ -965,6 +981,8 @@ def eq_complex(freqs_hz, bands):
     For an all-pass the gain is ignored (it has none) and `q` is read only by the second order.
     """
     freqs_hz = np.asarray(freqs_hz, dtype=float)
+    if _MODEL["impl"] is not None:
+        return _MODEL["impl"].eq_complex(freqs_hz, bands, _fs(None))
     h = np.ones_like(freqs_hz, dtype=complex)
     for kind, f0, g, q in bands:
         if kind == "APF1":

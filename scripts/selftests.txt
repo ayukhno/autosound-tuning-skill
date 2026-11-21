@@ -42,6 +42,7 @@ skills/autosound-tuning/rew_tool/level_offsets.py --selftest
 skills/autosound-tuning/rew_tool/levelbase.py --selftest
 skills/autosound-tuning/rew_tool/listening.py --selftest
 skip skills/autosound-tuning/rew_tool/make_plot.py has no selftest: a plotting helper for a one-off experiment (one synthetic PNG); no part of the method calls it
+skills/autosound-tuning/rew_tool/mosconi_gladen.py --selftest
 # naming.py's command line takes a project folder first: "." fills that slot, which its selftest ignores.
 skills/autosound-tuning/rew_tool/naming.py . selftest
 skills/autosound-tuning/rew_tool/nono_curves.py --selftest

@@ -2252,6 +2252,11 @@ def _main(argv=None):
         _rate_hz, _rate_note = _dp_bind.bind_model_rate(args.project)
         if _rate_note:
             print(f"  \u26a0 {_rate_note}", file=sys.stderr)
+        # A Mosconi / Gladen DSP's own filter model, bound in `dsp_math` when the profile is that vendor's (#219).
+        import mosconi_gladen as _mg
+        _mg_note = _mg.bind_for_project(args.project)
+        if _mg_note:
+            print(f"  {_mg_note}", file=sys.stderr)
     if args.selftest:
         return _selftest()
     if not (args.solos or args.rew) or not (args.project or args.state_json):

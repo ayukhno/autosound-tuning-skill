@@ -42,6 +42,10 @@ machine-readable to render for its Project/System/Car-audio-analysis panels eith
   "dsp": {"vendor": "Audiotec-Fischer", "model": "Helix DSP Ultra S",   // links dsp_profile.json
           "tiers_used": ["channels", "virtual_channels"],    // the intake page: which of the
                                                              //   processor's tiers this car uses
+          "settings": {"peak_mode": {"value": "rew", "source": "user", "at": "..."}},  // #219: a setting
+                                                             //   a response depends on that no file
+                                                             //   carries -- the tuner's word
+                                                             //   (`project.py set-dsp-setting`)
           "previous_maps": [{"vendor": "Musway", "model": "M6V4 (no 512K)",  // round 4: a processor
                              "slots": [{"code": "w-L", "tier": "channels", "slot": "1"}]}]},
                                                              //   change REPLACES the channel map; the

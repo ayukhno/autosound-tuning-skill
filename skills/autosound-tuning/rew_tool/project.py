@@ -120,6 +120,10 @@ class _Unchanged:
 #: no write, no `project_rev` -- and `update` gives back the facts as they stand.
 UNCHANGED = _Unchanged()
 
+#: `dsp.settings` (#219): the keys `set-dsp-setting` records and the values each takes. `mosconi_gladen`'s selftest
+#: holds its own tables to these.
+DSP_SETTINGS = {"peak_mode": ("rew", "gain_dependent"), "corner_set": ("default", "minus_3db", "minus_6db")}
+
 
 def _now():
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -1474,6 +1478,22 @@ class Project:
         raw = ((data.get("hardware") or {}).get("virtual_routing") or {})
         return {k: list(fact_value(v) or []) for k, v in raw.items()}
 
+    def set_dsp_setting(self, key, value, source=None):
+        """`dsp.settings.<key>` = `value` as a fact: a setting of the DSP or its PC program that a response depends on
+        and no file of ours carries (#219). The tuner's word, asked when a model refuses without it: a Mosconi /
+        Gladen DSP's peak mode is a setting of the program, not of the preset. Here and not in `dsp_profile.json`:
+        that file is the library's description of the device, and `dsp_profile.py refresh` rewrites it from there."""
+        allowed = DSP_SETTINGS.get(key)
+        if allowed is None:
+            raise ProjectError(f"{key!r} is not a DSP setting: {', '.join(sorted(DSP_SETTINGS))}")
+        if value not in allowed:
+            raise ProjectError(f"dsp.settings.{key}: {value!r} is not one of {', '.join(allowed)}")
+
+        def put(data):
+            data.setdefault("dsp", {}).setdefault("settings", {})[key] = fact(value, source=source)
+
+        return self.update(put)
+
     def set_control_mapping(self, name, step_db, affects, source=None, zero_at=None):
         """What one hardware knob DOES, in dB per step, and to which channels.
 
@@ -1655,6 +1675,9 @@ _USAGE = """usage: project.py <project-dir> <command> [args]
                                                plan without --apply, run on the user's OK
   set-hardware <name> <value> [--source S]     set a DSP-hardware control (a remote knob: RearRC/SubRC/...)
   set-path <key> <path>                        where this project's files live (rew_project: its REW .mdat)
+  set-dsp-setting <key> <value> [--source S]  a DSP setting a response depends on (dsp.settings):
+                                               peak_mode rew|gain_dependent, corner_set
+                                               default|minus_3db|minus_6db -- the tuner's word
   set-route <VIRTUAL> <out,out,...> [--source S]
                                                which outputs a VIRTUAL channel feeds -- the DSP's
                                                routing matrix as a fact, so `predict` stops being
@@ -1905,6 +1928,10 @@ def _main(argv):
         elif cmd == "set-path":
             proj.set_path(args[0], args[1])
             print(f"paths.{args[0]} = {args[1]!r}")
+        elif cmd == "set-dsp-setting":
+            source = _flag(args, "--source")
+            proj.set_dsp_setting(args[0], args[1], source=source)
+            print(f"dsp.settings.{args[0]} = {args[1]!r}")
         elif cmd == "set-route":
             source = _flag(args, "--source")
             name, outs = args[0], [c.strip() for c in args[1].split(",") if c.strip()]
@@ -2668,6 +2695,7 @@ def _check_a_held_lock_answers_75():
                   ["project-type", "driver"], ["catch-up"], ["migrate-fields"], ["backfill-tiers"],
                   ["fix-ids", "--apply"], ["rename-channel", "w-L", "wf-L"],
                   ["set-hardware", "SubRC", "4/4", "--source", "user"], ["set-route", "VFL", "w-L"],
+                  ["set-dsp-setting", "peak_mode", "rew", "--source", "user"],
                   ["set-control-mapping", "SubRC", "2", "w-L", "--source", "user"],
                   ["mark-imported", "channels.w-L.fs_hz", "--from", "/old/car"],
                   ["flaw", "56", "-4", "cabin_null", "leave", "--why", "x", "--evidence", "w-L_1 (sw)"],
@@ -2868,6 +2896,29 @@ def _check_rename_channel_takes_no_facts_of_its_own():
         rev = proj.load()["project_rev"]
         assert proj.rename_channel("w-L", "w-L")["code"] == "w-L" and proj.load()["project_rev"] == rev, \
             "a rename to the name it has wrote"
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_dsp_setting_records_the_tuners_word():
+    """`set-dsp-setting` (#219) records `dsp.settings.<key>` as a fact with its source, and refuses a key or a value
+    it does not know, writing nothing."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_project_dsp_setting_")
+    try:
+        proj = Project(top)
+        proj.save({"schema_version": SCHEMA_VERSION, "dsp": {"vendor": "Mosconi", "model": "PICO 6/8-2 DSP"}})
+        rc, out, err = _run_cli(_main, ["project.py", top, "set-dsp-setting", "peak_mode", "gain_dependent",
+                                        "--source", "user"])
+        got = proj.load()["dsp"]
+        assert rc in (0, None) and got.get("settings", {}).get("peak_mode", {}).get("value") == "gain_dependent" \
+            and got["settings"]["peak_mode"]["source"] == "user" and got["vendor"] == "Mosconi", (rc, err, got)
+        rev = proj.load()["project_rev"]
+        for key, value in (("peak", "rew"), ("peak_mode", "classic"), ("corner_set", "minus_9db")):
+            exc = _raised_by(lambda: proj.set_dsp_setting(key, value, source="user"))
+            assert isinstance(exc, ProjectError) and repr(value if key in DSP_SETTINGS else key) in str(exc), exc
+        assert proj.load()["project_rev"] == rev, "a refused setting wrote"
     finally:
         shutil.rmtree(top, ignore_errors=True)
 
@@ -3130,7 +3181,7 @@ def _selftest():
                   _check_held_elsewhere_needs_its_folder, _check_rename_channel_takes_no_facts_of_its_own,
                   _check_a_bad_timeout_is_a_usage_error, _check_record_change_into_a_mistyped_folder,
                   _check_record_change_asks_git_with_the_lock_free, _check_no_load_and_save_outside_update,
-                  _check_agents_setup_writes_once):
+                  _check_agents_setup_writes_once, _check_dsp_setting_records_the_tuners_word):
         try:
             check()
         except AssertionError as exc:
