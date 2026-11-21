@@ -1,0 +1,824 @@
+{
+ "format": "helix-pct6.rules.v1",
+ "scope": {
+  "dev": "39",
+  "model": "HELIX DSP ULTRA S"
+ },
+ "note": "Mapping rules checked on one reference file (saved 16.10.2026, md5 708ccc26583f90e7dfb84fd9345f670c) and 15 one-change experiment files. A rule present here is not proof by itself: its confidence says how far it is checked. xml_path values are group labels, not executable XPath; conversions are text, implemented explicitly in inventory.py.",
+ "reference_file": {
+  "md5": "708ccc26583f90e7dfb84fd9345f670c",
+  "sha256": "1905185abc405624ff5e5cb47832a8fe53e5ec2e8f87449f48adcc1de741dc1e",
+  "saved": "16.10.2026 18:55",
+  "dev": 39
+ },
+ "experiments": {
+  "T1-MT.pct6": "fb7257f5c347c2d39188b14354797237",
+  "T2-PM-phase.pct6": "4514d0d572ce0ccbb944c45d379ddeb8",
+  "T4-LG.pct6": "dd35ca290d206bd5f0f0c2454d9bdca7",
+  "T5-APF.pct6": "61296bd0ff157879281debce1f904932",
+  "T5-APF2.pct6": "f1ba5dfeedd4ff31e584ddbf75c0aa86",
+  "T6-APF.pct6": "f580546f161c3feef02f31c4add34b69",
+  "ActiveToneControl-on.pct6": "3bbe5a778b5a97b4cfbd48460179f360",
+  "BT-off_AUX-on.pct6": "74d972235e5c0d640d72b7f07fe4aa86",
+  "BTautoSwitchON-off.pct6": "bad9c1d43be1fdfb3ac3a81ae10ef566",
+  "DynamicBassEnh-on.pct6": "c6474692ef57d435bb67f99a1f49c022",
+  "FX-off.pct6": "072ca002685db02e274ad74c40868bb9",
+  "MasterVolume_changed.pct6": "7b754e68fd1dff55aa6bbfc8e62eeaa8",
+  "RemoteToneControl-on.pct6": "4078742d9a0ac8fc3fc26c3619f48cbe",
+  "SubX-on.pct6": "a4fe0c539448973750297f76e2188779",
+  "t7.pct6": "19003906690b73039938f934609d4f91"
+ },
+ "unknown": [
+  "/ATF/@AV (44→A4 on every save in the test session)",
+  "/ATF/@VM, @VCO, @JPT, @IOR, @IGL, @IGM, @FV, @TM, @ICT",
+  "Route AOM=25",
+  "DCM DC/SW i=1,209-211/V",
+  "ABP LF, LT, HT, RT, SWIN1, SWOUT1/2",
+  "MCV2 DLC_*, URC*, IPRIO*, IDEPSETUP*, ADEP, TONT, TOFFT, ROS, ANS, DIN, IMODE, PM",
+  "ATFCOND AV, ACV; GLB LO, STO, BTO, TCAC",
+  "OC DG, GD, EqBy, CE, Finit (single values only)"
+ ],
+ "rules": [
+  {
+   "id": "R01",
+   "xml_path": "/ATF/OC[@ON='14']/T[1]/@T",
+   "raw": "0",
+   "meaning": "output A (free) delay",
+   "conversion": "ms = T / 96 (samples at 96 kHz; UI rounds to 0.01 ms)",
+   "confidence": "confirmed",
+   "reference_value": null,
+   "reference_unit": "ms",
+   "supporting_examples": [
+    "0/96 = 0.0000 ms"
+   ],
+   "contradictions": []
+  },
+  {
+   "id": "R02",
+   "xml_path": "/ATF/OC[@ON='14']/Vol[1]/@L",
+   "raw": "1",
+   "meaning": "output A (free) channel gain",
+   "conversion": "dB = 20*log10(L)",
+   "confidence": "confirmed",
+   "reference_value": null,
+   "reference_unit": "dB",
+   "supporting_examples": [
+    "0.00 dB"
+   ],
+   "contradictions": []
+  },
+  {
+   "id": "R03",
+   "xml_path": "/ATF/OC[@ON='15']/T[1]/@T",
+   "raw": "240",
+   "meaning": "output B (c) delay",
+   "conversion": "ms = T / 96 (samples at 96 kHz; UI rounds to 0.01 ms)",
+   "confidence": "confirmed",
+   "reference_value": 2.5,
+   "reference_unit": "ms",
+   "supporting_examples": [
+    "240/96 = 2.5000 ms"
+   ],
+   "contradictions": []
+  },
+  {
+   "id": "R04",
+   "xml_path": "/ATF/OC[@ON='15']/Vol[1]/@L",
+   "raw": "0.3758374042884442",
+   "meaning": "output B (c) channel gain",
+   "conversion": "dB = 20*log10(L)",
+   "confidence": "confirmed",
+   "reference_value": -8.5,
+   "reference_unit": "dB",
+   "supporting_examples": [
+    "-8.50 dB"
+   ],
+   "contradictions": []
+  },
+  {
+   "id": "R05",
+   "xml_path": "/ATF/OC[@ON='16']/T[1]/@T",
+   "raw": "444",
+   "meaning": "output C (w-L) delay",
+   "conversion": "ms = T / 96 (samples at 96 kHz; UI rounds to 0.01 ms)",
+   "confidence": "confirmed",
+   "reference_value": 4.63,
+   "reference_unit": "ms",
+   "supporting_examples": [
+    "444/96 = 4.6250 ms"
+   ],
+   "contradictions": []
+  },
+  {
+   "id": "R06",
+   "xml_path": "/ATF/OC[@ON='16']/Vol[1]/@L",
+   "raw": "0.9660508789898133",
+   "meaning": "output C (w-L) channel gain",
+   "conversion": "dB = 20*log10(L)",
+   "confidence": "confirmed",
+   "reference_value": -0.3,
+   "reference_unit": "dB",
+   "supporting_examples": [
+    "-0.30 dB"
+   ],
+   "contradictions": []
+  },
+  {
+   "id": "R07",
+   "xml_path": "/ATF/OC[@ON='17']/T[1]/@T",
+   "raw": "341",
+   "meaning": "output D (w-R) delay",
+   "conversion": "ms = T / 96 (samples at 96 kHz; UI rounds to 0.01 ms)",
+   "confidence": "confirmed",
+   "reference_value": 3.55,
+   "reference_unit": "ms",
+   "supporting_examples": [
+    "341/96 = 3.5521 ms"
+   ],
+   "contradictions": []
+  },
+  {
+   "id": "R08",
+   "xml_path": "/ATF/OC[@ON='17']/Vol[1]/@L",
+   "raw": "1.071519305237606",
+   "meaning": "output D (w-R) channel gain",
+   "conversion": "dB = 20*log10(L)",
+   "confidence": "confirmed",
+   "reference_value": 0.6,
+   "reference_unit": "dB",
+   "supporting_examples": [
+    "0.60 dB"
+   ],
+   "contradictions": []
+  },
+  {
+   "id": "R09",
+   "xml_path": "/ATF/OC[@ON='18']/T[1]/@T",
+   "raw": "454",
+   "meaning": "output E (m-L) delay",
+   "conversion": "ms = T / 96 (samples at 96 kHz; UI rounds to 0.01 ms)",
+   "confidence": "confirmed",
+   "reference_value": 4.73,
+   "reference_unit": "ms",
+   "supporting_examples": [
+    "454/96 = 4.7292 ms"
+   ],
+   "contradictions": []
+  },
+  {
+   "id": "R10",
+   "xml_path": "/ATF/OC[@ON='18']/Vol[1]/@L",
+   "raw": "0.6683439175686147",
+   "meaning": "output E (m-L) channel gain",
+   "conversion": "dB = 20*log10(L)",
+   "confidence": "confirmed",
+   "reference_value": -3.5,
+   "reference_unit": "dB",
+   "supporting_examples": [
+    "-3.50 dB"
+   ],
+   "contradictions": []
+  },
+  {
+   "id": "R11",
+   "xml_path": "/ATF/OC[@ON='19']/T[1]/@T",
+   "raw": "316",
+   "meaning": "output F (m-R) delay",
+   "conversion": "ms = T / 96 (samples at 96 kHz; UI rounds to 0.01 ms)",
+   "confidence": "confirmed",
+   "reference_value": 3.29,
+   "reference_unit": "ms",
+   "supporting_examples": [
+    "316/96 = 3.2917 ms"
+   ],
+   "contradictions": []
+  },
+  {
+   "id": "R12",
+   "xml_path": "/ATF/OC[@ON='19']/Vol[1]/@L",
+   "raw": "1.109174815262401",
+   "meaning": "output F (m-R) channel gain",
+   "conversion": "dB = 20*log10(L)",
+   "confidence": "confirmed",
+   "reference_value": 0.9,
+   "reference_unit": "dB",
+   "supporting_examples": [
+    "0.90 dB"
+   ],
+   "contradictions": []
+  },
+  {
+   "id": "R13",
+   "xml_path": "/ATF/OC[@ON='20']/T[1]/@T",
+   "raw": "454",
+   "meaning": "output G (tw-L) delay",
+   "conversion": "ms = T / 96 (samples at 96 kHz; UI rounds to 0.01 ms)",
+   "confidence": "confirmed",
+   "reference_value": 4.73,
+   "reference_unit": "ms",
+   "supporting_examples": [
+    "454/96 = 4.7292 ms"
+   ],
+   "contradictions": []
+  },
+  {
+   "id": "R14",
+   "xml_path": "/ATF/OC[@ON='20']/Vol[1]/@L",
+   "raw": "0.5128613839913648",
+   "meaning": "output G (tw-L) channel gain",
+   "conversion": "dB = 20*log10(L)",
+   "confidence": "confirmed",
+   "reference_value": -5.8,
+   "reference_unit": "dB",
+   "supporting_examples": [
+    "-5.80 dB"
+   ],
+   "contradictions": []
+  },
+  {
+   "id": "R15",
+   "xml_path": "/ATF/OC[@ON='21']/T[1]/@T",
+   "raw": "316",
+   "meaning": "output H (tw-R) delay",
+   "conversion": "ms = T / 96 (samples at 96 kHz; UI rounds to 0.01 ms)",
+   "confidence": "confirmed",
+   "reference_value": 3.29,
+   "reference_unit": "ms",
+   "supporting_examples": [
+    "316/96 = 3.2917 ms"
+   ],
+   "contradictions": []
+  },
+  {
+   "id": "R16",
+   "xml_path": "/ATF/OC[@ON='21']/Vol[1]/@L",
+   "raw": "0.6165950018614821",
+   "meaning": "output H (tw-R) channel gain",
+   "conversion": "dB = 20*log10(L)",
+   "confidence": "confirmed",
+   "reference_value": -4.2,
+   "reference_unit": "dB",
+   "supporting_examples": [
+    "-4.20 dB"
+   ],
+   "contradictions": []
+  },
+  {
+   "id": "R17",
+   "xml_path": "/ATF/OC[@ON='22']/T[1]/@T",
+   "raw": "1512",
+   "meaning": "output I (r-L) delay",
+   "conversion": "ms = T / 96 (samples at 96 kHz; UI rounds to 0.01 ms)",
+   "confidence": "confirmed",
+   "reference_value": 15.75,
+   "reference_unit": "ms",
+   "supporting_examples": [
+    "1512/96 = 15.7500 ms"
+   ],
+   "contradictions": []
+  },
+  {
+   "id": "R18",
+   "xml_path": "/ATF/OC[@ON='22']/Vol[1]/@L",
+   "raw": "1.333521432163324",
+   "meaning": "output I (r-L) channel gain",
+   "conversion": "dB = 20*log10(L)",
+   "confidence": "confirmed",
+   "reference_value": 2.5,
+   "reference_unit": "dB",
+   "supporting_examples": [
+    "2.50 dB"
+   ],
+   "contradictions": []
+  },
+  {
+   "id": "R19",
+   "xml_path": "/ATF/OC[@ON='23']/T[1]/@T",
+   "raw": "1344",
+   "meaning": "output J (r-R) delay",
+   "conversion": "ms = T / 96 (samples at 96 kHz; UI rounds to 0.01 ms)",
+   "confidence": "confirmed",
+   "reference_value": 14.0,
+   "reference_unit": "ms",
+   "supporting_examples": [
+    "1344/96 = 14.0000 ms"
+   ],
+   "contradictions": []
+  },
+  {
+   "id": "R20",
+   "xml_path": "/ATF/OC[@ON='23']/Vol[1]/@L",
+   "raw": "1.412537544622754",
+   "meaning": "output J (r-R) channel gain",
+   "conversion": "dB = 20*log10(L)",
+   "confidence": "confirmed",
+   "reference_value": 3.0,
+   "reference_unit": "dB",
+   "supporting_examples": [
+    "3.00 dB"
+   ],
+   "contradictions": []
+  },
+  {
+   "id": "R21",
+   "xml_path": "/ATF/OC[@ON='24']/T[1]/@T",
+   "raw": "0",
+   "meaning": "output K (sw) delay",
+   "conversion": "ms = T / 96 (samples at 96 kHz; UI rounds to 0.01 ms)",
+   "confidence": "confirmed",
+   "reference_value": 0.0,
+   "reference_unit": "ms",
+   "supporting_examples": [
+    "0/96 = 0.0000 ms"
+   ],
+   "contradictions": []
+  },
+  {
+   "id": "R22",
+   "xml_path": "/ATF/OC[@ON='24']/Vol[1]/@L",
+   "raw": "0.4731512589614805",
+   "meaning": "output K (sw) channel gain",
+   "conversion": "dB = 20*log10(L)",
+   "confidence": "confirmed",
+   "reference_value": -6.5,
+   "reference_unit": "dB",
+   "supporting_examples": [
+    "-6.50 dB"
+   ],
+   "contradictions": []
+  },
+  {
+   "id": "R23",
+   "xml_path": "/ATF/OC[@ON='25']/T[1]/@T",
+   "raw": "0",
+   "meaning": "output L (free) delay",
+   "conversion": "ms = T / 96 (samples at 96 kHz; UI rounds to 0.01 ms)",
+   "confidence": "confirmed",
+   "reference_value": null,
+   "reference_unit": "ms",
+   "supporting_examples": [
+    "0/96 = 0.0000 ms"
+   ],
+   "contradictions": []
+  },
+  {
+   "id": "R24",
+   "xml_path": "/ATF/OC[@ON='25']/Vol[1]/@L",
+   "raw": "1",
+   "meaning": "output L (free) channel gain",
+   "conversion": "dB = 20*log10(L)",
+   "confidence": "confirmed",
+   "reference_value": null,
+   "reference_unit": "dB",
+   "supporting_examples": [
+    "0.00 dB"
+   ],
+   "contradictions": []
+  },
+  {
+   "id": "R25",
+   "xml_path": "/ATF/OC/T[1]/@T",
+   "raw": "444,341,454,316,1512,1344,240 (Oct); 416,293,326,204,239,120 (Jul)",
+   "meaning": "channel delay",
+   "conversion": "ms = T/96",
+   "confidence": "confirmed",
+   "reference_value": "4.63,3.55,4.73,3.29,15.75,14.00,2.50; 4.33,3.05,3.40,2.13,2.49,1.25",
+   "reference_unit": "ms",
+   "supporting_examples": [
+    "13 channels in two files; max 20.82 ms ~ 1999 samples"
+   ],
+   "contradictions": []
+  },
+  {
+   "id": "R26",
+   "xml_path": "/ATF/OC/T[1]/@P",
+   "raw": "0; 90 (T2); 50.625, 56.25 (t7)",
+   "meaning": "phase",
+   "conversion": "as is; UI step 5.625° = 180/32",
+   "confidence": "confirmed",
+   "reference_value": "0°, 90°, 50.625°, 56.25°, 45°, 39.375°, 33.75°",
+   "reference_unit": "deg",
+   "supporting_examples": [
+    "user stepped the slider 56.25→50.625→45→39.375→33.75"
+   ],
+   "contradictions": []
+  },
+  {
+   "id": "R27",
+   "xml_path": "/ATF/OC/T[1]/@PM",
+   "raw": "1 | 2",
+   "meaning": "phase control available on this channel (set by channel type in routing)",
+   "conversion": "1 = polarity only, 2 = phase 0..180° adjustable",
+   "confidence": "confirmed",
+   "reference_value": null,
+   "reference_unit": null,
+   "supporting_examples": [
+    "PM=2 on m, tw, sw, Virtual K; C (w-L, PM=1) has no phase control (user)",
+    "t7: Output A type → R Subwoofer flips PM 1→2"
+   ],
+   "contradictions": []
+  },
+  {
+   "id": "R28",
+   "xml_path": "/ATF/OC/@CINV",
+   "raw": "0 | 1",
+   "meaning": "polarity",
+   "conversion": "1 = INV, 0 = NORM",
+   "confidence": "confirmed",
+   "reference_value": null,
+   "reference_unit": null,
+   "supporting_examples": [
+    "July m-L/m-R/tw-L/tw-R CINV=1 = ledger INV",
+    "Oct all 0 = front NORM; rear screen 'Polarity normal'"
+   ],
+   "contradictions": []
+  },
+  {
+   "id": "R29",
+   "xml_path": "/ATF/OC/@MT",
+   "raw": "0 | 1",
+   "meaning": "output mute",
+   "conversion": "0 = Mute ON, 1 = playing",
+   "confidence": "confirmed",
+   "reference_value": null,
+   "reference_unit": null,
+   "supporting_examples": [
+    "T1: Mute on C → ON=16 MT 1→0",
+    "rear I/J MT=0, Mute lit on screen"
+   ],
+   "contradictions": []
+  },
+  {
+   "id": "R30",
+   "xml_path": "/ATF/OC/@LG",
+   "raw": "per-channel integers",
+   "meaning": "PC-Tool UI selection/link state (order of selecting channels; linked channels share a value)",
+   "conversion": null,
+   "confidence": "assumption",
+   "reference_value": null,
+   "reference_unit": null,
+   "supporting_examples": [
+    "changes on every save with no audio change; T4 link C+D → both 14"
+   ],
+   "contradictions": [
+    "not an audio link group"
+   ]
+  },
+  {
+   "id": "R31",
+   "xml_path": "/ATF/OC/Fil[HPi+1] | Fil[LPi+1] /@T",
+   "raw": "9,10,15,16",
+   "meaning": "crossover family",
+   "conversion": "15 LR LP, 16 LR HP, 9 BW LP, 10 BW HP (documented, not calibrated: 11/12 BE, 13/14 Tscheb., 7/8 self-defined)",
+   "confidence": "confirmed",
+   "reference_value": null,
+   "reference_unit": null,
+   "supporting_examples": [
+    "Oct LR24/BW24, July LR12/BW24/BW36"
+   ],
+   "contradictions": []
+  },
+  {
+   "id": "R32",
+   "xml_path": "/ATF/OC/Fil[HPi+1] | Fil[LPi+1] /@G",
+   "raw": "-12,-24,-36,0",
+   "meaning": "crossover slope",
+   "conversion": "slope = -G; G=0 = OFF",
+   "confidence": "confirmed",
+   "reference_value": null,
+   "reference_unit": "dB/oct",
+   "supporting_examples": [],
+   "contradictions": []
+  },
+  {
+   "id": "R33",
+   "xml_path": "/ATF/OC/Fil[1..30]/@T",
+   "raw": "1,3,4,17,19,20",
+   "meaning": "EQ band type",
+   "conversion": "1 Fine EQ (fixed ISO freq, Q 4.3; neutral when G=0), 3 Low Shelf, 4 High Shelf, 17 Parametric, 19 All-pass 1st order (Q stored, N/A), 20 All-pass 2nd order",
+   "confidence": "confirmed",
+   "reference_value": null,
+   "reference_unit": null,
+   "supporting_examples": [
+    ">60 bands match v_012",
+    "T5-APF: 2nd order → 20; T5-APF2: 1st order → 19; t7: Fine EQ −1 dB keeps T=1"
+   ],
+   "contradictions": []
+  },
+  {
+   "id": "R34",
+   "xml_path": "/ATF/OC/Fil/@F, @G, @Q",
+   "raw": "e.g. 2357.00 / -5.4 / 3",
+   "meaning": "EQ frequency / gain / Q",
+   "conversion": "as is",
+   "confidence": "confirmed",
+   "reference_value": null,
+   "reference_unit": "Hz / dB / -",
+   "supporting_examples": [
+    "shelf Q stored 0.7 or 0.707, ledger 0.71 (rounding)"
+   ],
+   "contradictions": []
+  },
+  {
+   "id": "R35",
+   "xml_path": "/ATF/OC/Fil/@FilBy",
+   "raw": "0 | 1",
+   "meaning": "band bypass",
+   "conversion": "1 = bypass",
+   "confidence": "confirmed",
+   "reference_value": null,
+   "reference_unit": null,
+   "supporting_examples": [
+    "c 1-4, sw 2,4, m-R 3,6,8, w-R 6; VFL/VFR 1 screen Bypass lit"
+   ],
+   "contradictions": []
+  },
+  {
+   "id": "R36",
+   "xml_path": "/ATF/OC/Fil/@FilBBR",
+   "raw": "= FilBy",
+   "meaning": "copy of bypass state",
+   "conversion": null,
+   "confidence": "assumption",
+   "reference_value": null,
+   "reference_unit": null,
+   "supporting_examples": [],
+   "contradictions": []
+  },
+  {
+   "id": "R37",
+   "xml_path": "/ATF/OC/Fil/@I",
+   "raw": "0 | 1",
+   "meaning": "all-pass invert",
+   "conversion": "1 = invert ON",
+   "confidence": "confirmed",
+   "reference_value": null,
+   "reference_unit": null,
+   "supporting_examples": [
+    "T6 band 4 invert → I=1; band 9 not inverted → 0 (screen)",
+    "I=1 on Fine-EQ band 30 of ON 16/18/24 is an inert leftover"
+   ],
+   "contradictions": []
+  },
+  {
+   "id": "R38",
+   "xml_path": "/ATF/OC/CHS",
+   "raw": "LATERAL, LONG, PB, IDX",
+   "meaning": "channel role label",
+   "conversion": "LATERAL 0 L / 1 C / 2 R; LONG 0 front / 1 side(?) / 2 rear; PB 0 sub / 1 low / 2 mid / 3 high",
+   "confidence": "confirmed",
+   "reference_value": null,
+   "reference_unit": null,
+   "supporting_examples": [
+    "t7: 'R Subwoofer' → LATERAL=2 PB=0"
+   ],
+   "contradictions": []
+  },
+  {
+   "id": "R39",
+   "xml_path": "/ATF/OC/@CN",
+   "raw": "int",
+   "meaning": "legacy channel code",
+   "conversion": "7/8 w, 5/6 m, 3/4 tw, 9 c, 13/14 rear, 25 sub, 1/2 virtual front, 38 R Subwoofer",
+   "confidence": "assumption",
+   "reference_value": null,
+   "reference_unit": null,
+   "supporting_examples": [],
+   "contradictions": []
+  },
+  {
+   "id": "R40",
+   "xml_path": "/ATF/Route/R[@AOM]",
+   "raw": "1,5,9,31,25",
+   "meaning": "routing matrix",
+   "conversion": "AOM=1 Main→Virtual, 5 HEC/AUX→Virtual, 9 Digital→Virtual, 31 Virtual→Output; G[n], n = out*INS + in, linear",
+   "confidence": "confirmed",
+   "reference_value": null,
+   "reference_unit": null,
+   "supporting_examples": [
+    "AOM=31 reproduces VFL→C,E,G / VFR→D,F,H / VC→B / VRL→I / VRR→J / VSW→K",
+    "T8 master volumes: R[1]/R[2]/R[3] OFFS = +5/+4/+3 dB"
+   ],
+   "contradictions": [
+    "AOM=25 (OC12/13 → 2 outputs) unknown"
+   ]
+  },
+  {
+   "id": "R41",
+   "xml_path": "/ATF/Route/R/@OFFS",
+   "raw": "1",
+   "meaning": "source level (Master Volume per source)",
+   "conversion": "dB = 20*log10(OFFS)",
+   "confidence": "confirmed",
+   "reference_value": 0,
+   "reference_unit": "dB",
+   "supporting_examples": [],
+   "contradictions": []
+  },
+  {
+   "id": "R42",
+   "xml_path": "/ATF/STX/@CMOD",
+   "raw": "1",
+   "meaning": "RealCenter (FX → Center Processing, Virtual E)",
+   "conversion": "1 = enabled",
+   "confidence": "confirmed",
+   "reference_value": "Enabled",
+   "reference_unit": null,
+   "supporting_examples": [],
+   "contradictions": []
+  },
+  {
+   "id": "R43",
+   "xml_path": "/ATF/ABP/@SWBP",
+   "raw": "1",
+   "meaning": "Dynamic Bass Enhancement",
+   "conversion": "1 = disabled (inverted)",
+   "confidence": "confirmed",
+   "reference_value": "Disabled",
+   "reference_unit": null,
+   "supporting_examples": [],
+   "contradictions": []
+  },
+  {
+   "id": "R44",
+   "xml_path": "/ATF/ABP/@SWS",
+   "raw": "1",
+   "meaning": "SubXpander",
+   "conversion": "1 = disabled (inverted)",
+   "confidence": "confirmed",
+   "reference_value": "Disabled",
+   "reference_unit": null,
+   "supporting_examples": [],
+   "contradictions": []
+  },
+  {
+   "id": "R45",
+   "xml_path": "/ATF/ABP/@BF1, @BF2",
+   "raw": "0.001308996938995747",
+   "meaning": "Dynamic Boost frequency",
+   "conversion": "f = BF*96000/(2*pi)",
+   "confidence": "assumption",
+   "reference_value": 20,
+   "reference_unit": "Hz",
+   "supporting_examples": [
+    "exact to 15 digits, one point only"
+   ],
+   "contradictions": []
+  },
+  {
+   "id": "R46",
+   "xml_path": "/ATF/ABP/@B, @AM",
+   "raw": "0, 0",
+   "meaning": "Dynamic Boost gain / automatic frequency adjustment",
+   "conversion": null,
+   "confidence": "assumption",
+   "reference_value": "0 dB / off",
+   "reference_unit": null,
+   "supporting_examples": [],
+   "contradictions": []
+  },
+  {
+   "id": "R47",
+   "xml_path": "/ATF/MCV2/@RTC_EN",
+   "raw": "0",
+   "meaning": "Remote Tone Control",
+   "conversion": "1 = enabled",
+   "confidence": "confirmed",
+   "reference_value": "Disabled",
+   "reference_unit": null,
+   "supporting_examples": [],
+   "contradictions": []
+  },
+  {
+   "id": "R48",
+   "xml_path": "/ATF/MCV2/@RTC_{GSTART,GSTOP,VSTART,VSTOP,FSTART,FSTOP}{0,1}",
+   "raw": "120,-30,-400,-90,150,150 / 80,-20,-400,-80,10000,10000",
+   "meaning": "RTC: gain low vol, gain high vol, threshold low vol, threshold high vol, frequency; 0=LF, 1=HF",
+   "conversion": "dB = raw/10; Hz as is",
+   "confidence": "confirmed",
+   "reference_value": "12,-3,-40,-9,150 / 8,-2,-40,-8,10000",
+   "reference_unit": "0.1 dB / Hz",
+   "supporting_examples": [
+    "10 values match the screen"
+   ],
+   "contradictions": [
+    "FSTART=FSTOP; UI shows one frequency"
+   ]
+  },
+  {
+   "id": "R49",
+   "xml_path": "/ATF/MCV2/@DLC_*",
+   "raw": "EN 0, G 0/0, V -500/-100, F 100/5000",
+   "meaning": "DLC (by analogy with RTC)",
+   "conversion": null,
+   "confidence": "unknown",
+   "reference_value": null,
+   "reference_unit": "0.1 dB / Hz",
+   "supporting_examples": [],
+   "contradictions": []
+  },
+  {
+   "id": "R50",
+   "xml_path": "/ATF/MCV2/@IMASK",
+   "raw": "5",
+   "meaning": "input mask; bit 4 = BT auto-switch",
+   "conversion": "bitmask",
+   "confidence": "confirmed",
+   "reference_value": null,
+   "reference_unit": null,
+   "supporting_examples": [
+    "5→1 when BT auto-switch off"
+   ],
+   "contradictions": [
+    "bit 1 unknown"
+   ]
+  },
+  {
+   "id": "R51",
+   "xml_path": "/ATF/DCM/SW[@i='0']/@A",
+   "raw": "1",
+   "meaning": "BT vs AUX",
+   "conversion": "1 = BT, 0 = AUX",
+   "confidence": "confirmed",
+   "reference_value": null,
+   "reference_unit": null,
+   "supporting_examples": [],
+   "contradictions": []
+  },
+  {
+   "id": "R52",
+   "xml_path": "/ATF/ATFCOND/GLB/@TCEN",
+   "raw": "0",
+   "meaning": "CONDUCTOR: Activate Tone Control menu",
+   "conversion": "1 = on",
+   "confidence": "confirmed",
+   "reference_value": "off",
+   "reference_unit": null,
+   "supporting_examples": [],
+   "contradictions": []
+  },
+  {
+   "id": "R53",
+   "xml_path": "/ATF/ATFCOND/TC[@TCN]/@TCF",
+   "raw": "300, 20000",
+   "meaning": "Tone Control low / high frequency",
+   "conversion": "as is",
+   "confidence": "confirmed",
+   "reference_value": "300, 20000",
+   "reference_unit": "Hz",
+   "supporting_examples": [],
+   "contradictions": []
+  },
+  {
+   "id": "R54",
+   "xml_path": "/ATF/ATFCOND/GLB/@MB, @DB, @MTO",
+   "raw": "102, 25, 5000",
+   "meaning": "CONDUCTOR LED brightness / LED dimming / auto switch back",
+   "conversion": "MB/255; DB %; MTO ms",
+   "confidence": "confirmed",
+   "reference_value": "40%, 25%, 5 s",
+   "reference_unit": null,
+   "supporting_examples": [],
+   "contradictions": []
+  },
+  {
+   "id": "R55",
+   "xml_path": "/ATF/ATFCOND/GLB/@SE, @IE, @PE, @MD",
+   "raw": "1, 0, 0, 1",
+   "meaning": "CONDUCTOR menus: sound setup / input / BT playback / main menu",
+   "conversion": null,
+   "confidence": "assumption",
+   "reference_value": "on, off, off, Volume Control",
+   "reference_unit": null,
+   "supporting_examples": [],
+   "contradictions": []
+  },
+  {
+   "id": "R56",
+   "xml_path": "/ATF/ATFCOND/VOL[@VN]",
+   "raw": "SEL,R,G,B,RNG,STP,BV",
+   "meaning": "CONDUCTOR Volume 1..4",
+   "conversion": "VN=index-1; SEL 0 Master, 1 Sub, 5 Rear Att., 255 none; colour R,G,B; range = RNG/10 dB; step = RNG/STP/10 dB",
+   "confidence": "confirmed",
+   "reference_value": "V1 Master white 60/1 dB; V2 Sub red 24/0.5; V3 Rear Att. blue 12/0.5; V4 none",
+   "reference_unit": null,
+   "supporting_examples": [],
+   "contradictions": [
+    "BV startup 'Disabled' = -601 (V1,V2) but -600 (V3); unproven"
+   ]
+  },
+  {
+   "id": "R57",
+   "xml_path": "/ATF/ATFCOND/@CV",
+   "raw": "7",
+   "meaning": "CONDUCTOR protocol version",
+   "conversion": null,
+   "confidence": "confirmed",
+   "reference_value": 7,
+   "reference_unit": null,
+   "supporting_examples": [],
+   "contradictions": []
+  }
+ ],
+ "provenance_sha256": "6282342f8d679c442c402aba55553a0f06788766d03b3da56f279d44471b8ad4"
+}

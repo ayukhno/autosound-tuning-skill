@@ -18,6 +18,9 @@
 **/rew_analitic/
 *.mdat
 *.pct6
+# ...except the .pct6 reader's fixture folder (#218): a file saved by PC-Tool, shipped byte for byte for
+# rew_tool/helix_pct6's tests. Only this folder; a .pct6 anywhere else stays ignored.
+!skills/autosound-tuning/rew_tool/testdata/helix-pct6/*.pct6
 .gstack/
 
 # Python bytecode cache — machine- and interpreter-version specific, regenerated
