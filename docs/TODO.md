@@ -1659,7 +1659,7 @@ possible; it joins this wave (the Arbiter: «У цю хвилю», 2026-11-21). 
 
 ## S-131 · Read `.pct6` in the skill: take research's `helix_pct6`, a comparison verb, never writes (hub #344 RES-025)
 
-**Status**: open 2026-11-21 · T1 built `0123561` (the intake; the task review's two findings fixed in it, the fix's re-review running); T2 (compare-file, the contract) with its implementer · open 2026-11-21 · on milestone `W-13 · v3.3.2` as #218, `ok` (the Arbiter: «Усі шість», 2026-11-21) · was: W-13's pool, order 3 of 5; recorded, not diagnosed
+**Status**: open 2026-11-21 · T1 built `0123561` + `380a4bf` (reviewed, fixed, re-reviewed); T2 built `974bdf1` (`compare-file`, CONTRACT.md item 13; the review's five findings fixed, the fix's re-review running; virtual letters = PC-Tool's ordinal among shown channels, the reader's own labels are index letters); T3 (`attest`/`propose --from-file`) with its implementer · open 2026-11-21 · on milestone `W-13 · v3.3.2` as #218, `ok` (the Arbiter: «Усі шість», 2026-11-21) · was: W-13's pool, order 3 of 5; recorded, not diagnosed
 
 The core of the wave. It sets the comparison's JSON shape in `CONTRACT.md` (S-133 needs it) and the pattern of one
 library per vendor with a never-writes test (S-132 repeats it). Ask 6 is decided: `AYA.pct6` ships byte for byte
