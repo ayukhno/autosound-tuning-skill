@@ -1627,6 +1627,24 @@ S-062, S-064 (with TCC's half, hub #217 SKL-056), S-065, S-066. When he says to 
 four assessment lines, and nothing is built before his `ok` on that task. Resume: `hub/bin/role skill --resume
 6b9c70d1-4094-4337-a1fd-23976307dfc2`.
 
+## S-137 · Found while building v3.3.3: left for the next wave
+
+**Status**: open 2026-11-22 · the next wave's pool; recorded, not diagnosed · from the v3.3.3 implementers and seats
+
+1. `attest` refuses a `source_file` on a version with no other preset setting (a 3.2 copy would read the field alone as
+   a tier). A Mosconi version's only preset setting is `input_gain_db`, so most Mosconi versions cannot be attested from
+   their file, and TCC's «checked in the DSP» mark (hub #348) stays off for them; a `.pct6` version with no setting
+   likewise. A home for the record that an older copy does not misread.
+2. The settings sheet says "APPLY THIS in Helix PC-Tool" on every `propose` for a Mosconi project.
+3. compare-file's text output prints "saved None" in its header for a `.PR15`; the sheet shows "None → False" for a
+   field the base left unset.
+4. `helix_pct6/__main__.py` keeps its own `_SHORT` table: the reader's own output still spells `CH` / `SD`.
+5. A Helix model the reader does not know has no layout, yet its preset rows are compared on the Ultra S's paths under
+   the read-at-your-own-risk warning (the V EIGHT's are `unknown` since v3.3.3).
+6. The V EIGHT: its routing labels are not read (the 14×14 matrix's columns not checked); two routing codes (AOM 25,
+   32) not decoded; its mute inversion, crossover and EQ codes are taken from the Ultra S and only consistent with the
+   demo file's defaults.
+
 ## S-136 · W-13's final review: four things after the tag v3.3.2
 
 **Status**: open 2026-11-21 · in the patch v3.3.3 (the Arbiter's decision, 2026-11-21; `docs/PLAN-v3.3.3.md`), branch `patch-2026-11-21` · was: open 2026-11-21 · the next wave's pool; recorded, not diagnosed · from the final branch review on Fable
