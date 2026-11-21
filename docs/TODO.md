@@ -1627,6 +1627,47 @@ S-062, S-064 (with TCC's half, hub #217 SKL-056), S-065, S-066. When he says to 
 four assessment lines, and nothing is built before his `ok` on that task. Resume: `hub/bin/role skill --resume
 6b9c70d1-4094-4337-a1fd-23976307dfc2`.
 
+## S-133 · TCC's «Перевірити налаштування» button: pass it on to TCC once the reader is released (hub #346 RES-027)
+
+**Status**: open 2026-11-21 · W-13's pool, order 5 of 5; recorded, not diagnosed; the Arbiter's «так» to the order
+
+The build is TCC's (`dsp_check.py`, the DSP row); readdressed to us because the skill owns the contract with TCC.
+Ours: a `to:tcc` ticket carrying the comparison's JSON shape from `CONTRACT.md`, sent only after S-131 is in a
+released skill (its `depends_on` is required). Resume: `hub/bin/role skill --resume 4cf06299-0cbf-40a3-bff9-923f6750b75e`.
+
+## S-132 · Mosconi PICO 6/8-2: a selectable profile and the Mosconi / Gladen filter model (hub #345 RES-026, skill #214)
+
+**Status**: open 2026-11-21 · W-13's pool, order 4 of 5; recorded, not diagnosed
+
+The profile does not depend on anything and could go earlier, since the contributor of #214 is waiting. The filter
+library follows S-131's pattern: one library per vendor, no write path. The intake is the Arbiter's (hub #345 comments):
+our own texts built from his values, credit to Widar1979 with a link to #214, licence granted, the sample `.PR15`
+ships byte for byte. With the offsets and the sample in, the read-only preset reader (ask 3, "later") is now
+possible; whether it joins this wave is the milestone's call. Resume: `hub/bin/role skill --resume 4cf06299-0cbf-40a3-bff9-923f6750b75e`.
+
+## S-131 · Read `.pct6` in the skill: take research's `helix_pct6`, a comparison verb, never writes (hub #344 RES-025)
+
+**Status**: open 2026-11-21 · W-13's pool, order 3 of 5; recorded, not diagnosed
+
+The core of the wave. It sets the comparison's JSON shape in `CONTRACT.md` (S-133 needs it) and the pattern of one
+library per vendor with a never-writes test (S-132 repeats it). Ask 6 is decided: `AYA.pct6` ships byte for byte
+(hub #344 comment). `Risk: high` (the method/TCC seam, the never-writes guarantee). Resume: `hub/bin/role skill --resume 4cf06299-0cbf-40a3-bff9-923f6750b75e`.
+
+## S-130 · Dead links to the deleted `ayukhno/autosound-measurements` (hub #342 RES-023)
+
+**Status**: open 2026-11-21 · W-13's pool, order 2 of 5; recorded, not diagnosed
+
+Text only: `LICENSES/NOTICE.md`, `testdata/helix-bench/README.md`, `docs/changelog/` archive. `NOTICE.md` is edited
+once, together with S-132's credit. CI: none of its own. Resume: `hub/bin/role skill --resume 4cf06299-0cbf-40a3-bff9-923f6750b75e`.
+
+## S-129 · The candidate gate checks the wave's pool; «LAST candidate» rewording; main runs finish; hub rules by link (hub #338 asks 1–2)
+
+**Status**: open 2026-11-21 · W-13's pool, order 1 of 5; recorded, not diagnosed; first because it guards this wave's own candidate
+
+Asks 1 and 2 of hub #338 (ask 3 is S-128, done), plus the two lines from its comments: `cancel-in-progress` off on
+`main` in `checks.yml`, and links to the hub's rules instead of copies in `CLAUDE.md`, `checks.yml`, `tag-check.sh`.
+Touches nothing the other items touch. `Risk: high` (the release gate): a test first. Resume: `hub/bin/role skill --resume 4cf06299-0cbf-40a3-bff9-923f6750b75e`.
+
 ## S-128 · Docs-only pushes to main run no `checks` (hub #338, ask 3)
 
 **Status**: done 2026-11-10 · PR #212, `2c91b36` on `main` · on the Arbiter's word "urgent"; asks 1 and 2 of hub #338 wait for W-13's milestone
