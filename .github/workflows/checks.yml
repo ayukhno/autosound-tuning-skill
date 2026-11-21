@@ -11,20 +11,21 @@ name: checks
 
 # Once per wave (hub governance/WAVES.md, HUB-065). The full run is the PULL REQUEST's. A push to main
 # first asks whether a green pull-request run of this workflow exists on the same commit: yes -- the
-# heavy jobs are skipped and the run still ends `success`, which is what the hub's release gate
-# reads; no -- a merge without a PR, or GitHub's button making a new commit -- they run here. A work
+# heavy jobs are skipped and the run still ends `success`; no -- a merge without a PR, or GitHub's
+# button making a new commit -- they run here. Which run the hub's release gate counts is the hub's
+# rule, not this file's: hub governance/RELEASE-CHANNEL.md §9.9.1. A work
 # branch runs nothing on push; `workflow_dispatch` runs it by hand, for a change that touches Windows
 # or the installers. 149 runs from 8 to 14.09 are what this replaces.
 #
 # A push to main that touches only the paths below runs nothing (hub #338, ask 3): 51 of the 60 latest
-# push runs were docs-only and ran in full. The hub's release gate rests such a commit on its nearest
-# green ancestor. Listed is only what no check here reads -- traced on 2026-11-10 with an open() audit
+# push runs were docs-only and ran in full. How the hub's gate treats such a commit is its own
+# (RELEASE-CHANNEL.md §9.9, `ci-green` in hub scripts/release-preflight.py). Listed is only what no check here reads -- traced on 2026-11-10 with an open() audit
 # hook over every in-tree check the runner starts: the plans, ledgers and research in docs/, the
 # community inbox, promotion, the root's images, and four root pages. NOT listed, because a check reads
 # them: README* and FAQ* (installer-consistency, i18n-check, docs-check), ADVANCED.md and CHANGELOG.md
 # (docs-check), docs/changelog/ (changelog-fresh), everything under skills/ and commands/ (it ships).
 # secret-scan reads the whole tree; for these paths the pre-commit hook it installs holds that line.
-# Plain globs only: the hub's gate reads this list and refuses a pattern with ! [ { ? or +.
+# Plain globs only (`*`, `**`): the hub's gate reads this list too (`push_ignore` in release-preflight.py).
 # A pull request still runs everything.
 on:
   push:
@@ -51,10 +52,12 @@ permissions:
   # `gate` reads this workflow's own runs. Read, nothing more.
   actions: read
 
-# A newer push supersedes an in-flight run on the same ref; stale runs are noise, not signal.
+# A newer push supersedes an in-flight run on a branch; stale runs are noise, not signal. On main a run
+# always finishes and GitHub keeps at most one pending behind it: a second push used to kill main's
+# verdict (hub #338).
 concurrency:
   group: checks-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   # Decides whether the jobs below run. Anything it cannot establish -- no answer from the API, an

@@ -2,30 +2,31 @@
 # Everything that must be true BEFORE `git tag -s vX.Y.Z`. Run it, read it, then tag (signed: skill #99).
 #
 #   scripts/tag-check.sh v3.0.30
-#   scripts/tag-check.sh --candidate v3.1.0     a release candidate for v3.1.0; the hub names its rcN
+#   scripts/tag-check.sh --candidate v3.1.0     the candidate that carries v3.1.0; the hub names its rcN
+#   scripts/tag-check.sh --candidate --early v3.1.0   an early one: says what it lacks, not refused for it
 #   scripts/tag-check.sh --at <commit> v3.2.0   this repo's half for the release train, at a commit (read-only)
-#   scripts/tag-check.sh --selftest             the --at mode and the install-line rule, in a throwaway repo
+#   scripts/tag-check.sh --selftest             these modes and the install-line rule, in a throwaway repo
 #
 # A patch tag is a PUBLICATION: install.sh, install.ps1 and the TCC updater all install the newest
 # tag matching v3.*, so a tag is on somebody's machine the moment it is pushed. Every check below
 # is something that has already shipped wrong once, or that cannot be undone once it has.
 #
-# A CANDIDATE (`beta-vX.Y.Z-rcN`, hub RELEASE-CHANNEL.md §11) is checked the same way, with three
-# differences: its CHANGELOG entry may still be `## [Unreleased]`, its manifest may still carry the
-# previous version, and the channel half asks the hub for the next attempt's name. An early candidate
-# is not asked to carry its release's bookkeeping; the LAST one is, under the release train.
+# A CANDIDATE (`beta-vX.Y.Z-rcN`, hub RELEASE-CHANNEL.md §11) is the release: the product session cuts the
+# candidate that carries its release, and `release` only tags and publishes (hub governance/WAVES.md §3; which
+# versions go by the train, and how, is RELEASE-CHANNEL.md §11.6 -- not restated here). Carrying it is four
+# things of this repo: plugin.json at X.Y.Z, `## [vX.Y.Z]` with no `## [Unreleased]`, install.cmd's PS1URL at
+# the tag, and the wave's pool closed -- the hub's own `pool-closed`, called by path as TCC's ship.py calls it,
+# not copied. A candidate without them is refused, and `releasable: yes/no` names every reason (hub #338:
+# W-12's rc1 passed this gate with 16 pool items open, and the train refused it on release day). `--early`
+# names an early candidate, cut for TCC to build on: the same reasons are printed and it is not refused for
+# them; its CHANGELOG may still say `## [Unreleased]`, but never nothing. The README/FAQ/ADVANCED install
+# lines stay on the release before, as in the train's half below: they never name a tag that does not exist.
 #
-# THE RELEASE TRAIN (hub #245, RELEASE-CHANNEL.md §11.6): a minor, a major or a skipped version goes out
-# through `release` as the group, and its tag lands on the last candidate's commit -- nothing is committed
-# on release day. So that candidate carries `## [vX.Y.Z]`, plugin.json at X.Y.Z, every file shipped inside
-# the tag that names the tag (install.cmd's PS1URL), and the wave's pool closed. The lines users copy from
-# main's front page (README*, FAQ*, ADVANCED.md) still name the release before: the train rewrites them,
-# with the catalog, in one commit after the tag, so they never point at a tag that does not exist yet.
 # `--at <commit> vX.Y.Z` is the content half the train runs (`release-groups.json` `check`): it exports the
 # commit's tree to a temporary folder and checks it there, so neither the working tree nor HEAD matters.
 # The channel half -- CI on that commit, the tag rule, signing, the pool -- is the train's own preflight.
-# An ordinary patch is the session's own, as before: its bookkeeping commit moves the front-page lines
-# too, and the plain `vX.Y.Z` mode holds them to the tag.
+# An ordinary patch is the session's own: its bookkeeping commit moves the front-page lines too, and
+# the plain `vX.Y.Z` mode holds them to the tag.
 #
 # THE GIT HALF IS NOT HERE. Everything about the release channel -- clean tree, HEAD published,
 # push.followTags, the newest tag on the remote, the tag being free, the tag rule and the hook's
@@ -48,7 +49,7 @@ PY="${PYTHON:-python3}"
 # it is a path to the carrier, not a switch that can turn the channel checks off.
 PREFLIGHT="${PREFLIGHT:-$(cd .. && pwd)/hub/scripts/release-preflight.py}"
 
-USAGE="usage: scripts/tag-check.sh vX.Y.Z | --candidate vX.Y.Z | --at <commit> vX.Y.Z | --selftest"
+USAGE="usage: scripts/tag-check.sh vX.Y.Z | --candidate [--early] vX.Y.Z | --at <commit> vX.Y.Z | --selftest"
 
 # The --at mode and the install-line rule, run against a throwaway repository built from this working tree: a
 # release-train candidate passes, and each thing it must carry is taken away once and named by the refusal.
@@ -100,11 +101,13 @@ cmd = root / "install.cmd"
 cmd.write_bytes(cmd.read_bytes().replace(f"/{old}/".encode(), f"/{new}/".encode()))
 PYEOF
   G commit -qam candidate; a="$(G rev-parse HEAD)"
-  expect() {  # expect <rc> <word in the output> <what> -- <args...>
-    local want="$1" word="$2" what="$3"; shift 4
+  expect() {  # expect <rc> <word in the output> <what> [<more words>...] -- <args...>
+    local want="$1" what="$3" words=("$2") w miss=""; shift 3
+    while [ $# -gt 0 ] && [ "$1" != "--" ]; do words+=("$1"); shift; done; shift
     out="$("$repo/scripts/tag-check.sh" "$@" 2>&1)"; rc=$?
-    if [ "$rc" != "$want" ] || ! printf '%s' "$out" | grep -qF -- "$word"; then
-      echo "selftest[tag-check] FAIL: $what (rc=$rc, wanted $want and «${word}»)" >&2
+    for w in "${words[@]}"; do printf '%s' "$out" | grep -qF -- "$w" || miss="$w"; done
+    if [ "$rc" != "$want" ] || [ -n "$miss" ]; then
+      echo "selftest[tag-check] FAIL: $what (rc=$rc, wanted $want and «${miss:-${words[0]}}»)" >&2
       printf '%s\n' "$out" | tail -n 15 >&2; return 1
     fi
   }
@@ -124,6 +127,14 @@ p=pathlib.Path(sys.argv[1])/"install.cmd"; p.write_bytes(p.read_bytes().replace(
   e="$(brk unreleased 'import sys,pathlib,re
 p=pathlib.Path(sys.argv[1])/"CHANGELOG.md"; h="## ["+sys.argv[3]+"]"
 p.write_text(re.sub("(?m)^"+re.escape(h),lambda m:"## [Unreleased]\n\n- x\n\n"+h,p.read_text(encoding="utf-8"),count=1),encoding="utf-8")')" || return 1
+  # The wave's pool (hub #338): an item naming an issue of the milestone, open and then done. The shim below
+  # answers GitHub's half -- the milestone of the coming tag holds issue 9901 -- and the rule is the hub's own.
+  local pool='import sys,pathlib
+p=pathlib.Path(sys.argv[1])/"docs"/"TODO.md"
+p.write_text(p.read_text(encoding="utf-8")+"\n## S-9901 · selftest item\n\n**Status**: @STATUS@\n\nIt names #9901.\n",encoding="utf-8")'
+  local po pd
+  po="$(brk pool-open "${pool//@STATUS@/open}")" || return 1
+  pd="$(brk pool-done "${pool//@STATUS@/done}")" || return 1
   G checkout -q "$base"
   expect 0 "ready at ${a:0:12}" "the last candidate carries the release" -- --at "$a" "$next" || return 1
   expect 1 "FAIL install-lines" "front-page lines naming the coming tag" -- --at "$b" "$next" || return 1
@@ -135,19 +146,57 @@ p.write_text(re.sub("(?m)^"+re.escape(h),lambda m:"## [Unreleased]\n\n- x\n\n"+h
   # A patch (the plain mode, at HEAD) holds the front page to its own tag; the channel half fails here, no hub.
   expect 1 "ok   install-lines" "a patch's front page at its tag" -- "$newest" || return 1
   expect 1 "FAIL install-lines" "a patch whose front page is behind" -- "$next" || return 1
+  # --candidate at HEAD: the candidate that carries its release, and an early one named so (hub #338). The pool
+  # rule is the hub's, so these run where the hub is beside this repo; the shim fixes GitHub's answer, signing is
+  # given the key in allowed_signers, and the channel half -- clean tree, CI, the remote -- is not asked here.
+  local pool_cases="the --candidate cases skipped: no hub carrier at $PREFLIGHT"
+  if [ -f "$PREFLIGHT" ]; then
+    local shim="$ST_TMP/carrier/release-preflight.py" real="$PREFLIGHT" key
+    mkdir -p "$ST_TMP/carrier"
+    cat >"$shim" <<'PYEOF'
+"""tag-check's selftest: the hub's own carrier, with GitHub's answer about the coming tag's milestone fixed."""
+import importlib.util, os, sys
+spec = importlib.util.spec_from_file_location("release_preflight", os.environ["ST_REAL_PREFLIGHT"])
+real = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(real)
+real.wave_issues = lambda repo, version: (f"W-99 · {version}", {9901})
+check_pool_closed, ROLE_REPO = real.check_pool_closed, real.ROLE_REPO
+if __name__ == "__main__":
+    print("selftest: the channel half is not asked -- the throwaway repo has no remote")
+PYEOF
+    key="$(grep -v '^#' "$repo/allowed_signers" | awk 'NF {print $3, $4; exit}')"
+    cand() {  # cand <commit> <expect's arguments...>
+      ( G checkout -q "$1" && shift &&
+        export PREFLIGHT="$shim" ST_REAL_PREFLIGHT="$real" GIT_CONFIG_COUNT=2 \
+               GIT_CONFIG_KEY_0=gpg.format GIT_CONFIG_VALUE_0=ssh \
+               GIT_CONFIG_KEY_1=user.signingkey GIT_CONFIG_VALUE_1="key::$key" &&
+        expect "$@" )
+    }
+    cand "$pd" 0 "releasable: yes" "a candidate that carries its release, its pool closed" \
+      "ok   pool-closed" -- --candidate "$next" || return 1
+    cand "$po" 1 "FAIL pool-closed" "a candidate with the wave's pool open" "S-9901" "releasable: no" \
+      -- --candidate "$next" || return 1
+    cand "$po" 0 "releasable: no" "an early candidate lists its open item and is not refused" "S-9901" \
+      -- --candidate --early "$next" || return 1
+    cand "$c" 1 "FAIL manifest" "a candidate whose manifest is still at the previous version" "releasable: no" \
+      -- --candidate "$next" || return 1
+    G checkout -q "$base"
+    pool_cases="a candidate is refused while it does not carry its release (the wave's pool open, the manifest"
+    pool_cases+=" behind) and says releasable: yes/no with the reasons; an early one, named so, lists them and passes"
+  fi
   echo "selftest[tag-check] OK -- --at reads the named commit, not HEAD: a last candidate carrying its heading, manifest and" \
        "install.cmd pin passes with the front page one release behind; front-page lines naming the coming tag, a manifest" \
        "or an install.cmd pin left behind, and an [Unreleased] heading still above the release's, are each refused by" \
        "name; a commit not here and a missing tag are usage errors;" \
-       "a patch's front page is held to its own tag"
+       "a patch's front page is held to its own tag; $pool_cases"
 }
 
 # 1. The intended tag is REQUIRED -- a check whose input is missing must FAIL, not report
 #    "no objection" about a version it was never told (references/core/estimator-scope.md).
-MODE="release" AT=""
+MODE="release" AT="" EARLY=""
 case "${1-}" in
   --selftest) selftest; exit $? ;;
-  --candidate) MODE="candidate"; shift ;;
+  --candidate) MODE="candidate"; shift; if [ "${1-}" = "--early" ]; then EARLY=1; shift; fi ;;
   --at) MODE="at"; AT="${2-}"; shift; [ $# -gt 0 ] && shift ;;
 esac
 TAG="${1-}"
@@ -159,6 +208,12 @@ if [ -z "$TAG" ]; then
 fi
 if ! printf '%s' "$TAG" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
   echo "$USAGE (got '$TAG')" >&2
+  exit 2
+fi
+# A word after the tag is not ignored: `--candidate vX.Y.Z --early` would otherwise check the candidate that
+# carries its release while the person meant an early one.
+if [ $# -gt 1 ]; then
+  echo "$USAGE (unexpected '$2' after the tag)" >&2
   exit 2
 fi
 VER="${TAG#v}"
@@ -184,8 +239,19 @@ fi
 pass=0 fail=0 failed=()
 ok()  { pass=$((pass + 1)); printf '  ok   %-16s %s\n' "$1" "${2-}"; }
 bad() { fail=$((fail + 1)); failed+=("$1"); printf '  FAIL %-16s %s\n' "$1" "$2"; }
+# What a candidate needs to carry its release, collected for `releasable: yes/no` (hub #338). `rel` is a thing
+# only the release asks for: a failure, except on an early candidate, where it is printed as what that
+# candidate lacks. `hard` fails on every candidate, early or not, and is a reason too.
+reasons=()
+rel() {
+  reasons+=("$1 -- $2")
+  if [ -n "$EARLY" ]; then printf '  --   %-16s %s\n' "$1" "$2 (an early candidate: not required)"
+  else bad "$1" "$2"; fi
+}
+hard() { reasons+=("$1 -- $2"); bad "$1" "$2"; }
 
-if [ "$MODE" = "candidate" ]; then echo "pre-tag checks for a candidate for $TAG"
+if [ -n "$EARLY" ]; then echo "pre-tag checks for an early candidate for $TAG"
+elif [ "$MODE" = "candidate" ]; then echo "pre-tag checks for the candidate that carries $TAG"
 elif [ "$MODE" = "at" ]; then echo "pre-tag checks for $TAG at ${SHA:0:12} -- this repo's half for the release train"
 else echo "pre-tag checks for $TAG"; fi
 
@@ -194,43 +260,50 @@ else echo "pre-tag checks for $TAG"; fi
 if mver="$("$PY" -c 'import json;print(json.load(open(".claude-plugin/plugin.json"))["version"])' 2>&1)"; then
   if [ "$mver" = "$VER" ]; then ok manifest "plugin.json version = $mver"
   elif [ "$MODE" = "candidate" ]; then
-    ok manifest "plugin.json says $mver -- the release commit bumps it to $VER (bookkeeping, hub §11.3)"
+    rel manifest "plugin.json says $mver -- the candidate that carries $TAG has $VER"
   else bad manifest "plugin.json says $mver, tag says $VER (the v3.0.24 mistake)"; fi
 else
-  bad manifest "cannot read version from .claude-plugin/plugin.json: $mver"
+  hard manifest "cannot read version from .claude-plugin/plugin.json: $mver"
 fi
 
 # 3. The Upgrading note is written BEFORE the tag, or it ships as the NEXT patch: the heading must
 #    already carry this version, [Unreleased] must be gone, and the body must say something.
+note_lines() { awk -v h="$1" 'index($0,h)==1{f=1;next} f&&/^## /{exit} f&&NF{n++} END{print n+0}' CHANGELOG.md; }
+release_note() {  # why CHANGELOG.md does not carry $TAG's note as a tag needs it; nothing when it does
+  if grep -qE '^## \[[Uu]nreleased\]' CHANGELOG.md; then
+    echo "a '## [Unreleased]' heading is still there -- rename it to [$TAG] first"
+  elif ! grep -qF "## [$TAG]" CHANGELOG.md; then
+    echo "no '## [$TAG]' heading in CHANGELOG.md -- write the note before tagging"
+  elif [ "$(note_lines "## [$TAG]")" -lt 3 ]; then
+    echo "[$TAG] section has $(note_lines "## [$TAG]") non-empty lines -- an empty note is a forgotten note"
+  fi
+}
 if [ ! -f CHANGELOG.md ]; then
-  bad changelog "CHANGELOG.md is missing"
+  hard changelog "CHANGELOG.md is missing"
 elif [ "$MODE" = "candidate" ]; then
   # `## [vX.Y.Z]` when the version is already named, else `## [Unreleased]`. Either must say what is
   # being tried: an empty note is a forgotten note for a candidate too.
   if grep -qF "## [$TAG]" CHANGELOG.md; then head="## [$TAG]"
   else head="$(grep -iE -m1 '^## \[unreleased\]' CHANGELOG.md || true)"; fi
   if [ -z "$head" ]; then
-    bad changelog-note "neither '## [$TAG]' nor '## [Unreleased]' in CHANGELOG.md -- nothing says what the candidate carries"
+    hard changelog-note "neither '## [$TAG]' nor '## [Unreleased]' in CHANGELOG.md -- nothing says what the candidate carries"
   else
-    body="$(awk -v h="$head" 'index($0,h)==1{f=1;next} f&&/^## /{exit} f&&NF{n++} END{print n+0}' CHANGELOG.md)"
+    body="$(note_lines "$head")"
+    why="$(release_note)"
     if [ "$body" -lt 1 ]; then
-      bad changelog-note "$head has no entry -- an empty note is a forgotten note"
-    elif [ "$head" = "## [$TAG]" ]; then
+      hard changelog-note "$head has no entry -- an empty note is a forgotten note"
+    elif [ -z "$why" ]; then
       ok changelog-note "[$TAG] section, $body non-empty lines"
     else
-      ok changelog-note "[Unreleased], $body non-empty lines -- renamed to [$TAG] in the release commit"
+      # An early candidate's note may still be [Unreleased]; it says something, and that much is checked.
+      [ -n "$EARLY" ] && ok changelog-note "$head -- $body non-empty lines"
+      rel changelog-note "$why"
     fi
   fi
 else
-  if grep -qE '^## \[[Uu]nreleased\]' CHANGELOG.md; then
-    bad changelog-note "a '## [Unreleased]' heading is still there -- rename it to [$TAG] first"
-  elif ! grep -qF "## [$TAG]" CHANGELOG.md; then
-    bad changelog-note "no '## [$TAG]' heading in CHANGELOG.md -- write the note before tagging"
-  else
-    body="$(awk -v h="## [$TAG]" 'index($0,h)==1{f=1;next} f&&/^## /{exit} f&&NF{n++} END{print n+0}' CHANGELOG.md)"
-    if [ "$body" -ge 3 ]; then ok changelog-note "[$TAG] section, $body non-empty lines"
-    else bad changelog-note "[$TAG] section has $body non-empty lines -- an empty note is a forgotten note"; fi
-  fi
+  why="$(release_note)"
+  if [ -n "$why" ]; then bad changelog-note "$why"
+  else ok changelog-note "[$TAG] section, $(note_lines "## [$TAG]") non-empty lines"; fi
 fi
 
 # 4. The installer triplet carries the same decisions three times; a claim checked in one file is
@@ -244,21 +317,20 @@ fi
 
 # 4c. A file shipped INSIDE the tag that names the tag carries it already: install.cmd fetches install.ps1 by tag
 #     (it stayed on v3.0.46 for three releases, 2026-09-13). installer-consistency.py compares it with the
-#     CHANGELOG's newest heading; this names it against the tag itself. A candidate may still be behind.
-if [ "$MODE" != "candidate" ]; then
-  ps1url="$(sed -n 's/^set "PS1URL=\([^"]*\)".*/\1/p' install.cmd 2>/dev/null | tr -d '\r' | head -n 1)"
-  case "$ps1url" in
-    */"$TAG"/install.ps1) ok shipped-pins "install.cmd fetches install.ps1 at $TAG" ;;
-    "") bad shipped-pins "install.cmd has no PS1URL line" ;;
-    *) bad shipped-pins "install.cmd fetches ${ps1url} -- the tag ships it, so it must name $TAG" ;;
-  esac
-fi
+#     CHANGELOG's newest heading; this names it against the tag itself. Only an early candidate may be behind.
+ps1url="$(sed -n 's/^set "PS1URL=\([^"]*\)".*/\1/p' install.cmd 2>/dev/null | tr -d '\r' | head -n 1)"
+case "$ps1url" in
+  */"$TAG"/install.ps1) ok shipped-pins "install.cmd fetches install.ps1 at $TAG" ;;
+  "") hard shipped-pins "install.cmd has no PS1URL line" ;;
+  *) rel shipped-pins "install.cmd fetches ${ps1url} -- the tag ships it, so it must name $TAG" ;;
+esac
 
 # 4d. The install lines people copy from main's front page (README*, FAQ*, ADVANCED.md). A patch moves them in its
 #     own bookkeeping, so they name its tag. A release-train candidate leaves them on the release before -- they
 #     must never name a tag that does not exist yet -- and the train moves them right after the tag (hub #245).
-if [ "$MODE" != "candidate" ]; then
-  if lines_out="$("$PY" - "$TAG" "$MODE" 2>&1 <<'PYEOF'
+#     A candidate is held as the train holds its commit: the front page stays on the release before.
+LMODE="$MODE"; [ "$MODE" = "candidate" ] && LMODE="at"
+if lines_out="$("$PY" - "$TAG" "$LMODE" 2>&1 <<'PYEOF'
 import glob, re, sys
 tag, mode = sys.argv[1], sys.argv[2]
 key = lambda v: tuple(int(x) for x in v[1:].split("."))
@@ -284,7 +356,33 @@ else:
     print(f"every front-page install line names {tag}")
 PYEOF
 )"; then ok install-lines "$lines_out"
-  else bad install-lines "$lines_out"; fi
+else rel install-lines "$lines_out"; fi
+
+# 4e. The wave's pool (hub #338). Which items of docs/TODO.md name an issue of the coming tag's milestone and are
+#     not closed is the hub's rule, `pool-closed`: called here by path, as TCC's ship.py calls it, never copied.
+#     A version tag is asked it by the carrier's own preflight below, and --at by the train's.
+if [ "$MODE" = "candidate" ]; then
+  if [ ! -f "$PREFLIGHT" ]; then
+    rel pool-closed "no carrier at $PREFLIGHT -- the pool rule is the hub's; set PREFLIGHT=<path to hub/scripts/release-preflight.py>"
+  else
+    pool_out="$("$PY" - "$PREFLIGHT" "$TAG" 2>&1 <<'PYEOF'
+import importlib.util, sys
+from pathlib import Path
+spec = importlib.util.spec_from_file_location("release_preflight", sys.argv[1])
+carrier = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(carrier)
+check = carrier.check_pool_closed(Path.cwd(), carrier.ROLE_REPO["skill"], "skill", sys.argv[2])
+print(check.line)
+sys.exit(3 if check.gates else 0)
+PYEOF
+)"; pool_rc=$?
+    pool_line="$(printf '%s' "$pool_out" | tail -n 1)"
+    case "$pool_rc" in
+      0) ok pool-closed "$pool_line" ;;
+      3) rel pool-closed "$pool_line" ;;
+      *) rel pool-closed "the hub's pool check did not run (rc=$pool_rc): $pool_line -- unknown is not closed" ;;
+    esac
+  fi
 fi
 
 # 4b. The tag is SIGNED (skill #99, hub #82 HUB-031). From v3.0.64 the installers and TCC's update path refuse a
@@ -337,6 +435,17 @@ LABEL="$TAG"
 if [ "$MODE" = "candidate" ]; then
   cand="$(printf '%s' "${chan_out-}" | grep -oE 'beta-v[0-9]+\.[0-9]+\.[0-9]+-rc[0-9]+' | head -n 1)"
   LABEL="${cand:-a candidate for $TAG}"
+fi
+
+# Whether this candidate carries its release -- the property the train needs, said for every candidate.
+if [ "$MODE" = "candidate" ]; then
+  echo
+  if [ "${#reasons[@]}" -eq 0 ]; then
+    echo "releasable: yes -- it carries $TAG: plugin.json, the CHANGELOG heading, install.cmd's pin, the wave's pool closed"
+  else
+    echo "releasable: no -- it does not carry $TAG (${#reasons[@]}):"
+    printf '  - %s\n' "${reasons[@]}"
+  fi
 fi
 
 echo

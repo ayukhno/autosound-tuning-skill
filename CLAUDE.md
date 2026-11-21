@@ -34,16 +34,19 @@ message with Cyrillic in it and names the line (its `--selftest` runs in CI).
   push; `gh workflow run checks --ref <branch>` runs it by hand, and only for a change to Windows or the
   installers. A candidate (`scripts/tag-check.sh --candidate vX.Y.Z`, tag `beta-vX.Y.Z-rcN`) is optional
   for a patch.
-- **A minor, a major or a skipped version goes out by the release train** (hub #245, `RELEASE-CHANNEL.md`
-  §11.6): the user's «релізь» in `hub/bin/role release`, and the tag lands on the LAST candidate's commit —
-  nothing is committed on release day. So that candidate carries the release's bookkeeping: `## [vX.Y.Z]`,
-  `plugin.json` at X.Y.Z, `install.cmd`'s PS1URL at the tag, the pool closed. `commands/install-tcc.md` names
+- **The product session cuts the candidate that carries its release; `release` only tags and publishes.**
+  Which versions go by the release train, and how, is the hub's: `governance/WAVES.md` §3,
+  `RELEASE-CHANNEL.md` §11.6. Here "carries" is four things: `plugin.json` at X.Y.Z, `## [vX.Y.Z]` with no
+  `## [Unreleased]`, `install.cmd`'s PS1URL at the tag, and the wave's pool closed (the hub's own
+  `pool-closed`, called). `scripts/tag-check.sh --candidate vX.Y.Z` refuses a candidate without them and
+  prints `releasable: yes/no` with every reason. An early candidate, cut for TCC to build on, is named so:
+  `--candidate --early vX.Y.Z` lists what it lacks and is not refused for it. `commands/install-tcc.md` names
   no TCC version: it installs TCC's newest release, read when it runs — TCC pins the skill, never the reverse,
-  which is why the skill goes first (the user, W-11; `installer-consistency` refuses a pin there). The README/FAQ/ADVANCED install lines stay on the release before — they must never name
-  a tag that does not exist yet — and the train moves them, with the catalog, in one commit after the tag.
-  The train runs `scripts/tag-check.sh --at <commit> vX.Y.Z` as this repo's half. **An ordinary patch is
-  the session's own, as before**: its bookkeeping commit moves the front-page lines too, and
-  `tag-check.sh vX.Y.Z` holds them to the tag.
+  which is why the skill goes first (the user, W-11; `installer-consistency` refuses a pin there). The
+  README/FAQ/ADVANCED install lines stay on the release before — they must never name a tag that does not
+  exist yet — and move in one commit after the tag. The train runs `scripts/tag-check.sh --at <commit>
+  vX.Y.Z` as this repo's half. **An ordinary patch is the session's own**: its bookkeeping commit moves the
+  front-page lines too, and `tag-check.sh vX.Y.Z` holds them to the tag.
 
 ## The installers are a TRIPLET
 
