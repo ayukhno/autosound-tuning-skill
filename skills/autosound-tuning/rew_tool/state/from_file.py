@@ -20,7 +20,6 @@ name for, a row no output is mapped to, an output no row is on. Format documente
 """
 
 import datetime
-import hashlib
 import importlib.util
 import math
 import os
@@ -100,42 +99,19 @@ def virtual_by_letter(outputs):
     return _compare_file()._virtual_by_letter(outputs)
 
 
-def _sha256(path):
-    with open(path, "rb") as fh:
-        return hashlib.sha256(fh.read()).hexdigest()
-
-
 # ---------------------------------------------------------------------------------------------------- the file
 
 def read_file(file_path):
     """`(exit code, read)`: the file read and interpreted, or compare-file's refusal (CONTRACT.md item 13) -- 2 the file
     cannot be read or interpreted (`error.kind`), 3 it changed while it was read. `read` is `{name, path, doc, inv,
-    device, warning}` on 0. Hashed before the read, by the reader, and after, as compare-file hashes it."""
+    device, warning}` on 0. Read by compare-file's own read (`compare_file.read_doc`): hashed before the read, by the
+    reader, and after."""
     cf = _compare_file()
     hx = cf._helix()
     name = os.path.basename(file_path)
-    try:
-        before = _sha256(file_path)
-    except OSError as exc:
-        return cf.EXIT_UNREADABLE, cf.refusal(hx.WARNING, name, "io", "the file cannot be opened: %s" % exc)
-
-    def changed():
-        try:
-            return _sha256(file_path) != before
-        except OSError:
-            return True
-
-    said = "the file changed while it was read: nothing was taken from it -- read it again once nothing is saving it"
-    try:
-        doc = hx.read_pct6(file_path)
-    except (hx.Pct6Error, OSError) as exc:
-        if changed():
-            return cf.EXIT_CHANGED, cf.refusal(hx.WARNING, name, "changed", said)
-        if isinstance(exc, hx.Pct6Error):
-            return cf.EXIT_UNREADABLE, cf.refusal(hx.WARNING, name, exc.kind, str(exc))
-        return cf.EXIT_UNREADABLE, cf.refusal(hx.WARNING, name, "io", "the file cannot be read: %s" % exc)
-    if doc.input_sha256 != before or changed():
-        return cf.EXIT_CHANGED, cf.refusal(hx.WARNING, name, "changed", said, md5=doc.input_md5)
+    code, doc = cf.read_doc(file_path)
+    if code != cf.EXIT_COMPARED:
+        return code, doc
     try:
         inv = hx.interpret(doc)
         device = hx.models.describe(doc.dev)
@@ -244,42 +220,69 @@ def reach(inv, snap, identity):
     return rows, unreached
 
 
-def _leg(have, side):
-    """`(value, None)` for a crossover leg the file gives -- `{f, type, slope}`, or None for OFF -- or `(None, why)`."""
+def _finite(value, positive=False):
+    """True for a number the journal takes: finite (no NaN, no Infinity, which no strict JSON reader takes) and, for a
+    frequency or a Q, above 0 -- the ledger's own rule for a frequency (`state._validate_eq`, `_validate_filter`)."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+        return False
+    return value > 0 if positive else True
+
+
+def _leg(have, side, code=None):
+    """`(value, why, note)` for a crossover leg: `value` the leg the file gives -- `{f, type, slope}`, or None for OFF
+    -- with `why` None, or `why` the reason it is not taken; `note` a `(what, why)` taken short -- a family whose file
+    code is documented and not confirmed, which compare-file holds `unknown` (`confirm`), is taken and named."""
     what = "high-pass" if side == "hp" else "low-pass"
     if not have or "position" not in have:
-        return None, "the file holds no %s filter for this channel" % what
+        return None, "the file holds no %s filter for this channel" % what, None
     state = have.get("state")
     if state == "off":
-        return None, None
+        return None, None, None
     if state == "bypassed":
-        return None, "the file holds this %s bypassed, which the journal cannot record" % what
+        return None, "the file holds this %s bypassed, which the journal cannot record" % what, None
     family = XO_SHORT.get(have.get("family"))
     if state != "configured" or family is None or have.get("frequency_hz") is None or have.get("slope_db_oct") is None:
-        return None, "the file holds a %s of type code %s this reader does not decode" % (what, have.get("type_code"))
-    return {"f": _plain(have["frequency_hz"]), "type": family, "slope": _plain(have["slope_db_oct"])}, None
+        return None, "the file holds a %s of type code %s this reader does not decode" % (
+            what, have.get("type_code")), None
+    if not _finite(have["frequency_hz"], positive=True):
+        return None, "the file's %s frequency %r is not a positive number" % (what, have["frequency_hz"]), None
+    if not _finite(have["slope_db_oct"]):
+        return None, "the file's %s slope %r is not a number" % (what, have["slope_db_oct"]), None
+    note = None
+    if have.get("type_confidence") not in (None, "confirmed"):
+        note = ("%s %s.type" % (code, side), "the file's code %s for %s is documented, not confirmed on a saved file: "
+                "taken as %s, to be checked in PC-Tool" % (have.get("type_code"), have.get("family"), family))
+    return {"f": _plain(have["frequency_hz"]), "type": family, "slope": _plain(have["slope_db_oct"])}, None, note
 
 
 def _bands(ch, code):
-    """`(bands, not taken, notes)`: the channel's EQ as the journal holds it -- every band that does something, and
-    every bypassed one that would -- in slot order; the bands the journal has no name for; and what is taken short."""
-    bands, skipped, notes = [], [], []
+    """`(bands, not taken, notes, undecoded)`: the channel's EQ as the journal holds it -- every band that does
+    something, and every bypassed one that would -- in slot order; the bands it does not take, with why (a type code the
+    reader does not decode, a type the journal has no name for, a value missing or no finite number, a frequency the
+    journal refuses); what is taken short; and the slots of the bands not taken, whose band the version keeps."""
+    bands, skipped, notes, undecoded = [], [], [], []
     for f in ch.get("filters") or []:
         if f.get("role") != "eq" or f.get("state") == "neutral":
             continue
         name = EQ_TYPES_BACK.get(f.get("type_code"))
         label = "%s eq[%d]" % (code, f["position"])
+
+        def skip(why):
+            skipped.append((label, why))
+            undecoded.append(f["position"])
         if f.get("state") not in ("configured", "bypassed"):
-            skipped.append((label, "the file holds a band of type code %s this reader does not decode"
-                            % f["raw"].get("T", "(none)")))
+            skip("the file holds a band of type code %s this reader does not decode" % f["raw"].get("T", "(none)"))
             continue
         if name is None:
-            skipped.append((label, "the journal has no band type for the file's %s" % (f.get("type") or f.get("type_code"))))
+            skip("the journal has no band type for the file's %s" % (f.get("type") or f.get("type_code")))
             continue
-        if f.get("state") == "bypassed" and name in EQ_WITH_GAIN and not f.get("gain_db"):
+        if f.get("state") == "bypassed" and name in EQ_WITH_GAIN and f.get("gain_db") == 0:
             continue                      # bypassed and flat: does nothing either way
         if f.get("frequency_hz") is None:
-            skipped.append((label, "the file holds no frequency for this band"))
+            skip("the file holds no frequency for this band")
+            continue
+        if not _finite(f["frequency_hz"], positive=True):
+            skip("the file's frequency %r for this band is not a positive number" % f["frequency_hz"])
             continue
         band = {"type": name, "f": _plain(f["frequency_hz"])}
         if name in EQ_WITH_GAIN:
@@ -289,29 +292,39 @@ def _bands(ch, code):
         band["i"] = f["position"]
         if f.get("state") == "bypassed":          # a band with no `bypass` is one that is on, as the journal writes it
             band["bypass"] = True
-        if any(band.get(k) is None for k in ("gain_db", "q") if k in band):
-            skipped.append((label, "the file holds no %s for this band" % " or ".join(
-                k for k in ("gain_db", "q") if k in band and band[k] is None)))
+        missing = [k for k in ("gain_db", "q") if k in band and band[k] is None]
+        if missing:
+            skip("the file holds no %s for this band" % " or ".join(missing))
+            continue
+        odd = [k for k in ("gain_db", "q") if k in band and not _finite(band[k], positive=k == "q")]
+        if odd:
+            skip("the file's %s for this band is not %s" % (" and ".join("%s %r" % (k, band[k]) for k in odd),
+                                                           "a positive number" if odd == ["q"] else "a finite number"))
             continue
         if f.get("invert"):
             notes.append((label + ".invert", "the file's all-pass is inverted; the journal cannot record an invert"))
         bands.append(band)
-    return bands, skipped, notes
+    return bands, skipped, notes, undecoded
 
 
-def _channel_values(ch, row):
-    """`(fields, why not)`: what the file gives one row, in the journal's units, and why each field it does not give
-    is not taken -- `{field: reason}` for the fields the file holds no value for."""
-    fields, why = {}, {}
+def _channel_values(ch, row, code=None):
+    """`(fields, why not, notes)`: what the file gives one row, in the journal's units; why each field it does not give
+    is not taken -- `{field: reason}` for the fields the file holds no value for, or none the journal takes (no finite
+    number); and what is taken short."""
+    fields, why, notes = {}, {}, []
     level = ch.get("level") or {}
-    if level.get("state") == "present" and isinstance(level.get("value"), (int, float)):
+    if level.get("state") == "present" and _finite(level.get("value")):
         fields["gain_db"] = round(level["value"], 2)
+    elif level.get("state") == "present":
+        why["gain_db"] = "the file's level %r is not a finite number" % level.get("value")
     else:
         why["gain_db"] = "the file's level is %s" % (level.get("state") or "missing")
     timing = ch["timing"][0] if ch.get("timing") else {}
     delay = timing.get("delay") or {}
-    if delay.get("state") == "present" and isinstance(delay.get("display_ms"), (int, float)):
+    if delay.get("state") == "present" and _finite(delay.get("display_ms")):
         fields["ta_ms"] = delay["display_ms"]
+    elif delay.get("state") == "present":
+        why["ta_ms"] = "the file's delay %r is not a finite number" % delay.get("display_ms")
     else:
         why["ta_ms"] = "the file's delay is %s" % (delay.get("state") or "missing")
     raw = ch.get("raw") or {}
@@ -325,21 +338,28 @@ def _channel_values(ch, row):
         why["mute"] = "the file holds no mute it can name (%r)" % raw.get("MT")
     phase = timing.get("phase_degrees")
     if timing.get("phase_mode") == "phase_adjustable" or "phase_deg" in row:
-        if isinstance(phase, (int, float)) and not math.isnan(phase):
+        if _finite(phase):
             fields["phase_deg"] = phase
-        else:
+        elif phase is None:
             why["phase_deg"] = "the file holds no phase for this channel"
+        else:
+            why["phase_deg"] = "the file's phase %r is not a finite number" % phase
     for leg, side in (("hp", "high_pass"), ("lp", "low_pass")):
-        value, reason = _leg(ch.get(side), leg)
+        value, reason, note = _leg(ch.get(side), leg, code)
         if reason is None:
             fields[leg] = value
+            if note:
+                notes.append(note)
         else:
             why[leg] = reason
-    return fields, why
+    return fields, why, notes
 
 
-def _preset_values(doc, hx):
-    """`{path: value}` of the preset's settings the file stores, in `preset_settings`' paths and units."""
+def _preset_values(doc, hx=None, undecoded=None):
+    """`{path: value}` of the preset's settings the file stores, in `preset_settings`' paths and units. The RTC curve is
+    the points the file gives, each a number; `undecoded`, a list, gets `(point, why)` for each point it holds as no
+    finite number."""
+    hx = hx or _compare_file()._helix()
     values = hx.inventory.flatten(doc.root)
     out = {}
     route = doc.root.find("Route")
@@ -356,7 +376,7 @@ def _preset_values(doc, hx):
             linear = float(raw) if raw is not None else None
         except ValueError:
             linear = None
-        if linear is not None and linear > 0 and not math.isinf(linear):
+        if linear is not None and linear > 0 and math.isfinite(linear):
             out["sources." + source] = round(20 * math.log10(linear), 2)
     for path, at, on, off in SWITCHES:
         if values.get(at) in (on, off):
@@ -367,12 +387,17 @@ def _preset_values(doc, hx):
             continue
         name = key.rsplit("_", 1)[1]
         m = _RTC_KEY.match(name)
+        if not m:
+            continue                      # RTC_EN is `rtc.on`; another RTC_ value is no point of the curve
         try:
             number = float(raw)
         except (TypeError, ValueError):
+            number = None
+        if number is None or not math.isfinite(number):
+            if undecoded is not None:
+                undecoded.append((name.lower(), "the file's value %r is not a number" % raw))
             continue
-        if m and not math.isnan(number):
-            curve[name.lower()] = _plain(number / 10 if m.group(1) != "F" else number)
+        curve[name.lower()] = _plain(number / 10 if m.group(1) != "F" else number)
     if curve:
         out["rtc.curve"] = curve
     selector = next((k[:-len("/@i")] for k, v in values.items()
@@ -386,14 +411,37 @@ def _preset_values(doc, hx):
     return out
 
 
+def _kept_bands(code, row, bands, undecoded, why, kept):
+    """The version's bands in the slots whose file band is not taken (`undecoded`), put back: a band of the base in such
+    a slot is kept, not dropped, and named. A base whose bands carry no slot cannot be matched band by band: its whole
+    EQ is kept (`why["eq"]`) and None is returned."""
+    held = row.get("eq") if isinstance(row.get("eq"), list) else []
+    if not undecoded or not held:
+        return bands
+    if not all(isinstance(b, dict) and isinstance(b.get("i"), int) for b in held):
+        why["eq"] = ("the file's band%s in slot %s %s not decoded, and the version's bands carry no slot to keep one by: "
+                     "its whole EQ is kept" % ("s" if len(undecoded) > 1 else "", ", ".join(map(str, undecoded)),
+                                               "are" if len(undecoded) > 1 else "is"))
+        return None
+    by_slot = {b["i"]: b for b in held}
+    for position in undecoded:
+        if position in by_slot:
+            bands.append(dict(by_slot[position]))
+            kept.append(("%s eq[%d]" % (code, position), "the file's band there is not decoded"))
+    return sorted(bands, key=lambda b: b["i"])
+
+
 def build(snap, identity, read):
     """What `propose --from-file` banks, from a version and a file `read_file` read: `{delta, kept, not_taken, notes}`.
 
     `delta` is an ordinary tier-keyed delta (`apply.apply_delta`) -- each mapped row's fields the file gives, and
     `preset_settings` -- so `propose` banks it as any other: a new version, the one before it untouched. `kept` names
-    every field and row that stays as the version had it, with why; `not_taken` every output of the file no row is on
-    and every band the journal has no name for; `notes` what is taken short (an all-pass invert). Each is a list of
-    `(what, why)`."""
+    every field and row that stays as the version had it, with why -- a band of the version in a slot whose file band is
+    not decoded among them, which stays --; `not_taken` every output of the file no row is on, every band the journal
+    has no name for or the file does not give in full, and every value the file holds that the journal does not take
+    where the version holds none; `notes` what is taken short (an all-pass invert, a crossover family whose file code
+    is documented and not confirmed). Each is a list of `(what, why)`. A value the file holds as no finite number, or
+    that the journal's own rules refuse (a frequency of 0), is not decoded: kept and named, never banked."""
     st = _state()
     inv, doc = read["inv"], read["doc"]
     hx = _compare_file()._helix()
@@ -403,11 +451,13 @@ def build(snap, identity, read):
         if ch is None:
             kept.append((code, why_not + " (every field kept)"))
             continue
-        fields, why = _channel_values(ch, row)
+        fields, why, leg_notes = _channel_values(ch, row, code)
+        notes += leg_notes
         slots = [f for f in ch.get("filters") or [] if f.get("role") == "eq"]
         if slots:
-            bands, skipped, band_notes = _bands(ch, code)
-            if bands or "eq" in row:
+            bands, skipped, band_notes, undecoded = _bands(ch, code)
+            bands = _kept_bands(code, row, bands, undecoded, why, kept)
+            if bands is not None and (bands or "eq" in row):
                 fields["eq"] = bands
             not_taken += skipped
             notes += band_notes
@@ -427,15 +477,33 @@ def build(snap, identity, read):
         delta.setdefault(tier, {})[key] = fields
         for field in sorted(f for f in row if f not in fields and f != "status"):
             kept.append(("%s %s" % (code, field), why.get(field) or _WHY_KEPT.get(field, _NOT_DECODED)))
+        for field in sorted(f for f in why if f not in row and f not in fields):
+            # a value the file holds that the journal does not take, on a field the version leaves unstated
+            not_taken.append(("%s %s" % (code, field), why[field]))
     not_taken = [(label, text + ": no row of this version is on this output") for label, text in unreached] + not_taken
-    stated = _preset_values(doc, hx)
+    undecoded_points = []
+    stated = _preset_values(doc, hx, undecoded_points)
+    held = snap.get(st.PRESET_SETTINGS) if isinstance(snap.get(st.PRESET_SETTINGS), dict) else {}
+    held_curve = st._preset_leaf(held, "rtc.curve")
+    held_curve = held_curve if isinstance(held_curve, dict) else {}
+    if "rtc.curve" in stated or undecoded_points:
+        # point by point onto the curve the version holds: a point the file does not give stays, and is named
+        curve = dict(held_curve)
+        curve.update(stated.get("rtc.curve") or {})
+        given = set(stated.get("rtc.curve") or {})
+        bad = dict(undecoded_points)
+        for point in sorted(set(held_curve) - given):
+            kept.append(("preset rtc.curve.%s" % point, bad.get(point, "the file holds no such RTC value")))
+        for point in sorted(set(bad) - set(held_curve)):
+            not_taken.append(("preset rtc.curve.%s" % point, bad[point]))
+        if curve:
+            stated["rtc.curve"] = curve
     settings = {}
     for path, value in stated.items():
         head, _, leaf = path.partition(".")
         settings.setdefault(head, {})[leaf] = value
     if settings:
         delta[st.PRESET_SETTINGS] = settings
-    held = snap.get(st.PRESET_SETTINGS) if isinstance(snap.get(st.PRESET_SETTINGS), dict) else {}
     for path in st._PRESET_FIELDS:
         if path not in stated and st._preset_leaf(held, path) is not None:
             reason = {"input_gain_db": "the file decodes no input gain",
@@ -453,6 +521,7 @@ def provenance(read, built, read_at=None):
             "device": device_text(read["device"]), "read_at": read_at or now(),
             "kept": ["%s: %s" % pair for pair in built["kept"]],
             "not_taken": ["%s: %s" % pair for pair in built["not_taken"]],
+            "taken_short": ["%s: %s" % pair for pair in built["notes"]],
             "note": "read from a saved PC-Tool file: what was saved, not proof the DSP holds it now"}
 
 

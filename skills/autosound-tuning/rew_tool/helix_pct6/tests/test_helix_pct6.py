@@ -325,8 +325,10 @@ class TestNeverWrites(unittest.TestCase):
         for path in sources:
             with open(path, encoding="utf-8") as handle:
                 src = handle.read()
+            # the modes mosconi_pr's scan bans, every one: a file opened to append or to update is written too
             for banned in ('"w"', "'w'", '"wb"', "'wb'", '"x"', "'xb'", '"a"', "write_bytes", "write_text",
-                           "zlib.compress", "os.rename", "os.replace", "shutil", "os.remove", "unlink"):
+                           "zlib.compress", "os.rename", "os.replace", "shutil", "os.remove", "unlink",
+                           "'x'", '"xb"', "'a'", '"ab"', "'ab'", '"w+"', '"r+"', '"rb+"', "'w+'", "'r+'", "'rb+'"):
                 self.assertNotIn(banned, src, "%s holds %s" % (os.path.basename(path), banned))
 
     def test_input_unchanged_and_cli_writes_nothing(self):

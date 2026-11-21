@@ -333,6 +333,18 @@ def _eq_rows(code, row, ch, base):
         else:
             out.append(_said(name + ".type", code, btype, _EQ_NAMES.get(found.get("type_code")), "unknown",
                              "the file has no code for the type %r" % btype, path=path + "/@T"))
+        if found.get("type_code") not in _EQ_NAMES:
+            # A type the reader does not decode: its frequency, gain and Q mean nothing known -- never a match.
+            why = ("the file's band in slot %d is of type code %s, which this reader does not decode: its values are "
+                   "not read" % (found["position"], found["raw"].get("T", "(none)")))
+            for field, have, at in (("f", found.get("frequency_hz"), "/@F"), ("gain_db", found.get("gain_db"), "/@G"),
+                                    ("q", found.get("q"), "/@Q")):
+                if field == "f" or (field == "gain_db" and btype in _EQ_WITH_GAIN) or (field == "q" and btype != "APF1"):
+                    out.append(_said("%s.%s" % (name, field), code, band.get(field), have, "unknown", why,
+                                     path=path + at))
+            out.append(_compared(name + ".bypass", code, bool(band.get("bypass")), path + "/@FilBy",
+                                 "1" if band.get("bypass") else "0", "raw", show={"0": False, "1": True}.get))
+            continue
         out.append(_compared(name + ".f", code, band["f"], path + "/@F", band["f"], "number", show=_number,
                              tolerance=_TOL_HZ))
         if btype in _EQ_WITH_GAIN:
@@ -642,11 +654,21 @@ def compare_journal(journal, file_path):
     0 compared, whatever the rows say; 2 the file cannot be read (`error.kind`: the reader's kind -- container,
     checksum, truncated, limit, xml --, `io`, or `interpret`: it decoded and then could not be interpreted or
     compared); 3 the file changed while it was read (`changed`), which wins over a failed read: what failed was
-    another file. A `.PR<n>` file goes to the Mosconi reader (`_compare_pr`), the same shape."""
+    another file. A `.PR<n>` file goes to the Mosconi reader (`_compare_pr`), the same shape. A version this comparison
+    cannot read raises `JournalFault` (a `ValueError`): the journal's, exit 1, never said as the file's."""
     if _mosconi().is_preset_path(file_path):
         return _compare_pr(journal, file_path)
+    code, doc = read_doc(file_path)
+    if code != EXIT_COMPARED:
+        return code, doc
+    return compare_doc(journal, doc, os.path.basename(file_path))
+
+
+def read_doc(file_path):
+    """`(0, doc)`: the `.pct6` read by `helix_pct6.read_pct6`, hashed before the read and after -- or `(2, refusal)` the
+    file cannot be read, `(3, refusal)` it changed while it was read. The one read `compare-file` and `--from-file`
+    share."""
     hx = _helix()
-    snap, identity = journal
     name = os.path.basename(file_path)
     try:
         before = _sha256(file_path)
@@ -659,27 +681,77 @@ def compare_journal(journal, file_path):
         except OSError:
             return True
 
-    changed_refusal = (EXIT_CHANGED, "changed", "the file changed while it was read: nothing was compared -- read it "
-                                                "again once nothing is saving it")
+    said = "the file changed while it was read: nothing was compared or taken from it -- read it again once nothing " \
+           "is saving it"
     try:
         doc = hx.read_pct6(file_path)
     except (hx.Pct6Error, OSError) as exc:
         if changed():
-            return changed_refusal[0], refusal(hx.WARNING, name, changed_refusal[1], changed_refusal[2])
+            return EXIT_CHANGED, refusal(hx.WARNING, name, "changed", said)
         if isinstance(exc, hx.Pct6Error):
             return EXIT_UNREADABLE, refusal(hx.WARNING, name, exc.kind, str(exc))
         return EXIT_UNREADABLE, refusal(hx.WARNING, name, "io", "the file cannot be read: %s" % exc)
     if doc.input_sha256 != before or changed():
-        return changed_refusal[0], refusal(hx.WARNING, name, changed_refusal[1], changed_refusal[2], md5=doc.input_md5)
-    try:
-        inv = hx.interpret(doc)
-        rows = _finish(hx, doc, _plan(hx, doc, inv, snap, identity))
-        device = hx.models.describe(doc.dev)
-    except Exception as exc:  # noqa: BLE001 -- any failure past the decode is the file's, its type named
+        return EXIT_CHANGED, refusal(hx.WARNING, name, "changed", said, md5=doc.input_md5)
+    return EXIT_COMPARED, doc
+
+
+class JournalFault(ValueError):
+    """The version holds a value this comparison cannot read: the journal's fault, exit 1 -- never the file's."""
+
+
+#: The policies `helix_pct6.check` does arithmetic on: the version's value handed to it must be a finite number.
+_NUMBER_POLICIES = ("number", "db", "display_delay_ms")
+
+
+def _check_plan(plan):
+    """Every value of the version a planned row hands `helix_pct6.check` is of the kind its policy reads -- a finite
+    number, or the raw text -- or `JournalFault`. Past this, a failure inside `check` is the file's value, not the
+    version's."""
+    for p in plan:
+        expect = p.get("expect")
+        if not expect:
+            continue
+        value = expect["expected"]
+        if expect["policy"] in _NUMBER_POLICIES:
+            ok = isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+        else:
+            ok = isinstance(value, str)
+        if not ok:
+            raise JournalFault("%s %s: the version holds %r, which this comparison cannot read"
+                               % (p["channel"], p["parameter"], p["journal"]))
+
+
+def compare_doc(journal, doc, name, inv=None):
+    """`(exit code, JSON object)`: a version (`load_journal`'s pair) against a file `read_doc` read -- `inv` its
+    `helix_pct6.interpret` when the caller has it. Only the file's side is caught: its interpretation (exit 2
+    `interpret`), and a value of the file `check` cannot read at a compared path once the version's own values are
+    known to be of their kind (`_check_plan`). The version's side raises `JournalFault`: exit 1."""
+    hx = _helix()
+    snap, identity = journal
+
+    def uninterpretable(exc):
         # The file decoded and a value in it is not what the reader takes (a delay `abc`: decimal.InvalidOperation,
         # an ArithmeticError and no ValueError; `NaN`: a ValueError): said as the file's, never as the journal's.
         return EXIT_UNREADABLE, refusal(hx.WARNING, name, "interpret", "the file decoded and could not be interpreted "
                                         "or compared (%s: %s)" % (type(exc).__name__, exc), md5=doc.input_md5)
+    try:
+        if inv is None:
+            inv = hx.interpret(doc)
+        device = hx.models.describe(doc.dev)
+    except Exception as exc:  # noqa: BLE001 -- any failure of the file's interpretation is the file's, its type named
+        return uninterpretable(exc)
+    try:
+        plan = _plan(hx, doc, inv, snap, identity)
+        _check_plan(plan)
+    except JournalFault:
+        raise
+    except (TypeError, ValueError, KeyError, AttributeError) as exc:
+        raise JournalFault("the version cannot be compared (%s: %s)" % (type(exc).__name__, exc)) from exc
+    try:
+        rows = _finish(hx, doc, plan)
+    except Exception as exc:  # noqa: BLE001 -- the version's values are checked: what fails here is the file's value
+        return uninterpretable(exc)
     return EXIT_COMPARED, {
         "contract": CONTRACT, "warning": hx.WARNING, "device": device, "checked_model": bool(device["verified"]),
         "file": _file_block(name, doc.input_md5, inv["device"].get("saved"), doc.pc_tool_version),
@@ -708,11 +780,12 @@ def warning_for(path):
     return _mosconi().WARNING if _mosconi().is_preset_path(path) else _helix().WARNING
 
 
-def _pr_profile():
-    """The bundled profile of the model the reader reads, unwrapped, or None."""
+def _pr_profile(skipped=None):
+    """The bundled profile of the model the reader reads, unwrapped, or None. `skipped`, a list, gets each library
+    file that could not be read, as `(path, why)`: the profile looked for may be one of them."""
     dp = _siblings().load("dsp_profile.py")
     device = _mosconi().DEVICE
-    data = dp.find_bundled(device["vendor"], device["name"])
+    data = dp.find_bundled(device["vendor"], device["name"], skipped=skipped)
     return dp._unwrap(data) if data else None
 
 
@@ -752,6 +825,8 @@ def _pr_equal(parameter, code, want, have, path):
 def _pr_leg_text(leg):
     if leg["state"] == "off":
         return "OFF (stored: %s at %d Hz)" % (leg["family"], leg["frequency_hz"])
+    if leg["state"] == "undecoded":
+        return "%s, slope code %d (not decoded), at %d Hz" % (leg["family"], leg["slope_code"], leg["frequency_hz"])
     return "%s %d dB/oct at %d Hz" % (leg["family"], leg["slope_db_oct"], leg["frequency_hz"])
 
 
@@ -762,6 +837,12 @@ def _pr_band_text(band):
 
 def _pr_leg_rows(code, leg, want, have):
     path = _pr_at(have["offset"])
+    undecoded = None
+    if have["state"] == "undecoded":
+        undecoded = "the file holds a slope code %d this reader does not decode" % have["slope_code"]
+    if want in (None, "OFF") and undecoded:
+        return [_said(leg + ".slope", code, "OFF", _pr_leg_text(have), "unknown", undecoded, category="audio",
+                      path=path)]
     if want in (None, "OFF"):
         return [_said(leg + ".slope", code, "OFF", _pr_leg_text(have), "match" if have["state"] == "off" else "differs",
                       None, category="audio", path=path)]
@@ -778,7 +859,10 @@ def _pr_leg_rows(code, leg, want, have):
                           "match" if family == have["family"] else "differs", None, category="audio", path=path))
     if want.get("f") is not None:
         rows.append(_pr_number(leg + ".f", code, want["f"], have["frequency_hz"], _TOL_HZ, path))
-    if want.get("slope") is not None:
+    if undecoded:
+        rows.append(_said(leg + ".slope", code, want.get("slope"), _pr_leg_text(have), "unknown", undecoded,
+                          category="audio", path=path))
+    elif want.get("slope") is not None:
         rows.append(_pr_equal(leg + ".slope", code, want["slope"], have["slope_db_oct"], path))
     else:
         rows.append(_said(leg + ".slope", code, None, _pr_leg_text(have), "unknown", "the version records no slope",
@@ -825,6 +909,18 @@ def _pr_eq_rows(code, row, output):
         else:
             out.append(_said(name + ".type", code, btype, found["type"] or "code %d" % found["type_code"], "unknown",
                              "the file's code for the type %r is not known" % btype, category="audio", path=path))
+        if found["type"] is None:
+            # A type the reader does not decode: the record's frequency, gain and Q mean nothing known -- never a match.
+            why = ("the file's band is of type code %d, which this reader does not decode: its values are not read"
+                   % found["type_code"])
+            for field, have in (("f", found["frequency_hz"]), ("gain_db", found["gain_db"]), ("q", found["q"])):
+                if field != "gain_db" or btype in _PR_WITH_GAIN:
+                    out.append(_said("%s.%s" % (name, field), code, band.get(field), have, "unknown", why,
+                                     category="audio", path=path))
+            if band.get("bypass"):
+                out.append(_said(name + ".bypass", code, True, None, "unknown", "the file decodes no bypass for a band",
+                                 category="audio", path=path))
+            continue
         out.append(_pr_number(name + ".f", code, band.get("f"), found["frequency_hz"], _TOL_HZ, path))
         if btype in _PR_WITH_GAIN:
             if band.get("gain_db") is not None:
@@ -854,8 +950,9 @@ def _pr_eq_rows(code, row, output):
     return out
 
 
-def _pr_channel_rows(code, row, o):
-    """The rows of one channel row of the version against the reader's output `o`."""
+def _pr_channel_rows(code, row, o, reading_rate=None):
+    """The rows of one channel row of the version against the reader's output `o`; `reading_rate` the reader's `rate`
+    (a delay is read at it)."""
     out = []
     not_recorded = "the version does not record it"
     for field in sorted(row):
@@ -867,12 +964,24 @@ def _pr_channel_rows(code, row, o):
     slot = o["slot"]
     # a muted output keeps its set level at the second offset
     level_at = _pr_at((1292 if o["muted"] else 1280) + slot - 1)
-    if row.get("gain_db") is not None:
+    level_byte = o["level_while_muted_byte"] if o["muted"] else o["level_byte"]
+    if row.get("gain_db") is not None and o["level_db"] is None:
+        out.append(_said("gain_db", code, row["gain_db"], None, "unknown", "the file's level byte %d is not decoded"
+                         % level_byte, category="audio", path=level_at))
+    elif row.get("gain_db") is not None:
         out.append(_pr_number("gain_db", code, row["gain_db"], o["level_db"], _TOL_DB, level_at))
     else:
         out.append(_said("gain_db", code, None, o["level_db"], "unknown", not_recorded, category="audio", path=level_at))
     delay_at = _pr_at(1408 + 2 * (slot - 1))
-    if row.get("ta_ms") is not None:
+    rate = reading_rate or {}
+    if rate.get("assumed"):
+        # The steps are read as ms at the rate: one not stored is no rate to compare a delay at.
+        said = ("the rate is not stored in the file; %d kHz assumed" % (_mosconi().DEVICE["rate_hz"] // 1000)
+                if rate.get("byte") is None else "the file's rate byte %s is not one this reader knows; %d kHz assumed"
+                % (rate["byte"], _mosconi().DEVICE["rate_hz"] // 1000))
+        out.append(_said("ta_ms", code, row.get("ta_ms"), round(o["delay_ms"], 4), "unknown", said, category="audio",
+                         path=delay_at))
+    elif row.get("ta_ms") is not None:
         out.append(_pr_number("ta_ms", code, row["ta_ms"], round(o["delay_ms"], 4), _PR_TOL_MS, delay_at))
     else:
         out.append(_said("ta_ms", code, None, round(o["delay_ms"], 4), "unknown", not_recorded, category="audio",
@@ -932,7 +1041,12 @@ def _pr_preset_rows(snap, reading):
 def _pr_plan(reading, snap, identity):
     out, reached = [], set()
     outputs = reading["outputs"]
-    by_slot, why_not = _pr_numbering(_pr_profile(), outputs)
+    skipped = []
+    profile = _pr_profile(skipped)
+    by_slot, why_not = _pr_numbering(profile, outputs)
+    if profile is None and skipped:
+        why_not = "no bundled profile of this model could be read: %s -- no rule says how its outputs are named" % (
+            "; ".join("%s cannot be read (%s)" % (os.path.basename(path), why) for path, why in skipped))
     tiers = [t for t in _state().tier_names(snap) if isinstance(snap.get(t), dict)]
     planned = []
     for tier in tiers:
@@ -958,7 +1072,7 @@ def _pr_plan(reading, snap, identity):
                 out.append(_said(field, code, row[field], None, "unknown", why, category="audio"))
             continue
         reached.add(o["channel"])
-        out += _pr_channel_rows(code, row, o)
+        out += _pr_channel_rows(code, row, o, reading.get("rate"))
     for o in outputs:
         if o["channel"] in reached:
             continue

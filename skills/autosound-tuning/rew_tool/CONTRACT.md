@@ -711,7 +711,7 @@ It takes no writer lock and needs no active slot for a `v_NNN`. The file is hash
 | exit | means |
 |---|---|
 | 0 | compared, whatever the rows say: the JSON below on stdout with `--json`, else a table a person reads (the warning, the file, the model, the counts, one row a line, then each unknown with its reason) |
-| 1 | the journal refused: the version is not there, or `HEAD` with no slot named or active -- `error: <reason>` on stderr; with `--json` also a refusal on stdout, `error.kind` `journal` |
+| 1 | the journal refused: the version is not there, `HEAD` with no slot named or active, or the version holds a value the comparison cannot read (a leg `slope` or a `phase_deg` that is no number) -- `error: <reason>` on stderr; with `--json` also a refusal on stdout, `error.kind` `journal`. Never said as the file's: only the file's interpretation, and a file value at a compared path, are exit 2 |
 | 2 | the file cannot be read: a refusal naming the kind, `error.kind` one of `container`, `checksum`, `truncated`, `limit`, `xml` (the reader's `Pct6Error.kind`), `io` (not there, not to be opened) or `interpret` (it decoded, and a value in it could not be interpreted or compared: a delay `abc`); no rows. Also usage, a wrong number of arguments: the usage on stderr and nothing on stdout, which is what tells the two apart |
 | 3 | the file changed while it was read (its hash before the read, the bytes read and its hash after are not one): a refusal, not a result, `error.kind` `changed`, no rows -- read it again once nothing is saving it |
 
@@ -759,7 +759,8 @@ version holds with no slope gives `<leg>.slope` unknown, the file's leg beside i
 for the channel); `eq[<n>].type`, `.f`, `.gain_db`, `.q`, `.bypass` for a band paired with the file's band in slot n,
 and `eq[<n>].invert`, unknown, when that band is an all-pass the file holds inverted (the journal cannot record an
 invert); `eq[<n>]` for an active band of the file the version does not hold -- unknown when its type code is one the
-reader does not decode --, `eq <type> <f> Hz` for a band of the version the file does not hold, and `eq[<i>]`, `journal` the version's band, when
+reader does not decode --, and, for a band of the version paired by its `i` with a file band of such a type code, its
+`.f`, `.gain_db` and `.q` unknown (the file's values there are not read); `eq <type> <f> Hz` for a band of the version the file does not hold, and `eq[<i>]`, `journal` the version's band, when
 its `i` names a slot the file does not have; `channel` for an output no row reaches; for a row of the version that
 reaches no output, each of its fields by its own name (`gain_db`, `hp`, `lp`, `eq` -- here the whole band list --
 ...), unknown; under `preset`, the field's
@@ -791,7 +792,11 @@ record's first line). A row of tier `channels` reaches output n through `slot` "
 `knowledge/dsp/profiles/mosconi-pico-6-8-2.json` numbers the eight outputs 1-8, as the program does; a profile that
 letters them, counts other than eight or is not there leaves every row `unknown`. Compared: `gain_db` (a muted
 output's kept level), `ta_ms` (to 0.005 ms), `polarity`, `mute`, the legs' `type` / `f` / `slope`, and the EQ bands'
-`type` / `f` / `gain_db` / `q` as the records store them (types PK, LSH, HSH; another code is `unknown`). `unknown`
+`type` / `f` / `gain_db` / `q` as the records store them (types PK, LSH, HSH; another code is `unknown`, and a band of
+the version paired with it has its `f`, `gain_db` and `q` `unknown`). A leg's slope code the reader does not decode
+(5-7) is no OFF: `<leg>.slope` is `unknown`, naming the code, against an OFF leg and against a filter alike. With no
+rate byte in the file (or one the reader does not know) every `ta_ms` is `unknown`: the steps are not read as ms at an
+assumed 96 kHz. A bundled profile of the model that cannot be read is named, file and why, in the rows' reason. `unknown`
 always: `phase_deg` (no phase control), `off`, `eq_bypass` and a band's `bypass` (not decoded), and under `preset`
 `input_gain_db` (the file holds one per input), any other stated setting, and `crossover.corner_set` (the file's
 global corner set; the journal records none). Not read: the mixer, the input EQ, the group EQ.
@@ -807,10 +812,13 @@ taken as given, as in item 13. Both verbs take the writer lock as `attest` and `
 verbatim and a `model:` line -- `checked`, or `NOT CHECKED: read at your own risk ...` -- before the result.
 
 **The exit table**, both verbs: 0 banked; 1 the journal refused (`error: <reason>` on stderr: no such version, a
-candidate, `attest` on a version with no preset setting, as for `--source-file`); 2 the file cannot be read or
-interpreted (`error: <file>: <kind>: <message>`, the kinds of item 13), or usage -- `--from-file` with `--source-file`,
-with a delta file, with `--evidence` or `--reviewed`; 3 the file changed while it was read (`changed`). Nothing is banked
-on 1, 2 or 3; 75 is a held lock (item 8).
+candidate, `attest` on a version with no preset setting, as for `--source-file`, a version holding a leg `slope` or a
+`phase_deg` that is no number, as item 13 refuses it); 2 the file cannot be read or interpreted (`error: <file>: <kind>:
+<message>`, the kinds of item 13 -- both verbs refuse what compare-file refuses, `propose` comparing its base with the
+file on the same read), a `.PR<n>` file (`model`: `--from-file` reads a `.pct6`; a `.PR15` is compared with
+`compare-file`, and nothing is banked from it), or usage -- `--from-file` with `--source-file`, with a delta file, with
+`--evidence` or `--reviewed`; 3 the file changed while it was read (`changed`). Nothing is banked on 1, 2 or 3; 75 is a
+held lock (item 8).
 
 **`attest --from-file`** banks what `attest` banks, with `preset_settings.source_file` filled by the method:
 S-119's eight keys (`state/schema.md`, "Preset settings"), no other -- `name` (the base name), `path` (absolute), `md5`
@@ -827,12 +835,18 @@ version is rewritten. A row of the base reaches the file's channel by item 13's 
 none. A reached row takes what the file gives, in the journal's units: `gain_db` (to 0.01 dB), `ta_ms` (as PC-Tool
 shows it), `polarity`, `mute`, `phase_deg` where the channel has the phase control or the base states one, `hp` and
 `lp` (`{f, type, slope}`, null for an OFF leg) and `eq` (every band that works, and every bypassed one that would: `type`,
-`f`, `gain_db`, `q`, `i` the file's slot, `bypass: true` when bypassed). `preset_settings` takes `sources.*`,
-`fx.realcenter`, `fx.dynamic_bass`, `fx.subxpander`, `rtc.on`, `rtc.curve`, `bt.source` and `bt.auto_switch`. The
+`f`, `gain_db`, `q`, `i` the file's slot, `bypass: true` when bypassed). A value the file holds as no finite number, or
+that the ledger's own rules refuse (a frequency of 0), is not decoded: never banked. A file band not decoded -- a type
+code the reader does not know, Fine EQ, a value missing or not decoded -- leaves the base's band in that slot as it was,
+named; a base whose bands carry no `i` keeps its whole `eq`, named. `preset_settings` takes `sources.*`,
+`fx.realcenter`, `fx.dynamic_bass`, `fx.subxpander`, `rtc.on`, `rtc.curve` (point by point onto the base's curve: a
+point the file does not give, or not as a number, stays and is named), `bt.source` and `bt.auto_switch`. The
 codes between the two are one table (`state/from_file.py`), the one item 13 compares with. Anything else stays as the
 base had it and is printed by name with its reason -- each field kept (`Kept as <base> has them`), each row no channel
-is reached for, each output of the file no row is on and each band the journal has no type for (`Not taken from the
-file`), and what is taken short, such as an all-pass invert (`Taken short`) -- and the same lists are in the version's
-`provenance` (`kind` `pct6`, the file's name, path, md5, saved, PC-Tool, device, `read_at`, `kept`, `not_taken`). The read
+is reached for, each output of the file no row is on, each band the journal has no type for or the file does not give
+in full, and each value the file holds that the journal does not take where the base holds none (`Not taken from the
+file`), and what is taken short, such as an all-pass invert or a crossover family whose file code is documented and not
+confirmed (`Taken short`) -- and the same lists are in the version's `provenance` (`kind` `pct6`, the file's name, path,
+md5, saved, PC-Tool, device, `read_at`, `kept`, `not_taken`, `taken_short`). The read
 is a device read, as `setup_import`'s: its own evidence, so a structural move read from the file is not held as a
 candidate.

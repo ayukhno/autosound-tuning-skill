@@ -268,8 +268,15 @@ def is_this_vendor(profile):
     return any(word in vendor for word in ("mosconi", "gladen"))
 
 
+class BadSetting(ValueError):
+    """A `dsp.settings` value in `project.json` this model has no name for (one edited by hand): `is_unreadable`, so
+    `predict`'s `main` says it in one line, exit 1, as it says a project file it cannot read."""
+    is_unreadable = True
+
+
 def settings_of(project_data):
-    """`(corner_set, peak_mode)` recorded in `project.json` `dsp.settings`, each None when not recorded."""
+    """`(corner_set, peak_mode)` recorded in `project.json` `dsp.settings`, each None when not recorded. A value the
+    model has no name for raises `BadSetting`, naming the repair."""
     raw = (((project_data or {}).get("dsp") or {}).get("settings") or {})
 
     def value(key, allowed):
@@ -278,7 +285,9 @@ def settings_of(project_data):
         if x is None:
             return None
         if x not in allowed:
-            raise ValueError(f"project.json dsp.settings.{key} is {x!r}: one of {', '.join(allowed)}")
+            raise BadSetting(f"project.json dsp.settings.{key} is {x!r}: one of {', '.join(allowed)} -- record the "
+                             f"tuner's answer again: project.py <dir> set-dsp-setting {key} {'|'.join(allowed)} "
+                             f"--source user")
         return x
     return value("corner_set", CORNER_SET_ORDER), value("peak_mode", tuple(PEAK_MODES))
 
@@ -311,11 +320,14 @@ def _siblings():
 
 
 def bind(profile, project_data):
-    """Bind this model into `dsp_math` for a Mosconi / Gladen profile, or unbind it for any other. Returns a note."""
+    """Bind this model into `dsp_math` for a Mosconi / Gladen profile, or unbind it for any other. Returns a note.
+
+    The hook is reset first, before anything here can raise: a setting refused (`BadSetting`) leaves the generic
+    model, never the model of a project read before this one."""
     dsp_math = _siblings().load("dsp_math.py")
+    dsp_math.reset_response_model()
     model = model_for(profile, project_data)
     if model is None:
-        dsp_math.reset_response_model()
         return None
     dsp_math.bind_response_model(model)
     missing = [q for q, v in ((corner_set_question(), model.corner_set), (peak_mode_question(), model.peak_mode))
@@ -326,17 +338,37 @@ def bind(profile, project_data):
             + ("".join(f"; to ask: {q}" for q in missing)))
 
 
+def note_without_profile(project_data):
+    """The note for a project `project.json` names as this vendor's that has no `dsp_profile.json`: its DSP is modelled
+    by the generic model, said once. None for any other vendor's project."""
+    vendor = str((((project_data or {}).get("dsp") or {}).get("vendor")) or "").strip()
+    if not is_this_vendor({"vendor": vendor}):
+        return None
+    return f"{vendor} project, no dsp_profile.json: the generic model is used"
+
+
 def bind_for_project(project_dir):
-    """`bind` for a project folder: its `dsp_profile.json` and `project.json`, read only."""
+    """`bind` for a project folder: its `dsp_profile.json` and `project.json`, read only. With no profile, a project
+    whose `project.json` names this vendor gets the generic model and one note saying so (`note_without_profile`)."""
     if not project_dir:
         return bind(None, None)
+    _siblings().load("dsp_math.py").reset_response_model()     # before a read below can raise
     dsp_profile = _siblings().load("dsp_profile.py")
     project_io = _siblings().load("project_io.py")
     path = os.path.join(project_dir, "dsp_profile.json")
+    pj = os.path.join(project_dir, "project.json")
     profile = dsp_profile.load_profile(path) if os.path.exists(path) else None
     if not is_this_vendor(profile):
-        return bind(None, None)
-    pj = os.path.join(project_dir, "project.json")
+        bind(None, None)
+        if profile is None and os.path.exists(pj):
+            try:
+                data = project_io.read_json(pj)
+            except Exception as exc:  # noqa: BLE001 -- a note only: the run's own read of project.json refuses it
+                if not (isinstance(exc, (OSError, ValueError)) or getattr(type(exc), "is_unreadable", False)):
+                    raise
+                return None
+            return note_without_profile(data)
+        return None
     return bind(profile, project_io.read_json(pj) if os.path.exists(pj) else None)
 
 
@@ -403,6 +435,17 @@ def _wrap_deg(d):
 def _selftest():
     fs = 96000.0
     failures = []
+
+    # the transcribed tables are there: a table cut to nothing would let every loop below pass on no case at all
+    for name, table in (("_XO_CASES", _XO_CASES), ("_XO_BLOCKS", _XO_BLOCKS), ("_EQ_CASES", _EQ_CASES),
+                        ("SECTION_Q", SECTION_Q), ("CORNER_K", CORNER_K), ("SECTION_ORDERS", SECTION_ORDERS)):
+        if not table:
+            failures.append(f"{name} is empty: the selftest checks nothing against it")
+    for cset in CORNER_SET_ORDER:
+        if not CORNER_K.get(cset):
+            failures.append(f"CORNER_K holds no corners for the set {cset!r}")
+    if {mode for mode, *_rest in _EQ_CASES} != set(PEAK_MODES) or {c[0] for c in _XO_CASES} != set(FAMILIES):
+        failures.append("the vectors do not cover both peak modes and every family")
 
     # crossovers: magnitude and phase, every family and slope, all three corner sets, both kinds
     f = _grid(_XO_AT)
@@ -473,6 +516,24 @@ def _selftest():
             failures.append("bound with no recorded peak mode, a peak was modelled")
         except NotRecorded:
             pass
+        # a hand-edited setting the model has no name for: a refusal of one line (`is_unreadable`, as a project file
+        # that cannot be read), and the project before it does not stay bound
+        bind(mosconi, project)
+        try:
+            bind(mosconi, {"dsp": {"settings": {"peak_mode": {"value": "classic", "source": "user", "at": None}}}})
+            failures.append("a peak mode 'classic' was bound")
+        except Exception as exc:  # noqa: BLE001 -- read by its attributes
+            if not getattr(type(exc), "is_unreadable", False) or "'classic'" not in str(exc) \
+                    or "set-dsp-setting peak_mode" not in str(exc):
+                failures.append(f"a peak mode 'classic' is not refused in one line naming the repair: {exc!r}")
+        if dsp_math._MODEL["impl"] is not None:
+            failures.append("a refused setting left the previous project's model bound")
+        # a Mosconi project with no dsp_profile.json: one note that the generic model is used
+        note = note_without_profile({"dsp": {"vendor": "Mosconi", "model": "PICO 6/8-2 DSP"}})
+        if not note or "no dsp_profile.json" not in note or "generic model" not in note:
+            failures.append(f"a Mosconi project with no profile says nothing of the generic model: {note!r}")
+        if note_without_profile({"dsp": {"vendor": "Audiotec-Fischer"}}) is not None:
+            failures.append("another vendor's project with no profile got the Mosconi note")
     finally:
         dsp_math.reset_response_model()
 

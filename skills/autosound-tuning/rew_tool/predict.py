@@ -2162,6 +2162,15 @@ def refuse_unmodelled_legs(chains, where):
 
 
 def _main(argv=None):
+    """One run: `_run`, with the response hook (`dsp_math`, #219) bound for this run only -- unbound when it ends,
+    whatever it ends in, so the next run in the process does not model on this project's DSP."""
+    try:
+        return _run(argv)
+    finally:
+        dsp_math.reset_response_model()
+
+
+def _run(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     src = ap.add_mutually_exclusive_group()
     src.add_argument("--solos", metavar="DIR", help="directory of Resonalyze v7 solo files")
@@ -2257,6 +2266,8 @@ def _main(argv=None):
         _mg_note = _mg.bind_for_project(args.project)
         if _mg_note:
             print(f"  {_mg_note}", file=sys.stderr)
+    else:
+        dsp_math.reset_response_model()          # no project: the generic model, never a previous run's
     if args.selftest:
         return _selftest()
     if not (args.solos or args.rew) or not (args.project or args.state_json):
@@ -3207,6 +3218,69 @@ def _check_refused_notes_never_cut():
     assert "m-L, m-R: REFUSED -- one reason" in shown and shown[-1].startswith("(+1 more"), shown
 
 
+def _check_the_vendor_model_is_bound_for_one_run():
+    """The response hook on predict's real path (#219): a project whose `dsp_profile.json` is the shipped Mosconi PICO
+    6/8-2 profile, its peak mode and corner set recorded through `project.py set-dsp-setting`, binds a model carrying
+    both; a Helix project binds none; a Mosconi project with no profile says the generic model is used. The binding
+    lasts one run: after a Mosconi run, and in a run with no `--project`, the generic model is back. A hand-edited
+    setting the model has no name for is one line, exit 1, and leaves no earlier project's model bound."""
+    import shutil
+    import tempfile
+    import mosconi_gladen as mg
+    pj = mg._siblings().load("project.py")
+    profiles = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "knowledge", "dsp", "profiles")
+    top = tempfile.mkdtemp(prefix="autosound_predict_vendor_model_")
+
+    def bound():
+        return dsp_math._MODEL["impl"]
+
+    def run(argv):
+        try:
+            return _run_main(argv)
+        except SystemExit as exc:            # a usage refusal is an answer here: what is looked at is the hook after it
+            return exc.code, "", ""
+    try:
+        mos, helix, bare, bad = (os.path.join(top, n) for n in ("mosconi", "helix", "bare", "bad"))
+        for folder, vendor, profile in ((mos, "Mosconi", "mosconi-pico-6-8-2.json"),
+                                        (helix, "Audiotec-Fischer", "audiotec-fischer-helix-dsp-ultra-s.json"),
+                                        (bare, "Mosconi", None)):
+            os.makedirs(folder)
+            pj.Project(folder).save({"schema_version": pj.SCHEMA_VERSION, "dsp": {"vendor": vendor, "model": "M"}})
+            if profile:
+                shutil.copyfile(os.path.join(profiles, profile), os.path.join(folder, "dsp_profile.json"))
+        for key, value in (("peak_mode", "gain_dependent"), ("corner_set", "minus_3db")):
+            rc, _out, err = pj._run_cli(pj._main, ["project.py", mos, "set-dsp-setting", key, value, "--source", "user"])
+            assert rc in (0, None), (key, rc, err)
+        dsp_math.reset_response_model()
+        mg.bind_for_project(mos)
+        assert bound() is not None and (bound().peak_mode, bound().corner_set) == ("gain_dependent", "minus_3db"), \
+            vars(bound()) if bound() else None
+        assert mg.bind_for_project(helix) is None and bound() is None, "a Helix project bound a vendor model"
+        note = mg.bind_for_project(bare)
+        assert bound() is None and note and "no dsp_profile.json" in note and "generic model" in note, note
+        solos = os.path.join(top, "solos")
+        os.makedirs(solos)
+        run(["--solos", solos, "--project", mos])
+        assert bound() is None, "a Mosconi run left its model bound past its end"
+        mg.bind_for_project(mos)
+        run(["--solos", solos, "--state-json", os.path.join(top, "none.json")])
+        assert bound() is None, "a run with no --project ran on the previous project's model"
+        shutil.copytree(mos, bad)
+        with open(os.path.join(bad, "project.json"), encoding="utf-8") as fh:
+            data = json.load(fh)
+        data["dsp"]["settings"]["peak_mode"]["value"] = "classic"            # edited by hand
+        with open(os.path.join(bad, "project.json"), "w", encoding="utf-8") as fh:
+            json.dump(data, fh)
+        mg.bind_for_project(mos)
+        rc, _out, err = run(["--solos", solos, "--project", bad])
+        last = err.strip().splitlines()[-1] if err.strip() else ""
+        assert rc == 1 and last.startswith("error: ") and "'classic'" in last and "Traceback" not in err, (rc, err)
+        assert bound() is None, "a refused setting left the previous project's model bound"
+    finally:
+        dsp_math.reset_response_model()
+        shutil.rmtree(top, ignore_errors=True)
+
+
 def _selftest():
     """Anchored to facts about waves and to the ledger's own vocabulary, never to a stored run."""
     import tempfile
@@ -3905,7 +3979,8 @@ def _selftest():
     failures = []
     for check in (_check_says_what_it_did_not_check, _check_predict_error_says_it_is_a_refusal,
                   _check_rew_down_is_rew_down,
-                  _check_own_rew_project_reads_a_bom, _check_foreign_solos_refused_over_any_project_json):
+                  _check_own_rew_project_reads_a_bom, _check_foreign_solos_refused_over_any_project_json,
+                  _check_the_vendor_model_is_bound_for_one_run):
         try:
             check()
         except AssertionError as exc:

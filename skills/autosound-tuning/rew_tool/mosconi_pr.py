@@ -125,12 +125,20 @@ def _level(byte):
 
 
 def _leg(values, n):
+    """One crossover leg. A slope code past the five this reader knows (5-7) is `undecoded`, its slope None: never
+    read as off."""
     control = values[_XOVER + _XOVER_LEN * n:_XOVER + _XOVER_LEN * n + _XOVER_LEN]
     code = (control[0] >> 2) & 7
     not_set = bool(control[0] & 64)
-    slope = SLOPES[code] if code < len(SLOPES) and not not_set else 0
+    if not_set:
+        slope, state = 0, "off"
+    elif code < len(SLOPES):
+        slope = SLOPES[code]
+        state = "on" if slope else "off"
+    else:
+        slope, state = None, "undecoded"
     return {"side": "high_pass" if n % 2 == 0 else "low_pass", "family": FAMILIES[control[0] & 3],
-            "slope_db_oct": slope, "state": "on" if slope else "off", "frequency_hz": control[1] * 256 + control[2],
+            "slope_db_oct": slope, "slope_code": code, "state": state, "frequency_hz": control[1] * 256 + control[2],
             "locked": bool(control[0] & 32), "not_initialised": not_set, "offset": _XOVER + _XOVER_LEN * n,
             "control": control}
 
@@ -220,7 +228,20 @@ def read_pr(path):
 def _leg_text(leg):
     if leg["state"] == "off":
         return "off"
+    if leg["state"] == "undecoded":
+        return "%s at %d Hz, slope code %d not decoded" % (leg["family"], leg["frequency_hz"], leg["slope_code"])
     return "%s %d at %d Hz" % (leg["family"], leg["slope_db_oct"], leg["frequency_hz"])
+
+
+def _level_text(o):
+    """An output's level as a person reads it; a byte past -100 dB that is not the mute code is said as not decoded."""
+    if o["muted"]:
+        if o["level_db"] is None:
+            return "muted (level not decoded (byte %d))" % o["level_while_muted_byte"]
+        return "muted (level %s dB)" % o["level_db"]
+    if o["level_db"] is None:
+        return "level not decoded (byte %d)" % o["level_byte"]
+    return "%+g dB" % o["level_db"]
 
 
 def summary(reading):
@@ -236,9 +257,8 @@ def summary(reading):
              "input attenuation dB: " + ", ".join("%g" % g["attenuation_db"] for g in reading["input_gain"]),
              "not read: " + ", ".join(reading["not_read"]), ""]
     for o in reading["outputs"]:
-        level = "muted (level %s dB)" % o["level_db"] if o["muted"] else "%+g dB" % o["level_db"]
         lines.append("output %d (slot %d): %s, delay %.3f ms, %s, HP %s, LP %s" % (
-            o["channel"], o["slot"], level, o["delay_ms"], o["polarity"], _leg_text(o["high_pass"]),
+            o["channel"], o["slot"], _level_text(o), o["delay_ms"], o["polarity"], _leg_text(o["high_pass"]),
             _leg_text(o["low_pass"])))
         for b in o["eq"]:
             if b["state"] != "neutral":
@@ -378,21 +398,25 @@ def _check_a_change_while_read_is_refused():
 
 
 def _check_unreadable_files_are_named():
-    """Not there, another model, not a preset, cut short: refused with the kind, exit 2."""
+    """Not there, another model, not a preset, cut short, one line too many, a byte over 255: refused with the kind,
+    exit 2."""
     import shutil
     import tempfile
     top = tempfile.mkdtemp(prefix="selftest_mosconi_pr_")
     try:
         with open(SAMPLE, "rb") as fh:
             data = fh.read()
+        lines = data.split(b"\n")
+        big = b"\n".join(lines[:100] + [b"256\r"] + lines[101:])
         cases = {"none.PR15": None, "other.PR16": data, "garbage.PR15": b"\x00\x01 not a preset\r\n" * 9,
-                 "cut.PR15": data[:len(data) // 2]}
+                 "cut.PR15": data[:len(data) // 2], "extra.PR15": data + b"0\r\n", "big.PR15": big}
         for name, body in cases.items():
             path = os.path.join(top, name)
             if body is not None:
                 with open(path, "wb") as fh:
                     fh.write(body)
-            want = {"none.PR15": "io", "other.PR16": "model", "garbage.PR15": "format", "cut.PR15": "truncated"}[name]
+            want = {"none.PR15": "io", "other.PR16": "model", "garbage.PR15": "format", "cut.PR15": "truncated",
+                    "extra.PR15": "format", "big.PR15": "format"}[name]
             try:
                 read_pr(path)
             except PrError as exc:
@@ -412,12 +436,57 @@ def _check_reading_leaves_the_file_as_it_was():
     assert _sha256(SAMPLE) == before and sorted(os.listdir(os.path.dirname(SAMPLE))) == listing
 
 
+def _sample_with(top, name, lines):
+    """A copy of the sample in `top` with `lines` ({0-based line: text}) changed: this selftest's own file only."""
+    with open(SAMPLE, "rb") as fh:
+        rows = fh.read().split(b"\n")
+    for n, text in lines.items():
+        rows[n] = text.encode("ascii") + (b"\r" if rows[n].endswith(b"\r") else b"")
+    path = os.path.join(top, name)
+    with open(path, "wb") as fh:
+        fh.write(b"\n".join(rows))
+    return path
+
+
+def _check_an_undecoded_slope_code_is_not_off():
+    """A crossover leg whose slope code this reader does not decode (5-7) is `undecoded` with no slope -- never read
+    as OFF -- and the summary says the code."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="selftest_mosconi_pr_")
+    try:
+        with open(SAMPLE, "rb") as fh:
+            byte = int(fh.read().split(b"\n")[_XOVER + _XOVER_LEN].strip() or b"0")
+        path = _sample_with(top, "slope.PR15", {_XOVER + _XOVER_LEN: str((byte & ~(7 << 2) & ~64) | (5 << 2))})
+        r = read_pr(path)
+        leg = r["outputs"][0]["low_pass"]
+        assert (leg["state"], leg["slope_db_oct"], leg["slope_code"]) == ("undecoded", None, 5), leg
+        assert "slope code 5" in summary(r), summary(r)
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_a_level_byte_it_does_not_decode_is_said():
+    """A level byte past -100 dB that is not the mute code (225-254) is read as no level, and `read` says it: "level
+    not decoded (byte N)" -- not a crash."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="selftest_mosconi_pr_")
+    try:
+        r = read_pr(_sample_with(top, "level.PR15", {_LEVEL: "230"}))
+        assert r["outputs"][0]["level_db"] is None, r["outputs"][0]
+        assert "level not decoded (byte 230)" in summary(r), summary(r)
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
 def _selftest():
     import contextlib
     import io
     checks = (_check_sample_is_the_shipped_one, _check_values_on_the_sample, _check_never_writes,
               _check_a_change_while_read_is_refused, _check_unreadable_files_are_named,
-              _check_reading_leaves_the_file_as_it_was)
+              _check_reading_leaves_the_file_as_it_was, _check_an_undecoded_slope_code_is_not_off,
+              _check_a_level_byte_it_does_not_decode_is_said)
     failures = []
     for check in checks:
         try:
