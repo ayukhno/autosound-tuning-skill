@@ -695,3 +695,84 @@ path and the method's own raise different classes.
   together with its digest, in one commit, passes it: review alone catches that today. A test on TCC's side that
   keeps contract 1's table as TCC reads it would hold it, and TCC keeps none yet.
 - Every change to an item is named in the CHANGELOG's `### Upgrading` note, with a line for TCC.
+
+## 13. `state/apply.py <project-dir> compare-file <version> FILE [--json] [--preset P]` — guaranteed (W-13, #218)
+
+One version of the journal against a saved `.pct6`, row by row: what TCC's comparison button reads. An addition
+under contract 1 (item 12). `<version>` is `v_NNN` or `HEAD` (the slot's version: `--preset`, else the active slot);
+`FILE` is taken as given, a relative path being the current folder's. The file is read by `rew_tool/helix_pct6/`
+and every value is compared by its `check`; the version comes from the project's journal (`state/`).
+
+**Read only.** The verb writes nothing, anywhere: not beside the file, not into the project, not into the journal.
+It takes no writer lock and needs no active slot for a `v_NNN`. The file is hashed before it is read and after.
+
+**The exit table**:
+
+| exit | means |
+|---|---|
+| 0 | compared, whatever the rows say: the JSON below on stdout with `--json`, else a table a person reads (the warning, the file, the model, the counts, one row a line, then each unknown with its reason) |
+| 1 | the journal refused: the version is not there, or `HEAD` with no slot named or active -- `error: <reason>` on stderr; with `--json` also a refusal on stdout, `error.kind` `journal` |
+| 2 | the file cannot be read: a refusal naming the kind, `error.kind` one of `container`, `checksum`, `truncated`, `limit`, `xml` (the reader's `Pct6Error.kind`), `io` (not there, not to be opened) or `interpret` (it decoded, and a value in it could not be interpreted or compared: a delay `abc`); no rows. Also usage, a wrong number of arguments: the usage on stderr and nothing on stdout, which is what tells the two apart |
+| 3 | the file changed while it was read (its hash before the read, the bytes read and its hash after are not one): a refusal, not a result, `error.kind` `changed`, no rows -- read it again once nothing is saving it |
+
+Without `--json` a refusal prints nothing on stdout and one line on stderr, `error: <file>: <kind>: <message>`.
+
+**The keys**, every one always present (a value may be null). The selftest of `state/apply.py` holds what the verb
+prints to this table: a key added, removed or renamed in the code or here fails it.
+
+| object | keys |
+|---|---|
+| top level | `contract`, `warning`, `device`, `checked_model`, `file`, `counts`, `rows` |
+| `file` | `name`, `md5`, `saved`, `pctool` |
+| `device` | `dev`, `name`, `verified`, `clock_hz`, `clock_assumed_hz`, `layout`, `note` |
+| `counts` | `result`, `category` |
+| row | `parameter`, `channel`, `journal`, `file`, `result`, `category`, `reason`, `path` |
+| refusal | `contract`, `warning`, `file`, `error` |
+| `error` | `kind`, `message` |
+
+**The values.** `contract` is the shape's name, `"compare-file.v1"` -- not the number item 6 leaves unbuilt.
+`warning` is `helix_pct6.WARNING` verbatim, in English, on every answer, refusals among them. `device` is
+`helix_pct6.models.describe` of the model the file names; `checked_model` is its `verified`, true only for a model
+the reader has been checked on. `file`: its base name, the input's md5, the save time the file states (`dd.MM.yyyy
+hh:mm`, no time zone, null when it states none) and the PC-Tool version that saved it; in a refusal the last three
+may be null. `counts`: `result` is `{match, differs, unknown}`, each a number, summing to the rows; `category` is
+`{<category>: {match, differs, unknown}}` for each category a row has.
+
+**A row.** `result` is `match`, `differs` or `unknown`, and nothing else: an `unknown` never counts as a match, and
+`check`'s `missing` is passed on as `unknown`. `category` is `helix_pct6.compare.category` of the path (`audio`,
+`system`, `naming`, `ui_state`, `save_metadata`, `structure`, `unknown`); a row with no path is `audio` for a channel
+and for a source level or the input gain, `system` for the preset's other settings. Every `audio` row comes first,
+then the rest in that order, the version's order within one. `reason` says why a row is `unknown`, and why a band is
+on one side only; null otherwise. `path` is the file's value compared, as `helix_pct6` flattens it
+(`/ATF/OC[@ON='16']/Vol[1]/@L`), or the element looked at, or null when the file holds nothing to look at.
+`journal` is the version's value as the journal holds it (null when it does not record one; `"OFF"` for a crossover
+leg the journal holds as null or `"OFF"`; the whole band for a band the file does not hold); `file` is the file's
+value in the journal's unit (dB, ms as PC-Tool shows it, Hz, degrees, `NORM`/`INV`, true/false, a band's type name),
+or a short text for a band or a channel the version does not hold.
+
+`channel` is the channel's code in `project.json` (the ledger's key where `project.json` has none), `preset` for the
+preset's settings, or PC-Tool's name (`Output A`, `Virtual G`) for an output no row of the version reaches.
+`parameter` is the version's field: `gain_db`, `ta_ms`, `polarity`, `phase_deg`, `mute`, `off`, `eq_bypass`;
+`hp.type`, `hp.f`, `hp.slope`, `hp.bypass` and the same for `lp` (an OFF leg is `<leg>.slope` against 0; a leg the
+version holds with no slope gives `<leg>.slope` unknown, the file's leg beside it); `eq` (a version that holds no EQ
+for the channel); `eq[<n>].type`, `.f`, `.gain_db`, `.q`, `.bypass` for a band paired with the file's band in slot n,
+and `eq[<n>].invert`, unknown, when that band is an all-pass the file holds inverted (the journal cannot record an
+invert); `eq[<n>]` for an active band of the file the version does not hold -- unknown when its type code is one the
+reader does not decode --, `eq <type> <f> Hz` for a band of the version the file does not hold; `channel` for an output no row reaches; under `preset`, the field's
+path in `preset_settings` (`fx.realcenter`, `sources.main`, `rtc.curve.<name>`, `bt.auto_switch` ...).
+
+**What reaches what.** A row of the version reaches the file through its `slot` in `project.json` and its tier: tier
+`channels` the output the reader labels `Output <slot>`; tier `virtual_channels` the virtual channel PC-Tool names
+by that letter, which is the ordinal among the virtual channels PC-Tool shows, in index order (on the HELIX DSP ULTRA S,
+A..H are indexes 0-5, 10, 11 -- the reader's own `Virtual K` label for index 10 is the index's letter, not PC-Tool's).
+A row with no such channel, a tier other than those two, or a model whose layout is not
+checked gives `unknown` rows. An EQ band pairs with the file's band in the slot its `i` names, else with the first
+unpaired band of its type at its frequency. A value one side holds and the other does not record or decode is a row,
+`unknown` with its reason: a field the version leaves unstated is not read as its default. Not compared: a row's
+`status`, `eq_ptr` and `tag`, and `preset_settings`' `status` and `source_file`, which are the journal's bookkeeping;
+a file band that is bypassed or neutral and not named by the version, which does nothing. A row's field this
+comparison does not know is an `unknown` row. Tolerances: 0.005 dB, 0.005 Hz, 0.005 for a Q (a shelf's 0.71 is the
+file's 0.707), 0.001°, a slope exact, a delay to 0.01 ms as PC-Tool shows it.
+
+A key, a row's `parameter`, a category, an `error.kind` or an exit code added later is an addition (item 12);
+removing or renaming one is a contract change.

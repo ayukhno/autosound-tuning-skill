@@ -1875,6 +1875,477 @@ def _check_a_plain_propose_keeps_the_slots_named_variant():
             shutil.rmtree(top, ignore_errors=True)
 
 
+# ── compare-file (#218 T2): a version of the journal against a saved `.pct6`, read only ────────────────────────────
+_AYA_PCT6 = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "testdata", "helix-pct6",
+                         "AYA.pct6")
+
+
+def _compare_file():
+    """`state/compare_file.py`, through the ledger's own loader: one module object."""
+    return _state._siblings().load("state/compare_file.py")
+
+
+def _aya_project(top, edit_state=None, edit_xml=None, more_channels=()):
+    """A project in `top/project` whose one version, v_001, holds values read off the shipped AYA.pct6 for four outputs
+    and two virtual channels -- with a gain, a polarity, a band and a switch made to differ, and fields left out or
+    not decoded on purpose -- and a copy of the file in `top/files`, outside the project. Returns (project, file).
+    `edit_state(state)` changes the version before it is banked, `more_channels` adds `project.json` channels, and
+    `edit_xml(root)` builds the file from AYA's decoded XML changed in place (`_test_container`)."""
+    import shutil
+    project, files = os.path.join(top, "project"), os.path.join(top, "files")
+    os.makedirs(project)
+    os.makedirs(files)
+    channels = [{"code": "w-L", "tier": "channels", "slot": "C"}, {"code": "m-L", "tier": "channels", "slot": "E"},
+                {"code": "tw-L", "tier": "channels", "slot": "G"}, {"code": "sw", "tier": "channels", "slot": "K"},
+                {"code": "VFL", "tier": "virtual_channels", "slot": "A"},
+                {"code": "VSW", "tier": "virtual_channels", "slot": "G"}] + list(more_channels)
+    with open(os.path.join(project, "project.json"), "w", encoding="utf-8") as fh:
+        json.dump({"schema_version": _state.SCHEMA_VERSION, "project_rev": 1, "channels": channels}, fh)
+    state = {
+        "preset": "AYA", "sample_rate": 96000, "project_rev": 1,
+        "channels": {
+            # every value as the file holds it: all match
+            "w-L": {"gain_db": -0.3, "ta_ms": 4.63, "polarity": "NORM", "mute": False,
+                    "hp": {"f": 92, "type": "LR", "slope": 24}, "lp": {"f": 280, "type": "LR", "slope": 24},
+                    "eq": [{"type": "PK", "f": 241, "gain_db": -3.0, "q": 5.0, "i": 1},
+                           {"type": "PK", "f": 188, "gain_db": -2.5, "q": 7.0, "i": 2},
+                           {"type": "PK", "f": 300, "gain_db": -2.5, "q": 2.0, "i": 3},
+                           {"type": "PK", "f": 102, "gain_db": -3.0, "q": 3.5, "i": 4}]},
+            # the file says -3.5 dB; no `eq`, no `mute`, no `phase_deg` on a phase channel: unknown, never a match
+            "m-L": {"gain_db": -3.0, "ta_ms": 4.73, "polarity": "NORM",
+                    "hp": {"f": 280, "type": "LR", "slope": 24}, "lp": {"f": 2500, "type": "LR", "slope": 24}},
+            # the file says NORM; its low-pass is off (slope 0), as the version's
+            "tw-L": {"gain_db": -5.8, "ta_ms": 4.73, "polarity": "INV", "phase_deg": 0.0,
+                     "hp": {"f": 3000, "type": "BW", "slope": 24}, "lp": None},
+            # bands with no slot index: paired by type and frequency; PK 1000 is not in the file, and the file's other
+            # active bands are not in the version; `off` is a switch the file does not decode
+            "sw": {"gain_db": -6.5, "ta_ms": 0.0, "polarity": "NORM", "off": False,
+                   "hp": None, "lp": {"f": 80, "type": "LR", "slope": 24},
+                   "eq": [{"type": "PK", "f": 55, "gain_db": 1.9, "q": 5.0},
+                          {"type": "PK", "f": 1000, "gain_db": -3.0, "q": 2.0}]},
+        },
+        "virtual_channels": {
+            # a shelf's Q written 0.71 where the file holds 0.707; `eq_bypass` is a field whose meaning in the file is
+            # not established
+            "VFL": {"gain_db": 0.0, "ta_ms": 0.0, "polarity": "NORM", "eq_bypass": False,
+                    "eq": [{"type": "LSH", "f": 150, "gain_db": 2.5, "q": 0.71, "bypass": True, "i": 1}]},
+            # slot G of the virtual tier: no channel the reader labels "Virtual G" is shown in PC-Tool
+            "VSW": {"gain_db": 0.0, "ta_ms": 0.0, "polarity": "NORM"},
+        },
+        # RealCenter and BT as the file; SubXpander on where the file has it off; the knob position is not in a file
+        "preset_settings": {"fx": {"realcenter": True, "subxpander": True}, "bt": {"source": "BT"},
+                            "sources": {"main": 0.0}, "conductor": {"sub_lamps": 7}},
+    }
+    if edit_state:
+        edit_state(state)
+    _state.PresetHistory(os.path.join(project, "state"), "AYA", project_dir=project).snapshot(state, note="AYA")
+    pct6 = os.path.join(files, "AYA.pct6")
+    if edit_xml is None:
+        shutil.copyfile(_AYA_PCT6, pct6)
+    else:
+        import xml.etree.ElementTree as ET
+        root = ET.fromstring(_compare_file()._helix().read_pct6(_AYA_PCT6).xml)
+        edit_xml(root)
+        with open(pct6, "wb") as fh:
+            fh.write(_test_container(ET.tostring(root)))
+    return project, pct6
+
+
+def _test_container(xml):
+    """The bytes of a `.pct6` around given XML, for this selftest's own cases only, written in its own temp folder and
+    never next to a fixture -- as the helix_pct6 tests build their error containers. The method has no encoder."""
+    import struct
+    import zlib
+    body = struct.pack(">I", len(xml)) + zlib.compress(xml)
+    return bytes(b ^ b"ATFV6"[i % 5] for i, b in enumerate(body))
+
+
+def _oc(root, index):
+    return next(e for e in root.findall("OC") if e.get("ON") == str(index))
+
+
+def _compare_cli(*argv):
+    """(exit code, stdout, stderr) of `apply.py <argv>`."""
+    import contextlib
+    import io
+    out, err = io.StringIO(), io.StringIO()
+    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+        code = _main(["apply.py"] + list(argv))
+    return code, out.getvalue(), err.getvalue()
+
+
+def _compared(project, pct6, version="v_001"):
+    code, out, err = _compare_cli(project, "compare-file", version, pct6, "--json")
+    assert code == 0, (code, out, err)
+    return json.loads(out)
+
+
+def _row(result, channel, parameter):
+    found = [r for r in result["rows"] if r["channel"] == channel and r["parameter"] == parameter]
+    assert len(found) == 1, (channel, parameter, found, sorted({(r["channel"], r["parameter"]) for r in result["rows"]}))
+    return found[0]
+
+
+def _pinned_compare_keys():
+    """{object: [keys]} from the key table under CONTRACT.md's compare-file heading: the shape pinned in the contract."""
+    import re
+    contract = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "CONTRACT.md")
+    with open(contract, encoding="utf-8") as fh:
+        lines = fh.read().splitlines()
+    inside, table = False, {}
+    for line in lines:
+        if line.startswith("## "):
+            inside = "compare-file" in line
+            continue
+        m = re.match(r"^\| (?P<object>[^|]+?) \| (?P<keys>`[^|]+) \|$", line) if inside else None
+        if m:
+            table[m.group("object").strip("` ")] = re.findall(r"`([^`]+)`", m.group("keys"))
+    assert table, "CONTRACT.md has no compare-file heading with a key table"
+    return table
+
+
+def _check_compare_file_keys_are_the_pinned_ones():
+    """The JSON compare-file prints holds exactly the keys CONTRACT.md pins: top level, `file`, `counts`, `device`, a
+    row, a refusal and its `error`. A key added, removed or renamed on either side fails here."""
+    import shutil
+    import tempfile
+    pinned = _pinned_compare_keys()
+    for name in ("top level", "file", "counts", "device", "row", "refusal", "error"):
+        assert name in pinned, f"CONTRACT.md pins no keys for {name!r}: {sorted(pinned)}"
+    top = tempfile.mkdtemp(prefix="autosound_compare_keys_")
+    try:
+        project, pct6 = _aya_project(top)
+        got = _compared(project, pct6)
+        assert sorted(got) == sorted(pinned["top level"]), (sorted(got), pinned["top level"])
+        assert sorted(got["file"]) == sorted(pinned["file"]), (sorted(got["file"]), pinned["file"])
+        assert sorted(got["counts"]) == sorted(pinned["counts"]), (sorted(got["counts"]), pinned["counts"])
+        assert sorted(got["device"]) == sorted(pinned["device"]), (sorted(got["device"]), pinned["device"])
+        assert got["rows"], "no rows"
+        for row in got["rows"]:
+            assert sorted(row) == sorted(pinned["row"]), (sorted(row), pinned["row"])
+        bad = os.path.join(top, "files", "not-a-preset.pct6")
+        with open(bad, "wb") as fh:
+            fh.write(b"this is not a PC-Tool file")
+        code, out, _err = _compare_cli(project, "compare-file", "v_001", bad, "--json")
+        refused = json.loads(out)
+        assert code == 2 and sorted(refused) == sorted(pinned["refusal"]), (code, sorted(refused), pinned["refusal"])
+        assert sorted(refused["error"]) == sorted(pinned["error"]), (sorted(refused["error"]), pinned["error"])
+        assert sorted(refused["file"]) == sorted(pinned["file"]), (sorted(refused["file"]), pinned["file"])
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_compare_file_matches_and_differs_on_aya():
+    """On the shipped AYA.pct6: what the version holds as the file does is a match, what it holds otherwise differs --
+    a gain, a polarity, a band missing on either side, a switch -- and the top level names the file and the model."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_compare_aya_")
+    try:
+        project, pct6 = _aya_project(top)
+        got = _compared(project, pct6)
+        hx = _compare_file()._helix()
+        assert got["contract"] == _compare_file().CONTRACT and got["warning"] == hx.WARNING, got["warning"]
+        assert got["device"]["name"] == "HELIX DSP ULTRA S" and got["checked_model"] is True, got["device"]
+        assert got["file"] == {"name": "AYA.pct6", "md5": "708ccc26583f90e7dfb84fd9345f670c",
+                               "saved": "16.10.2026 18:55", "pctool": "6.04.03"}, got["file"]
+        for channel, parameter in (("w-L", "gain_db"), ("w-L", "ta_ms"), ("w-L", "polarity"), ("w-L", "mute"),
+                                   ("w-L", "hp.type"), ("w-L", "hp.f"), ("w-L", "hp.slope"), ("w-L", "lp.f"),
+                                   ("w-L", "eq[1].gain_db"), ("w-L", "eq[4].q"), ("w-L", "eq[2].f"),
+                                   ("tw-L", "lp.slope"), ("tw-L", "hp.type"), ("tw-L", "phase_deg"),
+                                   ("sw", "hp.slope"), ("sw", "eq[1].gain_db"), ("sw", "eq[1].q"),
+                                   ("VFL", "gain_db"), ("VFL", "eq[1].q"), ("VFL", "eq[1].bypass"),
+                                   ("preset", "fx.realcenter"), ("preset", "bt.source"), ("preset", "sources.main")):
+            row = _row(got, channel, parameter)
+            assert row["result"] == "match", row
+        gain = _row(got, "m-L", "gain_db")
+        assert gain["result"] == "differs" and gain["journal"] == -3.0 and abs(gain["file"] + 3.5) < 0.01, gain
+        assert gain["category"] == "audio" and gain["path"] == "/ATF/OC[@ON='18']/Vol[1]/@L", gain
+        pol = _row(got, "tw-L", "polarity")
+        assert pol["result"] == "differs" and (pol["journal"], pol["file"]) == ("INV", "NORM"), pol
+        assert _row(got, "preset", "fx.subxpander")["result"] == "differs"
+        assert _row(got, "preset", "fx.subxpander")["category"] == "system"
+        only_journal = [r for r in got["rows"] if r["channel"] == "sw" and r["file"] is None and r["result"] == "differs"]
+        assert len(only_journal) == 1 and only_journal[0]["journal"]["f"] == 1000, only_journal
+        only_file = [r for r in got["rows"] if r["channel"] == "sw" and r["journal"] is None and r["result"] == "differs"]
+        assert {r["parameter"] for r in only_file} == {"eq[3]", "eq[5]", "eq[6]", "eq[7]", "eq[8]", "eq[9]"}, only_file
+        assert got["counts"]["result"]["differs"] == sum(r["result"] == "differs" for r in got["rows"]), got["counts"]
+        assert got["counts"]["category"]["audio"]["match"] == sum(
+            r["result"] == "match" and r["category"] == "audio" for r in got["rows"]), got["counts"]
+        # The table a person reads: the same rows, one a line, and the same exit.
+        code, out, _err = _compare_cli(project, "compare-file", "v_001", pct6)
+        assert code == 0 and hx.WARNING in out and "m-L" in out and "differs" in out, out
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_compare_file_unknown_is_never_a_match():
+    """What one side holds and the other does not decode or record is a row, `unknown` with its reason, and never a
+    match: a field left out of the version, one the file does not decode, a channel no output carries, a field whose
+    meaning in the file is not established, a knob position. `check`'s `missing` is never passed on."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_compare_unknown_")
+    try:
+        project, pct6 = _aya_project(top)
+        got = _compared(project, pct6)
+        for channel, parameter in (("m-L", "eq"), ("m-L", "mute"), ("m-L", "phase_deg"), ("sw", "off"),
+                                   ("VFL", "eq_bypass"), ("Output A", "channel"),
+                                   ("preset", "conductor.sub_lamps"), ("preset", "fx.dynamic_bass")):
+            row = _row(got, channel, parameter)
+            assert row["result"] == "unknown" and row["reason"], row
+        assert _row(got, "VFL", "eq_bypass")["category"] == "unknown"
+        assert {r["result"] for r in got["rows"]} <= {"match", "differs", "unknown"}, {r["result"] for r in got["rows"]}
+        assert not [r for r in got["rows"] if r["category"] == "unknown" and r["result"] == "match"]
+        assert not [r for r in got["rows"] if r["result"] == "unknown" and not r["reason"]]
+        counts = got["counts"]["result"]
+        assert counts == {res: sum(r["result"] == res for r in got["rows"]) for res in ("match", "differs", "unknown")}, counts
+        assert sum(counts.values()) == len(got["rows"]), counts
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_compare_file_audio_first():
+    """Every audio row comes before every other row, whatever order the version and the file hold them in."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_compare_order_")
+    try:
+        project, pct6 = _aya_project(top)
+        cats = [r["category"] for r in _compared(project, pct6)["rows"]]
+        assert "audio" in cats and "system" in cats, sorted(set(cats))
+        last_audio = max(i for i, c in enumerate(cats) if c == "audio")
+        first_other = min(i for i, c in enumerate(cats) if c != "audio")
+        assert last_audio < first_other, (last_audio, first_other, cats)
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_compare_file_unreadable_is_exit_2():
+    """A file that is not a `.pct6`, one cut short, and one that is not there: exit 2, the JSON naming the kind of
+    failure, no rows -- nothing compared."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_compare_unreadable_")
+    try:
+        project, pct6 = _aya_project(top)
+        garbage, cut = os.path.join(top, "files", "garbage.pct6"), os.path.join(top, "files", "cut.pct6")
+        with open(garbage, "wb") as fh:
+            fh.write(b"\x00\x01 not a PC-Tool setup file \x02" * 8)
+        with open(pct6, "rb") as fh:
+            data = fh.read()
+        with open(cut, "wb") as fh:
+            fh.write(data[:len(data) // 2])
+        for path, kind in ((garbage, "container"), (cut, "truncated"), (os.path.join(top, "files", "none.pct6"), "io")):
+            code, out, err = _compare_cli(project, "compare-file", "v_001", path, "--json")
+            assert code == 2, (path, code, out, err)
+            refused = json.loads(out)
+            assert refused["error"]["kind"] == kind and refused["error"]["message"], (path, refused)
+            assert "rows" not in refused, refused
+            code, out, err = _compare_cli(project, "compare-file", "v_001", path)
+            assert code == 2 and kind in err, (path, code, out, err)
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_compare_file_input_changed_is_exit_3():
+    """The input is hashed before it is read and after: a file that changed in between -- the reader made to change it,
+    once after its read and once before -- is exit 3, a refusal with no rows, not a result."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_compare_changed_")
+    hx = real = None
+    try:
+        hx = _compare_file()._helix()
+        real = hx.read_pct6
+        project, pct6 = _aya_project(top)
+
+        def touch(path):
+            with open(path, "ab") as fh:
+                fh.write(b"\0")
+
+        def changed_after(source, *args, **kwargs):
+            doc = real(source, *args, **kwargs)
+            touch(source)
+            return doc
+
+        def changed_before(source, *args, **kwargs):
+            touch(source)
+            return real(source, *args, **kwargs)
+
+        for reader in (changed_after, changed_before):
+            shutil.copyfile(_AYA_PCT6, pct6)
+            hx.read_pct6 = reader
+            try:
+                code, out, err = _compare_cli(project, "compare-file", "v_001", pct6, "--json")
+            finally:
+                hx.read_pct6 = real
+            assert code == 3, (reader.__name__, code, out, err)
+            refused = json.loads(out)
+            assert refused["error"]["kind"] == "changed" and "rows" not in refused, (reader.__name__, refused)
+    finally:
+        if hx is not None:
+            hx.read_pct6 = real
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_compare_file_delay_rounds_half_up_on_both_sides():
+    """A delay is compared as PC-Tool shows it, half up to 0.01 ms -- the version's ms too, not half to even: 4.625 ms
+    is 444 samples at 96 kHz and shows 4.63; 0.045 ms shows 0.05, and 4 samples (0.0417) show 0.04."""
+    import shutil
+    import tempfile
+    hx = _compare_file()._helix()
+    path = "/ATF/OC[@ON='16']/T[1]/@T"
+    doc = hx.read_pct6(_AYA_PCT6)
+    assert doc.root.find("OC[@ON='16']/T").get("T") == "444"
+    assert hx.check(doc, [{"path": path, "expected": 4.625, "policy": "display_delay_ms"}])[0]["result"] == "match"
+    top = tempfile.mkdtemp(prefix="autosound_compare_delay_")
+    try:
+        def four_samples(root):
+            _oc(root, 16).find("T").set("T", "4")
+
+        def the_version(state):
+            state["channels"]["w-L"]["ta_ms"] = 0.045
+
+        project, pct6 = _aya_project(top, edit_state=the_version, edit_xml=four_samples)
+        row = _row(_compared(project, pct6), "w-L", "ta_ms")
+        assert row["result"] == "differs" and (row["journal"], row["file"]) == (0.045, 0.04), row
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_compare_file_a_leg_with_no_slope_is_unknown():
+    """A crossover leg the version holds with no `slope` (valid: only `f` is required) against a leg the file has OFF
+    -- PC-Tool keeps its type and frequency -- is never a match: `<leg>.slope` is unknown, the file's leg beside it."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_compare_noslope_")
+    try:
+        def no_slope(state):
+            state["channels"]["spare-A"] = {"gain_db": 0.0, "ta_ms": 0.0, "polarity": "NORM",
+                                            "hp": {"f": 100, "type": "BW"}, "lp": None}
+
+        project, pct6 = _aya_project(top, edit_state=no_slope,
+                                     more_channels=[{"code": "spare-A", "tier": "channels", "slot": "A"}])
+        got = _compared(project, pct6)
+        row = _row(got, "spare-A", "hp.slope")
+        assert row["result"] == "unknown" and "no slope" in row["reason"] and "OFF" in str(row["file"]), row
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_compare_file_bands_it_cannot_decode_and_an_inverted_all_pass():
+    """A file band of a type code the reader does not decode is a row, unknown, whether the version holds EQ for the
+    channel or not; an all-pass the file holds inverted is unknown, the version having no way to record an invert."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_compare_bands_")
+    try:
+        def bands(root):
+            wl = _oc(root, 16).findall("Fil")
+            wl[4].attrib.update({"T": "2", "F": "500.00", "G": "-3", "FilBy": "0", "FilBBR": "0"})
+            wl[5].attrib.update({"T": "20", "F": "80.00", "G": "0", "Q": "0.7", "I": "1", "FilBy": "0", "FilBBR": "0"})
+            spare = _oc(root, 25).findall("Fil")                # Output L: no active band, then one it cannot decode
+            spare[0].attrib.update({"T": "2", "F": "700.00", "G": "-2", "FilBy": "0", "FilBBR": "0"})
+
+        def the_version(state):
+            state["channels"]["w-L"]["eq"].append({"type": "APF2", "f": 80, "q": 0.7, "i": 6})
+            state["channels"]["spare-L"] = {"gain_db": 0.0, "ta_ms": 0.0, "polarity": "NORM", "hp": None, "lp": None}
+
+        project, pct6 = _aya_project(top, edit_state=the_version, edit_xml=bands,
+                                     more_channels=[{"code": "spare-L", "tier": "channels", "slot": "L"}])
+        got = _compared(project, pct6)
+        odd = _row(got, "w-L", "eq[5]")
+        assert odd["result"] == "unknown" and "type code 2" in odd["reason"], odd
+        inverted = _row(got, "w-L", "eq[6].invert")
+        assert inverted["result"] == "unknown" and "invert" in inverted["reason"] and inverted["file"] is True, inverted
+        assert _row(got, "w-L", "eq[6].f")["result"] == "match"
+        none_recorded = _row(got, "spare-L", "eq")
+        assert none_recorded["result"] == "unknown" and none_recorded["file"], none_recorded
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_compare_file_virtual_letters_are_pc_tools():
+    """A virtual slot letter is PC-Tool's: the ordinal among the virtual channels PC-Tool shows, in index order -- on the
+    HELIX DSP ULTRA S, A..H are indexes 0-5, 10, 11. G reaches index 10, H index 11; a letter past H reaches nothing."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_compare_virtual_")
+    try:
+        def two_more(state):
+            state["virtual_channels"]["VH"] = {"gain_db": 0.0, "ta_ms": 0.0, "polarity": "NORM"}
+            state["virtual_channels"]["VI"] = {"gain_db": 0.0, "ta_ms": 0.0, "polarity": "NORM"}
+
+        project, pct6 = _aya_project(top, edit_state=two_more,
+                                     more_channels=[{"code": "VH", "tier": "virtual_channels", "slot": "H"},
+                                                    {"code": "VI", "tier": "virtual_channels", "slot": "I"}])
+        got = _compared(project, pct6)
+        g, h = _row(got, "VSW", "gain_db"), _row(got, "VH", "gain_db")
+        assert g["result"] == "match" and g["path"] == "/ATF/OC[@ON='10']/Vol[1]/@L", g
+        assert h["result"] == "match" and h["path"] == "/ATF/OC[@ON='11']/Vol[1]/@L", h
+        assert _row(got, "VI", "gain_db")["result"] == "unknown"
+        unreached = {r["channel"] for r in got["rows"] if r["parameter"] == "channel"}
+        assert "Virtual K" not in unreached and "Virtual L" not in unreached, unreached
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_compare_file_a_file_it_cannot_interpret_is_exit_2():
+    """A file that decodes and then cannot be interpreted or compared -- a delay `abc`, a delay `NaN` -- is exit 2,
+    `kind` interpret, the JSON refusal: the file's failure, never the journal's exit 1, never a traceback."""
+    import shutil
+    import tempfile
+    for bad in ("abc", "NaN"):
+        top = tempfile.mkdtemp(prefix="autosound_compare_interpret_")
+        try:
+            def odd_delay(root, bad=bad):
+                _oc(root, 16).find("T").set("T", bad)
+
+            project, pct6 = _aya_project(top, edit_xml=odd_delay)
+            try:
+                code, out, err = _compare_cli(project, "compare-file", "v_001", pct6, "--json")
+            except Exception as exc:          # noqa: BLE001 -- what this check is about
+                raise AssertionError(f"T={bad}: {type(exc).__name__}: {exc}") from exc
+            assert code == 2, (bad, code, out[:300], err)
+            refused = json.loads(out)
+            assert refused["error"]["kind"] == "interpret" and "rows" not in refused, (bad, refused)
+        finally:
+            shutil.rmtree(top, ignore_errors=True)
+
+
+def _tree_digest(top):
+    """{relative path: sha256 or "<dir>"} of everything under `top`: a file made, changed or removed shows."""
+    import hashlib
+    out = {}
+    for here, dirs, files in os.walk(top):
+        for d in dirs:
+            out[os.path.relpath(os.path.join(here, d), top)] = "<dir>"
+        for f in files:
+            with open(os.path.join(here, f), "rb") as fh:
+                out[os.path.relpath(os.path.join(here, f), top)] = hashlib.sha256(fh.read()).hexdigest()
+    return out
+
+
+def _check_compare_file_writes_nothing():
+    """compare-file writes nothing anywhere: the project tree (its journal among it) and the file's own folder hash the
+    same before and after a comparison, its table, and a refusal."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_compare_nowrite_")
+    try:
+        project, pct6 = _aya_project(top)
+        before = _tree_digest(top)
+        assert any(k.endswith("v_001.json") for k in before) and "files/AYA.pct6".replace("/", os.sep) in before
+        for argv, exit_code in ((("v_001", pct6, "--json"), 0), (("v_001", pct6), 0),
+                                (("v_001", os.path.join(top, "files", "none.pct6")), 2)):
+            code, out, err = _compare_cli(project, "compare-file", *argv)
+            assert code == exit_code, (argv, code, out, err)     # it ran: a refusal at the door proves nothing
+        assert _tree_digest(top) == before, sorted(set(_tree_digest(top).items()) ^ set(before.items()))
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
 def _own_tempdir(selftest):
     """`selftest` run with tempfile's folder -- and TMPDIR, for the children it starts -- set to one folder of its own,
     removed with everything in it when the selftest ends, passed or failed, both put back (#148): a check that forgets
@@ -1920,7 +2391,15 @@ def _selftest():
                   _check_a_base_that_is_not_head_answers_to_the_slot, _check_rows_the_sheet_lists_are_proposed,
                   _check_a_candidate_base_is_no_candidate, _check_a_device_read_vouches_only_for_the_rows_it_read,
                   _check_a_candidate_with_no_moves_of_its_own_is_still_held, _check_a_row_gone_is_a_structural_move,
-                  _check_a_plain_propose_keeps_the_slots_named_variant):
+                  _check_a_plain_propose_keeps_the_slots_named_variant,
+                  _check_compare_file_keys_are_the_pinned_ones, _check_compare_file_matches_and_differs_on_aya,
+                  _check_compare_file_unknown_is_never_a_match, _check_compare_file_audio_first,
+                  _check_compare_file_unreadable_is_exit_2, _check_compare_file_input_changed_is_exit_3,
+                  _check_compare_file_writes_nothing, _check_compare_file_delay_rounds_half_up_on_both_sides,
+                  _check_compare_file_a_leg_with_no_slope_is_unknown,
+                  _check_compare_file_bands_it_cannot_decode_and_an_inverted_all_pass,
+                  _check_compare_file_virtual_letters_are_pc_tools,
+                  _check_compare_file_a_file_it_cannot_interpret_is_exit_2):
         try:
             check()
         except AssertionError as exc:
@@ -2163,6 +2642,7 @@ def _selftest():
 
 _USAGE = """usage: apply.py <project-dir> propose <delta.json> [--preset P] [--note TEXT] [--evidence E ...] [--reviewed FILE] [--on v_NNN|HEAD]
        apply.py <project-dir> attest [v_NNN] [--preset P] [--note TEXT] [--source-file FILE.json]
+       apply.py <project-dir> compare-file <v_NNN|HEAD> FILE.pct6 [--json] [--preset P]
        apply.py --selftest
 
   propose   bank the delta as a YELLOW version and print the settings sheet the Arbiter enters (skill #74: a
@@ -2171,7 +2651,49 @@ _USAGE = """usage: apply.py <project-dir> propose <delta.json> [--preset P] [--n
   attest    the Arbiter entered it: flip the proposed rows to green, as a new version.
             --source-file: a JSON object, the saved preset this version was read from (state/schema.md, #200);
             refused on a version with no preset setting (it would stand alone in `preset_settings`)
+  compare-file  a version of the journal against a saved .pct6, row by row (match / differs / unknown, audio first);
+            read only, writes nothing anywhere. --json: the shape CONTRACT.md item 13 pins. Exit 0 compared,
+            1 the version is not there, 2 the file cannot be read, 3 the file changed while it was read (#218)
 """
+
+
+def _compare_file_main(project_dir, args):
+    """`compare-file <version> FILE [--json] [--preset P]` (#218 T2): exit 0 compared, 1 the journal refused, 2 the
+    file unreadable (or usage), 3 the file changed while it was read. Writes nothing."""
+    as_json, preset, rest = False, None, []
+    i = 0
+    while i < len(args):
+        if args[i] == "--json":
+            as_json = True
+            i += 1
+        elif args[i] == "--preset" and i + 1 < len(args):
+            preset = args[i + 1]
+            i += 2
+        else:
+            rest.append(args[i])
+            i += 1
+    if len(rest) != 2 or any(a.startswith("--") for a in rest):
+        print(_USAGE, file=sys.stderr)
+        return 2
+    version, path = rest[0], os.path.abspath(rest[1])
+    cf = _compare_file()
+    try:                            # the journal's errors only: past this, a failure is the file's (exit 2 or 3)
+        journal = cf.load_journal(project_dir, version, preset=preset)
+    except (ValueError, OSError) as exc:
+        if as_json:
+            print(json.dumps(cf.refusal(cf._helix().WARNING, os.path.basename(path), "journal", str(exc)),
+                             ensure_ascii=False, indent=2))
+        print(f"error: {exc}", file=sys.stderr)
+        return cf.EXIT_JOURNAL
+    code, result = cf.compare_journal(journal, path)
+    if as_json:
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+    elif code == cf.EXIT_COMPARED:
+        print(cf.render(result, version))
+    if code != cf.EXIT_COMPARED:
+        print(f"error: {result['file']['name']}: {result['error']['kind']}: {result['error']['message']}",
+              file=sys.stderr)
+    return code
 
 
 def _main(argv):
@@ -2181,7 +2703,9 @@ def _main(argv):
         print(_USAGE, file=sys.stderr)
         return 2
     project_dir, cmd, args = argv[1], argv[2], list(argv[3:])
-    opts = {"--preset": None, "--note": None, "--reviewed": None, "--on": None, "--source-file": None}
+    if cmd == "compare-file":       # read only: no slot to be active, no lock, nothing banked (#218)
+        return _compare_file_main(project_dir, args)
+    opts ={"--preset": None, "--note": None, "--reviewed": None, "--on": None, "--source-file": None}
     evidence = []
     rest = []
     i = 0

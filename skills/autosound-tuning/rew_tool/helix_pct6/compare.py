@@ -81,7 +81,8 @@ def check(doc: Document, expected: Iterable[dict]) -> list:
 
     `policy` says what is compared: `raw` -- the stored string; `display_delay_ms` -- a delay as PC-Tool shows it
     (half up to 0.01 ms at the model's clock); `db` -- a level in dB to the given `tolerance` (default: the
-    precision the expected value is written with). A path the file does not hold is `missing`, never a match.
+    precision the expected value is written with); `number` -- the stored value as a number, to the same `tolerance`.
+    A path the file does not hold is `missing`, never a match.
     """
     values = flatten(doc.root)
     device = models.describe(doc.dev)
@@ -98,17 +99,29 @@ def check(doc: Document, expected: Iterable[dict]) -> list:
         elif policy == "display_delay_ms":
             shown = (Decimal(got) * 1000 / Decimal(clock)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
             verdict["actual"] = float(shown)
-            verdict["result"] = "match" if Decimal(str(want)).quantize(Decimal("0.01")) == shown else "differs"
-        elif policy == "db":
-            linear = float(got)
-            actual = 20 * math.log10(linear) if linear > 0 else None
+            verdict["result"] = "match" if Decimal(str(want)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP) == shown \
+                else "differs"
+        elif policy in ("db", "number"):
+            try:
+                number = float(got)
+            except ValueError:
+                number = None
+            if policy == "db":
+                actual = 20 * math.log10(number) if number is not None and number > 0 else None
+            else:
+                actual = number
             verdict["actual"] = actual
             tol = row.get("tolerance")
             if tol is None:
                 text = str(want)
                 places = len(text.split(".")[1]) if "." in text else 0
                 tol = 0.5 * 10 ** (-places)
-            verdict["result"] = "differs" if actual is None else ("match" if abs(actual - float(want)) <= tol + 1e-9 else "differs")
+            if number is None:
+                verdict["result"] = "unknown"
+                verdict["reason"] = "the stored value %r is not a number" % got
+            else:
+                verdict["result"] = "differs" if actual is None else (
+                    "match" if abs(actual - float(want)) <= tol + 1e-9 else "differs")
         else:
             verdict["result"] = "unknown"
             verdict["reason"] = "policy %r is not known" % policy
