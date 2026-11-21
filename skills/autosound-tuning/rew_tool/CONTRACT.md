@@ -791,12 +791,19 @@ holds a value for is `unknown` (`file` null): those places and meanings are chec
 
 **A Mosconi `.PR15`** (W-13, #219 T7; an addition): a `FILE` whose extension is `.PR<number>` is read by
 `rew_tool/mosconi_pr.py` instead, read only and hashed before and after the same way, and answered in the same
-shape, keys and exit codes. Only `.PR15`, the PICO 6/8-2, is read: the model is known from the extension alone.
+shape, keys and exit codes. The model is known from the extension alone; `.PR15`, the PICO 6/8-2, is the one whose
+layout is known. **Another `.PR<n>`** (hub #350, an addition) is read at the person's risk when its container is the
+PICO 6/8-2's (16384 lines, one byte a line): `warning` is `mosconi_pr.WARNING_OTHER` (the model not checked, its
+channel layout not known), `warning_uk` `WARNING_OTHER_UK`, `device` `{dev: "<n>", name: null, verified: false,
+clock_hz: null, clock_assumed_hz: null, layout: null, note}`, and every row `unknown`, its reason naming the unknown
+layout: no value of the file is read as a channel's or a setting's. Another container is refused, `format`, saying
+so. What follows is the `.PR15`'s.
 `warning` is `mosconi_pr.WARNING` verbatim (read on one sample of one model; check every value against the vendor
 program's screens), on refusals too, and `warning_uk` is `mosconi_pr.WARNING_UK`; `checked_model` is false; `device`
 is `{dev: "15", name: "Mosconi PICO 6/8-2 DSP", verified: false, clock_hz` from the file's rate byte, `layout:
 "pico-6-8-2", note}`; `file`'s `saved` and `pctool` are null (the file states neither). Exit 2's `error.kind` adds
-`format` (not one byte a line), `model` (a `.PR` model other than 15) and `truncated` (fewer lines than a preset);
+`format` (not one byte a line; for another `.PR<n>`, not the PICO 6/8-2's container), `model` (no longer given:
+another `.PR<n>` is read, as above) and `truncated` (fewer lines than a preset);
 `io`, `interpret` and exit 3's `changed` as above. A row's `path` is the 0-based line of the value looked at, `offset
 1281` (an EQ band's: its record's first line). A row of tier `channels` reaches output n through `slot` "n" -- the
 profile `knowledge/dsp/profiles/mosconi-pico-6-8-2.json` numbers the eight outputs 1-8, as the program does; a profile
@@ -830,8 +837,11 @@ own risk ...` -- before the result.
 candidate, `attest` on a version with no preset setting, as for `--source-file`, a version holding a leg `slope` or a
 `phase_deg` that is no number, as item 13 refuses it); 2 the file cannot be read or interpreted (`error: <file>: <kind>:
 <message>`, the kinds of item 13 -- both verbs refuse what compare-file refuses, `propose` comparing its base with the
-file on the same read; a `.PR<n>` other than 15, `model`, as item 13), or usage -- `--from-file` with `--source-file`, with a delta file, with `--evidence` or `--reviewed`; 3 the file
-changed while it was read (`changed`). Nothing is banked on 1, 2 or 3; 75 is a held lock (item 8).
+file on the same read), or usage -- `--from-file` with `--source-file`, with a delta file, with `--evidence` or
+`--reviewed`; 3 the file changed while it was read (`changed`). Nothing is banked on 1, 2 or 3; 75 is a held lock
+(item 8). Another Mosconi `.PR<n>` in the PICO 6/8-2's container (item 13) is read: `attest` records its comparison,
+every row `unknown`; `propose` takes nothing, every row kept and named, as on a Helix model whose layout is not
+checked.
 
 **`attest --from-file`** banks what `attest` banks, with `preset_settings.source_file` filled by the method:
 S-119's eight keys (`state/schema.md`, "Preset settings"), no other -- `name` (the base name), `path` (absolute), `md5`
@@ -876,3 +886,27 @@ phase, `off`, `eq_bypass`, a band's `bypass` (carried onto the file's band in it
 band of a type code the reader does not decode, and every `preset_settings` field (the input gain: the file holds one
 per input). The corner set is the project's (`project.json` `dsp.settings`), named under `Not taken` and never banked
 into a version. `provenance` `kind` is `pr15`, `saved` and `pctool` null.
+
+## 15. `knowledge/dsp/readers.json` — the DSP files the method reads — guaranteed (hub #350)
+
+An addition under contract 1 (item 12): the one declaration of the saved-file readers, `contract` `readers.v1`. A
+front end turns on what it offers for a DSP's saved file -- a comparison, the "checked in the DSP" mark, a new version
+from the file -- by this file, not by a table of its own: a reader added later shows on the next pin, with no change
+of the front end. `rew_tool/readers.py --selftest` holds it to the readers' code and to the verbs' one gate
+(`state/compare_file.reader_for`, which compare-file and both `--from-file` verbs dispatch by), both ways: a line the
+code does not back fails, and so does a reader or a verb the file does not list.
+
+`readers` is a list, one object a reader, each with exactly these keys:
+
+| key | meaning |
+|---|---|
+| `id` | the reader: `helix_pct6`, `mosconi_pr` |
+| `family` | the vendor family it serves: `Audiotec-Fischer`, `Mosconi` |
+| `module` | its code, from the skill's folder: `rew_tool/helix_pct6`, `rew_tool/mosconi_pr.py` |
+| `pattern` | the files it reads, by extension: `.pct6`; `.PR<n>`, `n` a number |
+| `verbs` | the verbs that read such a file, of `compare-file`, `attest --from-file`, `propose --from-file` |
+| `model_code` | where the file names its model: `dev` (the file's Dev code, item 13 `device.dev`), `extension` (`n`) |
+| `models` | the models whose channels it maps: `{name, code, checked_model}` -- `name` as item 13's `device.name`, `code` as `device.dev`, `checked_model` as item 13 gives it for that model |
+| `other_models` | what it does with the family's other models: `{read, checked_model, channels_mapped}` -- today `true`, `false`, `false` for both: read with the reader's warning, every channel row `unknown` |
+
+A reader, a verb, a key or a model added later is an addition; removing or renaming one is a contract change.

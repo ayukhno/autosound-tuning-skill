@@ -586,7 +586,6 @@ def read_pr_file(file_path):
     (`compare_file.read_pr`, hashed before and after by the reader) -- 2 or 3 and the refusal, or 0 and `{kind: "pr15",
     name, path, reading, device, warning}`."""
     cf = _compare_file()
-    mp = cf._mosconi()
     name = os.path.basename(file_path)
     code, reading = cf.read_pr(file_path)
     if code != cf.EXIT_COMPARED:
@@ -594,11 +593,11 @@ def read_pr_file(file_path):
     try:
         device = cf._pr_device(reading)
     except Exception as exc:  # noqa: BLE001 -- past the read, a failure is the file's, as in compare-file
-        return cf.EXIT_UNREADABLE, cf.refusal(mp.WARNING, name, "interpret", "the file was read and could not be "
+        return cf.EXIT_UNREADABLE, cf.refusal(reading["warning"], name, "interpret", "the file was read and could not be "
                                               "interpreted (%s: %s)" % (type(exc).__name__, exc),
                                               md5=reading["file"]["md5"])
     return cf.EXIT_COMPARED, {"kind": "pr15", "name": name, "path": os.path.abspath(file_path), "reading": reading,
-                              "device": device, "warning": mp.WARNING}
+                              "device": device, "warning": reading["warning"]}
 
 
 def _pr_leg(have, base_leg, side):
@@ -717,6 +716,11 @@ def build_pr(snap, identity, read):
     not_taken = [("Output %d" % o["channel"], "%s: no row of this version is on this output"
                   % ("muted" if o["muted"] else "on")) for o in unreached] + not_taken
     held = snap.get(st.PRESET_SETTINGS) if isinstance(snap.get(st.PRESET_SETTINGS), dict) else {}
+    if not cf._pr_known(reading):
+        # another model (hub #350): its layout is not known, so no setting is read -- each the base holds stays, named
+        kept += [("preset %s" % path, cf.PR_LAYOUT_UNKNOWN) for path in st._PRESET_FIELDS
+                 if st._preset_leaf(held, path) is not None]
+        return {"delta": delta, "kept": kept, "not_taken": not_taken, "notes": []}
     gains = [g["attenuation_db"] for g in reading["input_gain"]]
     per_input = "the file holds an attenuation per input (inputs 1-%d: %s dB); one value of the version names none " \
                 "of them" % (len(gains), ", ".join("%g" % g for g in gains))

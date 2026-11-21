@@ -682,7 +682,8 @@ def _file_block(name, md5=None, saved=None, pctool=None):
 def warning_uk(warning):
     """The reader's `warning` in Ukrainian (`warning_uk`, CONTRACT.md item 13): the text TCC shows in Ukrainian. Every
     warning a reader ships has one; a warning without one is a bug in this module, said, never answered in English."""
-    texts = {_helix().WARNING: _helix().WARNING_UK, _mosconi().WARNING: _mosconi().WARNING_UK}
+    texts = {_helix().WARNING: _helix().WARNING_UK, _mosconi().WARNING: _mosconi().WARNING_UK,
+             _mosconi().WARNING_OTHER: _mosconi().WARNING_OTHER_UK}
     if warning not in texts:
         raise ValueError("no Ukrainian text for the reader's warning %r" % warning[:60])
     return texts[warning]
@@ -753,7 +754,7 @@ def compare_journal(journal, file_path):
     compared); 3 the file changed while it was read (`changed`), which wins over a failed read: what failed was
     another file. A `.PR<n>` file goes to the Mosconi reader (`_compare_pr`), the same shape. A version this comparison
     cannot read raises `JournalFault` (a `ValueError`): the journal's, exit 1, never said as the file's."""
-    if _mosconi().is_preset_path(file_path):
+    if reader_for(file_path) == "mosconi_pr":
         return _compare_pr(journal, file_path)
     code, doc = read_doc(file_path)
     if code != EXIT_COMPARED:
@@ -869,6 +870,14 @@ _PR_TOL_MS = 0.005
 PR_NO_PHASE = "this model has no phase control, only a polarity switch"
 PR_NO_SWITCH = "the file decodes no such switch"
 PR_NO_BYPASS = "the file decodes no bypass for a band"
+#: Why every row is `unknown` on a `.PR<n>` other than 15 (hub #350): no channel is guessed.
+PR_LAYOUT_UNKNOWN = ("this Mosconi model's channel layout is not known (only the PICO 6/8-2, .PR15, is read): no "
+                     "value of the file is read as a channel's or a setting's")
+
+
+def _pr_known(reading):
+    """True for the model whose layout the reader knows (the PICO 6/8-2)."""
+    return reading["device"]["dev"] == _mosconi().DEVICE["dev"]
 
 
 def _mosconi():
@@ -876,9 +885,26 @@ def _mosconi():
     return _siblings().load("mosconi_pr.py")
 
 
+#: The saved-file readers the verbs dispatch to, each with the file pattern the gate (`reader_for`) gives it for:
+#: `knowledge/dsp/readers.json` lists each once, and `rew_tool/readers.py --selftest` holds the two together.
+READERS = {"helix_pct6": ".pct6", "mosconi_pr": ".PR<n>"}
+#: The verbs that read a saved DSP file, by their command-line names (`readers.json` `verbs`).
+FILE_VERBS = ("compare-file", "attest --from-file", "propose --from-file")
+
+
+def reader_for(path, verb="compare-file"):
+    """The reader `verb` reads `path` with -- `mosconi_pr` for a `.PR<n>`, `helix_pct6` for a `.pct6` and any other
+    name (read as a `.pct6`, which its reader refuses when it is not one) -- or None where `verb` reads no such file.
+    Each of the three verbs reads both. The one gate compare-file, attest --from-file and propose --from-file
+    dispatch by (hub #350)."""
+    if verb not in FILE_VERBS:
+        raise ValueError("%r is no verb that reads a file (%s)" % (verb, ", ".join(FILE_VERBS)))
+    return "mosconi_pr" if _mosconi().is_preset_path(path) else "helix_pct6"
+
+
 def warning_for(path):
-    """The warning of the reader that reads `path`: the Mosconi one for a `.PR<n>`, else `helix_pct6`'s."""
-    return _mosconi().WARNING if _mosconi().is_preset_path(path) else _helix().WARNING
+    """The warning of the reader that reads `path`: the Mosconi one for a `.PR<n>` (its model's), else `helix_pct6`'s."""
+    return _mosconi().warning_for(path) if reader_for(path) == "mosconi_pr" else _helix().WARNING
 
 
 def _pr_profile(skipped=None):
@@ -1191,7 +1217,12 @@ def _pr_corner_set_row(corner, dsp_settings):
 def pr_reach(reading, snap, identity):
     """`(rows, unreached)`: every row of the version, in the comparison's order, with the file's output its slot names
     -- `(tier, key, code, row, output or None, why not)` -- by the profile's numbering, and the outputs no row is on.
-    The one rule compare-file and `propose --from-file` reach a `.PR15`'s outputs by."""
+    The one rule compare-file and `propose --from-file` reach a `.PR15`'s outputs by. Another model's: no row reaches
+    an output (`PR_LAYOUT_UNKNOWN`)."""
+    if not _pr_known(reading):
+        tiers = [t for t in _state().tier_names(snap) if isinstance(snap.get(t), dict)]
+        return [(tier, key, (identity.get(key) or {}).get("code") or key, row, None, PR_LAYOUT_UNKNOWN)
+                for tier in tiers for key, row in snap[tier].items()], []
     outputs = reading["outputs"]
     skipped = []
     profile = _pr_profile(skipped)
@@ -1239,13 +1270,31 @@ def _pr_plan(reading, snap, identity, dsp_settings=None):
         out.append(_said("channel", "Output %d" % o["channel"], None, "muted" if o["muted"] else "on", "unknown",
                          "no row of this version is on this output", category="audio",
                          path=_pr_at(1280 + o["slot"] - 1)))
-    out += _pr_preset_rows(snap, reading, dsp_settings)
+    out += _pr_preset_rows(snap, reading, dsp_settings) if _pr_known(reading) else _pr_unknown_preset_rows(snap)
     rank = {c: i for i, c in enumerate(CATEGORY_ORDER)}
     out.sort(key=lambda r: rank.get(r["category"], len(rank)))
     return out
 
 
+def _pr_unknown_preset_rows(snap):
+    """The version's stated preset settings against a model whose layout is not known: each `unknown`."""
+    st = _state()
+    settings = snap.get(st.PRESET_SETTINGS) if isinstance(snap.get(st.PRESET_SETTINGS), dict) else {}
+    out = []
+    for path in st._PRESET_FIELDS:
+        value = st._preset_leaf(settings, path)
+        if value is not None:
+            category = "audio" if path.startswith("sources.") or path == "input_gain_db" else "system"
+            out.append(_said(path, "preset", value, None, "unknown", PR_LAYOUT_UNKNOWN, category=category))
+    return out
+
+
 def _pr_device(reading):
+    if not _pr_known(reading):
+        d = reading["device"]
+        return {"dev": d["dev"], "name": None, "verified": False, "clock_hz": None, "clock_assumed_hz": None,
+                "layout": None, "note": "a Mosconi model the reader has not checked (%s): the PICO 6/8-2's container, "
+                "its channel layout not known" % d["extension"]}
     d, fw, rate = reading["device"], reading["firmware"], reading["rate"]
     note = ("read on one sample preset only; outputs 1-8 are the file's memory slots %s; firmware %s; rate byte %s"
             % (", ".join(str(s) for s in _mosconi().CHANNEL_SLOTS), fw["version"] if fw else "not stored",
@@ -1264,7 +1313,7 @@ def read_pr(file_path):
         return EXIT_COMPARED, mp.read_pr(file_path)
     except mp.PrError as exc:
         code = EXIT_CHANGED if exc.kind == "changed" else EXIT_UNREADABLE
-        return code, refusal(mp.WARNING, os.path.basename(file_path), exc.kind, str(exc))
+        return code, refusal(mp.warning_for(file_path), os.path.basename(file_path), exc.kind, str(exc))
 
 
 def _compare_pr(journal, file_path):
@@ -1277,19 +1326,19 @@ def _compare_pr(journal, file_path):
 
 
 def compare_pr_reading(journal, reading, name):
-    """`(exit code, JSON object)`: a version (`load_journal`'s triple, or the pair) against a `.PR15` `read_pr` read --
+    """`(exit code, JSON object)`: a version (`load_journal`'s triple, or the pair) against a `.PR<n>` `read_pr` read --
     0 compared, 2 `interpret` (the file was read and could not be compared)."""
-    mp = _mosconi()
     snap, identity = journal[:2]
     dsp_settings = journal[2] if len(journal) > 2 and isinstance(journal[2], dict) else {}
     try:
         rows = _pr_plan(reading, snap, identity, dsp_settings)
         device = _pr_device(reading)
     except Exception as exc:  # noqa: BLE001 -- past the read, a failure is the file's, its type named
-        return EXIT_UNREADABLE, refusal(mp.WARNING, name, "interpret", "the file was read and could not be compared "
+        return EXIT_UNREADABLE, refusal(reading["warning"], name, "interpret", "the file was read and could not be compared "
                                         "(%s: %s)" % (type(exc).__name__, exc), md5=reading["file"]["md5"])
     return EXIT_COMPARED, {
-        "contract": CONTRACT, "warning": mp.WARNING, "warning_uk": mp.WARNING_UK, "device": device, "checked_model": False,
+        "contract": CONTRACT, "warning": reading["warning"], "warning_uk": warning_uk(reading["warning"]),
+        "device": device, "checked_model": False,
         "file": _file_block(name, reading["file"]["md5"]), "counts": _counts(rows), "rows": rows}
 
 

@@ -1,0 +1,31 @@
+{
+  "contract": "readers.v1",
+  "about": "The DSP saved-file readers the method ships (rew_tool/CONTRACT.md item 15): the file each reads, the verbs that read it, the models whose channels it maps, and what it does with the family's other models. Held to the code by rew_tool/readers.py --selftest.",
+  "readers": [
+    {
+      "id": "helix_pct6",
+      "family": "Audiotec-Fischer",
+      "module": "rew_tool/helix_pct6",
+      "pattern": ".pct6",
+      "verbs": ["compare-file", "attest --from-file", "propose --from-file"],
+      "model_code": "dev",
+      "models": [
+        {"name": "HELIX DSP ULTRA S", "code": "39", "checked_model": true},
+        {"name": "HELIX NEXT V EIGHT DSP ULTIMATE", "code": "44", "checked_model": true}
+      ],
+      "other_models": {"read": true, "checked_model": false, "channels_mapped": false}
+    },
+    {
+      "id": "mosconi_pr",
+      "family": "Mosconi",
+      "module": "rew_tool/mosconi_pr.py",
+      "pattern": ".PR<n>",
+      "verbs": ["compare-file", "attest --from-file", "propose --from-file"],
+      "model_code": "extension",
+      "models": [
+        {"name": "Mosconi PICO 6/8-2 DSP", "code": "15", "checked_model": false}
+      ],
+      "other_models": {"read": true, "checked_model": false, "channels_mapped": false}
+    }
+  ]
+}

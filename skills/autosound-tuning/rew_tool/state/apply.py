@@ -836,12 +836,15 @@ def attest_from_file(history, file_path, version=None, note=None):
     `compared` -- banked by `attest`, whose refusals hold as for `--source-file`.
 
     `(exit code, result)`: 0 and `attest`'s result with `source_file`, `device`, `warning`, `warning_uk`; else
-    compare-file's refusal -- 2 the file cannot be read or interpreted (a `.PR<n>` other than 15: `model`), 3 it
+    compare-file's refusal -- 2 the file cannot be read or interpreted (another `.PR<n>`'s container: `format`), 3 it
     changed while it was read -- and nothing banked. A refusal of the journal's raises `ValueError`, as `attest` does
     -- a version whose leg slope or phase is no number among them (`compare_file._check_kinds`, as compare-file checks
     it). One hold of the writer lock over the read of the version, the project's settings, the file and the bank: what
     is compared is what is attested."""
     cf, ff = _compare_file(), _from_file()
+    if cf.reader_for(file_path, "attest --from-file") is None:      # the gate (hub #350): every reader is read today
+        return cf.EXIT_UNREADABLE, cf.refusal(cf.warning_for(file_path), os.path.basename(file_path), "model",
+                                              "attest --from-file reads no such file")
     with _held(history):
         version = version or history.head()
         if not version:
@@ -875,7 +878,11 @@ def propose_from_file(history, file_path, note=None, registry=None, allow_nonact
     `(exit code, result)` as `attest_from_file`: 0 and `propose`'s result with `kept`, `not_taken`, `notes`, `device`,
     `warning`; 2 or 3 and the refusal, nothing banked."""
     cf, ff = _compare_file(), _from_file()
-    pr = cf._mosconi().is_preset_path(file_path)
+    reader = cf.reader_for(file_path, "propose --from-file")       # the gate (hub #350)
+    if reader is None:
+        return cf.EXIT_UNREADABLE, cf.refusal(cf.warning_for(file_path), os.path.basename(file_path), "model",
+                                              "propose --from-file reads no such file")
+    pr = reader == "mosconi_pr"
     with _held(history):
         code, read = (ff.read_pr_file if pr else ff.read_file)(file_path)
         if code:
@@ -2864,7 +2871,7 @@ def _check_compare_file_pr15_unreadable_is_exit_2_and_changed_is_exit_3():
         with open(pr15, "rb") as fh:
             data = fh.read()
         cases = (("garbage.PR15", b"not a preset\r\n" * 3, "format"), ("cut.PR15", data[:len(data) // 2], "truncated"),
-                 ("other.PR16", data, "model"), ("none.PR15", None, "io"))
+                 ("other.PR16", b"not a preset\r\n" * 3, "format"), ("none.PR15", None, "io"))
         for name, body, kind in cases:
             path = os.path.join(top, "files", name)
             if body is not None:
@@ -2873,7 +2880,7 @@ def _check_compare_file_pr15_unreadable_is_exit_2_and_changed_is_exit_3():
             code, out, err = _compare_cli(project, "compare-file", "v_001", path, "--json")
             refused = json.loads(out)
             assert code == 2 and refused["error"]["kind"] == kind and "rows" not in refused, (name, code, refused)
-            assert refused["warning"] == mp.WARNING, refused["warning"]
+            assert refused["warning"] == mp.warning_for(path) and refused["warning_uk"], refused["warning"]
 
         def changing(p):
             got = real(p)
@@ -3508,9 +3515,10 @@ def _check_attest_from_file_pr15_refusals():
         assert code == 3 and ": changed: " in err and not out, (code, out, err)
         assert _pico_history(project).versions() == ["v_001"], _pico_history(project).versions()
         other = os.path.join(top, "files", "other.PR16")
-        shutil.copyfile(_PICO_PR15, other)
+        with open(other, "wb") as fh:
+            fh.write(b"not a preset\r\n" * 3)
         code, out, err = _compare_cli(project, "attest", "--preset", "PICO", "--from-file", other)
-        assert code == 2 and ": model: " in err and "Traceback" not in err, (code, out, err)
+        assert code == 2 and ": format: " in err and "container" in err and "Traceback" not in err, (code, out, err)
         assert _pico_history(project).versions() == ["v_001"], _pico_history(project).versions()
         bare, bare_pr15 = _pico_project(os.path.join(top, "bare"))
         code, out, err = _compare_cli(bare, "attest", "--preset", "PICO", "--from-file", bare_pr15)
@@ -3668,9 +3676,10 @@ def _check_propose_from_file_pr15_refusals():
         shutil.copyfile(_PICO_PR15, pr15)
         files = _tree_digest(os.path.dirname(pr15))
         other = os.path.join(top, "other.PR16")
-        shutil.copyfile(_PICO_PR15, other)
+        with open(other, "wb") as fh:
+            fh.write(b"not a preset\r\n" * 3)
         code, out, err = _compare_cli(project, "propose", "--preset", "PICO", "--from-file", other)
-        assert code == 2 and ": model: " in err and "Traceback" not in err, (code, out, err)
+        assert code == 2 and ": format: " in err and "container" in err and "Traceback" not in err, (code, out, err)
         h = _pico_history(project)
         state = h.load("v_001")
         state["channels"]["tw-L"]["phase_deg"] = "ninety"
@@ -3685,6 +3694,60 @@ def _check_propose_from_file_pr15_refusals():
         assert _tree_digest(os.path.dirname(pr15)) == files
     finally:
         mp._read_bytes = real
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_another_mosconi_model_is_read_at_the_persons_risk():
+    """hub #350: a `.PR16` in the PICO 6/8-2's container -- a copy of the shipped sample -- is read at the person's
+    risk, never refused for its model. compare-file: exit 0, the other-model warning (and its Ukrainian), `checked_model`
+    false, `device` the code alone, every row `unknown` naming the unknown layout, no channel guessed. attest records
+    that comparison; propose takes nothing -- every row stays and is named, as on an unchecked Helix model. The file is
+    left as it was, and a `.PR15` reads as before."""
+    import hashlib
+    import shutil
+    import tempfile
+    cf = _compare_file()
+    mp = cf._mosconi()
+    top = tempfile.mkdtemp(prefix="autosound_pr_other_model_")
+    try:
+        project, pr15 = _pico_with_a_setting(top, corner_set="default")
+        before15 = _compared(project, pr15)
+        pr16 = os.path.join(top, "files", "other.PR16")
+        shutil.copyfile(_PICO_PR15, pr16)
+        with open(pr16, "rb") as fh:
+            digest = hashlib.sha256(fh.read()).hexdigest()
+        got = _compared(project, pr16)
+        assert got["warning"] == mp.WARNING_OTHER and got["warning_uk"] == mp.WARNING_OTHER_UK, got["warning"]
+        assert got["checked_model"] is False and got["file"]["md5"], got
+        assert (got["device"]["dev"], got["device"]["name"], got["device"]["verified"], got["device"]["layout"]) == (
+            "16", None, False, None), got["device"]
+        assert sorted(got["device"]) == sorted(before15["device"]), (sorted(got["device"]), sorted(before15["device"]))
+        assert got["rows"] and all(r["result"] == "unknown" and "layout" in r["reason"] for r in got["rows"]), \
+            [r for r in got["rows"] if r["result"] != "unknown" or "layout" not in str(r["reason"])][:3]
+        assert {r["channel"] for r in got["rows"]} >= {"tw-L", "tw-R", "w-L", "sub", "x-9", "preset"}, got["rows"]
+        assert got["counts"]["result"] == {"match": 0, "differs": 0, "unknown": len(got["rows"])}, got["counts"]
+        code, out, err = _compare_cli(project, "compare-file", "v_001", pr16)
+        assert code == 0 and out.startswith(mp.WARNING_OTHER) and "NOT CHECKED" in out, (code, out[:400], err)
+        code, out, err = _compare_cli(project, "propose", "--preset", "PICO", "--from-file", pr16)
+        assert code == 0 and out.startswith(mp.WARNING_OTHER), (code, out[:400], err)
+        h = _pico_history(project)
+        old, new = h.load("v_001"), h.load("v_002")
+        for key, row in old["channels"].items():
+            assert {k: v for k, v in new["channels"][key].items() if k != "status"} == row, key
+        assert new["preset_settings"].get("input_gain_db") == old["preset_settings"]["input_gain_db"]
+        kept = out[out.index("Kept as v_001 has them"):]
+        for named in ("tw-L:", "tw-R:", "w-L:", "sub:", "x-9:", "preset input_gain_db:", "layout is not known"):
+            assert named in kept, (named, kept)
+        assert h.load("v_002")["provenance"]["kind"] == "pr15", h.load("v_002")["provenance"]
+        code, out, err = _compare_cli(project, "attest", "--preset", "PICO", "--from-file", pr16)
+        assert code == 0 and out.startswith(mp.WARNING_OTHER), (code, out[:400], err)
+        source = h.load(h.head())["preset_settings"]["source_file"]
+        assert source["device"] == "Dev 16, a model the reader does not know" and source["name"] == "other.PR16", source
+        assert source["compared"][0].endswith("0 match, 0 differs, %d unknown" % len(got["rows"])), source["compared"]
+        with open(pr16, "rb") as fh:
+            assert hashlib.sha256(fh.read()).hexdigest() == digest, "the .PR16 changed"
+        assert _compared(project, pr15) == before15, "the .PR15 reads otherwise"
+    finally:
         shutil.rmtree(top, ignore_errors=True)
 
 
@@ -4147,6 +4210,7 @@ def _selftest():
                   _check_propose_from_file_merges_the_rtc_curve_key_by_key, _check_propose_from_file_pr15_round_trips_through_compare_file,
                   _check_propose_from_file_pr15_keeps_and_names_what_it_does_not_decode,
                   _check_propose_from_file_pr15_refusals,
+                  _check_another_mosconi_model_is_read_at_the_persons_risk,
                   _check_attest_from_file_records_a_pr15, _check_attest_from_file_pr15_refusals,
                   _check_compare_file_a_band_of_an_undecoded_type_paired_by_slot_is_unknown,
                   _check_compare_file_pr15_an_undecoded_slope_code_is_unknown,
@@ -4474,7 +4538,7 @@ def _from_file_main(history, cmd, path, rest, opts, registry, preset):
         return code
     ff = _from_file()
     print(got["warning"])
-    print(ff.model_line(got["device"], pct6=not _compare_file()._mosconi().is_preset_path(path)))
+    print(ff.model_line(got["device"], pct6=_compare_file().reader_for(path, f"{cmd} --from-file") == "helix_pct6"))
     print()
     if cmd == "attest":
         source, counts = got["source_file"], got["counts"]

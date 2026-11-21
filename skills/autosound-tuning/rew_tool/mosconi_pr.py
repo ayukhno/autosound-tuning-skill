@@ -1,9 +1,10 @@
-"""Read a Mosconi PICO 6/8-2 preset (`.PR15`): what each output is set to. Read only.
+"""Read a Mosconi PICO 6/8-2 preset (`.PR15`): what each output is set to. Read only. Another Mosconi model's `.PR<n>`
+in the same container is read at the person's risk, its layout not known: nothing in it is decoded (hub #350).
 
 Mosconi / Gladen filter model and the PICO 6/8-2 profile contributed by Widar1979 (https://github.com/Widar1979),
 https://github.com/ayukhno/autosound-tuning-skill/issues/214
 
-    python3 mosconi_pr.py read FILE.PR15 [--json]   the outputs, their crossovers and EQ, the warning first
+    python3 mosconi_pr.py read FILE.PR<n> [--json]  the outputs, their crossovers and EQ, the warning first
     python3 mosconi_pr.py --selftest                 the checks on the shipped sample; last line OK on a pass
 
 Exit codes: 0 read, 2 the file cannot be read (its kind on stderr), 3 it changed while it was read.
@@ -48,6 +49,19 @@ WARNING_UK = (
     "Зчитування .PR15 перевірено лише на одному зразку пресету однієї моделі — Mosconi PICO 6/8-2. Вважайте кожне "
     "значення непідтвердженим: перш ніж покладатися на нього, звірте його з екранами власної програми виробника."
 )
+#: Shown instead with a `.PR<n>` other than 15 in the same container: the model is not checked, its layout not known.
+WARNING_OTHER = (
+    "This .PR file is of a Mosconi model the reader has not checked: reading is checked on one sample preset of the "
+    "PICO 6/8-2 (.PR15) only. The file has the same container, but this model's channel layout is not known, so no "
+    "value is matched to a channel or taken into the journal. Read it at your own risk, and check every value against "
+    "the screens of the vendor's own program."
+)
+WARNING_OTHER_UK = (
+    "Цей файл .PR належить до моделі Mosconi, яку зчитувач не перевіряв: зчитування перевірено лише на одному зразку "
+    "пресету PICO 6/8-2 (.PR15). Файл має такий самий контейнер, але конфігурація каналів цієї моделі невідома, тому "
+    "жодне значення не зіставлено з каналом і не внесено до журналу. Зчитуйте його на власний ризик та звірте кожне "
+    "значення з екранами власної програми виробника."
+)
 #: Shown with every result, in the text and in `--json`: whose work the model and the profile are.
 CREDIT = ("Mosconi / Gladen filter model and the PICO 6/8-2 profile contributed by Widar1979 "
           "(https://github.com/Widar1979) -- https://github.com/ayukhno/autosound-tuning-skill/issues/214")
@@ -86,6 +100,26 @@ def is_preset_path(path):
     """True for a name with a `.PR<number>` extension: a preset of this vendor's family (only 15 is read)."""
     ext = os.path.splitext(str(path))[1].upper()
     return ext.startswith(".PR") and ext[3:].isdigit()
+
+
+def model_of(path):
+    """The model code a `.PR<n>` name carries -- `n`, as a string -- or None for any other name."""
+    return os.path.splitext(str(path))[1][3:] if is_preset_path(path) else None
+
+
+def describe(code):
+    """The model a code names, as far as this reader knows it: `{dev, vendor, name, verified, layout}`. Only the PICO
+    6/8-2 (15) has a name and a layout; `verified` is false for it too, read on one sample. Another code: no name, no
+    layout -- its channels are not known."""
+    code = str(code)
+    known = code == DEVICE["dev"]
+    return {"dev": code, "vendor": DEVICE["vendor"], "name": "%s %s" % (DEVICE["vendor"], DEVICE["name"]) if known
+            else None, "verified": False, "layout": "pico-6-8-2" if known else None}
+
+
+def warning_for(path):
+    """The warning a result about `path` carries: `WARNING` for a `.PR15`, `WARNING_OTHER` for another `.PR<n>`."""
+    return WARNING if model_of(path) in (None, DEVICE["dev"]) else WARNING_OTHER
 
 
 def _sha256(path):
@@ -210,12 +244,16 @@ def decode(values, empty=frozenset()):
 def read_pr(path):
     """Everything this reader takes from the preset at `path`, with the warning and the file's hashes.
 
-    Raises `PrError`: `io` (not there, not to be opened), `model` (another `.PR` model than 15), `format` (not one byte
-    a line), `truncated` (fewer lines than a preset), `changed` (the file changed while it was read)."""
+    A `.PR<n>` other than 15 whose container is the PICO 6/8-2's (16384 lines, one byte a line) is read at the
+    person's risk: its warning (`WARNING_OTHER`), `device` its code alone (`describe`), no output and no setting -- the
+    offsets are the PICO 6/8-2's, never read as another model's. Another container is refused, `format`, saying so.
+
+    Raises `PrError`: `io` (not there, not to be opened), `model` (not a `.PR<n>` name), `format` (not one byte a
+    line), `truncated` (fewer lines than a preset), `changed` (the file changed while it was read)."""
     name = os.path.basename(path)
-    if os.path.splitext(name)[1].upper() != DEVICE["extension"]:
-        raise PrError("model", "only %s (the %s) is read; %s is another model"
-                      % (DEVICE["extension"], DEVICE["name"], name))
+    code = model_of(name)
+    if code is None:
+        raise PrError("model", "%s is not a .PR<number> file: this reader reads Mosconi presets" % name)
     try:
         before = _sha256(path)
         data = _read_bytes(path)
@@ -224,6 +262,16 @@ def read_pr(path):
         raise PrError("io", "the file cannot be read: %s" % exc) from None
     if hashlib.sha256(data).hexdigest() != before or after != before:
         raise PrError("changed", "the file changed while it was read: read it again once nothing is saving it")
+    if code != DEVICE["dev"]:
+        try:
+            _values(data)
+        except PrError as exc:
+            raise PrError("format", "a .PR%s is read only in the PICO 6/8-2's container, %d lines of one byte each; "
+                          "this file is not: %s" % (code, LINES, exc)) from None
+        device = dict(describe(code), extension=".PR" + code)
+        return {"device": device, "warning": WARNING_OTHER, "credit": CREDIT,
+                "file": {"name": name, "md5": hashlib.md5(data).hexdigest(), "sha256": before, "lines": LINES},
+                "outputs": [], "not_read": ["every setting: the channel layout of this model is not known"]}
     values, empty = _values(data)
     out = decode(values, empty)
     out["warning"] = WARNING
@@ -253,6 +301,11 @@ def _level_text(o):
 
 def summary(reading):
     """The text a person reads: the warning first, then one block an output."""
+    if reading["device"]["dev"] != DEVICE["dev"]:
+        return "\n".join([reading["warning"], "", "Mosconi, model code %s (%s, not checked), file %s (md5 %s)" % (
+            reading["device"]["dev"], reading["device"]["extension"], reading["file"]["name"], reading["file"]["md5"]),
+            "the PICO 6/8-2's container: %d lines, one byte a line" % reading["file"]["lines"],
+            "not read: " + ", ".join(reading["not_read"]), "", reading["credit"]])
     rate = reading["rate"]
     fw = reading["firmware"]
     lines = [reading["warning"], "",
@@ -408,8 +461,8 @@ def _check_a_change_while_read_is_refused():
 
 
 def _check_unreadable_files_are_named():
-    """Not there, another model, not a preset, cut short, one line too many, a byte over 255: refused with the kind,
-    exit 2."""
+    """Not there, not a `.PR<n>`, not a preset, cut short, one line too many, a byte over 255, another model's file
+    whose container is not the PICO 6/8-2's: refused with the kind, exit 2."""
     import shutil
     import tempfile
     top = tempfile.mkdtemp(prefix="selftest_mosconi_pr_")
@@ -418,22 +471,55 @@ def _check_unreadable_files_are_named():
             data = fh.read()
         lines = data.split(b"\n")
         big = b"\n".join(lines[:100] + [b"256\r"] + lines[101:])
-        cases = {"none.PR15": None, "other.PR16": data, "garbage.PR15": b"\x00\x01 not a preset\r\n" * 9,
-                 "cut.PR15": data[:len(data) // 2], "extra.PR15": data + b"0\r\n", "big.PR15": big}
+        cases = {"none.PR15": None, "other.txt": data, "garbage.PR15": b"\x00\x01 not a preset\r\n" * 9,
+                 "cut.PR15": data[:len(data) // 2], "extra.PR15": data + b"0\r\n", "big.PR15": big,
+                 "cut.PR16": data[:len(data) // 2], "garbage.PR16": b"not a preset\r\n" * 9}
         for name, body in cases.items():
             path = os.path.join(top, name)
             if body is not None:
                 with open(path, "wb") as fh:
                     fh.write(body)
-            want = {"none.PR15": "io", "other.PR16": "model", "garbage.PR15": "format", "cut.PR15": "truncated",
-                    "extra.PR15": "format", "big.PR15": "format"}[name]
+            want = {"none.PR15": "io", "other.txt": "model", "garbage.PR15": "format", "cut.PR15": "truncated",
+                    "extra.PR15": "format", "big.PR15": "format", "cut.PR16": "format", "garbage.PR16": "format"}[name]
             try:
                 read_pr(path)
             except PrError as exc:
                 assert exc.kind == want, (name, exc.kind, str(exc))
+                if name.endswith(".PR16"):
+                    assert "container" in str(exc) and "16384" in str(exc), str(exc)
             else:
                 raise AssertionError("%s was read" % name)
             assert main(["read", path]) == 2, name
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_another_model_is_read_with_its_warning():
+    """hub #350: a `.PR<n>` other than 15 in the PICO 6/8-2's container is read at the person's risk -- its own warning
+    first (the model is not checked, its channel layout not known), the model named by its code alone, no output, no
+    setting decoded: no offset of the PICO 6/8-2 is read as this model's. `read` prints the warning first, exit 0."""
+    import contextlib
+    import io
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="selftest_mosconi_pr_")
+    try:
+        path = os.path.join(top, "other.PR16")
+        shutil.copyfile(SAMPLE, path)
+        r = read_pr(path)
+        assert r["warning"] == WARNING_OTHER and WARNING_OTHER != WARNING and WARNING_OTHER_UK, r["warning"]
+        assert r["device"]["dev"] == "16" and r["device"]["name"] is None, r["device"]
+        assert r["outputs"] == [] and r["file"]["md5"] and r["file"]["lines"] == LINES, r
+        assert describe("16") == {"dev": "16", "vendor": "Mosconi", "name": None, "verified": False, "layout": None}
+        assert describe("15")["name"] == "Mosconi PICO 6/8-2 DSP" and describe("15")["layout"], describe("15")
+        assert warning_for(path) == WARNING_OTHER and warning_for(SAMPLE) == WARNING, warning_for(path)
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            assert main(["read", path]) == 0
+        assert out.getvalue().startswith(WARNING_OTHER), out.getvalue()[:300]
+        with contextlib.redirect_stdout(io.StringIO()):
+            assert main(["read", path, "--json"]) == 0
+        assert _sha256(path) == _sha256(SAMPLE), "the file changed"
     finally:
         shutil.rmtree(top, ignore_errors=True)
 
@@ -496,7 +582,7 @@ def _selftest():
     checks = (_check_sample_is_the_shipped_one, _check_values_on_the_sample, _check_never_writes,
               _check_a_change_while_read_is_refused, _check_unreadable_files_are_named,
               _check_reading_leaves_the_file_as_it_was, _check_an_undecoded_slope_code_is_not_off,
-              _check_a_level_byte_it_does_not_decode_is_said)
+              _check_a_level_byte_it_does_not_decode_is_said, _check_another_model_is_read_with_its_warning)
     failures = []
     for check in checks:
         try:

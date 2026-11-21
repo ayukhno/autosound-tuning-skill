@@ -56,6 +56,7 @@ skills/autosound-tuning/rew_tool/project_seed.py --selftest
 skills/autosound-tuning/rew_tool/project.py selftest
 skills/autosound-tuning/rew_tool/protective.py --selftest
 skills/autosound-tuning/rew_tool/provenance.py --selftest
+skills/autosound-tuning/rew_tool/readers.py --selftest
 skills/autosound-tuning/rew_tool/resonalyze_engine.py --selftest
 skills/autosound-tuning/rew_tool/resonalyze_ir.py --selftest
 skills/autosound-tuning/rew_tool/resonalyze_vc.py --selftest
