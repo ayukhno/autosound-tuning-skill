@@ -13,11 +13,11 @@ from .compare import category, check, differences
 from .container import (ChecksumError, ContainerError, Document, LimitError, Pct6Error, TruncatedError, XmlError,
                         file_unchanged, read_pct6)
 from .inventory import interpret
-from .models import MODELS, VERIFIED_NAMES, WARNING
+from .models import MODELS, VERIFIED_NAMES, WARNING, WARNING_UK
 
 __version__ = "0.1.0"
 CREDIT = "Format documented by amATFpct6."
 
 __all__ = ["read_pct6", "interpret", "differences", "check", "category", "file_unchanged", "Document",
            "Pct6Error", "ContainerError", "ChecksumError", "TruncatedError", "LimitError", "XmlError",
-           "MODELS", "VERIFIED_NAMES", "WARNING", "CREDIT", "__version__"]
+           "MODELS", "VERIFIED_NAMES", "WARNING", "WARNING_UK", "CREDIT", "__version__"]

@@ -722,16 +722,18 @@ prints to this table: a key added, removed or renamed in the code or here fails 
 
 | object | keys |
 |---|---|
-| top level | `contract`, `warning`, `device`, `checked_model`, `file`, `counts`, `rows` |
+| top level | `contract`, `warning`, `warning_uk`, `device`, `checked_model`, `file`, `counts`, `rows` |
 | `file` | `name`, `md5`, `saved`, `pctool` |
 | `device` | `dev`, `name`, `verified`, `clock_hz`, `clock_assumed_hz`, `layout`, `note` |
 | `counts` | `result`, `category` |
 | row | `parameter`, `channel`, `journal`, `file`, `result`, `category`, `reason`, `path` |
-| refusal | `contract`, `warning`, `file`, `error` |
+| refusal | `contract`, `warning`, `warning_uk`, `file`, `error` |
 | `error` | `kind`, `message` |
 
 **The values.** `contract` is the shape's name, `"compare-file.v1"` -- not the number item 6 leaves unbuilt.
-`warning` is `helix_pct6.WARNING` verbatim, in English, on every answer, refusals among them. `device` is
+`warning` is `helix_pct6.WARNING` verbatim, in English, on every answer, refusals among them; `warning_uk` beside it
+is the same warning in Ukrainian (`helix_pct6.WARNING_UK`), for a front end that shows Ukrainian (v3.3.3, an
+addition). `device` is
 `helix_pct6.models.describe` of the model the file names; `checked_model` is its `verified`, true only for a model
 the reader has been checked on. `file`: its base name, the input's md5, the save time the file states (`dd.MM.yyyy
 hh:mm`, no time zone, null when it states none) and the PC-Tool version that saved it; in a refusal the last three
@@ -789,26 +791,26 @@ capability profile is read for a `.pct6`, and none of the V EIGHT is bundled.
 **A Mosconi `.PR15`** (W-13, #219 T7; an addition): a `FILE` whose extension is `.PR<number>` is read by
 `rew_tool/mosconi_pr.py` instead, read only and hashed before and after the same way, and answered in the same
 shape, keys and exit codes. Only `.PR15`, the PICO 6/8-2, is read: the model is known from the extension alone.
-`warning` is `mosconi_pr.WARNING` verbatim (read on one sample of one model; check every value against the
-vendor program's screens), on refusals too; `checked_model` is false; `device` is `{dev: "15", name: "Mosconi
-PICO 6/8-2 DSP", verified: false, clock_hz` from the file's rate byte, `layout: "pico-6-8-2", note}`; `file`'s
-`saved` and `pctool` are null (the file states neither). Exit 2's `error.kind` adds `format` (not one byte a line),
-`model` (a `.PR` model other than 15) and `truncated` (fewer lines than a preset); `io`, `interpret` and exit 3's
-`changed` as above. A row's `path` is the 0-based line of the value looked at, `offset 1281` (an EQ band's: its
-record's first line). A row of tier `channels` reaches output n through `slot` "n" -- the profile
-`knowledge/dsp/profiles/mosconi-pico-6-8-2.json` numbers the eight outputs 1-8, as the program does; a profile that
-letters them, counts other than eight or is not there leaves every row `unknown`. Compared: `gain_db` (a muted
+`warning` is `mosconi_pr.WARNING` verbatim (read on one sample of one model; check every value against the vendor
+program's screens), on refusals too, and `warning_uk` is `mosconi_pr.WARNING_UK`; `checked_model` is false; `device`
+is `{dev: "15", name: "Mosconi PICO 6/8-2 DSP", verified: false, clock_hz` from the file's rate byte, `layout:
+"pico-6-8-2", note}`; `file`'s `saved` and `pctool` are null (the file states neither). Exit 2's `error.kind` adds
+`format` (not one byte a line), `model` (a `.PR` model other than 15) and `truncated` (fewer lines than a preset);
+`io`, `interpret` and exit 3's `changed` as above. A row's `path` is the 0-based line of the value looked at, `offset
+1281` (an EQ band's: its record's first line). A row of tier `channels` reaches output n through `slot` "n" -- the
+profile `knowledge/dsp/profiles/mosconi-pico-6-8-2.json` numbers the eight outputs 1-8, as the program does; a profile
+that letters them, counts other than eight or is not there leaves every row `unknown`. Compared: `gain_db` (a muted
 output's kept level), `ta_ms` (to 0.005 ms), `polarity`, `mute`, the legs' `type` / `f` / `slope`, and the EQ bands'
 `type` / `f` / `gain_db` / `q` as the records store them (types PK, LSH, HSH; another code is `unknown`, and a band of
 the version paired with it has its `f`, `gain_db` and `q` `unknown`). A leg's slope code the reader does not decode
 (5-7) is no OFF: `<leg>.slope` is `unknown`, naming the code, against an OFF leg and against a filter alike. With no
 rate byte in the file (or one the reader does not know) every `ta_ms` is `unknown`: the steps are not read as ms at an
-assumed 96 kHz. A bundled profile of the model that cannot be read is named, file and why, in the rows' reason. `unknown`
-always: `phase_deg` (no phase control), `off`, `eq_bypass` and a band's `bypass` (not decoded), and under `preset`
-`input_gain_db` (the file holds one per input) and any other stated setting. `crossover.corner_set` (the file's
-global corner set) is set against `project.json` `dsp.settings.corner_set`, the tuner's recorded answer, in the
-reader's words: `match` or `differs`; `unknown` when none is recorded or the file's code is outside the reader's table.
-Not read: the mixer, the input EQ, the group EQ.
+assumed 96 kHz. A bundled profile of the model that cannot be read is named, file and why, in the rows' reason.
+`unknown` always: `phase_deg` (no phase control), `off`, `eq_bypass` and a band's `bypass` (not decoded), and under
+`preset` `input_gain_db` (the file holds one per input) and any other stated setting. `crossover.corner_set` (the
+file's global corner set) is set against `project.json` `dsp.settings.corner_set`, the tuner's recorded answer, in the
+reader's words: `match` or `differs`; `unknown` when none is recorded or the file's code is outside the reader's
+table. Not read: the mixer, the input EQ, the group EQ.
 
 A key, a row's `parameter`, a category, an `error.kind` or an exit code added later is an addition (item 12);
 removing or renaming one is a contract change.

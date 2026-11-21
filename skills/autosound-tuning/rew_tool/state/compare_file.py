@@ -657,10 +657,19 @@ def _file_block(name, md5=None, saved=None, pctool=None):
     return {"name": name, "md5": md5, "saved": saved, "pctool": pctool}
 
 
+def warning_uk(warning):
+    """The reader's `warning` in Ukrainian (`warning_uk`, CONTRACT.md item 13): the text TCC shows in Ukrainian. Every
+    warning a reader ships has one; a warning without one is a bug in this module, said, never answered in English."""
+    texts = {_helix().WARNING: _helix().WARNING_UK, _mosconi().WARNING: _mosconi().WARNING_UK}
+    if warning not in texts:
+        raise ValueError("no Ukrainian text for the reader's warning %r" % warning[:60])
+    return texts[warning]
+
+
 def refusal(warning, name, kind, message, md5=None):
     """The JSON of a comparison not made: exit 1 (`journal`), 2 (the file's kind) or 3 (`changed`)."""
-    return {"contract": CONTRACT, "warning": warning, "file": _file_block(name, md5), "error": {"kind": kind,
-                                                                                               "message": message}}
+    return {"contract": CONTRACT, "warning": warning, "warning_uk": warning_uk(warning), "file": _file_block(name, md5),
+            "error": {"kind": kind, "message": message}}
 
 
 def load_journal(project_dir, version, preset=None):
@@ -813,7 +822,7 @@ def compare_doc(journal, doc, name, inv=None):
     except Exception as exc:  # noqa: BLE001 -- the version's values are checked: what fails here is the file's value
         return uninterpretable(exc)
     return EXIT_COMPARED, {
-        "contract": CONTRACT, "warning": hx.WARNING, "device": device, "checked_model": bool(device["verified"]),
+        "contract": CONTRACT, "warning": hx.WARNING, "warning_uk": hx.WARNING_UK, "device": device, "checked_model": bool(device["verified"]),
         "file": _file_block(name, doc.input_md5, inv["device"].get("saved"), doc.pc_tool_version),
         "counts": _counts(rows), "rows": rows}
 
@@ -1205,7 +1214,7 @@ def _compare_pr(journal, file_path):
         return EXIT_UNREADABLE, refusal(mp.WARNING, name, "interpret", "the file was read and could not be compared "
                                         "(%s: %s)" % (type(exc).__name__, exc), md5=reading["file"]["md5"])
     return EXIT_COMPARED, {
-        "contract": CONTRACT, "warning": mp.WARNING, "device": device, "checked_model": False,
+        "contract": CONTRACT, "warning": mp.WARNING, "warning_uk": mp.WARNING_UK, "device": device, "checked_model": False,
         "file": _file_block(name, reading["file"]["md5"]), "counts": _counts(rows), "rows": rows}
 
 

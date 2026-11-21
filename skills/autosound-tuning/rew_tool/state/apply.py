@@ -2123,6 +2123,11 @@ def _check_compare_file_keys_are_the_pinned_ones():
             assert code == 2 and sorted(refused) == sorted(pinned["refusal"]), (code, sorted(refused), pinned["refusal"])
             assert sorted(refused["error"]) == sorted(pinned["error"]), (sorted(refused["error"]), pinned["error"])
             assert sorted(refused["file"]) == sorted(pinned["file"]), (sorted(refused["file"]), pinned["file"])
+            # `warning_uk` is the reader's own warning in Ukrainian, on a result and on a refusal alike (item 8, v3.3.3)
+            reader = _compare_file()._helix() if bad_name.endswith(".pct6") else _compare_file()._mosconi()
+            for answer in (got, refused):
+                assert answer["warning"] == reader.WARNING and answer["warning_uk"] == reader.WARNING_UK, answer
+                assert any("\u0400" <= c <= "\u04ff" for c in answer["warning_uk"]), answer["warning_uk"]
         finally:
             shutil.rmtree(top, ignore_errors=True)
 

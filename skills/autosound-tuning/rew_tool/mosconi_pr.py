@@ -43,6 +43,11 @@ WARNING = (
     "Reading .PR15 has been checked on one sample preset of one model, the Mosconi PICO 6/8-2. Treat every value "
     "as unconfirmed: check it against the screens of the vendor's own program before relying on it."
 )
+#: The same warning in Ukrainian, for a front end that shows Ukrainian (compare-file's `warning_uk`).
+WARNING_UK = (
+    "Зчитування .PR15 перевірено лише на одному зразку пресету однієї моделі — Mosconi PICO 6/8-2. Вважайте кожне "
+    "значення непідтвердженим: перш ніж покладатися на нього, звірте його з екранами власної програми виробника."
+)
 #: Shown with every result, in the text and in `--json`: whose work the model and the profile are.
 CREDIT = ("Mosconi / Gladen filter model and the PICO 6/8-2 profile contributed by Widar1979 "
           "(https://github.com/Widar1979) -- https://github.com/ayukhno/autosound-tuning-skill/issues/214")

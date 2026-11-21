@@ -19,6 +19,13 @@ WARNING = (
     "screens: PC-Tool versions change, and a new version may store a value differently."
 )
 
+#: The same warning in Ukrainian, for a front end that shows Ukrainian (compare-file's `warning_uk`).
+WARNING_UK = (
+    "Зчитування .pct6 перевірено лише на HELIX DSP ULTRA S та HELIX NEXT V EIGHT DSP ULTIMATE. Будь-які інші моделі "
+    "зчитуються на ваш власний ризик. У будь-якому разі звіряйте значення з власними екранами PC-Tool: версії PC-Tool "
+    "змінюються, і нова версія може зберігати значення інакше."
+)
+
 #: PC-Tool versions whose files this package's tests read (a fact about the test set, not a limit).
 PC_TOOL_VERSIONS_READ = ("6.03.03", "6.03.04", "6.04.01", "6.04.03", "6.05.01")
 
