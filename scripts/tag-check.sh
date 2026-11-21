@@ -72,7 +72,7 @@ for f in [*root.glob("README*.md"), *root.glob("FAQ*.md"), root / "ADVANCED.md",
 PYEOF
   G init -q && G add -A && G commit -qm base || { echo "selftest: cannot build the throwaway repo" >&2; return 1; }
   base="$(G rev-parse HEAD)"
-  # The last candidate of $next: the heading, the manifest and the installers' own version with it (#142),
+  # The candidate that carries $next: the heading, the manifest and the installers' own version with it (#142),
   # install.cmd's PS1URL -- and the front page left alone.
   "$PY" - "$repo" "$newest" "$next" <<'PYEOF' || return 1
 import json, pathlib, re, sys
@@ -132,11 +132,15 @@ p.write_text(re.sub("(?m)^"+re.escape(h),lambda m:"## [Unreleased]\n\n- x\n\n"+h
   local pool='import sys,pathlib
 p=pathlib.Path(sys.argv[1])/"docs"/"TODO.md"
 p.write_text(p.read_text(encoding="utf-8")+"\n## S-9901 · selftest item\n\n**Status**: @STATUS@\n\nIt names #9901.\n",encoding="utf-8")'
-  local po pd
+  local po pd pi
   po="$(brk pool-open "${pool//@STATUS@/open}")" || return 1
   pd="$(brk pool-done "${pool//@STATUS@/done}")" || return 1
+  # install.sh's own version left behind plugin.json's: installer-consistency refuses it (#142).
+  pi="$(brk installer 'import sys,pathlib,re
+p=pathlib.Path(sys.argv[1])/"install.sh"
+p.write_text(re.sub("(?m)^INSTALLER_VERSION=.*$","INSTALLER_VERSION=\""+sys.argv[2][1:]+"\"",p.read_text(encoding="utf-8"),count=1),encoding="utf-8")')" || return 1
   G checkout -q "$base"
-  expect 0 "ready at ${a:0:12}" "the last candidate carries the release" -- --at "$a" "$next" || return 1
+  expect 0 "ready at ${a:0:12}" "the candidate that carries the release" -- --at "$a" "$next" || return 1
   expect 1 "FAIL install-lines" "front-page lines naming the coming tag" -- --at "$b" "$next" || return 1
   expect 1 "FAIL manifest" "a manifest still at the previous version" -- --at "$c" "$next" || return 1
   expect 1 "FAIL shipped-pins" "install.cmd still fetching the previous tag" -- --at "$d" "$next" || return 1
@@ -180,11 +184,13 @@ PYEOF
       -- --candidate --early "$next" || return 1
     cand "$c" 1 "FAIL manifest" "a candidate whose manifest is still at the previous version" "releasable: no" \
       -- --candidate "$next" || return 1
+    cand "$pi" 1 "FAIL installers" "a candidate whose install.sh still says the previous version" "releasable: no" \
+      -- --candidate "$next" || return 1
     G checkout -q "$base"
     pool_cases="a candidate is refused while it does not carry its release (the wave's pool open, the manifest"
-    pool_cases+=" behind) and says releasable: yes/no with the reasons; an early one, named so, lists them and passes"
+    pool_cases+=" or the installers behind) and says releasable: yes/no with the reasons; an early one, named so, lists them and passes"
   fi
-  echo "selftest[tag-check] OK -- --at reads the named commit, not HEAD: a last candidate carrying its heading, manifest and" \
+  echo "selftest[tag-check] OK -- --at reads the named commit, not HEAD: a candidate carrying its heading, manifest and" \
        "install.cmd pin passes with the front page one release behind; front-page lines naming the coming tag, a manifest" \
        "or an install.cmd pin left behind, and an [Unreleased] heading still above the release's, are each refused by" \
        "name; a commit not here and a missing tag are usage errors;" \
@@ -311,7 +317,9 @@ fi
 if inst_out="$("$PY" scripts/installer-consistency.py 2>&1)"; then
   ok installers "$(printf '%s' "$inst_out" | tail -n1 | cut -c1-60)"
 else
-  bad installers "scripts/installer-consistency.py failed"
+  # A reason too: the triplet holds its own version to plugin.json's (#142), so a candidate that fails it does
+  # not carry its release -- on an early candidate as well, since the three files disagree with each other.
+  hard installers "scripts/installer-consistency.py failed"
   printf '%s\n' "$inst_out" | tail -n 12 | sed 's/^/         /'
 fi
 
