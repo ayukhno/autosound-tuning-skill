@@ -1639,7 +1639,7 @@ Arbiter's OK. Resume: `hub/bin/role skill --resume 766d28a7-6c7a-4cea-9e5b-2d4bc
 
 ## S-127 · Resonalyze has moved: its crossover project file is at format 13, our reader at 10; 11 ported files drifted
 
-**Status**: open 2026-11-10 · the FORMAT half done: **v3.3.1** released and `Latest` (tag on `8ae9095`, PR #213, hub #340 commented with tag and commit; the hub opens TCC's re-pin); reader v7..v13, a channel's FIR stage refused; still W-13's: the 11 DRIFTs and reading a FIR stage; resume: `hub/bin/role skill --resume cf677227-b29a-42f7-b42d-9de0455cbee2` · was: format half built, not pushed · was: open 2026-11-10 · W-13's pool; recorded, not diagnosed; found on the Arbiter's question about Resonalyze after v3.3.0
+**Status**: open 2026-11-21 · the 11 DRIFTs triaged (below): nothing critical, the engine stays pinned; the FIR stage stays in the pool (the Arbiter: «FIR не ставлю — лишай у пулі»); to W-13's milestone go only the five re-pins; the `NonCausalLoopback` check stays in the pool (the Arbiter: «ми не міряємо — ми використовуємо REW») · was: open 2026-11-10 · the FORMAT half done: **v3.3.1** released and `Latest` (tag on `8ae9095`, PR #213, hub #340 commented with tag and commit; the hub opens TCC's re-pin); reader v7..v13, a channel's FIR stage refused; still W-13's: the 11 DRIFTs and reading a FIR stage; resume: `hub/bin/role skill --resume cf677227-b29a-42f7-b42d-9de0455cbee2` · was: format half built, not pushed · was: open 2026-11-10 · W-13's pool; recorded, not diagnosed; found on the Arbiter's question about Resonalyze after v3.3.0
 
 `python3 scripts/upstream-drift.py` (exit 0, 19 ok, 11 DRIFT, 1 FORMAT):
 
@@ -1655,6 +1655,30 @@ Arbiter's OK. Resume: `hub/bin/role skill --resume 766d28a7-6c7a-4cea-9e5b-2d4bc
 
 At the milestone: which drifts change a result and which are comments or docs; the format first, since it
 refuses the user's files.
+
+**Triage, 2026-11-21** (the Arbiter: «зроби швидкий аналіз, щоб розуміти чи варто брати в цій хвилі»). Upstream
+`DIMOSUS/Resonalyze` has not moved since `4de20ec` (2026-10-15), so the list is the same as on 10.11. Read-only,
+two Sonnet readers, two claims checked by hand.
+
+- **The Python ports: no number changes.** `dsp_math.py` (sum loss): the definition and constants are identical
+  at `4de20ec`; #256's prior-slides-the-lobe bug is in their search, and our `align_sum_loss` has no prior. #202's
+  per-channel presence gate (40 dB) touches only the gated plot curve. `phase_rotation.py`,
+  `resonalyze_vc.py` (Zone): comment cuts only. `windows.py`: the spec moved to `docs/tech/phase-and-group-delay.md`,
+  same identity. All five: re-pin the header, no code.
+- **One real gap, an edge case:** upstream #232 (`2a6fa1a`) files a capture whose microphone led its loopback as
+  `timingReference: NonCausalLoopback` (no absolute time). `resonalyze_ir.load_file` does not validate, and
+  `predict.py:447` takes sample 0 as the loopback reference, so such a file would be read as absolute time, a
+  wrong delay without a word. **Not ours today:** only a file Resonalyze itself measured can carry it; a REW
+  capture becomes an `.ir` through `build_v7`, which accepts only REW's `Loopback` and writes
+  `SynchronizedLoopback` (`resonalyze_ir.py:201`). We measure in REW, so it stays in the pool until someone
+  brings a Resonalyze-measured file.
+- **The engine (`vendor/Resonalyze` at `b0ce9fb`, 88 behind): stay pinned.** Optional, not the default path
+  (`goal.desk_approach`). Upstream's audit fixes that reach its calls are tie and edge cases: low-junction polarity
+  from the fronts' anchor (#242), a doubled inverted neighbour (#241), sub precedence (#245), Bessel table 0.8 %
+  (#242); #256 changes every scene's delays but by ±0.02 dB loss on average, 14 junctions better and 15 worse.
+  Moving the pin is a rework of `WindowReplica.cs` (the copied window code moved into new types), FIR shims for
+  `VirtualCrossoverJunctions.cs`, new goldens, and one product decision: #269 plays a mono block at −6.02 dB per
+  side, which moves the sub's levels. Its own wave, when the Arbiter wants the engine current.
 
 ## S-126 · A third approach at the first step: joint-by-joint upward (skill #210)
 
