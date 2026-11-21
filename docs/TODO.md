@@ -1629,7 +1629,7 @@ four assessment lines, and nothing is built before his `ok` on that task. Resume
 
 ## S-135 · Records quote the Arbiter's words in Ukrainian; a decision and a reference are enough
 
-**Status**: open 2026-11-21 · the next wave's pool; recorded, not diagnosed
+**Status**: dropped 2026-11-21 · the Arbiter's decision: the older records stay as they are; the rule holds from W-13 on
 
 The Arbiter's rule, 2026-11-21: records carry the decision in English and a reference to him (the Arbiter, date),
 never his words. W-13's records (`docs/PLAN-W-13.md`, S-127 to S-134) follow it. The older records in `docs/`
