@@ -191,8 +191,9 @@ a version without the field is valid.
   0 dB, and don't ask until the user gets to needing it»).
 - **Audiotec Fischer's** (the Arbiter, 2026-11-08), Helix and its kin. The fields beyond `input_gain_db` are filled only
   on a DSP whose profile names them (`effects_and_dynamics`, `dsp_profile.py`). This is the method's text: `validate` and
-  the renderers get no profile. They are filled by the session or the person. When the skill can read a saved preset it
-  checks them against it; until then the check is the screen (`screen-read-dsp.md`).
+  the renderers get no profile. They are filled by the session or the person. For a `.pct6`, `compare-file` checks
+  them against the saved preset (`CONTRACT.md` item 13); for a DSP whose file the skill does not read, the check is the
+  screen (`screen-read-dsp.md`).
 - **`FX` in anything older means RealCenter**: `fx.realcenter` (`references/core/naming-and-structure.md`).
 - **A delta** carries it by name, `{"preset_settings": {"input_gain_db": -0.3}}`, alone or beside the rows. `apply_delta`
   takes it out before `_split_by_tier` and merges it two levels deep, so one `fx` switch leaves the others.

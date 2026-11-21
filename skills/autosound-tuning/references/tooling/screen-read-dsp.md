@@ -1,6 +1,6 @@
 # Reading DSP parameters off the SCREEN (screen-read) — when the file/export is unavailable
 
-**When:** the DSP config can't be read from a file (e.g. the Helix `.pct6` is **encrypted**, proven) and there's no readable export of the CURRENT state → we read the parameters (crossover / TA / EQ / gain / polarity) **off the DSP software's screen** via screenshot + vision. DSP-agnostic (any software on screen). It complements the black-box-DSP branch: **intent from the screen, the acoustic result from REW**.
+**When:** the DSP config can't be read from a file (the skill has no reader for that DSP's file, or the file is not at hand; a Helix `.pct6` IS read, `knowledge/dsp/helix-dsp-ultra-s.md`) and there's no readable export of the CURRENT state → we read the parameters (crossover / TA / EQ / gain / polarity) **off the DSP software's screen** via screenshot + vision. DSP-agnostic (any software on screen). It complements the black-box-DSP branch: **intent from the screen, the acoustic result from REW**.
 
 ## Prerequisites (what to set up if you need this)
 1. **macOS "Screen Recording"** for the terminal: System Settings → Privacy & Security → **Screen Recording** → enable your terminal (Terminal/iTerm) → **restart the terminal**. Without it, `screencapture` fails with `could not create image from display`. For on-demand reading this is the **ONLY thing needed**.
@@ -38,5 +38,5 @@ Before naming a VALUE — read IN THIS ORDER:
 If you ever need to capture ALL bands/channels systematically → the **STEP-CONFIRM** algorithm: the human steps linearly (only →); on each step the tool captures + **checks the change (`md5`)** (catches a skipped/double step LIVE) + numbers it, cross-checking against the band number on the Parametric/Allpass panel. **Not implemented as automation** (synthetic keystrokes don't reach Parallels, live narration is impossible, dedup gets confused on non-linear navigation). Keep it as a plan; for now — on-demand.
 
 ## Related
-- `.pct6` is encrypted (can't be parsed) → `knowledge/dsp/helix-dsp-ultra-s.md`. The only partially-readable Helix file = the AF **EQ export** (text) → `helix-eq-export.md`.
+- A Helix `.pct6` is read by the skill → `knowledge/dsp/helix-dsp-ultra-s.md`. Without it, the AF **EQ export** (text) → `helix-eq-export.md`.
 - Integration into tuning: intent from the screen + acoustics from REW → `diagnostic-techniques.md`, `analysis-playbook.md`.
