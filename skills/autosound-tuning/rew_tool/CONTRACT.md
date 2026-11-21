@@ -776,3 +776,41 @@ file's 0.707), 0.001°, a slope exact, a delay to 0.01 ms as PC-Tool shows it.
 
 A key, a row's `parameter`, a category, an `error.kind` or an exit code added later is an addition (item 12);
 removing or renaming one is a contract change.
+
+## 14. `state/apply.py <project-dir> attest [v_NNN] --from-file FILE` and `propose --from-file FILE` — guaranteed (W-13, #218)
+
+A saved `.pct6` read into the journal, by the ledger's own doors: an addition under contract 1 (item 12). `FILE` is
+taken as given, as in item 13. Both verbs take the writer lock as `attest` and `propose` do (item 8), read the file with
+`rew_tool/helix_pct6/`, hash it before the read and after, and never write it. Both print `helix_pct6.WARNING`
+verbatim and a `model:` line -- `checked`, or `NOT CHECKED: read at your own risk ...` -- before the result.
+
+**The exit table**, both verbs: 0 banked; 1 the journal refused (`error: <reason>` on stderr: no such version, a
+candidate, `attest` on a version with no preset setting, as for `--source-file`); 2 the file cannot be read or
+interpreted (`error: <file>: <kind>: <message>`, the kinds of item 13), or usage -- `--from-file` with `--source-file`,
+with a delta file, with `--evidence` or `--reviewed`; 3 the file changed while it was read (`changed`). Nothing is banked
+on 1, 2 or 3; 75 is a held lock (item 8).
+
+**`attest --from-file`** banks what `attest` banks, with `preset_settings.source_file` filled by the method:
+S-119's eight keys (`state/schema.md`, "Preset settings"), no other -- `name` (the base name), `path` (absolute), `md5`
+(the reader's), `saved` (`dd.MM.yyyy hh:mm` as the file states it), `pctool`, `device` (`<model> (Dev <n>)`, or the
+Dev code of a model the reader does not know), `read_at` (local time, ISO 8601 to the second) and `compared`.
+`compared` is item 13's comparison of the attested version against the file: `"no difference"` when every row is a
+match, else a list of strings -- first `compare-file.v1: <n> match, <n> differs, <n> unknown`, then one string per row
+that differs, `<channel> <parameter> differs: journal <value>, file <value>`, then one per unknown row, `<channel>
+<parameter> unknown: <reason>`. An unknown row is never written as no difference. The hand-filled JSON,
+`--source-file`, stays the way for a file of any other DSP.
+
+**`propose --from-file`** banks a NEW version through `propose`, built on HEAD unless `--on` names another; no banked
+version is rewritten. A row of the base reaches the file's channel by item 13's rules; an unchecked layout reaches
+none. A reached row takes what the file gives, in the journal's units: `gain_db` (to 0.01 dB), `ta_ms` (as PC-Tool
+shows it), `polarity`, `mute`, `phase_deg` where the channel has the phase control or the base states one, `hp` and
+`lp` (`{f, type, slope}`, null for an OFF leg) and `eq` (every band that works, and every bypassed one that would: `type`,
+`f`, `gain_db`, `q`, `i` the file's slot, `bypass: true` when bypassed). `preset_settings` takes `sources.*`,
+`fx.realcenter`, `fx.dynamic_bass`, `fx.subxpander`, `rtc.on`, `rtc.curve`, `bt.source` and `bt.auto_switch`. The
+codes between the two are one table (`state/from_file.py`), the one item 13 compares with. Anything else stays as the
+base had it and is printed by name with its reason -- each field kept (`Kept as <base> has them`), each row no channel
+is reached for, each output of the file no row is on and each band the journal has no type for (`Not taken from the
+file`), and what is taken short, such as an all-pass invert (`Taken short`) -- and the same lists are in the version's
+`provenance` (`kind` `pct6`, the file's name, path, md5, saved, PC-Tool, device, `read_at`, `kept`, `not_taken`). The read
+is a device read, as `setup_import`'s: its own evidence, so a structural move read from the file is not held as a
+candidate.

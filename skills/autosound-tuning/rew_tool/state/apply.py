@@ -780,8 +780,8 @@ def attest(history, version=None, note=None, source_file=None):
     under one hold of the project's writer lock (#141).
 
     `preset_settings` flips with the rows (#197, #200; it is no tier, so their walk does not reach it). `source_file`
-    (#200) is the record of the saved preset this version was read from and what the comparison said; the session or
-    the person fills it, since the method has no reader of that file yet.
+    (#200) is the record of the saved preset this version was read from and what the comparison said. For a `.pct6`
+    the method fills it itself (`attest_from_file`, #218); for any other DSP's file the session or the person does.
 
     The slot records what the DSP holds now (#201, `slots[slot].loaded`): the newly banked version, which is HEAD, under
     this same hold. The per-project line only; on the older layout no `slots.json` may appear.
@@ -818,6 +818,66 @@ def attest(history, version=None, note=None, source_file=None):
         if history._project():
             history.record_loaded(v, "attest")
     return {"version": v, "applied_channels": flipped}
+
+
+# ── --from-file (#218 T3): a saved .pct6, read only, through attest and propose ──────────────────────────────────────
+def _from_file():
+    """`state/from_file.py`, through the ledger's own loader: one module object."""
+    return _state._siblings().load("state/from_file.py")
+
+
+def attest_from_file(history, file_path, version=None, note=None):
+    """`attest` with the `source_file` filled from the `.pct6` itself (#218 T3, S-119): the file read by `helix_pct6`,
+    the version compared with it by compare-file (`compare_file.compare_journal`), and the record -- name, path, md5,
+    saved, PC-Tool, device, when read, `compared` -- banked by `attest`, whose refusals hold as for `--source-file`.
+
+    `(exit code, result)`: 0 and `attest`'s result with `source_file`, `device`, `warning`; else compare-file's refusal
+    -- 2 the file cannot be read or interpreted, 3 it changed while it was read -- and nothing banked. A refusal of
+    the journal's raises `ValueError`, as `attest` does. One hold of the writer lock over the read of the version, the
+    file's and the bank: what is compared is what is attested."""
+    cf, ff = _compare_file(), _from_file()
+    with _held(history):
+        version = version or history.head()
+        if not version:
+            raise ValueError(f"the slot {history.preset!r} holds no version to attest")
+        snap = history.load(version)
+        identity = _state.project_channels(getattr(history, "project_dir", None) or "")
+        code, result = cf.compare_journal((snap, identity), file_path)
+        if code != cf.EXIT_COMPARED:
+            return code, result
+        source = ff.source_file(result, file_path)
+        got = attest(history, version, note=note or f"attested, read back from {source['name']}", source_file=source)
+    got.update(source_file=source, device=result["device"], warning=result["warning"],
+               counts=result["counts"]["result"])
+    return code, got
+
+
+def propose_from_file(history, file_path, note=None, registry=None, allow_nonactive=False, on=None):
+    """A NEW version from a `.pct6`'s values (#218 T3): `from_file.build` turns what the file gives every row the slot
+    rules map -- level, delay, polarity, mute, phase, the legs, the EQ bands -- and the preset's settings into an
+    ordinary delta, and `propose` banks it, the one door: no version is rewritten. What the file does not give stays as
+    the base had it and is named (`kept`, `not_taken`, `notes`), in the result and in the version's `provenance`.
+
+    The read is a device read (`provenance`), as `setup_import`'s: its own evidence, and about the slot -- built on HEAD
+    unless `on` names another version. `(exit code, result)` as `attest_from_file`: 0 and `propose`'s result with
+    `kept`, `not_taken`, `notes`, `device`, `warning`; 2 or 3 and the refusal, nothing banked."""
+    ff = _from_file()
+    with _held(history):
+        code, read = ff.read_file(file_path)
+        if code:
+            return code, read
+        base = history.head() if on in (None, "HEAD") else on
+        if not base:
+            raise ValueError(f"the slot {history.preset!r} holds no version to build on")
+        snap = history.load(base)
+        identity = _state.project_channels(getattr(history, "project_dir", None) or "")
+        built = ff.build(snap, identity, read)
+        got = propose(history, built["delta"], note=note or f"read from {read['name']}",
+                      provenance=ff.provenance(read, built), registry=registry, allow_nonactive=allow_nonactive,
+                      on=on or "HEAD")
+    got.update(kept=built["kept"], not_taken=built["not_taken"], notes=built["notes"], base=base,
+               device=read["device"], warning=read["warning"], file=read["name"])
+    return 0, got
 
 
 # ── self-test ─────────────────────────────────────────────────────────────────
@@ -2346,6 +2406,287 @@ def _check_compare_file_writes_nothing():
         shutil.rmtree(top, ignore_errors=True)
 
 
+# ── --from-file (#218 T3): attest records the file and the comparison, propose banks the file's values ─────────────
+def _a_versions_file(project, version):
+    """The bytes of `version`'s file in the project's ledger, wherever its layout keeps it."""
+    for here, _dirs, files in os.walk(os.path.join(project, "state")):
+        if version + ".json" in files:
+            with open(os.path.join(here, version + ".json"), "rb") as fh:
+                return fh.read()
+    raise AssertionError(f"no {version}.json under {project}")
+
+
+def _aya_history(project):
+    return _state.PresetHistory(os.path.join(project, "state"), "AYA", project_dir=project)
+
+
+def _check_attest_from_file_fills_the_source_file():
+    """`attest --from-file` reads the file and records it itself: every one of S-119's eight fields, the hash the reader
+    took, the save time and PC-Tool version the file states, the model, when it was read -- and `compared` from
+    compare-file's own rows of that version against that file: its counts first, then every row that differs and every
+    unknown one. The warning is printed, verbatim, before the result."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_attest_from_file_")
+    try:
+        project, pct6 = _aya_project(top)
+        expected = _compared(project, pct6)
+        code, out, err = _compare_cli(project, "attest", "--preset", "AYA", "--from-file", pct6)
+        assert code == 0, (code, out, err)
+        hx = _compare_file()._helix()
+        assert out.startswith(hx.WARNING), out[:400]
+        assert out.index(hx.WARNING) < out.index("🟢"), out[:600]
+        h = _aya_history(project)
+        assert h.versions() == ["v_001", "v_002"], h.versions()
+        source = h.load("v_002")["preset_settings"]["source_file"]
+        assert sorted(source) == sorted(_state._SOURCE_FILE_FIELDS), sorted(source)
+        assert all(source[k] for k in _state._SOURCE_FILE_FIELDS), source
+        assert source["name"] == "AYA.pct6" and source["path"] == os.path.abspath(pct6), source
+        assert source["md5"] == "708ccc26583f90e7dfb84fd9345f670c", source
+        assert (source["saved"], source["pctool"]) == ("16.10.2026 18:55", "6.04.03"), source
+        assert "HELIX DSP ULTRA S" in source["device"], source
+        datetime.datetime.fromisoformat(source["read_at"])
+        compared = source["compared"]
+        counts = expected["counts"]["result"]
+        assert counts["differs"] and isinstance(compared, list), compared
+        assert compared[0] == "%s: %d match, %d differs, %d unknown" % (
+            expected["contract"], counts["match"], counts["differs"], counts["unknown"]), compared[0]
+        for row in expected["rows"]:
+            if row["result"] == "match":
+                continue
+            said = "%s %s %s" % (row["channel"], row["parameter"], row["result"])
+            assert any(c.startswith(said + ":") for c in compared), (said, compared)
+        assert len(compared) == 1 + counts["differs"] + counts["unknown"], (len(compared), counts)
+        assert any(c.startswith("m-L gain_db differs: journal -3, file -3.5") for c in compared), compared
+        assert "AYA.pct6 (md5 708ccc26)" in h.render("v_002"), h.render("v_002")
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_from_file_and_source_file_together_are_a_usage_error():
+    """`--from-file` with `--source-file` -- two records of one file -- and `propose --from-file` with a delta file are
+    usage errors: exit 2, the usage on stderr, nothing banked."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_from_file_usage_")
+    try:
+        project, pct6 = _aya_project(top)
+        with open(os.path.join(project, "read.json"), "w", encoding="utf-8") as fh:
+            json.dump({"name": "AYA.pct6"}, fh)
+        with open(os.path.join(project, "delta.json"), "w", encoding="utf-8") as fh:
+            json.dump({"w-L": {"gain_db": -1.0}}, fh)
+        h = _aya_history(project)
+        for argv in (("attest", "--preset", "AYA", "--from-file", pct6, "--source-file", "read.json"),
+                     ("attest", "--preset", "AYA", "--source-file", "read.json", "--from-file", pct6),
+                     ("propose", "delta.json", "--preset", "AYA", "--from-file", pct6)):
+            code, out, err = _compare_cli(project, *argv)
+            assert code == 2 and "usage:" in err and "--from-file" in err and not out, (argv, code, out, err)
+            assert h.versions() == ["v_001"], (argv, h.versions())
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_attest_from_file_needs_a_preset_setting():
+    """The refusal `--source-file` has: on a version with no preset setting the file would stand alone in
+    `preset_settings`, so `attest --from-file` refuses, exit 1, and banks nothing."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_attest_from_file_alone_")
+    try:
+        project, pct6 = _aya_project(top, edit_state=lambda state: state.pop("preset_settings"))
+        code, out, err = _compare_cli(project, "attest", "--preset", "AYA", "--from-file", pct6)
+        assert code == 1 and err.startswith("error: ") and "preset setting" in err, (code, out, err)
+        assert _aya_history(project).versions() == ["v_001"], _aya_history(project).versions()
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_from_file_input_changed_is_exit_3():
+    """Both verbs hash the file before it is read and after: a file that changed in between -- the reader made to
+    change it, once after its read and once before -- is exit 3, and nothing is banked."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_from_file_changed_")
+    hx = real = None
+    try:
+        hx = _compare_file()._helix()
+        real = hx.read_pct6
+        project, pct6 = _aya_project(top)
+
+        def touch(path):
+            with open(path, "ab") as fh:
+                fh.write(b"\0")
+
+        def changed_after(source, *args, **kwargs):
+            doc = real(source, *args, **kwargs)
+            touch(source)
+            return doc
+
+        def changed_before(source, *args, **kwargs):
+            touch(source)
+            return real(source, *args, **kwargs)
+
+        for verb in ("attest", "propose"):
+            for reader in (changed_after, changed_before):
+                shutil.copyfile(_AYA_PCT6, pct6)
+                hx.read_pct6 = reader
+                try:
+                    code, out, err = _compare_cli(project, verb, "--preset", "AYA", "--from-file", pct6)
+                finally:
+                    hx.read_pct6 = real
+                assert code == 3 and "changed" in err, (verb, reader.__name__, code, out, err)
+                assert _aya_history(project).versions() == ["v_001"], (verb, reader.__name__)
+    finally:
+        if hx is not None:
+            hx.read_pct6 = real
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _expected_from_the_reader(ch):
+    """What `propose --from-file` is to take from the reader's channel `ch`, read off `helix_pct6.interpret` itself: the
+    level, the delay as PC-Tool shows it, polarity, mute, the legs, and every band that does something or is bypassed."""
+    timing = ch["timing"][0]
+    want = {"gain_db": round(ch["level"]["value"], 2), "ta_ms": timing["delay"]["display_ms"],
+            "polarity": ch["polarity"], "mute": ch["mute_on"]}
+    for leg, side in (("hp", "high_pass"), ("lp", "low_pass")):
+        have = ch.get(side)
+        if have and have.get("state") == "configured":
+            short = {"Linkwitz": "LR", "Butterworth": "BW"}[have["family"]]
+            want[leg] = {"f": have["frequency_hz"], "type": short, "slope": have["slope_db_oct"]}
+        elif have and have.get("state") == "off":
+            want[leg] = None
+    bands = []
+    for f in ch["filters"]:
+        if f["role"] != "eq" or f.get("type") is None:
+            continue
+        bypassed = f["state"] == "bypassed" and (f["type"] in ("APF1", "APF2") or f.get("gain_db"))
+        if f["state"] != "configured" and not bypassed:
+            continue
+        band = {"type": f["type"], "f": f["frequency_hz"], "i": f["position"]}
+        if bypassed:
+            band["bypass"] = True
+        if f["type"] in ("PK", "LSH", "HSH"):
+            band["gain_db"] = f["gain_db"]
+        if f["type"] != "APF1":
+            band["q"] = f["q"]
+        bands.append(band)
+    want["eq"] = bands
+    return want
+
+
+def _check_propose_from_file_banks_the_files_values():
+    """`propose --from-file` banks a NEW version holding the file's values for every row the slot rules map -- level,
+    delay, polarity, mute, both crossover legs, every EQ band, the preset's settings -- and leaves the version before
+    it byte for byte. What it does not take is named, every field and channel: a switch the file does not decode, a
+    field whose meaning in the file is not established, a setting the file does not store, a row with no slot, and an
+    output of the file no row is on. The warning is printed, verbatim, before the result."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_propose_from_file_")
+    try:
+        def a_row_with_no_slot(state):
+            state["channels"]["spare-N"] = {"gain_db": -1.0, "ta_ms": 0.0, "polarity": "NORM", "hp": None, "lp": None}
+
+        project, pct6 = _aya_project(top, edit_state=a_row_with_no_slot,
+                                     more_channels=[{"code": "spare-N", "tier": "channels"}])
+        before = _a_versions_file(project, "v_001")
+        code, out, err = _compare_cli(project, "propose", "--preset", "AYA", "--from-file", pct6)
+        assert code == 0, (code, out, err)
+        hx = _compare_file()._helix()
+        assert out.startswith(hx.WARNING) and out.index(hx.WARNING) < out.index("proposed v_002"), out[:600]
+        h = _aya_history(project)
+        assert h.versions() == ["v_001", "v_002"], h.versions()
+        assert _a_versions_file(project, "v_001") == before, "v_001 was rewritten"
+        old, new = h.load("v_001"), h.load("v_002")
+        inv = hx.interpret(hx.read_pct6(pct6))
+        by_index = {c["index"]: c for c in inv["channels"] if c["kind"] == "output"}
+        for code_, index in (("w-L", 16), ("m-L", 18), ("tw-L", 20), ("sw", 24)):
+            want, row = _expected_from_the_reader(by_index[index]), new["channels"][code_]
+            for field, value in want.items():
+                assert row.get(field) == value, (code_, field, row.get(field), value)
+        for code_, index in (("VFL", 0), ("VSW", 10)):
+            want, row = _expected_from_the_reader(by_index[index]), new["virtual_channels"][code_]
+            for field in ("gain_db", "ta_ms", "polarity", "mute", "eq"):
+                # a channel with no band working in the file and no `eq` in the version gets none: no empty list
+                got = row.get(field, [] if field == "eq" else None)
+                assert got == want[field], (code_, field, got, want[field])
+        assert new["channels"]["m-L"]["gain_db"] == -3.5 and new["channels"]["tw-L"]["polarity"] == "NORM"
+        assert 1000 not in [b["f"] for b in new["channels"]["sw"]["eq"]], new["channels"]["sw"]["eq"]
+        settings = new["preset_settings"]
+        assert settings["fx"]["subxpander"] is False and settings["fx"]["realcenter"] is True, settings
+        assert settings["bt"]["source"] == "BT" and settings["conductor"] == {"sub_lamps": 7}, settings
+        # kept as v_001 had them, and named
+        assert new["channels"]["sw"]["off"] is False and new["virtual_channels"]["VFL"]["eq_bypass"] is False
+        assert new["channels"]["spare-N"] == old["channels"]["spare-N"], new["channels"]["spare-N"]
+        kept = out[out.index("Kept as v_001 has them"):]
+        for named in ("sw off:", "VFL eq_bypass:", "preset conductor.sub_lamps:", "spare-N:", "Output A",
+                      "project.json gives this channel no slot"):
+            assert named in kept, (named, kept)
+        assert new["provenance"]["kind"] == "pct6" and new["provenance"]["md5"] == "708ccc26583f90e7dfb84fd9345f670c"
+        assert "sw off" in " ".join(new["provenance"]["kept"]), new["provenance"]
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_propose_from_file_round_trips_through_compare_file():
+    """propose --from-file, then compare-file of the new version against the same file: no row differs -- every value
+    propose took from the file matches it -- and the rows v_001 had made to differ are matches now."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_from_file_round_trip_")
+    try:
+        project, pct6 = _aya_project(top)
+        assert _compared(project, pct6)["counts"]["result"]["differs"], "the fixture differs nowhere"
+        code, out, err = _compare_cli(project, "propose", "--preset", "AYA", "--from-file", pct6)
+        assert code == 0, (code, out, err)
+        got = _compared(project, pct6, version="v_002")
+        differs = [(r["channel"], r["parameter"], r["journal"], r["file"]) for r in got["rows"] if r["result"] == "differs"]
+        assert not differs, differs
+        for channel, parameter in (("m-L", "gain_db"), ("tw-L", "polarity"), ("preset", "fx.subxpander"),
+                                   ("m-L", "mute"), ("sw", "eq[1].gain_db"), ("VFL", "eq[1].q")):
+            assert _row(got, channel, parameter)["result"] == "match", (channel, parameter)
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_propose_from_file_on_an_unchecked_model_maps_nothing():
+    """A model the reader has not checked has no channel layout: no output is named by a slot, so every row stays as the
+    version had it and is named, and the model's not-checked line comes with the warning, before the result."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_from_file_unchecked_")
+    try:
+        project, pct6 = _aya_project(top, edit_xml=lambda root: root.set("Dev", "77"))
+        code, out, err = _compare_cli(project, "propose", "--preset", "AYA", "--from-file", pct6)
+        assert code == 0, (code, out, err)
+        hx = _compare_file()._helix()
+        assert out.startswith(hx.WARNING) and out.index("NOT CHECKED") < out.index("proposed v_002"), out[:800]
+        h = _aya_history(project)
+        old, new = h.load("v_001"), h.load("v_002")
+        for tier in ("channels", "virtual_channels"):
+            for key, row in old[tier].items():
+                assert {k: v for k, v in new[tier][key].items() if k != "status"} == row, (tier, key)
+        kept = out[out.index("Kept as v_001 has them"):]
+        for named in ("w-L:", "m-L:", "tw-L:", "sw:", "VFL:", "VSW:", "layout is not checked"):
+            assert named in kept, (named, kept)
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_from_file_tables_are_compare_files():
+    """The codes between the journal and the file are one table for both directions: `from_file.py`'s, which
+    compare-file reads its own copy of until it is moved onto it. Until then the two are held equal here."""
+    cf, ff = _compare_file(), _from_file()
+    assert ff.POLARITY == cf._POLARITY and ff.POLARITY_BACK == cf._POLARITY_BACK, (ff.POLARITY, cf._POLARITY)
+    assert ff.EQ_CODES == cf._EQ_CODES and ff.EQ_WITH_GAIN == cf._EQ_WITH_GAIN, (ff.EQ_CODES, cf._EQ_CODES)
+    assert ff.XO_FAMILY == cf._XO_FAMILY and ff.XO_SHORT == cf._XO_SHORT, (ff.XO_FAMILY, cf._XO_FAMILY)
+    hx = cf._helix()
+    outputs = [c for c in hx.interpret(hx.read_pct6(_AYA_PCT6))["channels"] if c["kind"] == "output"]
+    assert ff.virtual_by_letter(outputs) == cf._virtual_by_letter(outputs), "the slot rule lives in one place"
+    import inspect
+    assert "_compare_file()._virtual_by_letter(" in inspect.getsource(ff.virtual_by_letter), "a second slot rule"
+
+
 def _own_tempdir(selftest):
     """`selftest` run with tempfile's folder -- and TMPDIR, for the children it starts -- set to one folder of its own,
     removed with everything in it when the selftest ends, passed or failed, both put back (#148): a check that forgets
@@ -2399,7 +2740,14 @@ def _selftest():
                   _check_compare_file_a_leg_with_no_slope_is_unknown,
                   _check_compare_file_bands_it_cannot_decode_and_an_inverted_all_pass,
                   _check_compare_file_virtual_letters_are_pc_tools,
-                  _check_compare_file_a_file_it_cannot_interpret_is_exit_2):
+                  _check_compare_file_a_file_it_cannot_interpret_is_exit_2,
+                  _check_attest_from_file_fills_the_source_file,
+                  _check_from_file_and_source_file_together_are_a_usage_error,
+                  _check_attest_from_file_needs_a_preset_setting, _check_from_file_input_changed_is_exit_3,
+                  _check_propose_from_file_banks_the_files_values,
+                  _check_propose_from_file_round_trips_through_compare_file,
+                  _check_propose_from_file_on_an_unchecked_model_maps_nothing,
+                  _check_from_file_tables_are_compare_files):
         try:
             check()
         except AssertionError as exc:
@@ -2641,7 +2989,8 @@ def _selftest():
 
 
 _USAGE = """usage: apply.py <project-dir> propose <delta.json> [--preset P] [--note TEXT] [--evidence E ...] [--reviewed FILE] [--on v_NNN|HEAD]
-       apply.py <project-dir> attest [v_NNN] [--preset P] [--note TEXT] [--source-file FILE.json]
+       apply.py <project-dir> propose --from-file FILE.pct6 [--preset P] [--note TEXT] [--on v_NNN|HEAD]
+       apply.py <project-dir> attest [v_NNN] [--preset P] [--note TEXT] [--source-file FILE.json | --from-file FILE.pct6]
        apply.py <project-dir> compare-file <v_NNN|HEAD> FILE.pct6 [--json] [--preset P]
        apply.py --selftest
 
@@ -2651,6 +3000,12 @@ _USAGE = """usage: apply.py <project-dir> propose <delta.json> [--preset P] [--n
   attest    the Arbiter entered it: flip the proposed rows to green, as a new version.
             --source-file: a JSON object, the saved preset this version was read from (state/schema.md, #200);
             refused on a version with no preset setting (it would stand alone in `preset_settings`)
+            --from-file: the method fills that record from a saved .pct6 itself, with compare-file's comparison of the
+            version against it; not with --source-file (#218)
+  propose --from-file  a NEW version from a saved .pct6's values -- channels, crossovers, EQ, the preset's settings --
+            for every row the slot rules map; what the file does not give stays as the base had it, and is named.
+            Both --from-file verbs print the reader's warning first; exit 2 the file cannot be read, 3 it changed
+            while it was read, nothing banked. FILE is taken as given (a relative path is the current folder's)
   compare-file  a version of the journal against a saved .pct6, row by row (match / differs / unknown, audio first);
             read only, writes nothing anywhere. --json: the shape CONTRACT.md item 13 pins. Exit 0 compared,
             1 the version is not there, 2 the file cannot be read, 3 the file changed while it was read (#218)
@@ -2696,6 +3051,38 @@ def _compare_file_main(project_dir, args):
     return code
 
 
+def _from_file_main(history, cmd, path, rest, opts, registry, preset):
+    """`attest [v] --from-file FILE` and `propose --from-file FILE` (#218 T3): the warning first, verbatim -- and the
+    model's not-checked line beside it -- then the result. Exit 0 banked, 2 the file cannot be read, 3 it changed
+    while it was read (nothing banked on either); the journal's refusals raise to `_main`, exit 1."""
+    if cmd == "attest":
+        code, got = attest_from_file(history, path, rest[0] if rest else None, note=opts["--note"])
+    else:
+        code, got = propose_from_file(history, path, note=opts["--note"], registry=registry, on=opts["--on"])
+    if code:
+        print(f"error: {got['file']['name']}: {got['error']['kind']}: {got['error']['message']}", file=sys.stderr)
+        return code
+    ff = _from_file()
+    print(got["warning"])
+    print(ff.model_line(got["device"]))
+    print()
+    if cmd == "attest":
+        source, counts = got["source_file"], got["counts"]
+        print(f"🟢 {got['version']} on {preset}: applied {', '.join(got['applied_channels']) or 'nothing proposed'}")
+        print(f"source file: {source['name']} (md5 {source['md5']}, saved {source['saved']}, PC-Tool {source['pctool']}),"
+              f" read {source['read_at']}")
+        print(f"compared: {counts['match']} match, {counts['differs']} differs, {counts['unknown']} unknown"
+              + ("" if isinstance(source["compared"], str) else " -- `compare-file` lists every row"))
+        for line in source["compared"][1:] if isinstance(source["compared"], list) else ():
+            if " differs: " in line:
+                print(f"  - {line}")
+        return 0
+    print(f"{'🟠 candidate' if got['candidate'] else '🟡 proposed'} {got['version']} on {preset}, read from {got['file']}")
+    print(got["sheet"])
+    print("\n".join(ff.render_names(got, got["base"])))
+    return 0
+
+
 def _main(argv):
     if "--selftest" in argv:
         return _selftest()
@@ -2705,7 +3092,8 @@ def _main(argv):
     project_dir, cmd, args = argv[1], argv[2], list(argv[3:])
     if cmd == "compare-file":       # read only: no slot to be active, no lock, nothing banked (#218)
         return _compare_file_main(project_dir, args)
-    opts ={"--preset": None, "--note": None, "--reviewed": None, "--on": None, "--source-file": None}
+    opts ={"--preset": None, "--note": None, "--reviewed": None, "--on": None, "--source-file": None,
+           "--from-file": None}
     evidence = []
     rest = []
     i = 0
@@ -2726,7 +3114,18 @@ def _main(argv):
         print(f"error: no active slot in {root}/registry -- pass --preset", file=sys.stderr)
         return 2
     history = _state.PresetHistory(root, preset, project_dir=project_dir)
+    if opts["--from-file"]:
+        # One record of one file: the file read, or a JSON of it, or a delta -- never two (#218 T3). A device read is
+        # its own evidence, so a reviewer or evidence beside it would be taken for nothing.
+        beside = [name for name, given in (("--source-file", cmd == "attest" and opts["--source-file"]),
+                                           ("a delta file", cmd == "propose" and rest),
+                                           ("--evidence", evidence), ("--reviewed", opts["--reviewed"])) if given]
+        if beside:
+            print(f"error: --from-file takes no {', '.join(beside)} beside it\n" + _USAGE, file=sys.stderr)
+            return 2
     try:
+        if opts["--from-file"] and cmd in ("propose", "attest"):
+            return _from_file_main(history, cmd, os.path.abspath(opts["--from-file"]), rest, opts, registry, preset)
         if cmd == "propose":
             if not rest:
                 print(_USAGE, file=sys.stderr)

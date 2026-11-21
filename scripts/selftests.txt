@@ -66,6 +66,7 @@ skills/autosound-tuning/rew_tool/siblings.py --selftest
 skills/autosound-tuning/rew_tool/spot_check.py --selftest
 skills/autosound-tuning/rew_tool/state/apply.py --selftest
 skip skills/autosound-tuning/rew_tool/state/compare_file.py imported by state/apply.py (compare-file), whose --selftest runs its checks
+skip skills/autosound-tuning/rew_tool/state/from_file.py imported by state/apply.py (attest/propose --from-file), whose --selftest runs its checks
 skills/autosound-tuning/rew_tool/state/migrate.py selftest
 skills/autosound-tuning/rew_tool/state/process.py selftest
 skills/autosound-tuning/rew_tool/state/state.py selftest
