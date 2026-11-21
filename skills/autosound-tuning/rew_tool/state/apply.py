@@ -822,24 +822,10 @@ def attest(history, version=None, note=None, source_file=None, door="--source-fi
     return {"version": v, "applied_channels": flipped}
 
 
-# ── --from-file (#218 T3): a saved .pct6 (attest: or .PR15), read only, through attest and propose ────────────────────
+# ── --from-file (#218 T3, hub #348/#349): a saved .pct6 or .PR15, read only, through attest and propose ────────────────
 def _from_file():
     """`state/from_file.py`, through the ledger's own loader: one module object."""
     return _state._siblings().load("state/from_file.py")
-
-
-def _not_a_pct6(file_path):
-    """`(2, refusal)` for a `.PR<n>` given to `propose --from-file`, else None: it reads a `.pct6` (CONTRACT.md item
-    14); a Mosconi preset is compared with `compare-file` and its comparison recorded with `attest --from-file`, and no
-    version is built from it."""
-    cf = _compare_file()
-    mp = cf._mosconi()
-    if not mp.is_preset_path(file_path):
-        return None
-    return cf.EXIT_UNREADABLE, cf.refusal(mp.WARNING, os.path.basename(file_path), "model", (
-        "propose --from-file reads a .pct6; a %s preset is compared with compare-file (apply.py <project-dir> "
-        "compare-file <version> FILE) and recorded with attest --from-file, and no version is built from it"
-        % os.path.splitext(file_path)[1]))
 
 
 def attest_from_file(history, file_path, version=None, note=None):
@@ -876,23 +862,22 @@ def attest_from_file(history, file_path, version=None, note=None):
 
 
 def propose_from_file(history, file_path, note=None, registry=None, allow_nonactive=False, on=None):
-    """A NEW version from a `.pct6`'s values (#218 T3): `from_file.build` turns what the file gives every row the slot
-    rules map -- level, delay, polarity, mute, phase, the legs, the EQ bands -- and the preset's settings into an
-    ordinary delta, and `propose` banks it, the one door: no version is rewritten. What the file does not give stays as
+    """A NEW version from a `.pct6`'s values (#218 T3), or a `.PR15`'s (hub #349, `from_file.build_pr`):
+    `from_file.build` turns what the file gives every row the slot rules map -- level, delay, polarity, mute, phase,
+    the legs, the EQ bands -- and the preset's settings into an ordinary delta, and `propose` banks it, the one door: no version is rewritten. What the file does not give stays as
     the base had it and is named (`kept`, `not_taken`, `notes`), in the result and in the version's `provenance`.
 
-    The base is compared with the file first, on the same read (`compare_file.compare_doc`): a file compare-file
+    The base is compared with the file first, on the same read (`compare_file.compare_doc`, `compare_pr_reading` with
+    `project.json`'s `dsp.settings`): a file compare-file
     refuses -- a value it cannot interpret at a path the base reaches, a delay `abc` -- is refused here too, exit 2,
     and a base it cannot compare is the journal's refusal. The read is a device read (`provenance`), as
     `setup_import`'s: its own evidence, and about the slot -- built on HEAD unless `on` names another version.
     `(exit code, result)` as `attest_from_file`: 0 and `propose`'s result with `kept`, `not_taken`, `notes`, `device`,
     `warning`; 2 or 3 and the refusal, nothing banked."""
-    refused = _not_a_pct6(file_path)
-    if refused:
-        return refused
     cf, ff = _compare_file(), _from_file()
+    pr = cf._mosconi().is_preset_path(file_path)
     with _held(history):
-        code, read = ff.read_file(file_path)
+        code, read = (ff.read_pr_file if pr else ff.read_file)(file_path)
         if code:
             return code, read
         base = history.head() if on in (None, "HEAD") else on
@@ -900,11 +885,16 @@ def propose_from_file(history, file_path, note=None, registry=None, allow_nonact
             raise ValueError(f"the slot {history.preset!r} holds no version to build on")
         snap = history.load(base)
         cf._check_kinds(snap)
-        identity = _state.project_channels(getattr(history, "project_dir", None) or "")
-        code, compared = cf.compare_doc((snap, identity), read["doc"], read["name"], inv=read["inv"])
+        project_dir = getattr(history, "project_dir", None) or ""
+        identity = _state.project_channels(project_dir)
+        if pr:
+            code, compared = cf.compare_pr_reading((snap, identity, cf.dsp_settings(project_dir)), read["reading"],
+                                                   read["name"])
+        else:
+            code, compared = cf.compare_doc((snap, identity), read["doc"], read["name"], inv=read["inv"])
         if code:
             return code, compared
-        built = ff.build(snap, identity, read)
+        built = (ff.build_pr if pr else ff.build)(snap, identity, read)
         got = propose(history, built["delta"], note=note or f"read from {read['name']}",
                       provenance=ff.provenance(read, built), registry=registry, allow_nonactive=allow_nonactive,
                       on=on or "HEAD")
@@ -3531,22 +3521,170 @@ def _check_attest_from_file_pr15_refusals():
         shutil.rmtree(top, ignore_errors=True)
 
 
-def _check_propose_from_file_refuses_a_pr15():
-    """`propose --from-file` reads a `.pct6` only (CONTRACT.md item 14): a `.PR15` is exit 2, kind `model`, saying
-    compare-file and `attest --from-file` are what a `.PR15` is for -- nothing banked, nothing written beside the
-    file."""
+def _pico_with_kept_fields(top, corner_set=None):
+    """`_pico_with_a_setting` whose v_001 also holds what a `.PR15` does not decode: a phase, `off`, `eq_bypass`, a
+    band's `bypass`. (project, file)."""
+    project, pr15 = _pico_with_a_setting(top, corner_set=corner_set)
+    h = _pico_history(project)
+    state = h.load("v_001")
+    state["channels"]["sub"]["off"] = False
+    state["channels"]["tw-L"]["eq_bypass"] = False
+    state["channels"]["tw-L"]["eq"][0]["bypass"] = True
+    h.snapshot(state, note="PICO, the fields a .PR15 does not decode")
+    return project, pr15
+
+
+def _check_propose_from_file_pr15_round_trips_through_compare_file():
+    """hub #349 (TCC-072): `propose --from-file FILE.PR15` banks a new version from the file's values, and compare-file
+    of it against the same file has no row that differs -- every value taken matches; the rows v_002 had made to differ
+    or left unstated match now. Every row still unknown is one propose named, in what it printed and in `provenance`.
+    The Mosconi warning first; the file is left as it was."""
+    import hashlib
     import shutil
     import tempfile
-    top = tempfile.mkdtemp(prefix="autosound_from_file_pr15_")
+    mp = _compare_file()._mosconi()
+    top = tempfile.mkdtemp(prefix="autosound_propose_pr15_round_trip_")
+    try:
+        project, pr15 = _pico_with_kept_fields(top, corner_set="minus_6db")
+        first = _compared(project, pr15, version="v_002")
+        assert first["counts"]["result"]["differs"], "the fixture differs nowhere"
+        with open(pr15, "rb") as fh:
+            before = hashlib.sha256(fh.read()).hexdigest()
+        code, out, err = _compare_cli(project, "propose", "--preset", "PICO", "--from-file", pr15)
+        assert code == 0, (code, out, err)
+        assert out.startswith(mp.WARNING) and "NOT CHECKED" in out, out[:600]
+        assert not [line for line in out.splitlines() if line.startswith("  - ") and "None" in line], out
+        with open(pr15, "rb") as fh:
+            assert hashlib.sha256(fh.read()).hexdigest() == before, "the .PR15 changed"
+        h = _pico_history(project)
+        assert h.versions() == ["v_001", "v_002", "v_003"], h.versions()
+        got = _compared(project, pr15, version="v_003")
+        differs = [(r["channel"], r["parameter"], r["journal"], r["file"]) for r in got["rows"]
+                   if r["result"] == "differs" and r["parameter"] != "crossover.corner_set"]
+        assert not differs, differs
+        assert _row(got, "preset", "crossover.corner_set")["result"] == "differs", "the project's answer is not banked"
+        for channel, parameter in (("tw-R", "gain_db"), ("tw-R", "mute"), ("tw-R", "eq[1].gain_db"),
+                                   ("tw-L", "eq[2].f"), ("w-L", "eq[1].q"), ("sub", "lp.f"), ("tw-L", "lp.slope")):
+            assert _row(got, channel, parameter)["result"] == "match", _row(got, channel, parameter)
+        prov = h.load("v_003")["provenance"]
+        for where, labels in (("stdout", _named_lines(out)),
+                              ("provenance", [line.split(": ", 1)[0] for section in ("kept", "not_taken", "taken_short")
+                                              for line in prov.get(section) or []])):
+            unnamed = [(r["channel"], r["parameter"], r["reason"]) for r in got["rows"]
+                       if r["result"] == "unknown" and not _is_named(labels, r["channel"], r["parameter"])]
+            assert not unnamed, (where, unnamed)
+        unstated = ("the version does not record", "the version does not state", "the version records no")
+        now = {(r["channel"], r["parameter"]): r for r in got["rows"]}
+        for row in first["rows"]:
+            if row["result"] != "unknown" or not str(row["reason"]).startswith(unstated) or row["channel"] == "preset":
+                continue
+            channel, parameter = row["channel"], row["parameter"]
+            after = [r for (c, p), r in now.items() if c == channel and (
+                p == parameter or p.startswith(parameter + ".") or p.startswith(parameter + "["))]
+            assert after and all(r["result"] == "match" for r in after), (channel, parameter, row["reason"], after)
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_propose_from_file_pr15_keeps_and_names_what_it_does_not_decode():
+    """What compare-file leaves `unknown` on a `.PR15` stays as the base has it and is named, in what propose printed
+    and in the version's `provenance` (`kind` `pr15`, `saved` and `pctool` null): the phase, `off`, `eq_bypass`, a
+    band's `bypass`, the input gain, a row on no output; the corner set is named and never banked into the version.
+    A leg of a slope code the reader does not decode, a band of a type code it does not, and every delay at an
+    assumed rate are kept and named -- never guessed."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_propose_pr15_kept_")
+    try:
+        project, pr15 = _pico_with_kept_fields(top)
+        base = _pico_history(project).load("v_002")
+        code, out, err = _compare_cli(project, "propose", "--preset", "PICO", "--from-file", pr15)
+        assert code == 0, (code, out, err)
+        h = _pico_history(project)
+        new, prov = h.load("v_003"), h.load("v_003")["provenance"]
+        assert prov["kind"] == "pr15" and prov["source"] == "example_pico682.PR15", prov
+        assert prov["saved"] is None and prov["pctool"] is None, prov
+        assert prov["device"] == "Mosconi PICO 6/8-2 DSP (Dev 15)" and prov["md5"], prov
+        labels = _named_lines(out)
+        kept = [line.split(": ", 1)[0] for line in prov["kept"]]
+        for name in ("w-L phase_deg", "sub off", "tw-L eq_bypass", "tw-L eq[1].bypass", "preset input_gain_db", "x-9"):
+            assert name in labels and name in kept, (name, labels, kept)
+        assert "preset crossover.corner_set" in [line.split(": ", 1)[0] for line in prov["not_taken"]], prov
+        ch = new["channels"]
+        assert ch["w-L"]["phase_deg"] == 0.0 and ch["sub"]["off"] is False and ch["tw-L"]["eq_bypass"] is False
+        assert ch["tw-L"]["eq"][0]["bypass"] is True and ch["tw-L"]["eq"][0]["i"] == 1, ch["tw-L"]["eq"][0]
+        assert ch["x-9"] == base["channels"]["x-9"], ch["x-9"]
+        assert new["preset_settings"].get("input_gain_db") == 0.0, new["preset_settings"]
+        assert "corner_set" not in json.dumps(new["preset_settings"]), new["preset_settings"]
+        assert ch["tw-R"]["gain_db"] == 3.0 and ch["tw-R"]["mute"] is False, ch["tw-R"]
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+    top = tempfile.mkdtemp(prefix="autosound_propose_pr15_undecoded_")
     try:
         project, pr15 = _pico_with_a_setting(top)
-        files = _tree_digest(os.path.dirname(pr15))
+        base = _pico_history(project).load("v_001")
+        byte = _pr15_byte(pr15, 2304)
+        _pr15_edit(pr15, {2304: str((byte & ~(7 << 2) & ~64) | (6 << 2)),   # output 1's high-pass: slope code 6
+                          9280 + 32 * 1 + 20: "130",                          # output 1, band 1: type code 130
+                          72: ""})                                            # no rate byte: 96 kHz assumed
         code, out, err = _compare_cli(project, "propose", "--preset", "PICO", "--from-file", pr15)
-        assert code == 2 and ": model: " in err and "compare-file" in err and ".pct6" in err, (code, out, err)
-        assert "attest --from-file" in err and "Traceback" not in err, err
+        assert code == 0, (code, out, err)
+        new = _pico_history(project).load("v_002")["channels"]
+        assert new["tw-L"]["hp"] == base["channels"]["tw-L"]["hp"], new["tw-L"]["hp"]
+        assert new["tw-L"]["eq"][0] == base["channels"]["tw-L"]["eq"][0], new["tw-L"]["eq"]
+        for code_ in ("tw-L", "tw-R", "w-L", "sub"):
+            assert new[code_]["ta_ms"] == base["channels"][code_]["ta_ms"], (code_, new[code_])
+        labels = _named_lines(out)
+        for name in ("tw-L hp", "tw-L eq[1]", "tw-L ta_ms", "sub ta_ms"):
+            assert name in labels, (name, labels)
+        assert "slope code 6" in out and "130" in out and "96 kHz assumed" in out, out
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_propose_from_file_pr15_refusals():
+    """A `.PR15` that changes while propose reads it is exit 3, `changed`; another `.PR` model exit 2, `model`; a base
+    compare-file cannot read is the journal's, exit 1. Nothing is banked on any, and nothing written beside the file."""
+    import shutil
+    import tempfile
+    mp = _compare_file()._mosconi()
+    real = mp._read_bytes
+    top = tempfile.mkdtemp(prefix="autosound_propose_pr15_bad_")
+    try:
+        project, pr15 = _pico_with_a_setting(top)
+
+        def changing(p):
+            got = real(p)
+            with open(p, "ab") as fh:
+                fh.write(b"0\r\n")
+            return got
+        mp._read_bytes = changing
+        try:
+            code, out, err = _compare_cli(project, "propose", "--preset", "PICO", "--from-file", pr15)
+        finally:
+            mp._read_bytes = real
+        assert code == 3 and ": changed: " in err and not out, (code, out, err)
         assert _pico_history(project).versions() == ["v_001"], _pico_history(project).versions()
+        shutil.copyfile(_PICO_PR15, pr15)
+        files = _tree_digest(os.path.dirname(pr15))
+        other = os.path.join(top, "other.PR16")
+        shutil.copyfile(_PICO_PR15, other)
+        code, out, err = _compare_cli(project, "propose", "--preset", "PICO", "--from-file", other)
+        assert code == 2 and ": model: " in err and "Traceback" not in err, (code, out, err)
+        h = _pico_history(project)
+        state = h.load("v_001")
+        state["channels"]["tw-L"]["phase_deg"] = "ninety"
+        try:
+            h.snapshot(state, note="a phase that is no number")
+        except ValueError:
+            pass                                   # the ledger refuses it itself: then it never reaches propose
+        else:
+            code, out, err = _compare_cli(project, "propose", "--preset", "PICO", "--from-file", pr15)
+            assert code == 1 and "phase_deg" in err, (code, out, err)
+        assert h.versions()[-1] != "v_003" and not [v for v in h.versions() if v > "v_002"], h.versions()
         assert _tree_digest(os.path.dirname(pr15)) == files
     finally:
+        mp._read_bytes = real
         shutil.rmtree(top, ignore_errors=True)
 
 
@@ -4006,7 +4144,9 @@ def _selftest():
                   _check_propose_from_file_keeps_a_base_leg_spelled_short,
                   _check_propose_from_file_keeps_the_bands_it_does_not_decode,
                   _check_propose_from_file_keeps_values_that_are_not_finite,
-                  _check_propose_from_file_merges_the_rtc_curve_key_by_key, _check_propose_from_file_refuses_a_pr15,
+                  _check_propose_from_file_merges_the_rtc_curve_key_by_key, _check_propose_from_file_pr15_round_trips_through_compare_file,
+                  _check_propose_from_file_pr15_keeps_and_names_what_it_does_not_decode,
+                  _check_propose_from_file_pr15_refusals,
                   _check_attest_from_file_records_a_pr15, _check_attest_from_file_pr15_refusals,
                   _check_compare_file_a_band_of_an_undecoded_type_paired_by_slot_is_unknown,
                   _check_compare_file_pr15_an_undecoded_slope_code_is_unknown,
@@ -4259,7 +4399,7 @@ def _selftest():
 
 
 _USAGE = """usage: apply.py <project-dir> propose <delta.json> [--preset P] [--note TEXT] [--evidence E ...] [--reviewed FILE] [--on v_NNN|HEAD]
-       apply.py <project-dir> propose --from-file FILE.pct6 [--preset P] [--note TEXT] [--on v_NNN|HEAD]
+       apply.py <project-dir> propose --from-file FILE.pct6|FILE.PR15 [--preset P] [--note TEXT] [--on v_NNN|HEAD]
        apply.py <project-dir> attest [v_NNN] [--preset P] [--note TEXT] [--source-file FILE.json | --from-file FILE.pct6|FILE.PR15]
        apply.py <project-dir> compare-file <v_NNN|HEAD> FILE.pct6|FILE.PR15 [--json] [--preset P]
        apply.py --selftest
@@ -4272,7 +4412,7 @@ _USAGE = """usage: apply.py <project-dir> propose <delta.json> [--preset P] [--n
             refused on a version with no preset setting (it would stand alone in `preset_settings`)
             --from-file: the method fills that record from a saved .pct6 or .PR15 itself, with compare-file's
             comparison of the version against it; not with --source-file (#218)
-  propose --from-file  a NEW version from a saved .pct6's values -- channels, crossovers, EQ, the preset's settings --
+  propose --from-file  a NEW version from a saved .pct6's or .PR15's values -- channels, crossovers, EQ, settings --
             for every row the slot rules map; what the file does not give stays as the base had it, and is named.
             Both --from-file verbs print the reader's warning first; exit 2 the file cannot be read, 3 it changed
             while it was read, nothing banked. FILE is taken as given (a relative path is the current folder's)

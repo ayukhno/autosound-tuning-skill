@@ -865,6 +865,10 @@ _PR_FAMILY = {"LR": "LR", "BW": "BW", "BE": "BE", "CH": "CHEBYSHEV", "CHEBYSHEV"
 _PR_WITH_GAIN = ("PK", "LSH", "HSH")
 #: A delay to half of 0.01 ms (the journal's usual precision; the file's step is 1/384 ms at 96 kHz).
 _PR_TOL_MS = 0.005
+#: Why a field of a version is `unknown` on a `.PR15` -- and kept by `propose --from-file` (`from_file.build_pr`).
+PR_NO_PHASE = "this model has no phase control, only a polarity switch"
+PR_NO_SWITCH = "the file decodes no such switch"
+PR_NO_BYPASS = "the file decodes no bypass for a band"
 
 
 def _mosconi():
@@ -932,11 +936,34 @@ def _pr_band_text(band):
     return text + " %+g dB Q%g" % (band["gain_db"], round(band["q"], 2))
 
 
+def pr_leg_undecoded(have):
+    """Why a leg of the file is not read, or None: a slope code the reader does not decode."""
+    if have["state"] == "undecoded":
+        return "the file holds a slope code %d this reader does not decode" % have["slope_code"]
+    return None
+
+
+def pr_band_undecoded(band):
+    """Why an active band of the file is not read, or None: a type code the reader does not decode."""
+    if band["state"] == "undecoded":
+        return "the file holds a band of type code %d this reader does not decode" % band["type_code"]
+    return None
+
+
+def pr_rate_assumed(rate):
+    """Why no delay of the file is read as ms, or None: the rate is not stored, or is a byte the reader does not
+    know -- the steps are not read at an assumed rate."""
+    if not (rate or {}).get("assumed"):
+        return None
+    khz = _mosconi().DEVICE["rate_hz"] // 1000
+    if rate.get("byte") is None:
+        return "the rate is not stored in the file; %d kHz assumed" % khz
+    return "the file's rate byte %s is not one this reader knows; %d kHz assumed" % (rate["byte"], khz)
+
+
 def _pr_leg_rows(code, leg, want, have):
     path = _pr_at(have["offset"])
-    undecoded = None
-    if have["state"] == "undecoded":
-        undecoded = "the file holds a slope code %d this reader does not decode" % have["slope_code"]
+    undecoded = pr_leg_undecoded(have)
     if want in (None, "OFF") and undecoded:
         return [_said(leg + ".slope", code, "OFF", _pr_leg_text(have), "unknown", undecoded, category="audio",
                       path=path)]
@@ -1018,8 +1045,8 @@ def _pr_eq_rows(code, row, output):
                     out.append(_said("%s.%s" % (name, field), code, band.get(field), have, "unknown", why,
                                      category="audio", path=path))
             if band.get("bypass"):
-                out.append(_said(name + ".bypass", code, True, None, "unknown", "the file decodes no bypass for a band",
-                                 category="audio", path=path))
+                out.append(_said(name + ".bypass", code, True, None, "unknown", PR_NO_BYPASS, category="audio",
+                                 path=path))
             continue
         out.append(_pr_number(name + ".f", code, band.get("f"), found["frequency_hz"], _TOL_HZ, path))
         if btype in _PR_WITH_GAIN:
@@ -1034,16 +1061,14 @@ def _pr_eq_rows(code, row, output):
             out.append(_said(name + ".q", code, None, found["q"], "unknown", "the version records no Q for this band",
                              category="audio", path=path))
         if band.get("bypass"):
-            out.append(_said(name + ".bypass", code, True, None, "unknown", "the file decodes no bypass for a band",
-                             category="audio", path=path))
+            out.append(_said(name + ".bypass", code, True, None, "unknown", PR_NO_BYPASS, category="audio", path=path))
     for found in active:
         if found["band"] in claimed:
             continue
         path = _pr_at(found["offset"])
         if found["state"] != "configured":
             out.append(_said("eq[%d]" % found["band"], code, None, _pr_band_text(found), "unknown",
-                             "the file holds a band of type code %d this reader does not decode" % found["type_code"],
-                             category="audio", path=path))
+                             pr_band_undecoded(found), category="audio", path=path))
         else:
             out.append(_said("eq[%d]" % found["band"], code, None, _pr_band_text(found), "differs",
                              "the version holds no such band", category="audio", path=path))
@@ -1073,12 +1098,9 @@ def _pr_channel_rows(code, row, o, reading_rate=None):
     else:
         out.append(_said("gain_db", code, None, o["level_db"], "unknown", not_recorded, category="audio", path=level_at))
     delay_at = _pr_at(1408 + 2 * (slot - 1))
-    rate = reading_rate or {}
-    if rate.get("assumed"):
+    said = pr_rate_assumed(reading_rate)
+    if said:
         # The steps are read as ms at the rate: one not stored is no rate to compare a delay at.
-        said = ("the rate is not stored in the file; %d kHz assumed" % (_mosconi().DEVICE["rate_hz"] // 1000)
-                if rate.get("byte") is None else "the file's rate byte %s is not one this reader knows; %d kHz assumed"
-                % (rate["byte"], _mosconi().DEVICE["rate_hz"] // 1000))
         out.append(_said("ta_ms", code, row.get("ta_ms"), round(o["delay_ms"], 4), "unknown", said, category="audio",
                          path=delay_at))
     elif row.get("ta_ms") is not None:
@@ -1093,8 +1115,7 @@ def _pr_channel_rows(code, row, o, reading_rate=None):
         out.append(_said("polarity", code, row.get("polarity"), o["polarity"], "unknown", not_recorded,
                          category="audio", path=polarity_at))
     if row.get("phase_deg") is not None:
-        out.append(_said("phase_deg", code, row["phase_deg"], None, "unknown",
-                         "this model has no phase control, only a polarity switch", category="audio"))
+        out.append(_said("phase_deg", code, row["phase_deg"], None, "unknown", PR_NO_PHASE, category="audio"))
     mute_at = _pr_at(1280 + slot - 1)
     if row.get("mute") is not None:
         out.append(_pr_equal("mute", code, bool(row["mute"]), o["muted"], mute_at))
@@ -1102,8 +1123,7 @@ def _pr_channel_rows(code, row, o, reading_rate=None):
         out.append(_said("mute", code, None, o["muted"], "unknown", not_recorded, category="audio", path=mute_at))
     for field in ("off", "eq_bypass"):
         if row.get(field) is not None:
-            out.append(_said(field, code, row[field], None, "unknown", "the file decodes no such switch",
-                             category="audio"))
+            out.append(_said(field, code, row[field], None, "unknown", PR_NO_SWITCH, category="audio"))
     for leg in ("hp", "lp"):
         if leg in row:
             out += _pr_leg_rows(code, leg, row[leg], o["high_pass" if leg == "hp" else "low_pass"])
@@ -1168,8 +1188,10 @@ def _pr_corner_set_row(corner, dsp_settings):
                  category="system", path=_pr_at(2307))
 
 
-def _pr_plan(reading, snap, identity, dsp_settings=None):
-    out, reached = [], set()
+def pr_reach(reading, snap, identity):
+    """`(rows, unreached)`: every row of the version, in the comparison's order, with the file's output its slot names
+    -- `(tier, key, code, row, output or None, why not)` -- by the profile's numbering, and the outputs no row is on.
+    The one rule compare-file and `propose --from-file` reach a `.PR15`'s outputs by."""
     outputs = reading["outputs"]
     skipped = []
     profile = _pr_profile(skipped)
@@ -1184,6 +1206,7 @@ def _pr_plan(reading, snap, identity, dsp_settings=None):
             entry = identity.get(key) or {}
             slot = str(entry.get("slot") or "").strip().upper()
             planned.append((tiers.index(tier), slot or "~", key, tier, row, entry, slot))
+    rows, reached = [], set()
     for _order, _slot, key, tier, row, entry, slot in sorted(planned, key=lambda p: (p[0], p[1], p[2])):
         code = entry.get("code") or key
         why, o = None, None
@@ -1197,15 +1220,22 @@ def _pr_plan(reading, snap, identity, dsp_settings=None):
             o = by_slot.get(slot)
             if o is None:
                 why = "this model has no output %s (outputs 1-%d)" % (slot, len(outputs))
+        if o is not None:
+            reached.add(o["channel"])
+        rows.append((tier, key, code, row, o, why))
+    return rows, [o for o in outputs if o["channel"] not in reached]
+
+
+def _pr_plan(reading, snap, identity, dsp_settings=None):
+    out = []
+    rows, unreached = pr_reach(reading, snap, identity)
+    for _tier, _key, code, row, o, why in rows:
         if o is None:
             for field in sorted(f for f in row if f not in BOOKKEEPING):
                 out.append(_said(field, code, row[field], None, "unknown", why, category="audio"))
             continue
-        reached.add(o["channel"])
         out += _pr_channel_rows(code, row, o, reading.get("rate"))
-    for o in outputs:
-        if o["channel"] in reached:
-            continue
+    for o in unreached:
         out.append(_said("channel", "Output %d" % o["channel"], None, "muted" if o["muted"] else "on", "unknown",
                          "no row of this version is on this output", category="audio",
                          path=_pr_at(1280 + o["slot"] - 1)))
@@ -1225,18 +1255,33 @@ def _pr_device(reading):
             "note": note}
 
 
+def read_pr(file_path):
+    """`(0, reading)`: the `.PR<n>` read by `mosconi_pr.read_pr`, which hashes it before the read and after -- or `(2,
+    refusal)` it cannot be read (`io`, `model`, `format`, `truncated`), `(3, refusal)` it changed while it was read.
+    The one read `compare-file` and `propose --from-file` share on a `.PR15`."""
+    mp = _mosconi()
+    try:
+        return EXIT_COMPARED, mp.read_pr(file_path)
+    except mp.PrError as exc:
+        code = EXIT_CHANGED if exc.kind == "changed" else EXIT_UNREADABLE
+        return code, refusal(mp.WARNING, os.path.basename(file_path), exc.kind, str(exc))
+
+
 def _compare_pr(journal, file_path):
     """`compare_journal` for a `.PR<n>`: exit 0 compared, 2 unreadable (`io`, `model`, `format`, `truncated`,
     `interpret`), 3 changed while read. The reader hashes the file before it reads it and after."""
+    code, reading = read_pr(file_path)
+    if code != EXIT_COMPARED:
+        return code, reading
+    return compare_pr_reading(journal, reading, os.path.basename(file_path))
+
+
+def compare_pr_reading(journal, reading, name):
+    """`(exit code, JSON object)`: a version (`load_journal`'s triple, or the pair) against a `.PR15` `read_pr` read --
+    0 compared, 2 `interpret` (the file was read and could not be compared)."""
     mp = _mosconi()
     snap, identity = journal[:2]
     dsp_settings = journal[2] if len(journal) > 2 and isinstance(journal[2], dict) else {}
-    name = os.path.basename(file_path)
-    try:
-        reading = mp.read_pr(file_path)
-    except mp.PrError as exc:
-        code = EXIT_CHANGED if exc.kind == "changed" else EXIT_UNREADABLE
-        return code, refusal(mp.WARNING, name, exc.kind, str(exc))
     try:
         rows = _pr_plan(reading, snap, identity, dsp_settings)
         device = _pr_device(reading)

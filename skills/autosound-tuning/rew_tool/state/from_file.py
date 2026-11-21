@@ -1,5 +1,5 @@
-"""A version's values from a saved `.pct6` (#218 T3): what `apply.py attest --from-file` records (from a `.PR15`
-too) and what `apply.py propose --from-file` proposes. The contract is `rew_tool/CONTRACT.md` item 14.
+"""A version's values from a saved `.pct6` (#218 T3) or a Mosconi `.PR15` (hub #348, #349, `build_pr`): what `apply.py
+attest --from-file` records and what `apply.py propose --from-file` proposes. The contract is `rew_tool/CONTRACT.md` item 14.
 
 Read only, like compare-file: the file is opened for reading and hashed before it is read and after; this module
 writes nothing. What it hands back -- a `source_file` record, a delta, the names of what it did not take -- is banked by
@@ -561,15 +561,177 @@ def build(snap, identity, read):
 
 def provenance(read, built, read_at=None):
     """The version's `provenance`: a read of a saved file, what it was and when, and what it did not take. `propose`
-    takes a `provenance` as a device read, which is its own evidence (`apply.propose`)."""
-    inv = read["inv"]
-    return {"kind": "pct6", "source": read["name"], "path": read["path"], "md5": read["doc"].input_md5,
-            "saved": inv["device"].get("saved"), "pctool": read["doc"].pc_tool_version,
-            "device": device_text(read["device"]), "read_at": read_at or now(),
+    takes a `provenance` as a device read, which is its own evidence (`apply.propose`). A `.PR15` (`read_pr_file`)
+    states no save time and no program version: `saved` and `pctool` are null."""
+    if read.get("kind") == "pr15":
+        head = {"kind": "pr15", "md5": read["reading"]["file"]["md5"], "saved": None, "pctool": None,
+                "note": "read from a saved preset file: what was saved, not proof the DSP holds it now"}
+    else:
+        head = {"kind": "pct6", "md5": read["doc"].input_md5, "saved": read["inv"]["device"].get("saved"),
+                "pctool": read["doc"].pc_tool_version,
+                "note": "read from a saved PC-Tool file: what was saved, not proof the DSP holds it now"}
+    return {"kind": head["kind"], "source": read["name"], "path": read["path"], "md5": head["md5"],
+            "saved": head["saved"], "pctool": head["pctool"], "device": device_text(read["device"]),
+            "read_at": read_at or now(),
             "kept": ["%s: %s" % pair for pair in built["kept"]],
             "not_taken": ["%s: %s" % pair for pair in built["not_taken"]],
             "taken_short": ["%s: %s" % pair for pair in built["notes"]],
-            "note": "read from a saved PC-Tool file: what was saved, not proof the DSP holds it now"}
+            "note": head["note"]}
+
+
+# ---------------------------------------------------------------------------------------------------- a .PR15 (hub #349)
+
+def read_pr_file(file_path):
+    """`(exit code, read)` for a Mosconi `.PR15`, as `read_file` for a `.pct6`: compare-file's own read
+    (`compare_file.read_pr`, hashed before and after by the reader) -- 2 or 3 and the refusal, or 0 and `{kind: "pr15",
+    name, path, reading, device, warning}`."""
+    cf = _compare_file()
+    mp = cf._mosconi()
+    name = os.path.basename(file_path)
+    code, reading = cf.read_pr(file_path)
+    if code != cf.EXIT_COMPARED:
+        return code, reading
+    try:
+        device = cf._pr_device(reading)
+    except Exception as exc:  # noqa: BLE001 -- past the read, a failure is the file's, as in compare-file
+        return cf.EXIT_UNREADABLE, cf.refusal(mp.WARNING, name, "interpret", "the file was read and could not be "
+                                              "interpreted (%s: %s)" % (type(exc).__name__, exc),
+                                              md5=reading["file"]["md5"])
+    return cf.EXIT_COMPARED, {"kind": "pr15", "name": name, "path": os.path.abspath(file_path), "reading": reading,
+                              "device": device, "warning": mp.WARNING}
+
+
+def _pr_leg(have, base_leg, side):
+    """`(value, why)` for a `.PR15` crossover leg: `{f, type, slope}` in the reader's family names (`mosconi_pr.
+    FAMILIES`, the journal's spelling), None for OFF -- or `{f, type, slope: "OFF"}` where the base holds that form --
+    with `why` None; else `why` the reason it is not taken (a slope code the reader does not decode)."""
+    cf = _compare_file()
+    undecoded = cf.pr_leg_undecoded(have)
+    if undecoded:
+        return None, undecoded
+    if not _finite(have.get("frequency_hz"), positive=True):
+        if have["state"] == "off" and not cf._configured_off(base_leg):
+            return None, None
+        return None, "the file's %s frequency %r is not a positive number" % (
+            "high-pass" if side == "hp" else "low-pass", have.get("frequency_hz"))
+    if have["state"] == "off":
+        if cf._configured_off(base_leg):
+            return {"f": have["frequency_hz"], "type": have["family"], "slope": "OFF"}, None
+        return None, None
+    return {"f": have["frequency_hz"], "type": have["family"], "slope": have["slope_db_oct"]}, None
+
+
+def _pr_bands(o, row, code, kept):
+    """`(bands, not taken, undecoded)` for a `.PR15` output: every active band the reader decodes as the journal holds
+    one -- type, f, gain, Q, `i` the file's slot --, the bands it does not take with why, and their slots, whose band
+    the base keeps. The file decodes no bypass: a base band that is bypassed keeps its `bypass` on the band the file
+    gives in its place (by slot, or by type and frequency as compare-file pairs a band with no slot), named in `kept`."""
+    cf = _compare_file()
+    held = [b for b in (row.get("eq") if isinstance(row.get("eq"), list) else []) if isinstance(b, dict)]
+    bands, skipped, undecoded = [], [], []
+    for b in o["eq"]:
+        if b["state"] == "neutral":
+            continue                      # no gain: does nothing
+        label = "%s eq[%d]" % (code, b["band"])
+        why = cf.pr_band_undecoded(b)
+        if why is None and not _finite(b["frequency_hz"], positive=True):
+            why = "the file's frequency %r for this band is not a positive number" % b["frequency_hz"]
+        if why is None and not _finite(b["q"], positive=True):
+            why = "the file's q %r for this band is not a positive number" % b["q"]
+        if why:
+            skipped.append((label, why))
+            undecoded.append(b["band"])
+            continue
+        bands.append({"type": b["type"], "f": b["frequency_hz"], "gain_db": b["gain_db"], "q": b["q"], "i": b["band"]})
+    claimed = set()
+    for base in held:
+        if not base.get("bypass"):
+            continue
+        if isinstance(base.get("i"), int):
+            pick = next((n for n in bands if n["i"] == base["i"]), None)
+        else:
+            pick = next((n for n in bands if n["i"] not in claimed and n["type"] == base.get("type")
+                         and _finite(base.get("f")) and abs(n["f"] - float(base["f"])) <= cf._TOL_HZ), None)
+        if pick is not None:
+            claimed.add(pick["i"])
+            pick["bypass"] = True
+            kept.append(("%s eq[%d].bypass" % (code, pick["i"]), cf.PR_NO_BYPASS))
+    return bands, skipped, undecoded
+
+
+def build_pr(snap, identity, read):
+    """`build` for a `.PR15` (`read_pr_file`): `{delta, kept, not_taken, notes}`, the same shape. Each row reaches its
+    output by compare-file's rule (`compare_file.pr_reach`) and takes what CONTRACT.md item 13 compares there: the
+    level, the delay (ms at the file's rate, to 0.01), the polarity, the mute, both legs (family, Hz, dB/oct; OFF
+    null) and the EQ bands (type, f, gain, Q, the slot as `i`). Kept from the base and named, with compare-file's
+    reasons: what item 13 leaves `unknown` -- the phase, `off`, `eq_bypass`, a band's `bypass`, every delay at an
+    assumed rate, a leg or band the reader does not decode -- and every preset setting. The corner set is the
+    project's (`project.json` `dsp.settings`), never banked into a version: named under `not_taken`."""
+    st = _state()
+    cf = _compare_file()
+    reading = read["reading"]
+    delta, kept, not_taken = {}, [], []
+    rows, unreached = cf.pr_reach(reading, snap, identity)
+    no_rate = cf.pr_rate_assumed(reading.get("rate"))
+    for tier, key, code, row, o, why_not in rows:
+        if o is None:
+            kept.append((code, why_not + " (every field kept)"))
+            continue
+        fields, why = {}, {}
+        if o["level_db"] is not None:
+            fields["gain_db"] = o["level_db"]
+        else:
+            why["gain_db"] = "the file's level byte %d is not decoded" % (
+                o["level_while_muted_byte"] if o["muted"] else o["level_byte"])
+        if no_rate:
+            why["ta_ms"] = no_rate
+        else:
+            fields["ta_ms"] = round(o["delay_ms"], 2)
+        fields["polarity"] = o["polarity"]
+        fields["mute"] = o["muted"]
+        if "phase_deg" in row:
+            why["phase_deg"] = cf.PR_NO_PHASE
+        for field in ("off", "eq_bypass"):
+            if field in row:
+                why[field] = cf.PR_NO_SWITCH
+        for leg, side in (("hp", "high_pass"), ("lp", "low_pass")):
+            value, reason = _pr_leg(o[side], row.get(leg), leg)
+            if reason:
+                why[leg] = reason
+            elif value is None and leg in row and row[leg] in (None, "OFF"):
+                fields[leg] = row[leg]            # OFF either way: the base's spelling of it, no change on the sheet
+            elif _same_leg(value, row.get(leg)):
+                fields[leg] = row[leg]            # the same filter, the family spelled `CH` in the base: no move
+            else:
+                fields[leg] = value
+        bands, skipped, undecoded = _pr_bands(o, row, code, kept)
+        bands = _kept_bands(code, row, bands, undecoded, why, kept)
+        if bands is not None and (bands or "eq" in row):
+            fields["eq"] = bands
+        not_taken += skipped
+        delta.setdefault(tier, {})[key] = fields
+        for field in sorted(f for f in row if f not in fields and f != "status"):
+            kept.append(("%s %s" % (code, field), why.get(field) or _WHY_KEPT.get(field, _NOT_DECODED)))
+        for field in sorted(f for f in why if f not in row and f not in fields):
+            not_taken.append(("%s %s" % (code, field), why[field]))
+    not_taken = [("Output %d" % o["channel"], "%s: no row of this version is on this output"
+                  % ("muted" if o["muted"] else "on")) for o in unreached] + not_taken
+    held = snap.get(st.PRESET_SETTINGS) if isinstance(snap.get(st.PRESET_SETTINGS), dict) else {}
+    gains = [g["attenuation_db"] for g in reading["input_gain"]]
+    per_input = "the file holds an attenuation per input (inputs 1-%d: %s dB); one value of the version names none " \
+                "of them" % (len(gains), ", ".join("%g" % g for g in gains))
+    for path in st._PRESET_FIELDS:
+        if st._preset_leaf(held, path) is not None:
+            kept.append(("preset %s" % path, per_input if path == "input_gain_db"
+                         else "the file decodes no such setting"))
+    if st._preset_leaf(held, "input_gain_db") is None:
+        not_taken.append(("preset input_gain_db", per_input))
+    corner = reading["corner_set"]
+    not_taken.append(("preset crossover.corner_set", "the file's corner set is %s: a setting of the project, not of a "
+                      "version -- project.json dsp.settings.corner_set (project.py <dir> set-dsp-setting corner_set "
+                      "default|minus_3db|minus_6db --source user), which compare-file compares the file with"
+                      % (corner.get("name") or "code %s, outside the reader's table" % corner.get("code"))))
+    return {"delta": delta, "kept": kept, "not_taken": not_taken, "notes": []}
 
 
 def render_names(built, base):

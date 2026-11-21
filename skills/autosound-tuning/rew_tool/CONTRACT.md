@@ -820,8 +820,8 @@ removing or renaming one is a contract change.
 ## 14. `state/apply.py <project-dir> attest [v_NNN] --from-file FILE` and `propose --from-file FILE` — guaranteed (W-13, #218)
 
 A saved DSP file read into the journal, by the ledger's own doors: an addition under contract 1 (item 12). `FILE` is
-taken as given, as in item 13. **What each verb reads** (hub #348, an addition): `attest --from-file` a `.pct6` or a
-Mosconi `.PR15`, as item 13 reads them; `propose --from-file` a `.pct6` only. Both verbs take the writer lock as
+taken as given, as in item 13. **What each verb reads** (hub #348, #349, an addition): a `.pct6` or a Mosconi
+`.PR15`, both verbs, as item 13 reads them. Both verbs take the writer lock as
 `attest` and `propose` do (item 8), read the file with its item 13 reader, hash it before the read and after, and never
 write it. Both print the reader's `WARNING` verbatim and a `model:` line -- `checked`, or `NOT CHECKED: read at your
 own risk ...` -- before the result.
@@ -830,9 +830,7 @@ own risk ...` -- before the result.
 candidate, `attest` on a version with no preset setting, as for `--source-file`, a version holding a leg `slope` or a
 `phase_deg` that is no number, as item 13 refuses it); 2 the file cannot be read or interpreted (`error: <file>: <kind>:
 <message>`, the kinds of item 13 -- both verbs refuse what compare-file refuses, `propose` comparing its base with the
-file on the same read; `attest` a `.PR<n>` other than 15, `model`, as item 13), a `.PR<n>` file given to `propose`
-(`model`: it reads a `.pct6`; a `.PR15` is compared with `compare-file` and recorded with `attest --from-file`), or
-usage -- `--from-file` with `--source-file`, with a delta file, with `--evidence` or `--reviewed`; 3 the file
+file on the same read; a `.PR<n>` other than 15, `model`, as item 13), or usage -- `--from-file` with `--source-file`, with a delta file, with `--evidence` or `--reviewed`; 3 the file
 changed while it was read (`changed`). Nothing is banked on 1, 2 or 3; 75 is a held lock (item 8).
 
 **`attest --from-file`** banks what `attest` banks, with `preset_settings.source_file` filled by the method:
@@ -868,3 +866,13 @@ confirmed (`Taken short`) -- and the same lists are in the version's `provenance
 md5, saved, PC-Tool, device, `read_at`, `kept`, `not_taken`, `taken_short`). The read
 is a device read, as `setup_import`'s: its own evidence, so a structural move read from the file is not held as a
 candidate.
+
+**`propose --from-file FILE.PR15`** (hub #349, an addition) banks the same way, in the same shape, keys and exit codes.
+A row reaches an output by item 13's `.PR15` rule and takes what item 13 compares there: `gain_db`, `ta_ms` (ms at the
+file's rate, to 0.01; at an assumed rate kept, named), `polarity`, `mute`, `hp` and `lp` (`{f, type, slope}` in the
+reader's family names; OFF null, or `{f, type, slope: "OFF"}` where the base holds that form) and `eq` (every band with
+a gain: `type`, `f`, `gain_db`, `q`, `i` the file's slot). Kept from the base and named, with item 13's reasons: the
+phase, `off`, `eq_bypass`, a band's `bypass` (carried onto the file's band in its place), a leg of a slope code or a
+band of a type code the reader does not decode, and every `preset_settings` field (the input gain: the file holds one
+per input). The corner set is the project's (`project.json` `dsp.settings`), named under `Not taken` and never banked
+into a version. `provenance` `kind` is `pr15`, `saved` and `pctool` null.
