@@ -1665,7 +1665,7 @@ sent to a repository that no longer exists; the facts it held may need a home in
 
 ## S-133 · TCC's "Check settings" button: pass it on to TCC once the reader is released (hub #346 RES-027)
 
-**Status**: waiting 2026-11-21 · the to:tcc ticket goes after the tag v3.3.2 · was: open 2026-11-21 · on milestone `W-13 · v3.3.2` as #220, `ok` (the Arbiter's decision, 2026-11-21) · was: W-13's pool, order 5 of 5; recorded, not diagnosed; the Arbiter agreed to the order
+**Status**: done v3.3.2 · passed on to TCC as hub #347 (SKL-093), naming v3.3.2 · was: waiting 2026-11-21 · the to:tcc ticket goes after the tag v3.3.2 · was: open 2026-11-21 · on milestone `W-13 · v3.3.2` as #220, `ok` (the Arbiter's decision, 2026-11-21) · was: W-13's pool, order 5 of 5; recorded, not diagnosed; the Arbiter agreed to the order
 
 The build is TCC's (`dsp_check.py`, the DSP row); readdressed to us because the skill owns the contract with TCC.
 Ours: a `to:tcc` ticket carrying the comparison's JSON shape from `CONTRACT.md`, sent only after S-131 is in a
