@@ -254,14 +254,19 @@ def _groups_of(profile):
         row = {"tier": dsp_profile.ledger_tier(g["id"]), "label": g.get("label") or g["id"],
                "max_count": g.get("max_count"), "letters": g.get("row_id_style") == "letter",
                "in_scope": g.get("in_scope", True) is not False}
+        if isinstance(g.get("row_ids"), list):
+            row["row_ids"] = list(g["row_ids"])
         row["slots"] = slot_names(row)
         out.append(row)
     return out
 
 
 def slot_names(group):
-    """The slot labels of one tier: `A, B, ...` on a letter-style processor, `1, 2, ...` otherwise;
-    none when the tier's size is not known (a new processor before its slot count is answered)."""
+    """The slot labels of one tier: the profile's own `row_ids` where it names them (the HELIX DSP ULTRA S's virtual
+    tier, A..F, K, L), else `A, B, ...` on a letter-style processor, `1, 2, ...` otherwise; none when the tier's size
+    is not known (a new processor before its slot count is answered)."""
+    if group.get("row_ids"):
+        return list(group["row_ids"])
     n = group.get("max_count")
     if not isinstance(n, int) or n <= 0:
         return []
@@ -548,6 +553,7 @@ def _save_new_dsp(project_dir, answers):
         g["fields"] = fields or None
         g["max_count"] = counts[tier]
         g["row_id_style"] = "letter" if row.get("letters", True) else "number"
+        g.pop("row_ids", None)                  # the form asks a count and a style: an old list would contradict it
         if "eq" in fields and eq_block:
             g["eq"] = dict(eq_block)
         if ({"hp", "lp"} & set(fields)) and xo_block:
@@ -897,7 +903,7 @@ COUPLINGS = {
     "capability": "Is the state readable, and can you measure per-channel? The two together ARE the "
                   "level (`project-intake.md` §4); either one alone decides nothing.",
     "channel_slot": "A slot letter and its tier. Slot letters REPEAT across tiers (a Helix: virtual "
-                    "A–H, outputs B–K), so `slot: F` is legal in both and a guess files a spare "
+                    "A–F, K, L, outputs B–K), so `slot: F` is legal in both and a guess files a spare "
                     "output among the virtual channels (SCR-042).",
     "inputs": "Which input is for listening and which carries the measurement signal. One question "
               "with two answers — it is what SKILL.md's Pre-Session item 1 checks, and a preset "
@@ -1666,8 +1672,8 @@ def save_car(project_dir, make, model, generation, body, year=None):
 def save_channel(project_dir, code, source=None, **row):
     """One channel row, through `Project.set_channel` — with the intake's couple enforced.
 
-    `slot` without `tier` is refused: slot letters repeat across tiers (a Helix: virtual A–H,
-    outputs B–K), so `F` is a legal address in both and a guess files a spare output among the
+    `slot` without `tier` is refused: slot letters repeat across tiers (a Helix: virtual A–F, K,
+    L, outputs B–K), so `F` is a legal address in both and a guess files a spare output among the
     virtual channels (SCR-042). Enumerated fields are checked against the table, and `fs_hz` keeps
     its provenance through `--source`.
 
@@ -2626,6 +2632,9 @@ def _selftest():
         save(slots, "dsp.model", "Helix DSP Ultra S")
         cmap = channel_map(slots)
         assert [(g["tier"], g["total"]) for g in cmap] == [("virtual_channels", 8), ("channels", 12)], cmap
+        # the Ultra S's virtual tier is lettered as PC-Tool letters it: A..F, K, L (the profile's `row_ids`)
+        assert [r["slot"] for r in cmap[0]["rows"]] == list("ABCDEFKL"), cmap[0]["rows"]
+        assert [r["slot"] for r in cmap[1]["rows"]] == list("ABCDEFGHIJKL"), cmap[1]["rows"]
         assert cmap[1]["rows"][0] == {"slot": "A", "code": "", "on": False}, cmap[1]["rows"][0]
         save_slot(slots, "channels", "A", on=False)
         save_slot(slots, "channels", "A", "w-L")            # a spare with no history is REPLACED

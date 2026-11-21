@@ -1227,8 +1227,8 @@ class Project:
         profile group id to it. Cheap for a channel that has a ledger row (it is the key that row
         already sits under) and load-bearing for one that does not: an unused slot has no tuning
         state, so `tier` is the only thing that says which tier it is a spare slot OF. It cannot be
-        inferred, because slot letters repeat across tiers — on a Helix the virtual tier runs A–H
-        and the outputs B–K, so `slot: "F"` is a legal address in both, and a guess would file a
+        inferred, because slot letters repeat across tiers — on a Helix the virtual tier runs A–F, K,
+        L and the outputs B–K, so `slot: "F"` is a legal address in both, and a guess would file a
         spare output among the virtual channels. `role: "virtual"` is not a substitute: an unused
         virtual slot is written `role: "unused"`, which is what loses the tier in the first place.
 

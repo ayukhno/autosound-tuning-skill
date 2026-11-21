@@ -8,7 +8,8 @@ writes nothing. What it hands back -- a `source_file` record, a delta, the names
 **The codes between the journal and the file live here** (`POLARITY`, `EQ_CODES`, `XO_FAMILY`, ...): the one table both
 directions are to read. compare-file (`compare_file.py`) still holds its own copies, written before this module;
 `apply.py`'s selftest holds the two equal until compare-file reads them from here. The slot rule -- which output a row
-reaches -- is compare-file's `_virtual_by_letter`, taken as it is (`virtual_by_letter`), and its reasons are its words.
+reaches -- is compare-file's `_virtual_by_letter`, taken as it is (`virtual_by_letter`), and its reasons are its words
+(`virtual_miss`).
 
 **What the file gives a row** (`build`), in the journal's units: the level (dB, to 0.01), the delay as PC-Tool shows it
 (ms, to 0.01), the polarity, the mute, the phase where the channel has the phase control or the version states one,
@@ -97,6 +98,11 @@ def _compare_file():
 def virtual_by_letter(outputs):
     """compare-file's slot rule for the virtual tier, as it is: one place for it."""
     return _compare_file()._virtual_by_letter(outputs)
+
+
+def virtual_miss(outputs, slot):
+    """compare-file's reason for a virtual slot that reaches no channel, in its words."""
+    return _compare_file()._virtual_miss(outputs, slot)
 
 
 # ---------------------------------------------------------------------------------------------------- the file
@@ -206,8 +212,8 @@ def reach(inv, snap, identity):
             else:
                 ch = (physical if tier == "channels" else virtual).get(slot)
                 if ch is None:
-                    why = "no channel PC-Tool shows is %s %s on this model" % (
-                        "Output" if tier == "channels" else "Virtual", slot)
+                    why = ("no channel PC-Tool shows is Output %s on this model" % slot if tier == "channels"
+                           else virtual_miss(outputs, slot))
             if ch is not None:
                 reached.add(ch["index"])
             rows.append((tier, key, code, row, ch, why))

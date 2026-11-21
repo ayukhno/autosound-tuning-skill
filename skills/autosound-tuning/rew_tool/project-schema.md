@@ -88,7 +88,7 @@ machine-readable to render for its Project/System/Car-audio-analysis panels eith
     {"code": "vrf", "slot": "F", "hidden": true,             // SCR-003: no physical driver assigned
      "role": "unused", "tier": "virtual_channels"}           // SCR-042: which tier it is spare OF.
                                                              //   Slot letters REPEAT across tiers (this
-                                                             //   Helix: virtual A-H, outputs B-K), so
+                                                             //   Helix: virtual A-F,K,L, outputs B-K), so
                                                              //   "F" alone is ambiguous and a guess
                                                              //   files a spare output among the
                                                              //   virtual channels. `role: "unused"` is
@@ -327,7 +327,7 @@ one place that conversion lives, and `validate()` refuses `tier: "physical_outpu
 it would match no tier, and the row would simply never render, without an error.
 
 **Why it cannot be inferred:** slot letters repeat across tiers. On a Helix Ultra S the virtual tier
-runs A–H and the outputs run B–K, so `slot: "F"` is a legal address in both, and guessing files a
+runs A–F, K, L and the outputs run B–K, so `slot: "F"` is a legal address in both, and guessing files a
 spare output among the virtual channels — a wrong row in the one panel whose job is showing the rig
 as it actually is. `role` is no help either: an unused virtual slot is written `role: "unused"`,
 which is precisely what loses the tier.
@@ -336,6 +336,8 @@ The companion is **`max_count` per group in `dsp_profile.json`** — how many sl
 physically has. Without it a consumer can only count the rows it was given, so a 12-output Helix
 with ten wired reads `10/10` instead of `10/12`. It is a DSP-model fact like the rest of that file,
 null until confirmed, and it makes the spares visible as spares whether or not `tier` is filled in.
+The slots are named `A, B, ...` or `1, 2, ...` by the group's `row_id_style`, or by its own **`row_ids`** list
+where the vendor's program skips letters (the Helix Ultra S's virtual tier: A–F, K, L); `row_ids` wins.
 
 ## Provenance (SCR-014)
 

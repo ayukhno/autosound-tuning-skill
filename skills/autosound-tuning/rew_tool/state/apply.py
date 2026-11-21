@@ -1989,7 +1989,7 @@ def _aya_project(top, edit_state=None, edit_xml=None, more_channels=()):
     channels = [{"code": "w-L", "tier": "channels", "slot": "C"}, {"code": "m-L", "tier": "channels", "slot": "E"},
                 {"code": "tw-L", "tier": "channels", "slot": "G"}, {"code": "sw", "tier": "channels", "slot": "K"},
                 {"code": "VFL", "tier": "virtual_channels", "slot": "A"},
-                {"code": "VSW", "tier": "virtual_channels", "slot": "G"}] + list(more_channels)
+                {"code": "VSW", "tier": "virtual_channels", "slot": "K"}] + list(more_channels)
     with open(os.path.join(project, "project.json"), "w", encoding="utf-8") as fh:
         json.dump({"schema_version": _state.SCHEMA_VERSION, "project_rev": 1, "channels": channels}, fh)
     state = {
@@ -2020,7 +2020,7 @@ def _aya_project(top, edit_state=None, edit_xml=None, more_channels=()):
             # not established
             "VFL": {"gain_db": 0.0, "ta_ms": 0.0, "polarity": "NORM", "eq_bypass": False,
                     "eq": [{"type": "LSH", "f": 150, "gain_db": 2.5, "q": 0.71, "bypass": True, "i": 1}]},
-            # slot G of the virtual tier: no channel the reader labels "Virtual G" is shown in PC-Tool
+            # slot K of the virtual tier: PC-Tool's Virtual K [SubRC], the file's index 10
             "VSW": {"gain_db": 0.0, "ta_ms": 0.0, "polarity": "NORM"},
         },
         # RealCenter and BT as the file; SubXpander on where the file has it off; the knob position is not in a file
@@ -2403,26 +2403,68 @@ def _check_compare_file_bands_it_cannot_decode_and_an_inverted_all_pass():
 
 
 def _check_compare_file_virtual_letters_are_pc_tools():
-    """A virtual slot letter is PC-Tool's: the ordinal among the virtual channels PC-Tool shows, in index order -- on the
-    HELIX DSP ULTRA S, A..H are indexes 0-5, 10, 11. G reaches index 10, H index 11; a letter past H reaches nothing."""
+    """A virtual slot letter is PC-Tool's, which is the reader's own label: on the HELIX DSP ULTRA S, PC-Tool shows
+    Virtual A..F, K, L (indexes 0-5, 10, 11). K reaches index 10, L index 11; G (index 6, not shown) and I reach
+    nothing."""
     import shutil
     import tempfile
     top = tempfile.mkdtemp(prefix="autosound_compare_virtual_")
     try:
-        def two_more(state):
-            state["virtual_channels"]["VH"] = {"gain_db": 0.0, "ta_ms": 0.0, "polarity": "NORM"}
-            state["virtual_channels"]["VI"] = {"gain_db": 0.0, "ta_ms": 0.0, "polarity": "NORM"}
+        def three_more(state):
+            for code in ("VL", "VG", "VI"):
+                state["virtual_channels"][code] = {"gain_db": 0.0, "ta_ms": 0.0, "polarity": "NORM"}
 
-        project, pct6 = _aya_project(top, edit_state=two_more,
-                                     more_channels=[{"code": "VH", "tier": "virtual_channels", "slot": "H"},
+        project, pct6 = _aya_project(top, edit_state=three_more,
+                                     more_channels=[{"code": "VL", "tier": "virtual_channels", "slot": "L"},
+                                                    {"code": "VG", "tier": "virtual_channels", "slot": "G"},
                                                     {"code": "VI", "tier": "virtual_channels", "slot": "I"}])
         got = _compared(project, pct6)
-        g, h = _row(got, "VSW", "gain_db"), _row(got, "VH", "gain_db")
-        assert g["result"] == "match" and g["path"] == "/ATF/OC[@ON='10']/Vol[1]/@L", g
-        assert h["result"] == "match" and h["path"] == "/ATF/OC[@ON='11']/Vol[1]/@L", h
-        assert _row(got, "VI", "gain_db")["result"] == "unknown"
+        k, l_ = _row(got, "VSW", "gain_db"), _row(got, "VL", "gain_db")
+        assert k["result"] == "match" and k["path"] == "/ATF/OC[@ON='10']/Vol[1]/@L", k
+        assert l_["result"] == "match" and l_["path"] == "/ATF/OC[@ON='11']/Vol[1]/@L", l_
+        assert _row(got, "VFL", "gain_db")["path"] == "/ATF/OC[@ON='0']/Vol[1]/@L"
+        g, i = _row(got, "VG", "gain_db"), _row(got, "VI", "gain_db")
+        assert g["result"] == "unknown" and g["path"] is None, g
+        assert g["reason"].startswith("no channel PC-Tool shows is Virtual G on this model"), g
+        assert i["result"] == "unknown" and i["reason"] == "no channel PC-Tool shows is Virtual I on this model", i
         unreached = {r["channel"] for r in got["rows"] if r["parameter"] == "channel"}
         assert "Virtual K" not in unreached and "Virtual L" not in unreached, unreached
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_compare_file_an_ordinal_lettered_project_keeps_its_slots():
+    """A project whose virtual tier was lettered A..H in order (v3.3.2's rule, the car's journals) keeps its slots:
+    A..F still reach indexes 0-5; its G and H reach no channel and come out `unknown`, the reason naming the letter
+    PC-Tool gives that ordinal (Virtual K, Virtual L), so the tuner can re-slot. `propose --from-file` keeps them with
+    the same reason."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_compare_ordinal_")
+    try:
+        def one_more(state):
+            state["virtual_channels"]["VH"] = {"gain_db": 0.0, "ta_ms": 0.0, "polarity": "NORM"}
+
+        project, pct6 = _aya_project(top, edit_state=one_more,
+                                     more_channels=[{"code": "VH", "tier": "virtual_channels", "slot": "H"}])
+        with open(os.path.join(project, "project.json"), encoding="utf-8") as fh:
+            pj = json.load(fh)
+        next(c for c in pj["channels"] if c["code"] == "VSW")["slot"] = "G"
+        with open(os.path.join(project, "project.json"), "w", encoding="utf-8") as fh:
+            json.dump(pj, fh)
+        got = _compared(project, pct6)
+        assert _row(got, "VFL", "gain_db")["result"] == "match", _row(got, "VFL", "gain_db")
+        for code, slot, ordinal, letter in (("VSW", "G", "7th", "K"), ("VH", "H", "8th", "L")):
+            row = _row(got, code, "gain_db")
+            assert row["result"] == "unknown" and row["path"] is None, row
+            assert row["reason"].startswith("no channel PC-Tool shows is Virtual %s on this model" % slot), row
+            assert "the %s virtual channel PC-Tool shows is Virtual %s" % (ordinal, letter) in row["reason"], row
+        unreached = {r["channel"] for r in got["rows"] if r["parameter"] == "channel"}
+        assert {"Virtual K", "Virtual L"} <= unreached, unreached
+        code, out, err = _compare_cli(project, "propose", "--preset", "AYA", "--from-file", pct6)
+        assert code == 0, (code, out[-600:], err)
+        kept = [line for line in out.splitlines() if line.startswith("  - VSW: ")]
+        assert kept and "the 7th virtual channel PC-Tool shows is Virtual K" in kept[0], (kept, out[-1200:])
     finally:
         shutil.rmtree(top, ignore_errors=True)
 
@@ -3036,6 +3078,7 @@ def _check_from_file_tables_are_compare_files():
         assert ff.virtual_by_letter(outputs) == {"Z": "compare-file's rule"}, "a second slot rule"
     finally:
         cf._virtual_by_letter = real
+    assert ff.virtual_miss(outputs, "G") == cf._virtual_miss(outputs, "G") and "Virtual K" in ff.virtual_miss(outputs, "G")
 
 
 # ── the fix round of the DSP file readers (W-13): what the review seats found, each held by a check ────────────────
@@ -3627,6 +3670,7 @@ def _selftest():
                   _check_from_file_a_leg_switched_off_keeps_its_corner,
                   _check_compare_file_bands_it_cannot_decode_and_an_inverted_all_pass,
                   _check_compare_file_virtual_letters_are_pc_tools,
+                  _check_compare_file_an_ordinal_lettered_project_keeps_its_slots,
                   _check_compare_file_a_file_it_cannot_interpret_is_exit_2,
                   _check_compare_file_pr15_matches_differs_and_unknown,
                   _check_compare_file_pr15_numbering_not_settled_is_unknown,

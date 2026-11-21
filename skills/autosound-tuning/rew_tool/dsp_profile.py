@@ -28,7 +28,9 @@ Design invariants
       like everything else here, not a count of what one car wired up. Optional and `null` until
       confirmed, but load-bearing when present: without it a consumer can only count the rows it
       was given, so a 12-output Helix with two slots spare reads "10/10" instead of "10/12" and
-      the spares are invisible in the one panel whose job is showing the rig entire.
+      the spares are invisible in the one panel whose job is showing the rig entire. Its slots are
+      named by `row_id_style` (A, B, ... or 1, 2, ...), or by the group's own `row_ids` where the
+      vendor's program skips letters (the Helix Ultra S's virtual tier is A..F, K, L); `row_ids` wins.
     * Unconfirmed facts are `null`, not omitted — `open_questions()` walks the whole structure and
       surfaces every null plus any declared `_open_questions` freeform notes. This is what makes
       profile-building incremental: a re-run only asks about what's still open. The "not omitted"
@@ -282,6 +284,23 @@ def _validate_group(g):
             raise ValueError(
                 f"group {g['id']!r}.max_count must be a positive int or null (how many slots this "
                 f"tier physically has), got {n!r}")
+    _validate_row_ids(g)
+
+
+def _validate_row_ids(g):
+    """`row_ids`: the tier's slot names as the vendor's program shows them, in order, where they are not simply
+    A, B, C... or 1, 2, 3... (the HELIX DSP ULTRA S's virtual tier is A..F, K, L). It wins over `row_id_style`. A list
+    of distinct non-empty strings with no surrounding space, as long as `max_count` where that is stated."""
+    if "row_ids" not in g:
+        return
+    ids, n = g["row_ids"], g.get("max_count")
+    if (not isinstance(ids, list) or not ids
+            or any(not isinstance(x, str) or not x.strip() or x != x.strip() for x in ids)
+            or len(set(ids)) != len(ids)):
+        raise ValueError(f"group {g['id']!r}.row_ids must be a non-empty list of distinct slot names "
+                         f"(non-empty strings, no surrounding space), got {ids!r}")
+    if n is not None and len(ids) != n:
+        raise ValueError(f"group {g['id']!r}.row_ids names {len(ids)} slots and max_count says {n}")
 
 
 #: Rates a DSP actually runs at. Not a closed list of the world's rates -- a closed list of the
@@ -2245,6 +2264,29 @@ def _own_tempdir(selftest):
 
 
 @_own_tempdir
+def _check_row_ids_name_a_tiers_slots():
+    """A tier's `row_ids` names its slots as the vendor's program does, in order, and wins over `row_id_style`: a list
+    of distinct non-empty strings, as long as `max_count` where that is stated. The bundled HELIX DSP ULTRA S profile
+    names its virtual tier A..F, K, L (PC-Tool's letters)."""
+    def group(**extra):
+        return {"dsp_profile": {"name": "X", "vendor": "Y", "groups": [
+            dict({"id": "virtual_channels", "label": "V", "fields": None, "max_count": 3}, **extra)]}}
+
+    validate_profile(group(row_ids=["A", "B", "K"]))
+    validate_profile(group(row_ids=["A", "B", "K"], max_count=None))
+    for bad in ("ABK", [], ["A", "B"], ["A", "B", "B"], ["A", "", "K"], ["A", 2, "K"], ["A", " B", "K"]):
+        try:
+            validate_profile(group(row_ids=bad))
+        except ValueError as exc:
+            assert "row_ids" in str(exc), (bad, exc)
+        else:
+            raise AssertionError(f"row_ids {bad!r} went in")
+    ultra = next(p for v, m, p in list_bundled() if m == "Helix DSP Ultra S")
+    tiers = {g["id"]: g for g in _unwrap(load_profile(ultra))["groups"]}
+    assert tiers["virtual_channels"].get("row_ids") == list("ABCDEFKL"), tiers["virtual_channels"]
+    assert "row_ids" not in tiers["physical_outputs"], tiers["physical_outputs"]
+
+
 def _selftest():
     failures, ran = [], {}
     for check in (_check_loads_by_path, _check_bind_model_rate_binds_the_callers_dsp_math,
@@ -2256,7 +2298,7 @@ def _selftest():
                   _check_a_held_lock_answers_75, _check_a_bad_timeout_is_a_usage_error,
                   _check_no_load_and_save_outside_update, _check_writers_read_with_the_lock_held,
                   _check_no_profile_makes_nothing, _check_the_interview_makes_its_new_folder,
-                  _check_a_refusal_says_the_path_as_written):
+                  _check_a_refusal_says_the_path_as_written, _check_row_ids_name_a_tiers_slots):
         try:
             ran[check.__name__] = check()
         except AssertionError as exc:
@@ -2361,7 +2403,7 @@ def _selftest():
     # The real case: a Helix Ultra S with 10 outputs wired reads "10/10" without this, when it is
     # a 12-output processor with two slots spare.
     counted = copy.deepcopy(helix)
-    counted["dsp_profile"]["groups"][0]["max_count"] = 8    # virtual A-H
+    counted["dsp_profile"]["groups"][0]["max_count"] = 8    # virtual A-F, K, L
     counted["dsp_profile"]["groups"][1]["max_count"] = 12   # outputs B-K, 12 physical
     # ...and somebody has to SAY the tier list is complete. Leaving it unsaid is now an open
     # question rather than a silent claim of exhaustiveness (see GROUPS_ENUMERATED).

@@ -505,16 +505,34 @@ def _preset_rows(settings, values, root, stated_any):
     return out
 
 
+def _shown_virtual(outputs):
+    """The virtual channels PC-Tool shows, in index order."""
+    return sorted((c for c in outputs if c.get("group") == "virtual" and c.get("visible_in_pc_tool")),
+                  key=lambda c: c["index"])
+
+
 def _virtual_by_letter(outputs):
-    """{PC-Tool's letter: channel} for the virtual channels PC-Tool shows. The letter is the ORDINAL among the visible
-    virtual channels in index order -- on the HELIX DSP ULTRA S, A..H are indexes 0, 1, 2, 3, 4, 5, 10, 11 -- not the
-    index's own letter, which is what the reader's `Virtual <letter>` label holds (index 10 is its "Virtual K").
-    Evidence: a tuned project's journal keeps its virtual tier at A..H with the virtual sub at G, and AYA.pct6's visible
-    virtual channels 0-5, 10, 11 are named Front Left, Front Right, Rear Left, Rear Right, Front Center, -, Subwoofer 1,
-    -; the model's profile counts eight virtual channels, A-H. The one place this rule lives."""
-    visible = sorted((c for c in outputs if c.get("group") == "virtual" and c.get("visible_in_pc_tool")),
-                     key=lambda c: c["index"])
-    return {chr(65 + n): c for n, c in enumerate(visible)}
+    """{PC-Tool's letter: channel} for the virtual channels PC-Tool shows. The letter is the reader's own label,
+    `Virtual <letter>`, the index's letter: on the HELIX DSP ULTRA S PC-Tool shows Virtual A..F, K, L, indexes 0-5, 10,
+    11 (the owner's PC-Tool screen, 2026-11-21: Virtual K is the sub, the file's index 10). v3.3.2 lettered them by
+    their ordinal, A..H, which put the sub at G; a project lettered so keeps its slots, and `_virtual_miss` names
+    PC-Tool's letter for its G and H. The one place this rule lives."""
+    return {c["label"][len("Virtual "):]: c for c in _shown_virtual(outputs)
+            if str(c.get("label") or "").startswith("Virtual ")}
+
+
+def _virtual_miss(outputs, slot):
+    """Why a virtual slot reaches no channel: none PC-Tool shows has that letter. A single letter at whose ordinal
+    PC-Tool shows a channel (a tier lettered A..H in order, v3.3.2's rule) is told that channel's letter, so the tuner
+    can re-slot it."""
+    why = "no channel PC-Tool shows is Virtual %s on this model" % slot
+    shown = _shown_virtual(outputs)
+    n = ord(slot) - ord("A") if len(slot) == 1 and "A" <= slot <= "Z" else -1
+    if 0 <= n < len(shown) and shown[n].get("label"):
+        nth = "%d%s" % (n + 1, {1: "st", 2: "nd", 3: "rd"}.get(n + 1, "th"))
+        why += "; the %s virtual channel PC-Tool shows is %s: a tier lettered in order (A..H) holds it at %s, " \
+               "re-slot it to its own letter" % (nth, shown[n]["label"], slot)
+    return why
 
 
 def _plan(hx, doc, inv, snap, identity):
@@ -545,7 +563,8 @@ def _plan(hx, doc, inv, snap, identity):
         else:
             ch = (physical if tier == "channels" else virtual).get(slot)
             if ch is None:
-                why = "no channel PC-Tool shows is %s %s on this model" % (_TIER_LABEL[tier], slot)
+                why = ("no channel PC-Tool shows is %s %s on this model" % (_TIER_LABEL[tier], slot)
+                       if tier == "channels" else _virtual_miss(outputs, slot))
         if ch is None:
             for field in sorted(f for f in row if f not in BOOKKEEPING):
                 out.append(_said(field, code, row[field], None, "unknown", why))

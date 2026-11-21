@@ -89,7 +89,17 @@
         "label": "Virtual channels",
         "max_count": 8,
         "no_crossover": true,
-        "row_id_style": "letter"
+        "row_id_style": "letter",
+        "row_ids": [
+          "A",
+          "B",
+          "C",
+          "D",
+          "E",
+          "F",
+          "K",
+          "L"
+        ]
       },
       {
         "crossover_filters": {

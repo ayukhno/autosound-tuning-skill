@@ -751,7 +751,7 @@ value in the journal's unit (dB, ms as PC-Tool shows it, Hz, degrees, `NORM`/`IN
 or a short text for a band or a channel the version does not hold.
 
 `channel` is the channel's code in `project.json` (the ledger's key where `project.json` has none), `preset` for the
-preset's settings, or PC-Tool's name (`Output A`, `Virtual G`) for an output no row of the version reaches.
+preset's settings, or PC-Tool's name (`Output A`, `Virtual K`) for an output no row of the version reaches.
 `parameter` is the version's field: `gain_db`, `ta_ms`, `polarity`, `phase_deg`, `mute`, `off`, `eq_bypass`;
 `hp.type`, `hp.f`, `hp.slope`, `hp.bypass` and the same for `lp`, and a bare `hp` or `lp` when the file holds no leg
 there, `journal` the version's leg as written (an OFF leg is `<leg>.slope` against 0; a leg the version holds
@@ -769,11 +769,11 @@ reaches no output, each of its fields by its own name (`gain_db`, `hp`, `lp`, `e
 path in `preset_settings` (`fx.realcenter`, `sources.main`, `rtc.curve.<name>`, `bt.auto_switch` ...).
 
 **What reaches what.** A row of the version reaches the file through its `slot` in `project.json` and its tier: tier
-`channels` the output the reader labels `Output <slot>`; tier `virtual_channels` the virtual channel PC-Tool names
-by that letter, which is the ordinal among the virtual channels PC-Tool shows, in index order (on the HELIX DSP ULTRA S,
-A..H are indexes 0-5, 10, 11 -- the reader's own `Virtual K` label for index 10 is the index's letter, not PC-Tool's).
-A row with no such channel, a tier other than those two, or a model whose layout is not
-checked gives `unknown` rows. An EQ band pairs with the file's band in the slot its `i` names, else with the first
+`channels` the output the reader labels `Output <slot>`; tier `virtual_channels` the virtual channel PC-Tool shows
+that the reader labels `Virtual <slot>`, the index's letter, as PC-Tool letters it (on the HELIX DSP ULTRA S, A..F, K, L
+are indexes 0-5, 10, 11). A row with no such channel, a tier other than those two, or a model whose layout is not
+checked gives `unknown` rows; a virtual slot lettered by order (A..H, as v3.3.2 mapped it) is told, in its reason,
+the letter PC-Tool gives that ordinal (G: the 7th shown, Virtual K). An EQ band pairs with the file's band in the slot its `i` names, else with the first
 unpaired band of its type at its frequency. A value one side holds and the other does not record or decode is a row,
 `unknown` with its reason: a field the version leaves unstated is not read as its default. Not compared: a row's
 `status`, `eq_ptr` and `tag`, and `preset_settings`' `status` and `source_file`, which are the journal's bookkeeping;
