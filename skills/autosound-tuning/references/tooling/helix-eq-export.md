@@ -17,7 +17,7 @@ Don't enter EQ into Helix by hand (the per-channel EQ can't be viewed/copied all
    menu writes REW's OWN layout (`Filter Settings file` / `Filter 1: ON PK Fc … Gain … Q …`), which
    the PC-Tool does not import. The tab-separated `Audiotec_Fischer_Full_EQ_(30_bands)` bank comes
    from the EQ window's copy-to-clipboard with this equaliser selected (paste into a file, or read it
-   with `pbpaste`). Both real files: `autosound-measurements/hardware/helix/dsp-ultra-s/formats/`.
+   with `pbpaste`). Both checked on the author's own exports from his Ultra S.
 4. Move the file into Parallels (shared folder) → **import into the Helix PC-Tool** on the right channel.
 
 > Alternative — `rew_tool/atf_eq.py` (validated on a REAL export: `rew_tool/testdata/atf_full_eq_sample.txt`, `python3 atf_eq.py --selftest`): **`format_atf_eq()`** generates this 30-band block from computed PEQs (bypassing the REW export, deviation→PEQ), and **`parse_atf_eq()`** reads it BACK into a structure — for the black-box case (recover an existing Helix EQ from a file when the live DSP can't be read — `diagnostic-techniques.md §22`). CLI: `python3 atf_eq.py <file>`.

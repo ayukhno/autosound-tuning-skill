@@ -1,5 +1,5 @@
 {
- "source": "Helix DSP Ultra S, 96 kHz, electrical loop; curves published under CC BY 4.0 in ayukhno/autosound-measurements, hardware/helix/dsp-ultra-s/measurements/",
+ "source": "Helix DSP Ultra S, 96 kHz, electrical loop; the author's own bench captures, CC BY 4.0 (LICENSES/NOTICE.md)",
  "reference_implementation": "DIMOSUS/Resonalyze dsp/PhaseRotationControl.cs @ bc957c8 (MIT)",
  "verified": "2026-09-05: his compiled library run against all 32 published cases; median phase residual 0.19 deg rms, median corner agreement 0.10 %, worst delivered-angle error 0.75 deg",
  "how_to_read": "`solved_corner_hz` and `delivered_deg` come from the model; everything under `bench` comes from the measurement. Each case is the ratio of its own file to its group's ph0 capture - never compare across groups.",

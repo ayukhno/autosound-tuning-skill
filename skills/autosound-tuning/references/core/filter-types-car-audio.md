@@ -71,8 +71,8 @@ arrival condition and then went to the `research` role once a bench existed (`au
 
 **The answer**, measured electrically by `research` on 2026-09-04 (REW #99–102, `BW24` at
 **460 Hz — the corner the working preset runs on the mids**, not a round number) and re-derived by
-this tree from the published copy of the same four sweeps (`rew_tool/testdata/helix-bench/`,
-`ayukhno/autosound-measurements` fact 8):
+this tree from the copy of the same four sweeps it ships (`rew_tool/testdata/helix-bench/`, the
+author's own bench captures; its `README.md` says what each set decides):
 
 * `dsp_math.xo_response(…, 24, "hp", "BW")` sits **0.0598 dB / 0.443° rms** from the measured
   ratio over 100–4000 Hz, above a −25 dB mask, on the files' 1/96-octave grid, with delay and

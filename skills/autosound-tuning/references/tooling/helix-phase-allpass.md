@@ -11,10 +11,10 @@ Two different controls share the word "phase" on this processor, and this file k
 
 Until 2026-09-05 this file was compiled from forums and the user's practice, and said so. The
 first half is now measurement: Helix DSP Ultra S, 96 kHz, ~60 electrical sweeps over 2026-09-01/02
-(processor output straight into the interface — no microphone, no cabin), curves published under
-CC BY 4.0 in `ayukhno/autosound-measurements` (`hardware/helix/dsp-ultra-s/`, fact 6), the law
+(processor output straight into the interface — no microphone, no cabin), the author's own
+captures, CC BY 4.0 (fact 6 in `knowledge/dsp/helix-dsp-ultra-s.md`), the law
 implemented independently by Resonalyze's author (`dsp/PhaseRotationControl.cs`, `bc957c8`,
-DIMOSUS/Resonalyze#88) and his compiled library checked against all 32 published cases: median
+DIMOSUS/Resonalyze#88) and his compiled library checked against all 32 cases: median
 phase residual **0.19° rms**, median corner agreement **0.10 %**, worst delivered-angle error
 **0.75°**. The method's port is checked against the same 32 cases in its selftest
 (`testdata/helix-bench/phase-control-vectors.json`). One earlier statement of this file was wrong
@@ -217,9 +217,10 @@ corner, and the corner does not move with the crossover.
 
 ## Sources
 
-* The bench: `ayukhno/autosound-measurements`, `hardware/helix/dsp-ultra-s/FACTS.md` (facts 1 and
-  6), `bench3-manifest.json`, `phase-turns-manifest.json`, `measurements/README.md` (every defect in
-  the data is documented there, in place) — CC BY 4.0.
+* The bench: the author's own electrical captures of a Helix DSP Ultra S, 2026-09-01/02, CC BY 4.0
+  (`LICENSES/NOTICE.md`). Facts 1 and 6 are stated in `knowledge/dsp/helix-dsp-ultra-s.md`; the 32
+  cases the port is checked against ship in `rew_tool/testdata/helix-bench/` (its `README.md` says
+  what each set decides).
 * The upstream implementation: `DIMOSUS/Resonalyze`, `dsp/PhaseRotationControl.cs` at `bc957c8`,
   MIT; the reading and the author's response in DIMOSUS/Resonalyze#88.
 * Audiotec-Fischer's knowledge base (*Phase and time alignment*): the 5.625° grid, the 0–354.375°

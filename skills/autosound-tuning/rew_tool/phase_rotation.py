@@ -9,8 +9,8 @@ become one, which is why a ledger row carrying `phase_deg` and nothing else cann
 and a row carrying it beside its `hp`/`lp` can (`predict.chain_from_row`).
 
 MEASURED, not documented (Helix DSP Ultra S, 96 kHz, ~60 electrical sweeps, 2026-09-01/02; the
-curves are published under CC BY 4.0 in `ayukhno/autosound-measurements`, `hardware/helix/dsp-ultra-s/`,
-and the 32 cases the port is checked against are in `testdata/helix-bench/phase-control-vectors.json`):
+author's own bench captures, CC BY 4.0 (`LICENSES/NOTICE.md`), and the 32 cases the port is checked
+against are in `testdata/helix-bench/phase-control-vectors.json`):
 
   * one RBJ second-order all-pass with Q = 1.0000 across the whole reachable range;
   * the reference is the crossover AS CONFIGURED, not as active -- Bypass and slope = OFF leave it

@@ -60,12 +60,11 @@ banks the same way as one on a driver output, e.g. `apply.propose(h, {"virtual_c
 
 ## Where the bench numbers live (2026-08-31 … 2026-09-04)
 
-Every ✅ above that names a **fact N** comes from one published place:
-`ayukhno/autosound-measurements`, `hardware/helix/dsp-ultra-s/` (CC BY 4.0) — `FACTS.md` (nine
-facts, each with the files that decided it), `measurements/*.txt` (109 curves, `frequency_Hz<TAB>dB
-<TAB>phase_deg`, 1/96 octave anchored at 20 Hz, 957 points, unsmoothed), the manifests
-(`bench3-manifest.json`, `phase-turns-manifest.json`, `bw24-manifest.json`) and
-`measurements/README.md`, which documents every defect in the data in place. **Everything was
+Every ✅ above that names a **fact N** comes from the author's own electrical bench captures of
+this processor (CC BY 4.0, `LICENSES/NOTICE.md`): nine facts, each decided by its own files — 109
+curves (`frequency_Hz<TAB>dB<TAB>phase_deg`, 1/96 octave anchored at 20 Hz, 957 points,
+unsmoothed) and their manifests (`bench3-manifest.json`, `phase-turns-manifest.json`,
+`bw24-manifest.json`). Each fact is stated in its row above, with what decided it. **Everything was
 measured electrically** — processor output straight into the interface, no microphone, no cabin —
 which is the right shape when the question is the DSP's arithmetic rather than a driver.
 
