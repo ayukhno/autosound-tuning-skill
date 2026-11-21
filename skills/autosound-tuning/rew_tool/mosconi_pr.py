@@ -1,6 +1,6 @@
 """Read a Mosconi PICO 6/8-2 preset (`.PR15`): what each output is set to. Read only.
 
-Mosconi / Gladen filter model and the PICO 6/8-2 profile contributed by Widar1979
+Mosconi / Gladen filter model and the PICO 6/8-2 profile contributed by Widar1979 (https://github.com/Widar1979),
 https://github.com/ayukhno/autosound-tuning-skill/issues/214
 
     python3 mosconi_pr.py read FILE.PR15 [--json]   the outputs, their crossovers and EQ, the warning first
@@ -43,8 +43,9 @@ WARNING = (
     "Reading .PR15 has been checked on one sample preset of one model, the Mosconi PICO 6/8-2. Treat every value "
     "as unconfirmed: check it against the screens of the vendor's own program before relying on it."
 )
-CREDIT = ("Mosconi / Gladen filter model and the PICO 6/8-2 profile contributed by Widar1979 -- "
-          "https://github.com/ayukhno/autosound-tuning-skill/issues/214")
+#: Shown with every result, in the text and in `--json`: whose work the model and the profile are.
+CREDIT = ("Mosconi / Gladen filter model and the PICO 6/8-2 profile contributed by Widar1979 "
+          "(https://github.com/Widar1979) -- https://github.com/ayukhno/autosound-tuning-skill/issues/214")
 
 LINES = 16384
 DEVICE = {"dev": "15", "vendor": "Mosconi", "name": "PICO 6/8-2 DSP", "extension": ".PR15", "outputs": 8,
@@ -221,6 +222,7 @@ def read_pr(path):
     values, empty = _values(data)
     out = decode(values, empty)
     out["warning"] = WARNING
+    out["credit"] = CREDIT
     out["file"] = {"name": name, "md5": hashlib.md5(data).hexdigest(), "sha256": before, "lines": LINES}
     return out
 
@@ -264,6 +266,7 @@ def summary(reading):
             if b["state"] != "neutral":
                 lines.append("    EQ %d: %s %d Hz Q %.2f %+.2f dB" % (
                     b["band"], b["type"] or "code %d" % b["type_code"], b["frequency_hz"], b["q"], b["gain_db"]))
+    lines += ["", reading["credit"]]
     return "\n".join(lines)
 
 
@@ -330,6 +333,8 @@ def _check_values_on_the_sample():
     """Every value this reader takes, against the sample's settings list."""
     r = read_pr(SAMPLE)
     assert r["warning"] == WARNING and r["device"]["name"] == "PICO 6/8-2 DSP", r["device"]
+    assert r["credit"] == CREDIT and summary(r).endswith("\n" + CREDIT), r["credit"]
+    assert "https://github.com/Widar1979" in CREDIT and "/issues/214" in CREDIT, CREDIT
     assert r["firmware"] == {"bytes": [5, 2, 5], "version": "5.25"}, r["firmware"]
     assert (r["rate"]["byte"], r["rate"]["hz"], r["rate"]["assumed"]) == (2, 96000, False), r["rate"]
     assert r["corner_set"] == {"code": 0, "name": "default"}, r["corner_set"]
