@@ -788,7 +788,8 @@ def attest(history, version=None, note=None, source_file=None, door="--source-fi
     this same hold. The per-project line only; on the older layout no `slots.json` may appear.
 
     A candidate is refused (#199): it has earned no place in the DSP, and `propose --on` is how it earns one. `door` is
-    the option the record came through (`--source-file`, `--from-file`), named in the refusal.
+    the option the record came through (`--source-file`, `--from-file`); no refusal names it now -- a version with no
+    preset setting banks the record beside a `status` -- and it stays for its callers.
     """
     with _held(history):
         version = version or history.head()
@@ -808,14 +809,14 @@ def attest(history, version=None, note=None, source_file=None, door="--source-fi
             settings["status"] = "applied"
             flipped.append(_state.PRESET_SETTINGS)
         if source_file is not None:
-            held = s.get(_state.PRESET_SETTINGS) or {}
+            held = s.setdefault(_state.PRESET_SETTINGS, {})
             if not set(held) - {"status", "source_file"}:
-                # `preset_settings` would hold only the file: a dict of dicts, which a 3.2 copy reads as a tier instead
-                # of refusing the field by name as it does a number. The ledger stays as it is, and the file is not lost.
-                raise ValueError(f"{door}: {version} has no preset setting, and a {_state.PRESET_SETTINGS}.source_file "
-                                 f"alone is misread by a 3.2 copy of the method as a tier of its own. Attest without "
-                                 f"{door}, or bank a preset setting first (`propose` with `preset_settings`)")
-            s.setdefault(_state.PRESET_SETTINGS, {})["source_file"] = source_file
+                # No preset setting beside the file: `preset_settings` gets a `status` too. A 3.2 copy reads any
+                # top-level dict as a tier and refuses, loudly, a row that is no dict -- so a dict holding only the file
+                # would be taken silently for a tier, and one with `status` beside it is refused, as a version with
+                # settings is. 3.3 reads it as no setting: status and source_file reach no diff (review, items 10-11).
+                held.setdefault("status", "applied")
+            held["source_file"] = source_file
         v = history.snapshot(s, note=note or f"attested applied ({', '.join(flipped) or 'no proposed rows'})")
         if history._project():
             history.record_loaded(v, "attest")
@@ -1502,25 +1503,32 @@ def _check_preset_settings_merge_and_refusals():
         shutil.rmtree(top, ignore_errors=True)
 
 
-def _check_source_file_needs_a_preset_setting():
-    """`--source-file` on a version with no preset setting refuses and banks nothing: `preset_settings` would hold only the
-    file, and a 3.2 copy reads that dict of dicts as a tier instead of refusing it by name, as it refuses a number."""
+def _a_32_copy_misreads(state):
+    """True when a 3.2 copy of the method would take `preset_settings` silently for a tier: it reads any top-level
+    dict as one and refuses, loudly, a row that is no dict -- so the misread is silent only when every value is a dict."""
+    settings = state.get("preset_settings")
+    return isinstance(settings, dict) and all(isinstance(v, dict) for v in settings.values())
+
+
+def _check_source_file_needs_no_preset_setting():
+    """`--source-file` on a version with no preset setting banks the record beside a `status` (review of items 10-11):
+    `preset_settings` is `{status: "applied", source_file}`, which a 3.2 copy refuses loudly, never reads as a tier;
+    3.3 reads it as no setting -- it validates and renders, and the diff to its parent shows no preset change."""
     import shutil
     import tempfile
     top = tempfile.mkdtemp(prefix="autosound_apply_source_alone_")
     try:
         h = _ledger_with_a_baseline(top, "project")
         r = _proposed(h, {"w-L": {"gain_db": -7.0}}, note="no settings")
-        before = h.versions()
-        try:
-            attest(h, r["version"], source_file={"name": "5S.preset"})
-        except ValueError as exc:
-            assert "source_file" in str(exc) and "preset setting" in str(exc), str(exc)
-        else:
-            raise AssertionError("a source file on a version with no preset setting was banked")
-        assert h.versions() == before, h.versions()
-        said = attest(h, r["version"])
-        assert "preset_settings" not in h.load(said["version"]), h.load(said["version"])
+        said = attest(h, r["version"], source_file={"name": "5S.preset"})
+        banked = h.load(said["version"])
+        assert banked["preset_settings"] == {"status": "applied", "source_file": {"name": "5S.preset"}}, banked
+        assert not _a_32_copy_misreads(banked), banked["preset_settings"]
+        _state.validate(banked)
+        assert "5S.preset" in h.render(said["version"]), h.render(said["version"])
+        assert "preset_settings" not in _state.diff_states(h.load(r["version"]), banked)["preset"], banked
+        plain = attest(h, r["version"])
+        assert "preset_settings" not in h.load(plain["version"]), h.load(plain["version"])
     finally:
         shutil.rmtree(top, ignore_errors=True)
 
@@ -2986,18 +2994,47 @@ def _check_from_file_and_source_file_together_are_a_usage_error():
         shutil.rmtree(top, ignore_errors=True)
 
 
-def _check_attest_from_file_needs_a_preset_setting():
-    """The refusal `--source-file` has: on a version with no preset setting the file would stand alone in
-    `preset_settings`, so `attest --from-file` refuses, exit 1, and banks nothing."""
+def _check_attest_from_file_needs_no_preset_setting():
+    """A `.pct6` version with no preset setting is attested from the file (review of items 10-11): the record banks
+    beside a `status`, never a dict a 3.2 copy reads as a tier, and 3.3 sees no preset change in it."""
     import shutil
     import tempfile
     top = tempfile.mkdtemp(prefix="autosound_attest_from_file_alone_")
     try:
         project, pct6 = _aya_project(top, edit_state=lambda state: state.pop("preset_settings"))
         code, out, err = _compare_cli(project, "attest", "--preset", "AYA", "--from-file", pct6)
-        assert code == 1 and err.startswith("error: ") and "preset setting" in err, (code, out, err)
-        assert "--from-file" in err and "--source-file" not in err, err           # the door the person used
-        assert _aya_history(project).versions() == ["v_001"], _aya_history(project).versions()
+        assert code == 0, (code, out, err)
+        h = _aya_history(project)
+        banked = h.load("v_002")
+        assert sorted(banked["preset_settings"]) == ["source_file", "status"], banked["preset_settings"]
+        assert banked["preset_settings"]["status"] == "applied" and not _a_32_copy_misreads(banked)
+        assert "preset_settings" not in _state.diff_states(h.load("v_001"), banked)["preset"]
+        assert "AYA.pct6 (md5" in h.render("v_002"), h.render("v_002")
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_attest_from_file_right_after_propose_from_file_on_a_pico():
+    """The round TCC runs on an ordinary PICO project, which records no preset setting (nothing seeds `input_gain_db`):
+    `propose --from-file x.PR15`, then `attest --from-file x.PR15` of the version it banked -- the record banks, exit 0,
+    and the version holds nothing a 3.2 copy reads as a tier. It was exit 1, the version's lack of a setting."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_pico_propose_then_attest_")
+    try:
+        project, pr15 = _pico_project(top)
+        code, out, err = _compare_cli(project, "propose", "--preset", "PICO", "--from-file", pr15)
+        assert code == 0, (code, out, err)
+        code, out, err = _compare_cli(project, "attest", "--preset", "PICO", "--from-file", pr15)
+        assert code == 0, (code, out, err)
+        h = _pico_history(project)
+        assert h.versions() == ["v_001", "v_002", "v_003"], h.versions()
+        banked = h.load("v_003")
+        assert banked["preset_settings"]["source_file"]["name"] == "example_pico682.PR15", banked["preset_settings"]
+        assert banked["preset_settings"]["status"] == "applied" and not _a_32_copy_misreads(banked)
+        _state.validate(banked)
+        assert "preset_settings" not in _state.diff_states(h.load("v_002"), banked)["preset"]
+        assert "example_pico682.PR15 (md5" in h.render("v_003"), h.render("v_003")
     finally:
         shutil.rmtree(top, ignore_errors=True)
 
@@ -3492,8 +3529,8 @@ def _check_attest_from_file_records_a_pr15():
 
 
 def _check_attest_from_file_pr15_refusals():
-    """A `.PR15` that changes while attest reads it is exit 3, `changed`; another `.PR` model is exit 2, `model`, as
-    compare-file says it; a version with no preset setting is exit 1, as for a `.pct6`. Nothing is banked on any."""
+    """A `.PR15` that changes while attest reads it is exit 3, `changed`; a `.PR16` not in the PICO 6/8-2's container
+    is exit 2, `format`, as compare-file says it. Nothing is banked on either."""
     import shutil
     import tempfile
     mp = _compare_file()._mosconi()
@@ -3520,10 +3557,6 @@ def _check_attest_from_file_pr15_refusals():
         code, out, err = _compare_cli(project, "attest", "--preset", "PICO", "--from-file", other)
         assert code == 2 and ": format: " in err and "container" in err and "Traceback" not in err, (code, out, err)
         assert _pico_history(project).versions() == ["v_001"], _pico_history(project).versions()
-        bare, bare_pr15 = _pico_project(os.path.join(top, "bare"))
-        code, out, err = _compare_cli(bare, "attest", "--preset", "PICO", "--from-file", bare_pr15)
-        assert code == 1 and "preset setting" in err and "--from-file" in err, (code, out, err)
-        assert _pico_history(bare).versions() == ["v_001"], _pico_history(bare).versions()
     finally:
         mp._read_bytes = real
         shutil.rmtree(top, ignore_errors=True)
@@ -3815,6 +3848,32 @@ def _check_compare_file_pr15_an_undecoded_slope_code_is_unknown():
         for parameter, code in (("hp.slope", 6), ("lp.slope", 5)):
             row = _row(got, "tw-L", parameter)
             assert row["result"] == "unknown" and "slope code %d" % code in row["reason"], row
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_pr15_a_rate_not_checked_leaves_the_delay_unknown():
+    """Review of items 10-11: a `.PR15` whose rate byte says 48 kHz -- a rate the reader knows and no sample was read at
+    (only 96 kHz is checked) -- has every `ta_ms` `unknown`, naming the unchecked rate, and `propose --from-file`
+    keeps the base's delays, named; the shipped 96 kHz sample still compares its delays."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_pr15_rate_48k_")
+    try:
+        project, pr15 = _pico_project(top)
+        assert _row(_compared(project, pr15), "tw-L", "ta_ms")["result"] == "match"
+        _pr15_edit(pr15, {72: "1"})
+        got = _compared(project, pr15)
+        for channel in ("tw-L", "tw-R", "w-L", "sub"):
+            row = _row(got, channel, "ta_ms")
+            assert row["result"] == "unknown" and "48 kHz" in row["reason"] and "96 kHz" in row["reason"], row
+        base = _pico_history(project).load("v_001")
+        code, out, err = _compare_cli(project, "propose", "--preset", "PICO", "--from-file", pr15)
+        assert code == 0, (code, out, err)
+        new = _pico_history(project).load("v_002")["channels"]
+        for channel in ("tw-L", "tw-R", "w-L", "sub"):
+            assert new[channel]["ta_ms"] == base["channels"][channel]["ta_ms"], (channel, new[channel])
+            assert "%s ta_ms" % channel in _named_lines(out), (channel, _named_lines(out))
     finally:
         shutil.rmtree(top, ignore_errors=True)
 
@@ -4171,7 +4230,7 @@ def _selftest():
                   _check_a_delta_after_a_candidate_is_refused, _check_a_fix_on_a_candidate_stays_held,
                   _check_a_candidate_is_promoted_with_evidence_and_a_reviewer,
                   _check_a_trim_is_a_row_with_no_reviewer, _check_preset_settings_merge_and_refusals,
-                  _check_preset_settings_candidate_and_source_file, _check_source_file_needs_a_preset_setting,
+                  _check_preset_settings_candidate_and_source_file, _check_source_file_needs_no_preset_setting,
                   _check_a_candidate_switched_into_the_slot_is_held_then_promoted, _check_attest_refuses_a_candidate,
                   _check_a_base_that_is_not_head_answers_to_the_slot, _check_rows_the_sheet_lists_are_proposed,
                   _check_a_candidate_base_is_no_candidate, _check_a_device_read_vouches_only_for_the_rows_it_read,
@@ -4199,7 +4258,8 @@ def _selftest():
                   _check_compare_file_pr15_unreadable_is_exit_2_and_changed_is_exit_3,
                   _check_attest_from_file_fills_the_source_file,
                   _check_from_file_and_source_file_together_are_a_usage_error,
-                  _check_attest_from_file_needs_a_preset_setting, _check_from_file_input_changed_is_exit_3,
+                  _check_attest_from_file_needs_no_preset_setting, _check_from_file_input_changed_is_exit_3,
+                  _check_attest_from_file_right_after_propose_from_file_on_a_pico,
                   _check_propose_from_file_banks_the_files_values,
                   _check_propose_from_file_round_trips_through_compare_file,
                   _check_propose_from_file_on_an_unchecked_model_maps_nothing,
@@ -4215,6 +4275,7 @@ def _selftest():
                   _check_compare_file_a_band_of_an_undecoded_type_paired_by_slot_is_unknown,
                   _check_compare_file_pr15_an_undecoded_slope_code_is_unknown,
                   _check_compare_file_pr15_an_assumed_rate_leaves_the_delay_unknown,
+                  _check_pr15_a_rate_not_checked_leaves_the_delay_unknown,
                   _check_compare_file_pr15_names_an_unreadable_bundled_profile,
                   _check_compare_file_pr15_rows_it_cannot_decode_are_unknown,
                   _check_attest_from_file_after_propose_names_every_unknown,
@@ -4473,7 +4534,7 @@ _USAGE = """usage: apply.py <project-dir> propose <delta.json> [--preset P] [--n
             --on names the base: a version of this slot, or HEAD; past a candidate not in the slot it is required (#199)
   attest    the Arbiter entered it: flip the proposed rows to green, as a new version.
             --source-file: a JSON object, the saved preset this version was read from (state/schema.md, #200);
-            refused on a version with no preset setting (it would stand alone in `preset_settings`)
+            on a version with no preset setting it is banked beside `preset_settings.status` (no setting)
             --from-file: the method fills that record from a saved .pct6 or .PR15 itself, with compare-file's
             comparison of the version against it; not with --source-file (#218)
   propose --from-file  a NEW version from a saved .pct6's or .PR15's values -- channels, crossovers, EQ, settings --

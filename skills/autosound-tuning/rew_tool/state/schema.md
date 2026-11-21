@@ -205,12 +205,13 @@ a version without the field is valid.
   `render_diff` by name; `verification_set` asks for the whole-system sum; `levelbase.changed_ranges` reads it as
   every band changed; `predict.chains_from_snapshot(snap, trim=True)` adds the input gain once, on the physical tier,
   for the `predict` view, off by default for the engine.
-- **`source_file` is `attest`'s**, and `attest` refuses it on a version with no other preset setting (a field holding only a source file would be misread by a 3.2 copy): `attest --source-file <file.json>` (`apply.attest(…, source_file=)`) records it, and
+- **`source_file` is `attest`'s**; on a version with no preset setting `attest` banks it beside `status: "applied"`, which 3.3 reads as no setting (a dict holding only the file a 3.2 copy would take silently for a tier): `attest --source-file <file.json>` (`apply.attest(…, source_file=)`) records it, and
   for a `.pct6` or a `.PR15` `attest --from-file <file>` fills it itself (a `.PR15`'s `saved`, `pctool` null), `compared` from compare-file's rows (`CONTRACT.md` item 14), and
   `attest` keeps it. A delta cannot give it, and `propose` drops it, since a new version was not compared to that file.
   Not `provenance`: `propose`'s only door replaces the whole `provenance` and switches off the structural hold.
-- **Not harmless to an older copy.** A 3.2 copy of the method reads the dict as a tier and refuses the number in it. It
-  fails loud, only on a project a newer copy has written. A project bound to an older copy moves up before using the field.
+- **Not harmless to an older copy.** A 3.2 copy of the method reads the dict as a tier and refuses the value in it that
+  is no dict -- a setting's number, or the `status` beside a lone `source_file`. It fails loud, only on a project a
+  newer copy has written. A project bound to an older copy moves up before using the field.
 
 ## Invariants
 - **ms is canonical, samples are a view.** Entering 96 kHz samples into a 48 kHz DSP doubles the

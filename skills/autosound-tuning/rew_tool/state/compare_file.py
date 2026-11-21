@@ -978,10 +978,15 @@ def pr_band_undecoded(band):
 
 def pr_rate_assumed(rate):
     """Why no delay of the file is read as ms, or None: the rate is not stored, or is a byte the reader does not
-    know -- the steps are not read at an assumed rate."""
-    if not (rate or {}).get("assumed"):
-        return None
+    know -- the steps are not read at an assumed rate --, or is a rate no sample was read at: only 96 kHz is checked
+    (`mosconi_pr.DEVICE["rate_hz"]`), and a delay's steps are read at the rate (review of items 10-11)."""
+    rate = rate or {}
     khz = _mosconi().DEVICE["rate_hz"] // 1000
+    if not rate.get("assumed"):
+        if rate.get("hz") in (None, _mosconi().DEVICE["rate_hz"]):
+            return None
+        return ("the file's rate byte %s says %g kHz, a rate no sample has been read at (only %d kHz is checked): its "
+                "delay steps are not read as ms" % (rate.get("byte"), rate["hz"] / 1000, khz))
     if rate.get("byte") is None:
         return "the rate is not stored in the file; %d kHz assumed" % khz
     return "the file's rate byte %s is not one this reader knows; %d kHz assumed" % (rate["byte"], khz)

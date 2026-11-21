@@ -812,8 +812,9 @@ output's kept level), `ta_ms` (to 0.005 ms), `polarity`, `mute`, the legs' `type
 `type` / `f` / `gain_db` / `q` as the records store them (types PK, LSH, HSH; another code is `unknown`, and a band of
 the version paired with it has its `f`, `gain_db` and `q` `unknown`). A leg's slope code the reader does not decode
 (5-7) is no OFF: `<leg>.slope` is `unknown`, naming the code, against an OFF leg and against a filter alike. With no
-rate byte in the file (or one the reader does not know) every `ta_ms` is `unknown`: the steps are not read as ms at an
-assumed 96 kHz. A bundled profile of the model that cannot be read is named, file and why, in the rows' reason.
+rate byte in the file (or one the reader does not know) every `ta_ms` is `unknown`: the steps are not read as ms at
+an assumed 96 kHz; so too at a rate no sample was read at (48 kHz: only 96 kHz is checked), the reason naming it, and
+`propose --from-file` keeps the base's delays. A bundled profile of the model that cannot be read is named, file and why, in the rows' reason.
 `unknown` always: `phase_deg` (no phase control), `off`, `eq_bypass` and a band's `bypass` (not decoded), and under
 `preset` `input_gain_db` (the file holds one per input) and any other stated setting. `crossover.corner_set` (the
 file's global corner set) is set against `project.json` `dsp.settings.corner_set`, the tuner's recorded answer, in the
@@ -834,8 +835,7 @@ write it. Both print the reader's `WARNING` verbatim and a `model:` line -- `che
 own risk ...` -- before the result.
 
 **The exit table**, both verbs: 0 banked; 1 the journal refused (`error: <reason>` on stderr: no such version, a
-candidate, `attest` on a version with no preset setting, as for `--source-file`, a version holding a leg `slope` or a
-`phase_deg` that is no number, as item 13 refuses it); 2 the file cannot be read or interpreted (`error: <file>: <kind>:
+candidate, a version holding a leg `slope` or a `phase_deg` that is no number, as item 13 refuses it); 2 the file cannot be read or interpreted (`error: <file>: <kind>:
 <message>`, the kinds of item 13 -- both verbs refuse what compare-file refuses, `propose` comparing its base with the
 file on the same read), or usage -- `--from-file` with `--source-file`, with a delta file, with `--evidence` or
 `--reviewed`; 3 the file changed while it was read (`changed`). Nothing is banked on 1, 2 or 3; 75 is a held lock
@@ -852,7 +852,9 @@ second) and `compared`. `compared` is item 13's comparison of the attested versi
 a match, else a list of strings -- first `compare-file.v1: <n> match, <n> differs, <n> unknown`, then one string per row
 that differs, `<channel> <parameter> differs: journal <value>, file <value>`, then one per unknown row, `<channel>
 <parameter> unknown: <reason>`. An unknown row is never written as no difference. The hand-filled JSON,
-`--source-file`, stays the way for a file of any other DSP.
+`--source-file`, stays the way for a file of any other DSP. On a version with no preset setting either door banks
+`preset_settings` as `{status: "applied", source_file}` (no setting; review of items 10-11), never `source_file` alone,
+which a 3.2 copy would take for a tier; it was exit 1 before.
 
 **`propose --from-file`** banks a NEW version through `propose`, built on HEAD unless `--on` names another; no banked
 version is rewritten. A row of the base reaches the file's channel by item 13's rules; an unchecked layout reaches
