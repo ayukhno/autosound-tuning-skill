@@ -38,7 +38,8 @@ EQ_WITH_GAIN = ("PK", "LSH", "HSH")
 #: The journal's crossover families -> the reader's family names (`helix_pct6.inventory.CROSSOVER_TYPES`), and back.
 XO_FAMILY = {"LR": "Linkwitz", "BW": "Butterworth", "BE": "Bessel", "CH": "Chebyshev", "CHEBYSHEV": "Chebyshev",
              "SD": "Self-define", "SELF_DEFINED": "Self-define"}
-XO_SHORT = {"Linkwitz": "LR", "Butterworth": "BW", "Bessel": "BE", "Chebyshev": "CH", "Self-define": "SD"}
+#: Written as the profiles and the Mosconi reader spell the two (S-136.3); `XO_FAMILY` above reads both spellings.
+XO_SHORT = {"Linkwitz": "LR", "Butterworth": "BW", "Bessel": "BE", "Chebyshev": "CHEBYSHEV", "Self-define": "SELF_DEFINED"}
 #: `preset_settings.sources.<name>` -> the `AOM` of its route, whose `OFFS` is its level.
 SOURCES = (("main", "1"), ("hec", "5"), ("digital", "9"))
 #: A preset switch: (its path in `preset_settings`, the file's value, the raw value for ON, for OFF).

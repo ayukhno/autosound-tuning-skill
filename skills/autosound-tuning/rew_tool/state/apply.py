@@ -2975,6 +2975,27 @@ def _check_propose_from_file_round_trips_through_compare_file():
         shutil.rmtree(top, ignore_errors=True)
 
 
+def _check_propose_from_file_writes_the_full_family_names():
+    """S-136.3: a leg the file holds as Chebyshev is banked by `propose --from-file` as `CHEBYSHEV`, the profiles' and
+    the Mosconi reader's spelling, and Self-define as `SELF_DEFINED` -- not `CH` and `SD`. Both spellings are still
+    read."""
+    import shutil
+    import tempfile
+    ff = _from_file()
+    assert ff.XO_SHORT["Self-define"] == "SELF_DEFINED", ff.XO_SHORT
+    assert all(ff.XO_FAMILY[short] == ff.XO_FAMILY[name] for short, name in (("CH", "CHEBYSHEV"),
+                                                                            ("SD", "SELF_DEFINED"))), ff.XO_FAMILY
+    top = tempfile.mkdtemp(prefix="autosound_from_file_family_names_")
+    try:
+        project, pct6 = _aya_project(top, edit_xml=lambda root: _fils(root, 16)[31].set("T", "14"))   # Chebyshev HP
+        code, out, err = _compare_cli(project, "propose", "--preset", "AYA", "--from-file", pct6)
+        assert code == 0, (code, out, err)
+        hp = _aya_history(project).load("v_002")["channels"]["w-L"]["hp"]
+        assert hp["type"] == "CHEBYSHEV", hp
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
 def _check_propose_from_file_on_an_unchecked_model_maps_nothing():
     """A model the reader has not checked has no channel layout: no output is named by a slot, so every row stays as the
     version had it and is named, and the model's not-checked line comes with the warning, before the result."""
@@ -3617,7 +3638,7 @@ def _selftest():
                   _check_propose_from_file_banks_the_files_values,
                   _check_propose_from_file_round_trips_through_compare_file,
                   _check_propose_from_file_on_an_unchecked_model_maps_nothing,
-                  _check_from_file_tables_are_compare_files,
+                  _check_from_file_tables_are_compare_files, _check_propose_from_file_writes_the_full_family_names,
                   _check_propose_from_file_keeps_the_bands_it_does_not_decode,
                   _check_propose_from_file_keeps_values_that_are_not_finite,
                   _check_propose_from_file_merges_the_rtc_curve_key_by_key, _check_from_file_refuses_a_pr15,

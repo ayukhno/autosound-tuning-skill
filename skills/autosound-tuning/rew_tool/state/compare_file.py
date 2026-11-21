@@ -49,7 +49,8 @@ _EQ_WITH_GAIN = ("PK", "LSH", "HSH")
 #: The journal's crossover families -> the reader's family names (`helix_pct6.inventory.CROSSOVER_TYPES`).
 _XO_FAMILY = {"LR": "Linkwitz", "BW": "Butterworth", "BE": "Bessel", "CH": "Chebyshev", "CHEBYSHEV": "Chebyshev",
               "SD": "Self-define", "SELF_DEFINED": "Self-define"}
-_XO_SHORT = {"Linkwitz": "LR", "Butterworth": "BW", "Bessel": "BE", "Chebyshev": "CH", "Self-define": "SD"}
+#: Written as the profiles and the Mosconi reader spell the two (S-136.3); `_XO_FAMILY` above reads both spellings.
+_XO_SHORT = {"Linkwitz": "LR", "Butterworth": "BW", "Bessel": "BE", "Chebyshev": "CHEBYSHEV", "Self-define": "SELF_DEFINED"}
 #: Tolerances: exact to what PC-Tool shows, a Q to 0.005 (a shelf's 0.71 in the journal is the file's 0.707).
 _TOL_DB, _TOL_HZ, _TOL_Q, _TOL_DEG = 0.005, 0.005, 0.005, 0.001
 _RTC_KEY = re.compile(r"^([GVF])(START|STOP)([01])$")
