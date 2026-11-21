@@ -561,10 +561,12 @@ def build(snap, identity, read):
 
 def provenance(read, built, read_at=None):
     """The version's `provenance`: a read of a saved file, what it was and when, and what it did not take. `propose`
-    takes a `provenance` as a device read, which is its own evidence (`apply.propose`). A `.PR15` (`read_pr_file`)
-    states no save time and no program version: `saved` and `pctool` are null."""
-    if read.get("kind") == "pr15":
-        head = {"kind": "pr15", "md5": read["reading"]["file"]["md5"], "saved": None, "pctool": None,
+    takes a `provenance` as a device read, which is its own evidence (`apply.propose`). A `.PR<n>` (`read_pr_file`)
+    is `kind` `pr<n>` -- `pr15` the PICO 6/8-2 -- and states no save time and no program version: `saved` and
+    `pctool` are null."""
+    if read.get("kind") == "pr":
+        head = {"kind": "pr%s" % read["reading"]["device"]["dev"], "md5": read["reading"]["file"]["md5"],
+                "saved": None, "pctool": None,
                 "note": "read from a saved preset file: what was saved, not proof the DSP holds it now"}
     else:
         head = {"kind": "pct6", "md5": read["doc"].input_md5, "saved": read["inv"]["device"].get("saved"),
@@ -583,7 +585,7 @@ def provenance(read, built, read_at=None):
 
 def read_pr_file(file_path):
     """`(exit code, read)` for a Mosconi `.PR15`, as `read_file` for a `.pct6`: compare-file's own read
-    (`compare_file.read_pr`, hashed before and after by the reader) -- 2 or 3 and the refusal, or 0 and `{kind: "pr15",
+    (`compare_file.read_pr`, hashed before and after by the reader) -- 2 or 3 and the refusal, or 0 and `{kind: "pr",
     name, path, reading, device, warning}`."""
     cf = _compare_file()
     name = os.path.basename(file_path)
@@ -596,7 +598,7 @@ def read_pr_file(file_path):
         return cf.EXIT_UNREADABLE, cf.refusal(reading["warning"], name, "interpret", "the file was read and could not be "
                                               "interpreted (%s: %s)" % (type(exc).__name__, exc),
                                               md5=reading["file"]["md5"])
-    return cf.EXIT_COMPARED, {"kind": "pr15", "name": name, "path": os.path.abspath(file_path), "reading": reading,
+    return cf.EXIT_COMPARED, {"kind": "pr", "name": name, "path": os.path.abspath(file_path), "reading": reading,
                               "device": device, "warning": reading["warning"]}
 
 

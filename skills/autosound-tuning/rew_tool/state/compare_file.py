@@ -683,7 +683,7 @@ def warning_uk(warning):
     """The reader's `warning` in Ukrainian (`warning_uk`, CONTRACT.md item 13): the text TCC shows in Ukrainian. Every
     warning a reader ships has one; a warning without one is a bug in this module, said, never answered in English."""
     texts = {_helix().WARNING: _helix().WARNING_UK, _mosconi().WARNING: _mosconi().WARNING_UK,
-             _mosconi().WARNING_OTHER: _mosconi().WARNING_OTHER_UK}
+             _mosconi().WARNING_OTHER: _mosconi().WARNING_OTHER_UK, NO_READER_WARNING: NO_READER_WARNING_UK}
     if warning not in texts:
         raise ValueError("no Ukrainian text for the reader's warning %r" % warning[:60])
     return texts[warning]
@@ -754,7 +754,10 @@ def compare_journal(journal, file_path):
     compared); 3 the file changed while it was read (`changed`), which wins over a failed read: what failed was
     another file. A `.PR<n>` file goes to the Mosconi reader (`_compare_pr`), the same shape. A version this comparison
     cannot read raises `JournalFault` (a `ValueError`): the journal's, exit 1, never said as the file's."""
-    if reader_for(file_path) == "mosconi_pr":
+    reader = reader_for(file_path)
+    if reader is None:
+        return no_reader(file_path)
+    if reader == "mosconi_pr":
         return _compare_pr(journal, file_path)
     code, doc = read_doc(file_path)
     if code != EXIT_COMPARED:
@@ -892,19 +895,43 @@ READERS = {"helix_pct6": ".pct6", "mosconi_pr": ".PR<n>"}
 FILE_VERBS = ("compare-file", "attest --from-file", "propose --from-file")
 
 
+#: Shown when no reader's pattern matches a file's name: nothing was read (hub #350, the review).
+NO_READER_WARNING = ("The method reads a DSP's saved file only by its extension: .pct6 or .PR followed by a number. "
+                     "This file has another, so nothing was read from it.")
+NO_READER_WARNING_UK = ("Метод зчитує збережений файл DSP лише за його розширенням: .pct6 або .PR, за яким іде число. "
+                        "Цей файл має інше розширення, тому з нього нічого не зчитано.")
+
+
+def _matches(pattern, path):
+    """True when `path`'s extension is `pattern`'s, case aside: `.pct6`, or `.PR<n>` with `n` a number."""
+    ext = os.path.splitext(str(path))[1]
+    if pattern.endswith("<n>"):
+        head = pattern[:-len("<n>")]
+        return ext.upper().startswith(head.upper()) and ext[len(head):].isdigit()
+    return ext.lower() == pattern.lower()
+
+
 def reader_for(path, verb="compare-file"):
-    """The reader `verb` reads `path` with -- `mosconi_pr` for a `.PR<n>`, `helix_pct6` for a `.pct6` and any other
-    name (read as a `.pct6`, which its reader refuses when it is not one) -- or None where `verb` reads no such file.
-    Each of the three verbs reads both. The one gate compare-file, attest --from-file and propose --from-file
-    dispatch by (hub #350)."""
+    """The reader `verb` reads `path` with, by `READERS`' patterns -- `helix_pct6` for a `.pct6`, `mosconi_pr` for a
+    `.PR<n>` -- or None when no pattern matches its name. Each of the three verbs reads both. The one gate
+    compare-file, attest --from-file and propose --from-file dispatch by (hub #350)."""
     if verb not in FILE_VERBS:
         raise ValueError("%r is no verb that reads a file (%s)" % (verb, ", ".join(FILE_VERBS)))
-    return "mosconi_pr" if _mosconi().is_preset_path(path) else "helix_pct6"
+    return next((reader for reader, pattern in READERS.items() if _matches(pattern, path)), None)
+
+
+def no_reader(path, verb="compare-file"):
+    """`(2, refusal)` for a file no reader reads by its name: kind `model`, the no-reader warning, nothing read."""
+    return EXIT_UNREADABLE, refusal(NO_READER_WARNING, os.path.basename(path), "model", (
+        "%s reads %s files; %s is none of them" % (verb, " and ".join(READERS.values()), os.path.basename(path))))
 
 
 def warning_for(path):
-    """The warning of the reader that reads `path`: the Mosconi one for a `.PR<n>` (its model's), else `helix_pct6`'s."""
-    return _mosconi().warning_for(path) if reader_for(path) == "mosconi_pr" else _helix().WARNING
+    """The warning of the reader that reads `path` (the Mosconi one: its model's), or the no-reader warning."""
+    reader = reader_for(path)
+    if reader is None:
+        return NO_READER_WARNING
+    return _mosconi().warning_for(path) if reader == "mosconi_pr" else _helix().WARNING
 
 
 def _pr_profile(skipped=None):

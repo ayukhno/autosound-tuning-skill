@@ -49,18 +49,19 @@ WARNING_UK = (
     "Зчитування .PR15 перевірено лише на одному зразку пресету однієї моделі — Mosconi PICO 6/8-2. Вважайте кожне "
     "значення непідтвердженим: перш ніж покладатися на нього, звірте його з екранами власної програми виробника."
 )
-#: Shown instead with a `.PR<n>` other than 15 in the same container: the model is not checked, its layout not known.
+#: Shown instead with a `.PR<n>` other than 15, on its result and on its refusals alike: the model is not checked, its
+#: layout not known. Whether the container is the PICO 6/8-2's is said where it is known -- the result's `device.note`.
 WARNING_OTHER = (
     "This .PR file is of a Mosconi model the reader has not checked: reading is checked on one sample preset of the "
-    "PICO 6/8-2 (.PR15) only. The file has the same container, but this model's channel layout is not known, so no "
-    "value is matched to a channel or taken into the journal. Read it at your own risk, and check every value against "
-    "the screens of the vendor's own program."
+    "PICO 6/8-2 (.PR15) only, and this model's channel layout is not known, so no value is matched to a channel or "
+    "taken into the journal. Read it at your own risk, and check every value against the screens of the vendor's own "
+    "program."
 )
 WARNING_OTHER_UK = (
     "Цей файл .PR належить до моделі Mosconi, яку зчитувач не перевіряв: зчитування перевірено лише на одному зразку "
-    "пресету PICO 6/8-2 (.PR15). Файл має такий самий контейнер, але конфігурація каналів цієї моделі невідома, тому "
-    "жодне значення не зіставлено з каналом і не внесено до журналу. Зчитуйте його на власний ризик та звірте кожне "
-    "значення з екранами власної програми виробника."
+    "пресету PICO 6/8-2 (.PR15), а конфігурація каналів цієї моделі невідома, тому жодне значення не зіставлено з "
+    "каналом і не внесено до журналу. Зчитуйте його на власний ризик та звірте кожне значення з екранами власної "
+    "програми виробника."
 )
 #: Shown with every result, in the text and in `--json`: whose work the model and the profile are.
 CREDIT = ("Mosconi / Gladen filter model and the PICO 6/8-2 profile contributed by Widar1979 "
@@ -69,6 +70,10 @@ CREDIT = ("Mosconi / Gladen filter model and the PICO 6/8-2 profile contributed 
 LINES = 16384
 DEVICE = {"dev": "15", "vendor": "Mosconi", "name": "PICO 6/8-2 DSP", "extension": ".PR15", "outputs": 8,
           "rate_hz": 96000}
+#: The models whose layout this reader knows, by the code their extension carries (`describe` reads it), and where
+#: a file names its model: the number in its extension (`model_of`). `rew_tool/readers.py` holds the registry to both.
+MODELS = {DEVICE["dev"]: {"name": "%s %s" % (DEVICE["vendor"], DEVICE["name"]), "layout": "pico-6-8-2"}}
+MODEL_CODE = "extension"
 #: The program's output channel 1-8 -> the file's memory slot.
 CHANNEL_SLOTS = (1, 2, 3, 4, 7, 8, 11, 12)
 INPUTS = 5
@@ -112,9 +117,9 @@ def describe(code):
     6/8-2 (15) has a name and a layout; `verified` is false for it too, read on one sample. Another code: no name, no
     layout -- its channels are not known."""
     code = str(code)
-    known = code == DEVICE["dev"]
-    return {"dev": code, "vendor": DEVICE["vendor"], "name": "%s %s" % (DEVICE["vendor"], DEVICE["name"]) if known
-            else None, "verified": False, "layout": "pico-6-8-2" if known else None}
+    known = MODELS.get(code) or {}
+    return {"dev": code, "vendor": DEVICE["vendor"], "name": known.get("name"), "verified": False,
+            "layout": known.get("layout")}
 
 
 def warning_for(path):

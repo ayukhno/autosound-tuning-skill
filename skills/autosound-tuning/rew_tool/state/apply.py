@@ -843,9 +843,8 @@ def attest_from_file(history, file_path, version=None, note=None):
     it). One hold of the writer lock over the read of the version, the project's settings, the file and the bank: what
     is compared is what is attested."""
     cf, ff = _compare_file(), _from_file()
-    if cf.reader_for(file_path, "attest --from-file") is None:      # the gate (hub #350): every reader is read today
-        return cf.EXIT_UNREADABLE, cf.refusal(cf.warning_for(file_path), os.path.basename(file_path), "model",
-                                              "attest --from-file reads no such file")
+    if cf.reader_for(file_path, "attest --from-file") is None:      # the gate (hub #350): no reader reads that name
+        return cf.no_reader(file_path, "attest --from-file")
     with _held(history):
         version = version or history.head()
         if not version:
@@ -881,8 +880,7 @@ def propose_from_file(history, file_path, note=None, registry=None, allow_nonact
     cf, ff = _compare_file(), _from_file()
     reader = cf.reader_for(file_path, "propose --from-file")       # the gate (hub #350)
     if reader is None:
-        return cf.EXIT_UNREADABLE, cf.refusal(cf.warning_for(file_path), os.path.basename(file_path), "model",
-                                              "propose --from-file reads no such file")
+        return cf.no_reader(file_path, "propose --from-file")
     pr = reader == "mosconi_pr"
     with _held(history):
         code, read = (ff.read_pr_file if pr else ff.read_file)(file_path)
@@ -2889,6 +2887,7 @@ def _check_compare_file_pr15_unreadable_is_exit_2_and_changed_is_exit_3():
             refused = json.loads(out)
             assert code == 2 and refused["error"]["kind"] == kind and "rows" not in refused, (name, code, refused)
             assert refused["warning"] == mp.warning_for(path) and refused["warning_uk"], refused["warning"]
+            assert "same container" not in refused["warning"], (name, refused["warning"])
 
         def changing(p):
             got = real(p)
@@ -3684,8 +3683,8 @@ def _check_propose_from_file_pr15_keeps_and_names_what_it_does_not_decode():
 
 
 def _check_propose_from_file_pr15_refusals():
-    """A `.PR15` that changes while propose reads it is exit 3, `changed`; another `.PR` model exit 2, `model`; a base
-    compare-file cannot read is the journal's, exit 1. Nothing is banked on any, and nothing written beside the file."""
+    """A `.PR15` that changes while propose reads it is exit 3, `changed`; a `.PR16` not in the PICO 6/8-2's container
+    exit 2, `format`; a base compare-file cannot read is the journal's, exit 1. Nothing is banked on any, and nothing written beside the file."""
     import shutil
     import tempfile
     mp = _compare_file()._mosconi()
@@ -3730,6 +3729,31 @@ def _check_propose_from_file_pr15_refusals():
         shutil.rmtree(top, ignore_errors=True)
 
 
+def _check_a_file_no_reader_reads_is_refused_by_its_name():
+    """The verbs' gate dispatches from `compare_file.READERS` (item 12 review): a name no reader's pattern matches --
+    a `.pct6` saved as `.bin` -- is exit 2, `model`, with the no-reader warning (and its Ukrainian), from compare-file,
+    attest and propose alike, and nothing is banked. Before, compare-file read any other name as a `.pct6`."""
+    import shutil
+    import tempfile
+    cf = _compare_file()
+    top = tempfile.mkdtemp(prefix="autosound_no_reader_")
+    try:
+        project, pct6 = _aya_project(top)
+        other = os.path.join(top, "files", "AYA.bin")
+        shutil.copyfile(pct6, other)
+        assert cf.reader_for(other) is None and cf.reader_for(pct6) == "helix_pct6", cf.READERS
+        code, out, err = _compare_cli(project, "compare-file", "v_001", other, "--json")
+        refused = json.loads(out)
+        assert code == 2 and refused["error"]["kind"] == "model" and "rows" not in refused, (code, refused)
+        assert refused["warning"] == cf.NO_READER_WARNING and refused["warning_uk"] == cf.NO_READER_WARNING_UK
+        for verb in ("attest", "propose"):
+            code, out, err = _compare_cli(project, verb, "--preset", "AYA", "--from-file", other)
+            assert code == 2 and ": model: " in err and ".pct6" in err, (verb, code, out, err)
+        assert _aya_history(project).versions() == ["v_001"], _aya_history(project).versions()
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
 def _check_another_mosconi_model_is_read_at_the_persons_risk():
     """hub #350: a `.PR16` in the PICO 6/8-2's container -- a copy of the shipped sample -- is read at the person's
     risk, never refused for its model. compare-file: exit 0, the other-model warning (and its Ukrainian), `checked_model`
@@ -3755,6 +3779,7 @@ def _check_another_mosconi_model_is_read_at_the_persons_risk():
         assert (got["device"]["dev"], got["device"]["name"], got["device"]["verified"], got["device"]["layout"]) == (
             "16", None, False, None), got["device"]
         assert sorted(got["device"]) == sorted(before15["device"]), (sorted(got["device"]), sorted(before15["device"]))
+        assert "container" in got["device"]["note"] and "container" not in mp.WARNING_OTHER, got["device"]
         assert got["rows"] and all(r["result"] == "unknown" and "layout" in r["reason"] for r in got["rows"]), \
             [r for r in got["rows"] if r["result"] != "unknown" or "layout" not in str(r["reason"])][:3]
         assert {r["channel"] for r in got["rows"]} >= {"tw-L", "tw-R", "w-L", "sub", "x-9", "preset"}, got["rows"]
@@ -3771,7 +3796,7 @@ def _check_another_mosconi_model_is_read_at_the_persons_risk():
         kept = out[out.index("Kept as v_001 has them"):]
         for named in ("tw-L:", "tw-R:", "w-L:", "sub:", "x-9:", "preset input_gain_db:", "layout is not known"):
             assert named in kept, (named, kept)
-        assert h.load("v_002")["provenance"]["kind"] == "pr15", h.load("v_002")["provenance"]
+        assert h.load("v_002")["provenance"]["kind"] == "pr16", h.load("v_002")["provenance"]
         code, out, err = _compare_cli(project, "attest", "--preset", "PICO", "--from-file", pr16)
         assert code == 0 and out.startswith(mp.WARNING_OTHER), (code, out[:400], err)
         source = h.load(h.head())["preset_settings"]["source_file"]
@@ -4271,6 +4296,7 @@ def _selftest():
                   _check_propose_from_file_pr15_keeps_and_names_what_it_does_not_decode,
                   _check_propose_from_file_pr15_refusals,
                   _check_another_mosconi_model_is_read_at_the_persons_risk,
+                  _check_a_file_no_reader_reads_is_refused_by_its_name,
                   _check_attest_from_file_records_a_pr15, _check_attest_from_file_pr15_refusals,
                   _check_compare_file_a_band_of_an_undecoded_type_paired_by_slot_is_unknown,
                   _check_compare_file_pr15_an_undecoded_slope_code_is_unknown,

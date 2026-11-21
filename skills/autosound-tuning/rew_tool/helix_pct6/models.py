@@ -9,6 +9,11 @@ risk and is marked so in the result.
 from dataclasses import dataclass
 from typing import Optional
 
+#: The vendor family this reader serves, and where a file names its model: the `Dev` attribute of its root
+#: (`Document.dev`). `rew_tool/readers.py` holds `knowledge/dsp/readers.json` to both.
+VENDOR = "Audiotec-Fischer"
+MODEL_CODE = "dev"
+
 #: The models reading has been checked on (the user's word, 2026-11-20).
 VERIFIED_NAMES = ("HELIX DSP ULTRA S", "HELIX NEXT V EIGHT DSP ULTIMATE")
 
