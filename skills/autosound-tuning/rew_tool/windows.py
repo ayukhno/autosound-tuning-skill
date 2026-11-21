@@ -217,9 +217,13 @@ def windowed_spectrum(ir, fs, t0_s, freqs, *, gate_ms=None, cycles=None, band=No
 GD_SMOOTH_OCT = 1.0 / 12.0
 
 
-# upstream: DIMOSUS/Resonalyze docs/specs/fdw-group-delay.md @ 23f2e70 (MIT) -- the definition of group
-#     delay through an FDW (spec §2, their #186): the energy arrival inside the window,
-#     τ = Re[T·conj(H)]/|H|² with T the time-weighted twin of H, numerator and energy smoothed apart.
+# upstream: DIMOSUS/Resonalyze docs/tech/phase-and-group-delay.md @ 4de20ec (MIT) -- the definition of
+#     group delay through an FDW ("Group-delay identity", "FDW group delay"; their #186): the energy
+#     arrival inside the window, τ = Re[T·conj(H)]/|H|² with T the time-weighted twin of H, numerator
+#     and energy smoothed apart.
+# reviewed: 4de20ec (S-127, #217, 2026-11-21) -- 65a1e90 retired docs/specs/fdw-group-delay.md (pinned
+#           at 23f2e70); the definition now lives in docs/tech/phase-and-group-delay.md, the same
+#           identity and the same bank of three windows per octave the deviation below names.
 # deviation: one DFT per grid frequency over that frequency's own window (this module's FDW), not their
 #            bank of three windows per octave blended linearly between centres -- see `_windowed`.
 # deviation: one anchor for every frequency, so their extraction-start correction to T is zero by

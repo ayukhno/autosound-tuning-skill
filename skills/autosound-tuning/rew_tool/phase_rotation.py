@@ -40,11 +40,13 @@ NOT established, and not to be inferred (04-data-and-provenance of the 2026-09-0
     python3 phase_rotation.py 5.625 5000 --fs 96000
     python3 phase_rotation.py --selftest
 """
-# upstream: DIMOSUS/Resonalyze dsp/PhaseRotationControl.cs @ bc957c8 (MIT) --
+# upstream: DIMOSUS/Resonalyze dsp/PhaseRotationControl.cs @ 4de20ec (MIT) --
 #   PhaseRotationControl.{Realize,DeliveredDegrees,RotationAt,SolveCornerHz,SnapToGrid,
 #   MaximumCornerHz}, StepDegrees, MaximumDegrees, SectionQ, MaximumCornerFraction.
 #   Written by the upstream author from the published bench data (DIMOSUS/Resonalyze#88); this
 #   port is checked against his compiled library on 32 cases, see `_selftest`.
+# reviewed: 4de20ec (S-127, #217, 2026-11-21) -- one commit since bc957c8, 6503492 (#191): comment
+#           cuts only; the file's code identical at both ends with comments stripped.
 # deviation: the biquad is `dsp_math.apf2_response` rather than AllPassFilter.Response -- the
 #            same RBJ section at the same rate, and the one this tree already verifies against
 #            the hardware; see `rotation_at`.

@@ -147,8 +147,10 @@ if _HERE not in sys.path:
 # deviation: a dormant reference edge under a non-zero angle is written into the row with
 #            `slope: "OFF"` -- the ledger's form of "configured, not active"; theirs keeps both
 #            edges on the side always. See `_leg` and `predict._phase_reference`.
-# upstream: DIMOSUS/Resonalyze source/Tools/VirtualCrossover/VirtualCrossoverZone.cs @ f026276 (MIT) --
+# upstream: DIMOSUS/Resonalyze source/Tools/VirtualCrossover/VirtualCrossoverZone.cs @ 4de20ec (MIT) --
 #   `VirtualCrossoverZones.GuessForLegacyPair` (the v9 step's zone guess) and the zone names.
+# reviewed: 4de20ec (S-127, #217, 2026-11-21) -- one commit since f026276, 6503492 (#191): comment
+#           cuts only; the file's code identical at both ends with comments stripped.
 CONVERTER = "autosound-tuning-skill rew_tool/resonalyze_vc.py"
 CONVERTER_VERSION = "1.2 (2026-11-10, reads format v7..v13 as of Resonalyze 140f6d2, migrated in memory; a FIR stage refused)"
 

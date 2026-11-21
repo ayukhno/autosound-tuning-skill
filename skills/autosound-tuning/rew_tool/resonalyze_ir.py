@@ -100,13 +100,21 @@ from datetime import datetime, timezone
 
 import numpy as np
 
-# upstream: DIMOSUS/Resonalyze source/Measurements/ImpulseResponseFile.cs @ b8d73c8 (MIT) --
+# upstream: DIMOSUS/Resonalyze source/Measurements/ImpulseResponseFile.cs @ 4de20ec (MIT) --
 #   `Validate()` (mirrored as `validate_v7` for the members this module writes), the member set
 #   and its camelCase names, `CurrentVersion`; read alongside
 #   source/Measurements/Float32SampleArrayJsonConverter.cs @ b8d73c8 (the v8 base64 float32 LE
 #   form and the pre-v8 number-array form, both read by `load_file`).
 # format-version: 8 -- their `CurrentVersion`; `scripts/upstream-drift.py` reads it out of the
 #   upstream file and names a mismatch as a drift of the FORMAT, not merely of the file.
+# reviewed: 4de20ec (S-127, #217, 2026-11-21) -- four commits since b8d73c8, each diff read:
+#           `CurrentVersion` stays 8, and the members `validate_v7` mirrors and `load_file` reads are
+#           unchanged. 6503492 (#191) comment cuts; e000fcd (#204) builds the file from one
+#           `MeasurementResult`, the same members; 2482f94 (#277) flushes the save to disk and names
+#           the 44 100 Hz floor `SampleRateCatalog.MinimumSampleRate` (still 44 100); 2a6fa1a (#232)
+#           files a capture whose microphone led its loopback as `NonCausalLoopback`, without
+#           absolute time -- only a Resonalyze-measured file carries it, `build_v7` writes
+#           `SynchronizedLoopback`, and reading such a file stays in the pool (S-127).
 # deviation: the writer stays on v7 (number arrays) -- see the module docstring: their reader
 #            takes 4..CurrentVersion and migrates, and a v7 file opens in every build; only what
 #            we READ follows the current writer.

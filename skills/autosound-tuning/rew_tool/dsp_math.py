@@ -502,7 +502,7 @@ def robust_worst_null(freqs_hz, A, B, band, perturbations=ROBUST_PERT):
 
 
 # ---------- sum loss: the junction metric ported from Resonalyze ----------
-# upstream: DIMOSUS/Resonalyze dsp/VirtualCrossoverAnalysis.cs @ 23f2e70 (MIT) --
+# upstream: DIMOSUS/Resonalyze dsp/VirtualCrossoverAnalysis.cs @ 4de20ec (MIT) --
 # `DetailedLoss`, `SumLossCurve`, `MeasureJunctionSpectrum` (the ripple), `DipExcessPenaltyWeight`,
 # `MinBinAmplitudeRatio`, `SumLossLevelGateDb`. A port of the DEFINITION (formula and
 # constants), written fresh in numpy; see LICENSES/NOTICE.md. Checked against our own earlier
@@ -537,6 +537,21 @@ def robust_worst_null(freqs_hz, A, B, band, perturbations=ROBUST_PERT):
 #           samples for their Virtual DSP step view. A function beside the metric, not the
 #           metric: DetailedLoss, SumLossCurve, MeasureJunctionSpectrum and every constant
 #           untouched. Re-pinned after reading the diff (hub PAS-007, 2026-09-13).
+# reviewed: 4de20ec (S-127, #217, 2026-11-21) -- eight commits since 23f2e70; the ported functions
+#           compared at both ends with comments stripped. DetailedLoss and every constant identical.
+#           MeasureJunctionSpectrum split into an overload that also hands out its level bins, the
+#           reading moved into `ReadAt`: the same loss, dip and ripple at delay 0. Everything else the
+#           commits changed is outside the ported functions: e53ebe7 (#188) a FIR stage per channel
+#           and 7334d3b's junction windows that keep its pre-ring (the chain and the cut; a FIR stage
+#           is refused here), e344226 (#256) the alignment prior in their search (`align_sum_loss`
+#           has none), 6503492 (#191) comment cuts, and 65a1e90, c673c87, cef3ebc, 8fc888d. One change
+#           reaches the read-out: 7334d3b (#202) gives SumLossCurve a channel-presence gate -- the
+#           deviation below.
+# deviation: the read-out (`level_gate_db`) has no channel-presence gate -- their
+#            `SumLossChannelPresenceDb` (40 dB) leaves a bin NaN where every channel sits that far
+#            below its own peak, two FIR stop-band floors. Here the junction band keeps a channel
+#            playing, a FIR stage is refused, and the read-out only draws `predict`'s plot; see
+#            `sum_loss`.
 # deviation: d(ln f) per bin instead of their bare 1/f weight -- see `_log_weights`
 #            (their 1/f is a log-frequency average only on a uniform-Hz FFT grid).
 # deviation: candidates tie-break by our own near-tie rule (smallest |tau| within
