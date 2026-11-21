@@ -240,14 +240,22 @@ class TestOtherModelsAndVersions(unittest.TestCase):
         self.assertEqual(devs, {"17", "32", "38", "50", "53"})
 
     def test_pc_tool_versions(self):
-        paths = [fixture("versions", "pc-tool-6.05.01.pct6")]
         given = [p for p in os.environ.get("HELIX_PCT6_VERSIONS", "").split(os.pathsep) if p]
+        try:
+            paths = [fixture("versions", "pc-tool-6.05.01.pct6")]
+        except unittest.SkipTest:
+            if not given:
+                raise
+            paths = []          # a given set is checked on its own: it never skips for want of the 6.05.01 fixture
         for entry in given:
             paths += sorted(glob.glob(os.path.join(entry, "*.pct6"))) if os.path.isdir(entry) else [entry]
         seen = {hp.read_pct6(p).pc_tool_version for p in paths}
-        self.assertIn("6.05.01", seen)
         if given:
-            self.assertTrue({"6.03.03", "6.03.04", "6.04.01", "6.05.01"} <= seen, seen)
+            want = {"6.03.03", "6.03.04", "6.04.01", "6.05.01"}
+            self.assertTrue(want <= seen, "HELIX_PCT6_VERSIONS (with the versions fixture, if found) read %s; missing %s"
+                            % (sorted(seen), sorted(want - seen)))
+        else:
+            self.assertIn("6.05.01", seen)
 
     def test_warning_names_both_checked_models(self):
         self.assertEqual(hp.VERIFIED_NAMES, ("HELIX DSP ULTRA S", "HELIX NEXT V EIGHT DSP ULTIMATE"))
