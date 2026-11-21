@@ -91,13 +91,18 @@ Third-party resources (icons, external target curves, data) with their own licen
 
 - `skills/autosound-tuning/rew_tool/testdata/helix-bench/` — ten measured curves of a Helix DSP
   Ultra S (crossovers BW24 / LR24 at 460 Hz, BE36 at 1 kHz, LR36 at 8 kHz, each with its set's
-  bypass reference) and the 32 fitted cases of its phase control, copied verbatim from
-  [ayukhno/autosound-measurements](https://github.com/ayukhno/autosound-measurements),
-  `hardware/helix/dsp-ultra-s/`, at commit `5254c16`. That repository publishes its data under the
+  bypass reference) and the 32 fitted cases of its phase control: the author's own electrical bench
+  captures of that processor (2026-08-31 .. 2026-09-05), kept verbatim and published under the
   **Creative Commons Attribution 4.0 International** licence (CC BY 4.0,
-  <https://creativecommons.org/licenses/by/4.0/>); the files are the fixtures behind the hardware
-  half of `dsp_math` and `phase_rotation`'s selftests (`testdata/helix-bench/README.md` says what
-  each decides and how it is read).
+  <https://creativecommons.org/licenses/by/4.0/>). They are the fixtures behind the hardware half
+  of `dsp_math` and `phase_rotation`'s selftests (`testdata/helix-bench/README.md` says what each
+  decides and how it is read).
+
+- `skills/autosound-tuning/knowledge/dsp/profiles/mosconi-pico-6-8-2.json` — **Mosconi / Gladen
+  filter model and the PICO 6/8-2 profile contributed by Widar1979**
+  ([issue #214](https://github.com/ayukhno/autosound-tuning-skill/issues/214)). The contributor
+  granted MIT for code and CC BY-SA 4.0 for texts. Our files are written from his values (rates,
+  ranges, steps, filter families), not copied from his files or his sentences.
 
 Notes:
 - If you include third-party content in a contribution, state its source and license in the PR description.

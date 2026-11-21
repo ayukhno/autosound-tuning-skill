@@ -1,0 +1,189 @@
+{
+  "dsp_profile": {
+    "_open_questions": [
+      "Delay display step: the unit holds delay in steps of 1/384 ms at 96 kHz (about 2.6 us), up to 12 ms. Whether the vendor's software offers that resolution or rounds it to a coarser entry step is not checked, so `step_ms` records the held step, not necessarily the entry step.",
+      "EQ gain range and step: not recorded. The stored value can hold finer steps than 0.25 dB, but what the software lets a user type is unknown.",
+      "Presets: the unit holds 4. Whether the input selection switches with the preset is not checked, so check the input after every preset switch until it is.",
+      "Input EQ and group EQ: both exist on this unit and are not a tier in this profile yet. Their channel mapping is not settled, which is why `groups_enumerated` is false and `fields` of the one listed tier says nothing about them.",
+      "Crossover families: Chebyshev, and Bessel at 6 / 18 / 24 dB/oct, are taken from the contributor's reading of the vendor's filter tables and have not been compared with a preset saved by the vendor's software. The corner and Q factors are tabulated there, but Chebyshev ripple is not stated in this profile.",
+      "Odd-order Linkwitz (6 and 18 dB/oct) is a vendor menu label, not a true Linkwitz-Riley alignment: the 18 dB/oct leg is a 1st-order section plus a 2nd-order Q 0.707 section, and the 6 dB/oct leg is a 1st-order section with its corner scaled. Their phase behaviour is unmeasured.",
+      "Peak-EQ bandwidth convention: the software has two ways to turn f / Q / gain into a peak, one standard constant-Q and one where the bandwidth depends on gain. The setting is not stored in a preset, so the same numbers give a different curve in each. Which one the owner's software is set to must be asked before an EQ is proposed.",
+      "Acoustic check: the filters were compared with presets saved by the vendor's software, not with a loopback measurement of the unit's output."
+    ],
+    "channel_gain": {
+      "note": "Level per output, 0.5 dB steps. A muted output keeps its set level.",
+      "range_db": [
+        -100,
+        12
+      ],
+      "scope": [
+        "per output channel"
+      ],
+      "step_db": 0.5
+    },
+    "crossover_filters": {
+      "corner_freq_range_hz": [
+        10,
+        20000
+      ],
+      "corner_freq_step_hz": 1,
+      "independent_hp_lp": true,
+      "scope": "per output channel",
+      "slope_range_note": "Each leg is one or two biquad sections at 96 kHz: 6 dB/oct is one 1st-order section, 12 one 2nd-order, 18 a 1st plus a 2nd, 24 two 2nd-order. The families differ in section Q and corner factor. The unit also has a global corner-correction setting (off, -3 dB or -6 dB normalised) that shifts the corner factors; its state is not part of a preset's crossover fields and must be asked.",
+      "types": {
+        "BE": {
+          "orders_db_per_oct": [
+            6,
+            12,
+            18,
+            24
+          ]
+        },
+        "BW": {
+          "orders_db_per_oct": [
+            6,
+            12,
+            18,
+            24
+          ]
+        },
+        "CHEBYSHEV": {
+          "orders_db_per_oct": [
+            6,
+            12,
+            18,
+            24
+          ],
+          "ripple_db": null,
+          "ripple_db_note": "not stated"
+        },
+        "LR": {
+          "orders_db_per_oct": [
+            6,
+            12,
+            18,
+            24
+          ]
+        }
+      }
+    },
+    "delay": {
+      "max_ms": 12,
+      "min_ms": 0,
+      "scope": "per output channel",
+      "step_ms": 0.0026041666666666665,
+      "step_ms_note": "The held resolution, 1/384 ms (2.604 us) at 96 kHz. The step the software shows is unverified (see _open_questions)."
+    },
+    "dsp_processing_rate_hz": 96000,
+    "dsp_processing_rate_note": "The unit processes at 96 kHz; delays in samples derive from it.",
+    "groups": [
+      {
+        "crossover_filters": {
+          "types": {
+            "BE": {
+              "modellable": true,
+              "orders_db_per_oct": [
+                6,
+                12,
+                18,
+                24
+              ]
+            },
+            "BW": {
+              "modellable": true,
+              "orders_db_per_oct": [
+                6,
+                12,
+                18,
+                24
+              ]
+            },
+            "CHEBYSHEV": {
+              "modellable": false,
+              "modellable_note": "CHEBYSHEV is not in the method's default realisable set (dsp_math.MODELLABLE_FAMILIES) — ENTERABLE on this device, not predictable by us",
+              "orders_db_per_oct": [
+                6,
+                12,
+                18,
+                24
+              ]
+            },
+            "LR": {
+              "modellable": true,
+              "orders_db_per_oct": [
+                6,
+                12,
+                18,
+                24
+              ]
+            }
+          }
+        },
+        "eq": {
+          "band_types": [
+            "PK",
+            "LSH",
+            "HSH",
+            "APF1",
+            "APF2"
+          ],
+          "bands_per_channel": 10
+        },
+        "fields": [
+          "hp",
+          "lp",
+          "gain_db",
+          "ta_ms",
+          "polarity",
+          "mute",
+          "eq"
+        ],
+        "id": "physical_outputs",
+        "label": "Output channels",
+        "max_count": 8,
+        "note": "Six amplified channels and two line outputs. The unit also has an input EQ and a group EQ (shared left/right bands per output group); they are not listed as a tier here yet, and their mapping is not settled."
+      }
+    ],
+    "groups_enumerated": false,
+    "name": "PICO 6/8-2 DSP",
+    "parametric_eq": {
+      "band_types": [
+        "PK",
+        "LSH",
+        "HSH",
+        "APF1",
+        "APF2"
+      ],
+      "bands_per_channel": 10,
+      "freq_range_hz": [
+        10,
+        20000
+      ],
+      "freq_step_hz": 1,
+      "q_range": [
+        0.504,
+        40
+      ],
+      "scope": "per output channel"
+    },
+    "polarity": {
+      "implementation": "0 / 180 degree switch per output; no continuous all-pass phase control apart from the APF1 / APF2 EQ bands",
+      "scope": "per output channel",
+      "values": [
+        "NORM",
+        "INV"
+      ]
+    },
+    "presets": {
+      "count": 4,
+      "note": "Check the input after every preset switch until it is known whether the input selection follows the preset."
+    },
+    "sources": [
+      "Mosconi / Gladen filter model and the PICO 6/8-2 profile contributed by Widar1979 -- https://github.com/ayukhno/autosound-tuning-skill/issues/214 (MIT for code, CC BY-SA 4.0 for texts; this file is written here from his values, not copied)",
+      "checked by the contributor against presets saved by the vendor's software",
+      "NOT measured acoustically on a unit: every value here is read from presets and vendor tables, never verified by a loopback or microphone capture."
+    ],
+    "vendor": "Mosconi"
+  },
+  "schema_version": 3
+}
