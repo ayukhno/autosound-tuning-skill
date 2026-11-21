@@ -778,6 +778,24 @@ a file band that is bypassed or neutral and not named by the version, which does
 comparison does not know is an `unknown` row. Tolerances: 0.005 dB, 0.005 Hz, 0.005 for a Q (a shelf's 0.71 is the
 file's 0.707), 0.001°, a slope exact, a delay to 0.01 ms as PC-Tool shows it.
 
+**A Mosconi `.PR15`** (W-13, #219 T7; an addition): a `FILE` whose extension is `.PR<number>` is read by
+`rew_tool/mosconi_pr.py` instead, read only and hashed before and after the same way, and answered in the same
+shape, keys and exit codes. Only `.PR15`, the PICO 6/8-2, is read: the model is known from the extension alone.
+`warning` is `mosconi_pr.WARNING` verbatim (read on one sample of one model; check every value against the
+vendor program's screens), on refusals too; `checked_model` is false; `device` is `{dev: "15", name: "Mosconi
+PICO 6/8-2 DSP", verified: false, clock_hz` from the file's rate byte, `layout: "pico-6-8-2", note}`; `file`'s
+`saved` and `pctool` are null (the file states neither). Exit 2's `error.kind` adds `format` (not one byte a line),
+`model` (a `.PR` model other than 15) and `truncated` (fewer lines than a preset); `io`, `interpret` and exit 3's
+`changed` as above. A row's `path` is the 0-based line of the value looked at, `offset 1281` (an EQ band's: its
+record's first line). A row of tier `channels` reaches output n through `slot` "n" -- the profile
+`knowledge/dsp/profiles/mosconi-pico-6-8-2.json` numbers the eight outputs 1-8, as the program does; a profile that
+letters them, counts other than eight or is not there leaves every row `unknown`. Compared: `gain_db` (a muted
+output's kept level), `ta_ms` (to 0.005 ms), `polarity`, `mute`, the legs' `type` / `f` / `slope`, and the EQ bands'
+`type` / `f` / `gain_db` / `q` as the records store them (types PK, LSH, HSH; another code is `unknown`). `unknown`
+always: `phase_deg` (no phase control), `off`, `eq_bypass` and a band's `bypass` (not decoded), and under `preset`
+`input_gain_db` (the file holds one per input), any other stated setting, and `crossover.corner_set` (the file's
+global corner set; the journal records none). Not read: the mixer, the input EQ, the group EQ.
+
 A key, a row's `parameter`, a category, an `error.kind` or an exit code added later is an addition (item 12);
 removing or renaming one is a contract change.
 

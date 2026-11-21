@@ -2072,27 +2072,28 @@ def _check_compare_file_keys_are_the_pinned_ones():
     pinned = _pinned_compare_keys()
     for name in ("top level", "file", "counts", "device", "row", "refusal", "error"):
         assert name in pinned, f"CONTRACT.md pins no keys for {name!r}: {sorted(pinned)}"
-    top = tempfile.mkdtemp(prefix="autosound_compare_keys_")
-    try:
-        project, pct6 = _aya_project(top)
-        got = _compared(project, pct6)
-        assert sorted(got) == sorted(pinned["top level"]), (sorted(got), pinned["top level"])
-        assert sorted(got["file"]) == sorted(pinned["file"]), (sorted(got["file"]), pinned["file"])
-        assert sorted(got["counts"]) == sorted(pinned["counts"]), (sorted(got["counts"]), pinned["counts"])
-        assert sorted(got["device"]) == sorted(pinned["device"]), (sorted(got["device"]), pinned["device"])
-        assert got["rows"], "no rows"
-        for row in got["rows"]:
-            assert sorted(row) == sorted(pinned["row"]), (sorted(row), pinned["row"])
-        bad = os.path.join(top, "files", "not-a-preset.pct6")
-        with open(bad, "wb") as fh:
-            fh.write(b"this is not a PC-Tool file")
-        code, out, _err = _compare_cli(project, "compare-file", "v_001", bad, "--json")
-        refused = json.loads(out)
-        assert code == 2 and sorted(refused) == sorted(pinned["refusal"]), (code, sorted(refused), pinned["refusal"])
-        assert sorted(refused["error"]) == sorted(pinned["error"]), (sorted(refused["error"]), pinned["error"])
-        assert sorted(refused["file"]) == sorted(pinned["file"]), (sorted(refused["file"]), pinned["file"])
-    finally:
-        shutil.rmtree(top, ignore_errors=True)
+    for build, bad_name in ((_aya_project, "not-a-preset.pct6"), (_pico_project, "not-a-preset.PR15")):
+        top = tempfile.mkdtemp(prefix="autosound_compare_keys_")
+        try:
+            project, preset_file = build(top)
+            got = _compared(project, preset_file)
+            assert sorted(got) == sorted(pinned["top level"]), (sorted(got), pinned["top level"])
+            assert sorted(got["file"]) == sorted(pinned["file"]), (sorted(got["file"]), pinned["file"])
+            assert sorted(got["counts"]) == sorted(pinned["counts"]), (sorted(got["counts"]), pinned["counts"])
+            assert sorted(got["device"]) == sorted(pinned["device"]), (sorted(got["device"]), pinned["device"])
+            assert got["rows"], "no rows"
+            for row in got["rows"]:
+                assert sorted(row) == sorted(pinned["row"]), (sorted(row), pinned["row"])
+            bad = os.path.join(top, "files", bad_name)
+            with open(bad, "wb") as fh:
+                fh.write(b"this is not a PC-Tool file")
+            code, out, _err = _compare_cli(project, "compare-file", "v_001", bad, "--json")
+            refused = json.loads(out)
+            assert code == 2 and sorted(refused) == sorted(pinned["refusal"]), (code, sorted(refused), pinned["refusal"])
+            assert sorted(refused["error"]) == sorted(pinned["error"]), (sorted(refused["error"]), pinned["error"])
+            assert sorted(refused["file"]) == sorted(pinned["file"]), (sorted(refused["file"]), pinned["file"])
+        finally:
+            shutil.rmtree(top, ignore_errors=True)
 
 
 def _check_compare_file_matches_and_differs_on_aya():
@@ -2450,6 +2451,170 @@ def _check_compare_file_writes_nothing():
         shutil.rmtree(top, ignore_errors=True)
 
 
+# ── compare-file on a Mosconi `.PR15` (#219 T7): the same shape, its own reader ────────────────────────────────────
+_PICO_PR15 = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "testdata", "mosconi-pr",
+                          "example_pico682.PR15")
+
+
+def _pico_project(top, edit_state=None):
+    """A project in `top/project` whose v_001 holds values of the shipped sample preset for four outputs (numbered as
+    the PICO 6/8-2's profile numbers them, "1"..."8"), with a gain and a band made to differ and fields left out on
+    purpose, and one channel on a slot the model does not have; a copy of the file in `top/files`. (project, file)."""
+    import shutil
+    project, files = os.path.join(top, "project"), os.path.join(top, "files")
+    os.makedirs(project)
+    os.makedirs(files)
+    channels = [{"code": "tw-L", "tier": "channels", "slot": "1"}, {"code": "tw-R", "tier": "channels", "slot": "2"},
+                {"code": "w-L", "tier": "channels", "slot": "5"}, {"code": "sub", "tier": "channels", "slot": "7"},
+                {"code": "x-9", "tier": "channels", "slot": "9"}]
+    with open(os.path.join(project, "project.json"), "w", encoding="utf-8") as fh:
+        json.dump({"schema_version": _state.SCHEMA_VERSION, "project_rev": 1, "channels": channels}, fh)
+    state = {
+        "preset": "PICO", "sample_rate": 96000, "project_rev": 1,
+        "channels": {
+            # as the file holds it; two of its nine active bands named, by slot, the rest only in the file
+            "tw-L": {"gain_db": 0.0, "ta_ms": 6.8, "polarity": "INV", "mute": False,
+                     "hp": {"f": 2000, "type": "LR", "slope": 18}, "lp": None,
+                     "eq": [{"type": "PK", "f": 570, "gain_db": 4.0, "q": 4.42, "i": 1},
+                            {"type": "LSH", "f": 900, "gain_db": -9.0, "q": 1.0, "i": 3}]},
+            # the file says +3 dB; no mute, no EQ recorded: unknown, never a match
+            "tw-R": {"gain_db": 2.5, "ta_ms": 4.29, "polarity": "INV",
+                     "hp": {"f": 2000, "type": "LR", "slope": 18}, "lp": None},
+            # a band paired by type and frequency; a peak at 1000 Hz the file does not hold; a phase it has no control for
+            "w-L": {"gain_db": -1.5, "ta_ms": 5.19, "polarity": "NORM", "mute": False, "phase_deg": 0.0,
+                    "hp": {"f": 70, "type": "BE", "slope": 12}, "lp": {"f": 2400, "type": "LR", "slope": 12},
+                    "eq": [{"type": "PK", "f": 81, "gain_db": 1.1, "q": 3.57},
+                           {"type": "PK", "f": 1000, "gain_db": -3.0, "q": 2.0}]},
+            "sub": {"gain_db": 0.0, "ta_ms": 0.0, "polarity": "INV", "mute": False, "hp": None,
+                    "lp": {"f": 80, "type": "LR", "slope": 24}},
+            "x-9": {"gain_db": 0.0, "ta_ms": 0.0, "polarity": "NORM", "hp": None, "lp": None},
+        },
+    }
+    if edit_state:
+        edit_state(state)
+    _state.PresetHistory(os.path.join(project, "state"), "PICO", project_dir=project).snapshot(state, note="PICO")
+    pr15 = os.path.join(files, "example_pico682.PR15")
+    shutil.copyfile(_PICO_PR15, pr15)
+    return project, pr15
+
+
+def _check_compare_file_pr15_matches_differs_and_unknown():
+    """On the shipped `.PR15`: the same shape as a `.pct6`, its own warning, the model unchecked; what the version
+    holds as the file does matches, what it holds otherwise differs, what one side does not hold or decode is unknown
+    and never a match; audio first; nothing written anywhere."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_compare_pr15_")
+    try:
+        project, pr15 = _pico_project(top)
+        before = _tree_digest(top)
+        got = _compared(project, pr15)
+        cf = _compare_file()
+        assert got["contract"] == cf.CONTRACT and got["warning"] == cf._mosconi().WARNING, got["warning"]
+        assert got["checked_model"] is False and got["device"]["verified"] is False, got["device"]
+        assert (got["device"]["dev"], got["device"]["name"]) == ("15", "Mosconi PICO 6/8-2 DSP"), got["device"]
+        assert got["file"]["name"] == "example_pico682.PR15" and got["file"]["md5"], got["file"]
+        for channel, parameter in (("tw-L", "gain_db"), ("tw-L", "ta_ms"), ("tw-L", "polarity"), ("tw-L", "mute"),
+                                   ("tw-L", "hp.type"), ("tw-L", "hp.f"), ("tw-L", "hp.slope"), ("tw-L", "lp.slope"),
+                                   ("tw-L", "eq[1].type"), ("tw-L", "eq[1].f"), ("tw-L", "eq[1].gain_db"),
+                                   ("tw-L", "eq[1].q"), ("tw-L", "eq[3].type"), ("tw-L", "eq[3].gain_db"),
+                                   ("w-L", "lp.type"), ("w-L", "lp.f"), ("w-L", "hp.type"), ("w-L", "hp.slope"),
+                                   ("w-L", "eq[2].gain_db"), ("w-L", "eq[2].q"), ("w-L", "ta_ms"),
+                                   ("sub", "polarity"), ("sub", "lp.slope"), ("sub", "hp.slope")):
+            assert _row(got, channel, parameter)["result"] == "match", _row(got, channel, parameter)
+        gain = _row(got, "tw-R", "gain_db")
+        assert gain["result"] == "differs" and (gain["journal"], gain["file"]) == (2.5, 3.0), gain
+        assert gain["category"] == "audio" and gain["path"] == "offset 1281", gain
+        missing = [r for r in got["rows"] if r["channel"] == "w-L" and r["file"] is None and r["result"] == "differs"]
+        assert len(missing) == 1 and missing[0]["journal"]["f"] == 1000, missing
+        only_file = {r["parameter"] for r in got["rows"]
+                     if r["channel"] == "tw-L" and r["journal"] is None and r["result"] == "differs"}
+        assert only_file == {"eq[2]", "eq[4]", "eq[5]", "eq[6]", "eq[7]", "eq[8]", "eq[9]"}, only_file
+        for channel, parameter in (("tw-R", "mute"), ("tw-R", "eq"), ("w-L", "phase_deg"), ("x-9", "gain_db"),
+                                   ("Output 3", "channel"), ("Output 8", "channel"), ("preset", "input_gain_db"),
+                                   ("preset", "crossover.corner_set")):
+            row = _row(got, channel, parameter)
+            assert row["result"] == "unknown" and row["reason"], row
+        assert "9" in _row(got, "x-9", "gain_db")["reason"], _row(got, "x-9", "gain_db")
+        assert {r["result"] for r in got["rows"]} <= set(cf.RESULTS)
+        assert not [r for r in got["rows"] if r["result"] == "unknown" and not r["reason"]]
+        counts = got["counts"]["result"]
+        assert counts == {res: sum(r["result"] == res for r in got["rows"]) for res in cf.RESULTS}, counts
+        cats = [r["category"] for r in got["rows"]]
+        assert "system" in cats and max(i for i, c in enumerate(cats) if c == "audio") < min(
+            i for i, c in enumerate(cats) if c != "audio"), cats
+        code, out, _err = _compare_cli(project, "compare-file", "v_001", pr15)
+        assert code == 0 and cf._mosconi().WARNING in out and "tw-R" in out and "differs" in out, out
+        assert _tree_digest(top) == before, sorted(set(_tree_digest(top).items()) ^ set(before.items()))
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_compare_file_pr15_numbering_not_settled_is_unknown():
+    """Outputs reach a version's rows only by the profile's numbering: a profile that letters them (or none at all)
+    leaves every row unknown with its reason -- never a guessed match."""
+    import shutil
+    import tempfile
+    cf = _compare_file()
+    real = cf._pr_profile
+    top = tempfile.mkdtemp(prefix="autosound_compare_pr15_slots_")
+    try:
+        project, pr15 = _pico_project(top)
+        for profile in ({"groups": [{"id": "physical_outputs", "max_count": 8, "row_id_style": "letter"}]}, None):
+            cf._pr_profile = lambda profile=profile: profile
+            got = _compared(project, pr15)
+            rows = [r for r in got["rows"] if r["channel"] in ("tw-L", "tw-R", "w-L", "sub")]
+            assert rows and all(r["result"] == "unknown" and r["reason"] for r in rows), rows
+            assert not [r for r in got["rows"] if r["result"] != "unknown"], profile
+    finally:
+        cf._pr_profile = real
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_compare_file_pr15_unreadable_is_exit_2_and_changed_is_exit_3():
+    """A `.PR15` that is not a preset, cut short, not there, or another `.PR` model: exit 2 with its kind, no rows. One
+    that changes while it is read: exit 3, `changed`. Each refusal carries the Mosconi reader's warning."""
+    import shutil
+    import tempfile
+    cf = _compare_file()
+    mp = cf._mosconi()
+    real = mp._read_bytes
+    top = tempfile.mkdtemp(prefix="autosound_compare_pr15_bad_")
+    try:
+        project, pr15 = _pico_project(top)
+        with open(pr15, "rb") as fh:
+            data = fh.read()
+        cases = (("garbage.PR15", b"not a preset\r\n" * 3, "format"), ("cut.PR15", data[:len(data) // 2], "truncated"),
+                 ("other.PR16", data, "model"), ("none.PR15", None, "io"))
+        for name, body, kind in cases:
+            path = os.path.join(top, "files", name)
+            if body is not None:
+                with open(path, "wb") as fh:
+                    fh.write(body)
+            code, out, err = _compare_cli(project, "compare-file", "v_001", path, "--json")
+            refused = json.loads(out)
+            assert code == 2 and refused["error"]["kind"] == kind and "rows" not in refused, (name, code, refused)
+            assert refused["warning"] == mp.WARNING, refused["warning"]
+
+        def changing(p):
+            got = real(p)
+            with open(p, "ab") as fh:
+                fh.write(b"0\r\n")
+            return got
+        mp._read_bytes = changing
+        try:
+            code, out, err = _compare_cli(project, "compare-file", "v_001", pr15, "--json")
+        finally:
+            mp._read_bytes = real
+        refused = json.loads(out)
+        assert code == 3 and refused["error"]["kind"] == "changed" and "rows" not in refused, (code, refused)
+        code, out, err = _compare_cli(project, "compare-file", "v_009", pr15, "--json")
+        assert code == 1 and json.loads(out)["warning"] == mp.WARNING, (code, out)
+    finally:
+        mp._read_bytes = real
+        shutil.rmtree(top, ignore_errors=True)
+
+
 # ── --from-file (#218 T3): attest records the file and the comparison, propose banks the file's values ─────────────
 def _a_versions_file(project, version):
     """The bytes of `version`'s file in the project's ledger, wherever its layout keeps it."""
@@ -2787,6 +2952,9 @@ def _selftest():
                   _check_compare_file_bands_it_cannot_decode_and_an_inverted_all_pass,
                   _check_compare_file_virtual_letters_are_pc_tools,
                   _check_compare_file_a_file_it_cannot_interpret_is_exit_2,
+                  _check_compare_file_pr15_matches_differs_and_unknown,
+                  _check_compare_file_pr15_numbering_not_settled_is_unknown,
+                  _check_compare_file_pr15_unreadable_is_exit_2_and_changed_is_exit_3,
                   _check_attest_from_file_fills_the_source_file,
                   _check_from_file_and_source_file_together_are_a_usage_error,
                   _check_attest_from_file_needs_a_preset_setting, _check_from_file_input_changed_is_exit_3,
@@ -3082,7 +3250,7 @@ def _compare_file_main(project_dir, args):
         journal = cf.load_journal(project_dir, version, preset=preset)
     except (ValueError, OSError) as exc:
         if as_json:
-            print(json.dumps(cf.refusal(cf._helix().WARNING, os.path.basename(path), "journal", str(exc)),
+            print(json.dumps(cf.refusal(cf.warning_for(path), os.path.basename(path), "journal", str(exc)),
                              ensure_ascii=False, indent=2))
         print(f"error: {exc}", file=sys.stderr)
         return cf.EXIT_JOURNAL

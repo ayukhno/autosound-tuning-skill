@@ -7,3 +7,5 @@
 *.sh  text eol=lf
 # The selftest manifest is read by bash, whose `read` keeps a CR: LF on every platform (CI 38544832522).
 scripts/selftests.txt text eol=lf
+# The Mosconi reader's sample preset (#219): CRLF text that ships byte for byte -- its selftest checks the sha256.
+skills/autosound-tuning/rew_tool/testdata/mosconi-pr/*.PR15 -text

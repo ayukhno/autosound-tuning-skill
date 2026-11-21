@@ -98,7 +98,9 @@ Third-party resources (icons, external target curves, data) with their own licen
   of `dsp_math` and `phase_rotation`'s selftests (`testdata/helix-bench/README.md` says what each
   decides and how it is read).
 
-- `skills/autosound-tuning/knowledge/dsp/profiles/mosconi-pico-6-8-2.json` — **Mosconi / Gladen
+- `skills/autosound-tuning/knowledge/dsp/profiles/mosconi-pico-6-8-2.json`, `rew_tool/mosconi_gladen.py`,
+  `rew_tool/mosconi_pr.py` and the sample preset `rew_tool/testdata/mosconi-pr/example_pico682.PR15` (shipped
+  byte for byte, the one file of his that is) — **Mosconi / Gladen
   filter model and the PICO 6/8-2 profile contributed by Widar1979**
   ([issue #214](https://github.com/ayukhno/autosound-tuning-skill/issues/214)). The contributor
   granted MIT for code and CC BY-SA 4.0 for texts. Our files are written from his values (rates,

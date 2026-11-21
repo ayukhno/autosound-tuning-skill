@@ -1,4 +1,5 @@
-"""One version of the journal against a saved `.pct6` (#218 T2): `apply.py <project-dir> compare-file <version> FILE`.
+"""One version of the journal against a saved `.pct6` (#218 T2) or a Mosconi `.PR15` (#219 T7, `_compare_pr` below):
+`apply.py <project-dir> compare-file <version> FILE`.
 
 Read only, everywhere: the file is opened for reading, hashed before it is read and after, and nothing is written --
 not beside the file, not into the project, not into the journal. The contract is `rew_tool/CONTRACT.md` item 13.
@@ -641,7 +642,9 @@ def compare_journal(journal, file_path):
     0 compared, whatever the rows say; 2 the file cannot be read (`error.kind`: the reader's kind -- container,
     checksum, truncated, limit, xml --, `io`, or `interpret`: it decoded and then could not be interpreted or
     compared); 3 the file changed while it was read (`changed`), which wins over a failed read: what failed was
-    another file."""
+    another file. A `.PR<n>` file goes to the Mosconi reader (`_compare_pr`), the same shape."""
+    if _mosconi().is_preset_path(file_path):
+        return _compare_pr(journal, file_path)
     hx = _helix()
     snap, identity = journal
     name = os.path.basename(file_path)
@@ -683,6 +686,323 @@ def compare_journal(journal, file_path):
         "counts": _counts(rows), "rows": rows}
 
 
+# ---------------------------------------------------------------------------------------------------- a .PR15 (#219 T7)
+# The Mosconi PICO 6/8-2's preset, read by `rew_tool/mosconi_pr.py`: the same rows and top level as a `.pct6`. The
+# file is a byte a line, so a row's `path` is the 0-based line of the value looked at (`offset 1281`). No
+# `helix_pct6.check` here: the values are compared below, with the tolerances named.
+
+#: The journal's crossover families -> the reader's (the profile's `types`).
+_PR_FAMILY = {"LR": "LR", "BW": "BW", "BE": "BE", "CH": "CHEBYSHEV", "CHEBYSHEV": "CHEBYSHEV"}
+_PR_WITH_GAIN = ("PK", "LSH", "HSH")
+#: A delay to half of 0.01 ms (the journal's usual precision; the file's step is 1/384 ms at 96 kHz).
+_PR_TOL_MS = 0.005
+
+
+def _mosconi():
+    """`rew_tool/mosconi_pr.py`, the `.PR15` reader."""
+    return _siblings().load("mosconi_pr.py")
+
+
+def warning_for(path):
+    """The warning of the reader that reads `path`: the Mosconi one for a `.PR<n>`, else `helix_pct6`'s."""
+    return _mosconi().WARNING if _mosconi().is_preset_path(path) else _helix().WARNING
+
+
+def _pr_profile():
+    """The bundled profile of the model the reader reads, unwrapped, or None."""
+    dp = _siblings().load("dsp_profile.py")
+    device = _mosconi().DEVICE
+    data = dp.find_bundled(device["vendor"], device["name"])
+    return dp._unwrap(data) if data else None
+
+
+def _pr_numbering(profile, outputs):
+    """`({project.json slot: output}, None)`, or `(None, why)` when the profile does not settle which slot is which
+    output. The profile's output tier is numbered (no letter style), "1"..."N" as intake names it (`slot_names`), and
+    the file's outputs are the program's channels 1-8: slot "n" is channel n, and nothing else is guessed."""
+    group = next((g for g in (profile or {}).get("groups") or []
+                  if isinstance(g, dict) and g.get("id") == "physical_outputs"), None)
+    if group is None:
+        return None, "no bundled profile of this model says how its outputs are named"
+    if group.get("row_id_style") == "letter":
+        return None, "the profile letters the outputs and the file numbers them: no rule says which is which"
+    if group.get("max_count") != len(outputs):
+        return None, "the profile counts %s outputs and the file %d" % (group.get("max_count"), len(outputs))
+    return {str(o["channel"]): o for o in outputs}, None
+
+
+def _pr_at(offset):
+    return "offset %d" % offset
+
+
+def _pr_number(parameter, code, want, have, tolerance, path):
+    """A number of the version against the file's, within `tolerance`."""
+    try:
+        diff = abs(float(want) - float(have))
+    except (TypeError, ValueError):
+        return _said(parameter, code, want, have, "unknown", "not a number on both sides", category="audio", path=path)
+    result = "match" if diff <= tolerance + 1e-9 else "differs"
+    return _said(parameter, code, want, have, result, None, category="audio", path=path)
+
+
+def _pr_equal(parameter, code, want, have, path):
+    return _said(parameter, code, want, have, "match" if want == have else "differs", None, category="audio", path=path)
+
+
+def _pr_leg_text(leg):
+    if leg["state"] == "off":
+        return "OFF (stored: %s at %d Hz)" % (leg["family"], leg["frequency_hz"])
+    return "%s %d dB/oct at %d Hz" % (leg["family"], leg["slope_db_oct"], leg["frequency_hz"])
+
+
+def _pr_band_text(band):
+    text = "%s %d Hz" % (band["type"] or "code %d" % band["type_code"], band["frequency_hz"])
+    return text + " %+g dB Q%g" % (band["gain_db"], round(band["q"], 2))
+
+
+def _pr_leg_rows(code, leg, want, have):
+    path = _pr_at(have["offset"])
+    if want in (None, "OFF"):
+        return [_said(leg + ".slope", code, "OFF", _pr_leg_text(have), "match" if have["state"] == "off" else "differs",
+                      None, category="audio", path=path)]
+    if not isinstance(want, dict):
+        return [_said(leg, code, want, _pr_leg_text(have), "unknown", "the version's leg is not a filter this "
+                      "comparison reads", category="audio", path=path)]
+    rows = []
+    family = _PR_FAMILY.get(str(want.get("type", "")).upper())
+    if family is None:
+        rows.append(_said(leg + ".type", code, want.get("type"), have["family"], "unknown",
+                          "the file has no code for the type %r" % want.get("type"), category="audio", path=path))
+    else:
+        rows.append(_said(leg + ".type", code, want.get("type"), have["family"],
+                          "match" if family == have["family"] else "differs", None, category="audio", path=path))
+    if want.get("f") is not None:
+        rows.append(_pr_number(leg + ".f", code, want["f"], have["frequency_hz"], _TOL_HZ, path))
+    if want.get("slope") is not None:
+        rows.append(_pr_equal(leg + ".slope", code, want["slope"], have["slope_db_oct"], path))
+    else:
+        rows.append(_said(leg + ".slope", code, None, _pr_leg_text(have), "unknown", "the version records no slope",
+                          category="audio", path=path))
+    return rows
+
+
+def _pr_eq_rows(code, row, output):
+    bands = output["eq"]
+    by_band = {b["band"]: b for b in bands}
+    active = [b for b in bands if b["state"] != "neutral"]
+    if row.get("eq") is None:
+        if not active:
+            return []
+        return [_said("eq", code, None, [_pr_band_text(b) for b in active], "unknown",
+                      "the version does not record this channel's EQ", category="audio", path=_pr_at(bands[0]["offset"]))]
+    out, claimed, pairs = [], set(), []
+    for band in row["eq"]:
+        if band.get("i") is None:
+            continue
+        found = by_band.get(band["i"])
+        if found is None:
+            out.append(_said("eq[%s]" % band["i"], code, band, None, "unknown",
+                             "the file holds no EQ band in slot %s" % band["i"], category="audio"))
+            continue
+        claimed.add(band["i"])
+        pairs.append((band, found))
+    for band in row["eq"]:
+        if band.get("i") is not None:
+            continue
+        pick = next((b for b in bands if b["band"] not in claimed and b["state"] == "configured"
+                     and b["type"] == band.get("type") and abs(b["frequency_hz"] - float(band["f"])) <= _TOL_HZ), None)
+        if pick is None:
+            out.append(_said("eq %s %g Hz" % (band.get("type"), band["f"]), code, band, None, "differs",
+                             "the file holds no %s band at %g Hz" % (band.get("type"), band["f"]), category="audio"))
+            continue
+        claimed.add(pick["band"])
+        pairs.append((band, pick))
+    for band, found in sorted(pairs, key=lambda p: p[1]["band"]):
+        name, path = "eq[%d]" % found["band"], _pr_at(found["offset"])
+        btype = band.get("type")
+        if btype in _PR_WITH_GAIN:
+            out.append(_pr_equal(name + ".type", code, btype, found["type"] or "code %d" % found["type_code"], path))
+        else:
+            out.append(_said(name + ".type", code, btype, found["type"] or "code %d" % found["type_code"], "unknown",
+                             "the file's code for the type %r is not known" % btype, category="audio", path=path))
+        out.append(_pr_number(name + ".f", code, band.get("f"), found["frequency_hz"], _TOL_HZ, path))
+        if btype in _PR_WITH_GAIN:
+            if band.get("gain_db") is not None:
+                out.append(_pr_number(name + ".gain_db", code, band["gain_db"], found["gain_db"], _TOL_DB, path))
+            else:
+                out.append(_said(name + ".gain_db", code, None, found["gain_db"], "unknown",
+                                 "the version records no gain for this band", category="audio", path=path))
+        if band.get("q") is not None:
+            out.append(_pr_number(name + ".q", code, band["q"], found["q"], _TOL_Q, path))
+        else:
+            out.append(_said(name + ".q", code, None, found["q"], "unknown", "the version records no Q for this band",
+                             category="audio", path=path))
+        if band.get("bypass"):
+            out.append(_said(name + ".bypass", code, True, None, "unknown", "the file decodes no bypass for a band",
+                             category="audio", path=path))
+    for found in active:
+        if found["band"] in claimed:
+            continue
+        path = _pr_at(found["offset"])
+        if found["state"] != "configured":
+            out.append(_said("eq[%d]" % found["band"], code, None, _pr_band_text(found), "unknown",
+                             "the file holds a band of type code %d this reader does not decode" % found["type_code"],
+                             category="audio", path=path))
+        else:
+            out.append(_said("eq[%d]" % found["band"], code, None, _pr_band_text(found), "differs",
+                             "the version holds no such band", category="audio", path=path))
+    return out
+
+
+def _pr_channel_rows(code, row, o):
+    """The rows of one channel row of the version against the reader's output `o`."""
+    out = []
+    not_recorded = "the version does not record it"
+    for field in sorted(row):
+        if field in BOOKKEEPING or field in ("gain_db", "ta_ms", "polarity", "phase_deg", "mute", "off", "eq",
+                                             "eq_bypass", "hp", "lp"):
+            continue
+        out.append(_said(field, code, row[field], None, "unknown", "a field this comparison does not know",
+                         category="audio"))
+    slot = o["slot"]
+    # a muted output keeps its set level at the second offset
+    level_at = _pr_at((1292 if o["muted"] else 1280) + slot - 1)
+    if row.get("gain_db") is not None:
+        out.append(_pr_number("gain_db", code, row["gain_db"], o["level_db"], _TOL_DB, level_at))
+    else:
+        out.append(_said("gain_db", code, None, o["level_db"], "unknown", not_recorded, category="audio", path=level_at))
+    delay_at = _pr_at(1408 + 2 * (slot - 1))
+    if row.get("ta_ms") is not None:
+        out.append(_pr_number("ta_ms", code, row["ta_ms"], round(o["delay_ms"], 4), _PR_TOL_MS, delay_at))
+    else:
+        out.append(_said("ta_ms", code, None, round(o["delay_ms"], 4), "unknown", not_recorded, category="audio",
+                         path=delay_at))
+    polarity_at = _pr_at(1392 if slot <= 8 else 1393)
+    if row.get("polarity") in _POLARITY:
+        out.append(_pr_equal("polarity", code, row["polarity"], o["polarity"], polarity_at))
+    else:
+        out.append(_said("polarity", code, row.get("polarity"), o["polarity"], "unknown", not_recorded,
+                         category="audio", path=polarity_at))
+    if row.get("phase_deg") is not None:
+        out.append(_said("phase_deg", code, row["phase_deg"], None, "unknown",
+                         "this model has no phase control, only a polarity switch", category="audio"))
+    mute_at = _pr_at(1280 + slot - 1)
+    if row.get("mute") is not None:
+        out.append(_pr_equal("mute", code, bool(row["mute"]), o["muted"], mute_at))
+    else:
+        out.append(_said("mute", code, None, o["muted"], "unknown", not_recorded, category="audio", path=mute_at))
+    for field in ("off", "eq_bypass"):
+        if row.get(field) is not None:
+            out.append(_said(field, code, row[field], None, "unknown", "the file decodes no such switch",
+                             category="audio"))
+    for leg in ("hp", "lp"):
+        if leg in row:
+            out += _pr_leg_rows(code, leg, row[leg], o["high_pass" if leg == "hp" else "low_pass"])
+    out += _pr_eq_rows(code, row, o)
+    return out
+
+
+def _pr_preset_rows(snap, reading):
+    """The version's `preset_settings` against the file: the input gain (one per input in the file) and the corner set
+    (the file's only; the journal records none). Any other stated setting: the file decodes no such setting."""
+    st = _state()
+    settings = snap.get(st.PRESET_SETTINGS)
+    settings = settings if isinstance(settings, dict) else {}
+    stated = any(k not in ("status", "source_file") for k in settings)
+    out = []
+    gains = [g["attenuation_db"] for g in reading["input_gain"]]
+    for path in st._PRESET_FIELDS:
+        value = st._preset_leaf(settings, path)
+        category = "audio" if path.startswith("sources.") or path == "input_gain_db" else "system"
+        if path == "input_gain_db":
+            reason = ("the file holds an attenuation per input (inputs 1-%d); one value of the version names none of "
+                      "them" % len(gains)) if value is not None else (
+                "the version does not state it" if stated else "the version records no preset settings")
+            out.append(_said(path, "preset", value, {"attenuation_db": gains}, "unknown", reason, category=category,
+                             path=_pr_at(1344)))
+        elif value is not None:
+            out.append(_said(path, "preset", value, None, "unknown", "the file decodes no such setting",
+                             category=category))
+    out.append(_said("crossover.corner_set", "preset", None, reading["corner_set"]["name"], "unknown",
+                     "the journal records no corner set: the program's corner correction is asked, not recorded",
+                     category="system", path=_pr_at(2307)))
+    return out
+
+
+def _pr_plan(reading, snap, identity):
+    out, reached = [], set()
+    outputs = reading["outputs"]
+    by_slot, why_not = _pr_numbering(_pr_profile(), outputs)
+    tiers = [t for t in _state().tier_names(snap) if isinstance(snap.get(t), dict)]
+    planned = []
+    for tier in tiers:
+        for key, row in snap[tier].items():
+            entry = identity.get(key) or {}
+            slot = str(entry.get("slot") or "").strip().upper()
+            planned.append((tiers.index(tier), slot or "~", key, tier, row, entry, slot))
+    for _order, _slot, key, tier, row, entry, slot in sorted(planned, key=lambda p: (p[0], p[1], p[2])):
+        code = entry.get("code") or key
+        why, o = None, None
+        if tier != "channels":
+            why = "the file's outputs are not mapped for the tier %r" % tier
+        elif not slot:
+            why = "project.json gives this channel no slot"
+        elif by_slot is None:
+            why = why_not
+        else:
+            o = by_slot.get(slot)
+            if o is None:
+                why = "this model has no output %s (outputs 1-%d)" % (slot, len(outputs))
+        if o is None:
+            for field in sorted(f for f in row if f not in BOOKKEEPING):
+                out.append(_said(field, code, row[field], None, "unknown", why, category="audio"))
+            continue
+        reached.add(o["channel"])
+        out += _pr_channel_rows(code, row, o)
+    for o in outputs:
+        if o["channel"] in reached:
+            continue
+        out.append(_said("channel", "Output %d" % o["channel"], None, "muted" if o["muted"] else "on", "unknown",
+                         "no row of this version is on this output", category="audio",
+                         path=_pr_at(1280 + o["slot"] - 1)))
+    out += _pr_preset_rows(snap, reading)
+    rank = {c: i for i, c in enumerate(CATEGORY_ORDER)}
+    out.sort(key=lambda r: rank.get(r["category"], len(rank)))
+    return out
+
+
+def _pr_device(reading):
+    d, fw, rate = reading["device"], reading["firmware"], reading["rate"]
+    note = ("read on one sample preset only; outputs 1-8 are the file's memory slots %s; firmware %s; rate byte %s"
+            % (", ".join(str(s) for s in _mosconi().CHANNEL_SLOTS), fw["version"] if fw else "not stored",
+               rate["byte"]))
+    return {"dev": d["dev"], "name": "%s %s" % (d["vendor"], d["name"]), "verified": False,
+            "clock_hz": rate["hz"], "clock_assumed_hz": None if rate["hz"] else d["rate_hz"], "layout": "pico-6-8-2",
+            "note": note}
+
+
+def _compare_pr(journal, file_path):
+    """`compare_journal` for a `.PR<n>`: exit 0 compared, 2 unreadable (`io`, `model`, `format`, `truncated`,
+    `interpret`), 3 changed while read. The reader hashes the file before it reads it and after."""
+    mp = _mosconi()
+    snap, identity = journal
+    name = os.path.basename(file_path)
+    try:
+        reading = mp.read_pr(file_path)
+    except mp.PrError as exc:
+        code = EXIT_CHANGED if exc.kind == "changed" else EXIT_UNREADABLE
+        return code, refusal(mp.WARNING, name, exc.kind, str(exc))
+    try:
+        rows = _pr_plan(reading, snap, identity)
+        device = _pr_device(reading)
+    except Exception as exc:  # noqa: BLE001 -- past the read, a failure is the file's, its type named
+        return EXIT_UNREADABLE, refusal(mp.WARNING, name, "interpret", "the file was read and could not be compared "
+                                        "(%s: %s)" % (type(exc).__name__, exc), md5=reading["file"]["md5"])
+    return EXIT_COMPARED, {
+        "contract": CONTRACT, "warning": mp.WARNING, "device": device, "checked_model": False,
+        "file": _file_block(name, reading["file"]["md5"]), "counts": _counts(rows), "rows": rows}
+
+
 def _cell(value):
     if value is None:
         return "—"
@@ -701,8 +1021,8 @@ def render(result, version):
     """The table a person reads: the warning, the file and the model, the counts, then one row a line."""
     f, d = result["file"], result["device"]
     lines = [result["warning"], "",
-             "version %s against %s (md5 %s, saved %s, PC-Tool %s)" % (version, f["name"], f["md5"], f["saved"],
-                                                                       f["pctool"]),
+             "version %s against %s (md5 %s, saved %s%s)" % (version, f["name"], f["md5"], f["saved"],
+                                                              ", PC-Tool %s" % f["pctool"] if f["pctool"] else ""),
              "model: %s (Dev %s) -- %s" % (d.get("name") or "unknown", d.get("dev"),
                                           "checked" if result["checked_model"] else "NOT CHECKED: read at your own risk"),
              "rows: " + ", ".join("%d %s" % (n, r) for r, n in result["counts"]["result"].items()), ""]
