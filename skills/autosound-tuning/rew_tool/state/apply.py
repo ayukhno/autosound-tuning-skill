@@ -781,7 +781,8 @@ def attest(history, version=None, note=None, source_file=None, door="--source-fi
 
     `preset_settings` flips with the rows (#197, #200; it is no tier, so their walk does not reach it). `source_file`
     (#200) is the record of the saved preset this version was read from and what the comparison said. For a `.pct6`
-    the method fills it itself (`attest_from_file`, #218); for any other DSP's file the session or the person does.
+    or a `.PR15` the method fills it itself (`attest_from_file`, #218, hub #348); for any other DSP's file the session
+    or the person does.
 
     The slot records what the DSP holds now (#201, `slots[slot].loaded`): the newly banked version, which is HEAD, under
     this same hold. The per-project line only; on the older layout no `slots.json` may appear.
@@ -821,37 +822,39 @@ def attest(history, version=None, note=None, source_file=None, door="--source-fi
     return {"version": v, "applied_channels": flipped}
 
 
-# ── --from-file (#218 T3): a saved .pct6, read only, through attest and propose ──────────────────────────────────────
+# ── --from-file (#218 T3): a saved .pct6 (attest: or .PR15), read only, through attest and propose ────────────────────
 def _from_file():
     """`state/from_file.py`, through the ledger's own loader: one module object."""
     return _state._siblings().load("state/from_file.py")
 
 
 def _not_a_pct6(file_path):
-    """`(2, refusal)` for a `.PR<n>` given to `--from-file`, else None: `--from-file` reads a `.pct6` (CONTRACT.md item
-    14); a Mosconi preset is compared with `compare-file`, and nothing is banked from it."""
+    """`(2, refusal)` for a `.PR<n>` given to `propose --from-file`, else None: it reads a `.pct6` (CONTRACT.md item
+    14); a Mosconi preset is compared with `compare-file` and its comparison recorded with `attest --from-file`, and no
+    version is built from it."""
     cf = _compare_file()
     mp = cf._mosconi()
     if not mp.is_preset_path(file_path):
         return None
     return cf.EXIT_UNREADABLE, cf.refusal(mp.WARNING, os.path.basename(file_path), "model", (
-        "--from-file reads a .pct6; a %s preset is compared with compare-file (apply.py <project-dir> compare-file "
-        "<version> FILE), and nothing is banked from it" % os.path.splitext(file_path)[1]))
+        "propose --from-file reads a .pct6; a %s preset is compared with compare-file (apply.py <project-dir> "
+        "compare-file <version> FILE) and recorded with attest --from-file, and no version is built from it"
+        % os.path.splitext(file_path)[1]))
 
 
 def attest_from_file(history, file_path, version=None, note=None):
-    """`attest` with the `source_file` filled from the `.pct6` itself (#218 T3, S-119): the file read by `helix_pct6`,
-    the version compared with it by compare-file (`compare_file.compare_journal`), and the record -- name, path, md5,
-    saved, PC-Tool, device, when read, `compared` -- banked by `attest`, whose refusals hold as for `--source-file`.
+    """`attest` with the `source_file` filled from the file itself (#218 T3, S-119; a `.PR15`, hub #348): the file read
+    by its reader (`helix_pct6`, `mosconi_pr`), the version compared with it by compare-file
+    (`compare_file.compare_journal`, with `project.json`'s `dsp.settings` as compare-file passes them), and the record
+    -- name, path, md5, saved, PC-Tool (both null for a `.PR15`: the file states neither), device, when read,
+    `compared` -- banked by `attest`, whose refusals hold as for `--source-file`.
 
-    `(exit code, result)`: 0 and `attest`'s result with `source_file`, `device`, `warning`; else compare-file's refusal
-    -- 2 the file cannot be read or interpreted, or is a `.PR<n>` (`model`), 3 it changed while it was read -- and
-    nothing banked. A refusal of the journal's raises `ValueError`, as `attest` does -- a version whose leg slope or
-    phase is no number among them (`compare_file._check_kinds`, as compare-file checks it). One hold of the writer lock
-    over the read of the version, the file's and the bank: what is compared is what is attested."""
-    refused = _not_a_pct6(file_path)
-    if refused:
-        return refused
+    `(exit code, result)`: 0 and `attest`'s result with `source_file`, `device`, `warning`, `warning_uk`; else
+    compare-file's refusal -- 2 the file cannot be read or interpreted (a `.PR<n>` other than 15: `model`), 3 it
+    changed while it was read -- and nothing banked. A refusal of the journal's raises `ValueError`, as `attest` does
+    -- a version whose leg slope or phase is no number among them (`compare_file._check_kinds`, as compare-file checks
+    it). One hold of the writer lock over the read of the version, the project's settings, the file and the bank: what
+    is compared is what is attested."""
     cf, ff = _compare_file(), _from_file()
     with _held(history):
         version = version or history.head()
@@ -859,15 +862,16 @@ def attest_from_file(history, file_path, version=None, note=None):
             raise ValueError(f"the slot {history.preset!r} holds no version to attest")
         snap = history.load(version)
         cf._check_kinds(snap)
-        identity = _state.project_channels(getattr(history, "project_dir", None) or "")
-        code, result = cf.compare_journal((snap, identity), file_path)
+        project_dir = getattr(history, "project_dir", None) or ""
+        journal = (snap, _state.project_channels(project_dir), cf.dsp_settings(project_dir))
+        code, result = cf.compare_journal(journal, file_path)
         if code != cf.EXIT_COMPARED:
             return code, result
         source = ff.source_file(result, file_path)
         got = attest(history, version, note=note or f"attested, read back from {source['name']}", source_file=source,
                      door="--from-file")
     got.update(source_file=source, device=result["device"], warning=result["warning"],
-               counts=result["counts"]["result"])
+               warning_uk=result["warning_uk"], counts=result["counts"]["result"])
     return code, got
 
 
@@ -3425,20 +3429,122 @@ def _check_propose_from_file_merges_the_rtc_curve_key_by_key():
         shutil.rmtree(top, ignore_errors=True)
 
 
-def _check_from_file_refuses_a_pr15():
-    """`--from-file` reads a `.pct6` (CONTRACT.md item 14): a `.PR15` given to either verb is exit 2, kind `model`,
-    saying compare-file is how a `.PR15` is compared -- nothing banked, nothing written beside the file."""
+def _pico_history(project):
+    return _state.PresetHistory(os.path.join(project, "state"), "PICO", project_dir=project)
+
+
+def _pico_with_a_setting(top, corner_set=None):
+    """`_pico_project` whose v_001 states a preset setting (attest refuses a `source_file` standing alone), and
+    `project.json` recording `corner_set` when one is given. (project, file)."""
+    project, pr15 = _pico_project(top, edit_state=lambda state: state.update(preset_settings={"input_gain_db": 0.0}))
+    if corner_set:
+        pj = os.path.join(project, "project.json")
+        with open(pj, encoding="utf-8") as fh:
+            data = json.load(fh)
+        data["dsp"] = {"settings": {"corner_set": {"value": corner_set, "source": "user"}}}
+        with open(pj, "w", encoding="utf-8") as fh:
+            json.dump(data, fh)
+    return project, pr15
+
+
+def _check_attest_from_file_records_a_pr15():
+    """hub #348 (TCC-071): `attest --from-file FILE.PR15` banks the record a `.pct6` banks -- S-119's eight keys, the
+    reader's md5, `saved` and `pctool` null (the file states neither), the model, and `compared` from compare-file's own
+    rows of that version against that file, `project.json`'s corner set among them. The Mosconi warning is printed
+    first; no line says `None` or names PC-Tool; the file is left as it was."""
+    import hashlib
+    import shutil
+    import tempfile
+    ff = _from_file()
+    mp = _compare_file()._mosconi()
+    top = tempfile.mkdtemp(prefix="autosound_attest_from_file_pr15_")
+    try:
+        project, pr15 = _pico_with_a_setting(top, corner_set="minus_6db")
+        expected = _compared(project, pr15)
+        corner = _row(expected, "preset", "crossover.corner_set")
+        assert corner["result"] == "differs", corner                 # the project's answer reached compare-file
+        with open(pr15, "rb") as fh:
+            before = hashlib.sha256(fh.read()).hexdigest()
+        code, out, err = _compare_cli(project, "attest", "--preset", "PICO", "--from-file", pr15)
+        assert code == 0, (code, out, err)
+        assert out.startswith(mp.WARNING) and out.index(mp.WARNING) < out.index("🟢"), out[:600]
+        assert "NOT CHECKED" in out and "PC-Tool" not in out and "None" not in out, out[:800]
+        with open(pr15, "rb") as fh:
+            assert hashlib.sha256(fh.read()).hexdigest() == before, "the .PR15 changed"
+        h = _pico_history(project)
+        assert h.versions() == ["v_001", "v_002"], h.versions()
+        source = h.load("v_002")["preset_settings"]["source_file"]
+        assert sorted(source) == sorted(_state._SOURCE_FILE_FIELDS), sorted(source)
+        assert source["name"] == "example_pico682.PR15" and source["path"] == os.path.abspath(pr15), source
+        assert source["md5"] == expected["file"]["md5"] and source["md5"], source
+        assert source["saved"] is None and source["pctool"] is None, source
+        assert source["device"] == "Mosconi PICO 6/8-2 DSP (Dev 15)", source
+        datetime.datetime.fromisoformat(source["read_at"])
+        assert source["compared"] == ff.compared(expected), (source["compared"], ff.compared(expected))
+        counts = expected["counts"]["result"]
+        assert source["compared"][0] == "%s: %d match, %d differs, %d unknown" % (
+            expected["contract"], counts["match"], counts["differs"], counts["unknown"]), source["compared"][0]
+        assert "preset crossover.corner_set differs: journal normalized to -6 dB, file default" in source["compared"]
+        assert "tw-R gain_db differs: journal 2.5, file 3" in source["compared"], source["compared"]
+        sheet = h.render("v_002")
+        assert "example_pico682.PR15 (md5 %s)" % source["md5"][:8] in sheet and "None" not in sheet, sheet
+        # the same version and file through compare-file again: what was attested is what it prints
+        assert ff.compared(_compared(project, pr15)) == source["compared"]
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_attest_from_file_pr15_refusals():
+    """A `.PR15` that changes while attest reads it is exit 3, `changed`; another `.PR` model is exit 2, `model`, as
+    compare-file says it; a version with no preset setting is exit 1, as for a `.pct6`. Nothing is banked on any."""
+    import shutil
+    import tempfile
+    mp = _compare_file()._mosconi()
+    real = mp._read_bytes
+    top = tempfile.mkdtemp(prefix="autosound_attest_from_file_pr15_bad_")
+    try:
+        project, pr15 = _pico_with_a_setting(top)
+
+        def changing(p):
+            got = real(p)
+            with open(p, "ab") as fh:
+                fh.write(b"0\r\n")
+            return got
+        mp._read_bytes = changing
+        try:
+            code, out, err = _compare_cli(project, "attest", "--preset", "PICO", "--from-file", pr15)
+        finally:
+            mp._read_bytes = real
+        assert code == 3 and ": changed: " in err and not out, (code, out, err)
+        assert _pico_history(project).versions() == ["v_001"], _pico_history(project).versions()
+        other = os.path.join(top, "files", "other.PR16")
+        shutil.copyfile(_PICO_PR15, other)
+        code, out, err = _compare_cli(project, "attest", "--preset", "PICO", "--from-file", other)
+        assert code == 2 and ": model: " in err and "Traceback" not in err, (code, out, err)
+        assert _pico_history(project).versions() == ["v_001"], _pico_history(project).versions()
+        bare, bare_pr15 = _pico_project(os.path.join(top, "bare"))
+        code, out, err = _compare_cli(bare, "attest", "--preset", "PICO", "--from-file", bare_pr15)
+        assert code == 1 and "preset setting" in err and "--from-file" in err, (code, out, err)
+        assert _pico_history(bare).versions() == ["v_001"], _pico_history(bare).versions()
+    finally:
+        mp._read_bytes = real
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_propose_from_file_refuses_a_pr15():
+    """`propose --from-file` reads a `.pct6` only (CONTRACT.md item 14): a `.PR15` is exit 2, kind `model`, saying
+    compare-file and `attest --from-file` are what a `.PR15` is for -- nothing banked, nothing written beside the
+    file."""
     import shutil
     import tempfile
     top = tempfile.mkdtemp(prefix="autosound_from_file_pr15_")
     try:
-        project, pr15 = _pico_project(top)
+        project, pr15 = _pico_with_a_setting(top)
         files = _tree_digest(os.path.dirname(pr15))
-        for verb in ("attest", "propose"):
-            code, out, err = _compare_cli(project, verb, "--preset", "PICO", "--from-file", pr15)
-            assert code == 2 and ": model: " in err and "compare-file" in err and ".pct6" in err, (verb, code, out, err)
-            assert "Traceback" not in err and _state.PresetHistory(
-                os.path.join(project, "state"), "PICO", project_dir=project).versions() == ["v_001"], verb
+        code, out, err = _compare_cli(project, "propose", "--preset", "PICO", "--from-file", pr15)
+        assert code == 2 and ": model: " in err and "compare-file" in err and ".pct6" in err, (code, out, err)
+        assert "attest --from-file" in err and "Traceback" not in err, err
+        assert _pico_history(project).versions() == ["v_001"], _pico_history(project).versions()
         assert _tree_digest(os.path.dirname(pr15)) == files
     finally:
         shutil.rmtree(top, ignore_errors=True)
@@ -3900,7 +4006,8 @@ def _selftest():
                   _check_propose_from_file_keeps_a_base_leg_spelled_short,
                   _check_propose_from_file_keeps_the_bands_it_does_not_decode,
                   _check_propose_from_file_keeps_values_that_are_not_finite,
-                  _check_propose_from_file_merges_the_rtc_curve_key_by_key, _check_from_file_refuses_a_pr15,
+                  _check_propose_from_file_merges_the_rtc_curve_key_by_key, _check_propose_from_file_refuses_a_pr15,
+                  _check_attest_from_file_records_a_pr15, _check_attest_from_file_pr15_refusals,
                   _check_compare_file_a_band_of_an_undecoded_type_paired_by_slot_is_unknown,
                   _check_compare_file_pr15_an_undecoded_slope_code_is_unknown,
                   _check_compare_file_pr15_an_assumed_rate_leaves_the_delay_unknown,
@@ -4153,8 +4260,8 @@ def _selftest():
 
 _USAGE = """usage: apply.py <project-dir> propose <delta.json> [--preset P] [--note TEXT] [--evidence E ...] [--reviewed FILE] [--on v_NNN|HEAD]
        apply.py <project-dir> propose --from-file FILE.pct6 [--preset P] [--note TEXT] [--on v_NNN|HEAD]
-       apply.py <project-dir> attest [v_NNN] [--preset P] [--note TEXT] [--source-file FILE.json | --from-file FILE.pct6]
-       apply.py <project-dir> compare-file <v_NNN|HEAD> FILE.pct6 [--json] [--preset P]
+       apply.py <project-dir> attest [v_NNN] [--preset P] [--note TEXT] [--source-file FILE.json | --from-file FILE.pct6|FILE.PR15]
+       apply.py <project-dir> compare-file <v_NNN|HEAD> FILE.pct6|FILE.PR15 [--json] [--preset P]
        apply.py --selftest
 
   propose   bank the delta as a YELLOW version and print the settings sheet the Arbiter enters (skill #74: a
@@ -4163,13 +4270,13 @@ _USAGE = """usage: apply.py <project-dir> propose <delta.json> [--preset P] [--n
   attest    the Arbiter entered it: flip the proposed rows to green, as a new version.
             --source-file: a JSON object, the saved preset this version was read from (state/schema.md, #200);
             refused on a version with no preset setting (it would stand alone in `preset_settings`)
-            --from-file: the method fills that record from a saved .pct6 itself, with compare-file's comparison of the
-            version against it; not with --source-file (#218)
+            --from-file: the method fills that record from a saved .pct6 or .PR15 itself, with compare-file's
+            comparison of the version against it; not with --source-file (#218)
   propose --from-file  a NEW version from a saved .pct6's values -- channels, crossovers, EQ, the preset's settings --
             for every row the slot rules map; what the file does not give stays as the base had it, and is named.
             Both --from-file verbs print the reader's warning first; exit 2 the file cannot be read, 3 it changed
             while it was read, nothing banked. FILE is taken as given (a relative path is the current folder's)
-  compare-file  a version of the journal against a saved .pct6, row by row (match / differs / unknown, audio first);
+  compare-file  a version of the journal against a saved .pct6 or .PR15, row by row (match / differs / unknown, audio first);
             read only, writes nothing anywhere. --json: the shape CONTRACT.md item 13 pins. Exit 0 compared,
             1 the version is not there, 2 the file cannot be read, 3 the file changed while it was read (#218)
 """
@@ -4227,13 +4334,14 @@ def _from_file_main(history, cmd, path, rest, opts, registry, preset):
         return code
     ff = _from_file()
     print(got["warning"])
-    print(ff.model_line(got["device"]))
+    print(ff.model_line(got["device"], pct6=not _compare_file()._mosconi().is_preset_path(path)))
     print()
     if cmd == "attest":
         source, counts = got["source_file"], got["counts"]
         print(f"🟢 {got['version']} on {preset}: applied {', '.join(got['applied_channels']) or 'nothing proposed'}")
-        print(f"source file: {source['name']} (md5 {source['md5']}, saved {source['saved']}, PC-Tool {source['pctool']}),"
-              f" read {source['read_at']}")
+        stated = ", ".join(f"{said} {source[key]}" for key, said in (("md5", "md5"), ("saved", "saved"),
+                                                                       ("pctool", "PC-Tool")) if source.get(key))
+        print(f"source file: {source['name']} ({stated}), read {source['read_at']}")
         print(f"compared: {counts['match']} match, {counts['differs']} differs, {counts['unknown']} unknown"
               + ("" if isinstance(source["compared"], str) else " -- `compare-file` lists every row"))
         for line in source["compared"][1:] if isinstance(source["compared"], list) else ():

@@ -701,10 +701,15 @@ def load_journal(project_dir, version, preset=None):
     builds the journal itself may pass the pair alone: no setting is then recorded."""
     _name, snap = load_version(project_dir, version, preset)
     _check_kinds(snap)
-    st = _state()
-    dsp = st._project_json(project_dir).get("dsp")
+    return snap, _state().project_channels(project_dir), dsp_settings(project_dir)
+
+
+def dsp_settings(project_dir):
+    """`project.json`'s `dsp.settings`, `{}` when none is recorded: the third member of `load_journal`'s triple, which
+    `attest --from-file` reads under its own hold of the lock, so what it records is what compare-file prints."""
+    dsp = _state()._project_json(project_dir).get("dsp")
     settings = dsp.get("settings") if isinstance(dsp, dict) else None      # a `dsp` that is no object: none recorded
-    return snap, st.project_channels(project_dir), settings if isinstance(settings, dict) else {}
+    return settings if isinstance(settings, dict) else {}
 
 
 def _check_kinds(snap):

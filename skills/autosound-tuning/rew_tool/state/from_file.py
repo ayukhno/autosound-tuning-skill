@@ -1,5 +1,5 @@
-"""A version's values from a saved `.pct6` (#218 T3): what `apply.py attest --from-file` records and what
-`apply.py propose --from-file` proposes. The contract is `rew_tool/CONTRACT.md` item 14.
+"""A version's values from a saved `.pct6` (#218 T3): what `apply.py attest --from-file` records (from a `.PR15`
+too) and what `apply.py propose --from-file` proposes. The contract is `rew_tool/CONTRACT.md` item 14.
 
 Read only, like compare-file: the file is opened for reading and hashed before it is read and after; this module
 writes nothing. What it hands back -- a `source_file` record, a delta, the names of what it did not take -- is banked by
@@ -145,10 +145,12 @@ def device_text(device):
     return "Dev %s, a model the reader does not know" % device.get("dev")
 
 
-def model_line(device):
-    """What the person reads beside the warning: the model, and whether reading it has been checked."""
+def model_line(device, pct6=True):
+    """What the person reads beside the warning: the model, and whether reading it has been checked. `pct6` false: a
+    file of another vendor, whose values are checked in that vendor's own program."""
     return "model: %s -- %s" % (device_text(device), "checked" if device.get("verified")
-                                else "NOT CHECKED: read at your own risk, every value to be checked in PC-Tool")
+                                else "NOT CHECKED: read at your own risk, every value to be checked in %s"
+                                % ("PC-Tool" if pct6 else "the vendor's own program"))
 
 
 def now():

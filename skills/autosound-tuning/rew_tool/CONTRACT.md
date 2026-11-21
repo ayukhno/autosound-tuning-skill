@@ -819,26 +819,29 @@ removing or renaming one is a contract change.
 
 ## 14. `state/apply.py <project-dir> attest [v_NNN] --from-file FILE` and `propose --from-file FILE` — guaranteed (W-13, #218)
 
-A saved `.pct6` read into the journal, by the ledger's own doors: an addition under contract 1 (item 12). `FILE` is
-taken as given, as in item 13. Both verbs take the writer lock as `attest` and `propose` do (item 8), read the file with
-`rew_tool/helix_pct6/`, hash it before the read and after, and never write it. Both print `helix_pct6.WARNING`
-verbatim and a `model:` line -- `checked`, or `NOT CHECKED: read at your own risk ...` -- before the result.
+A saved DSP file read into the journal, by the ledger's own doors: an addition under contract 1 (item 12). `FILE` is
+taken as given, as in item 13. **What each verb reads** (hub #348, an addition): `attest --from-file` a `.pct6` or a
+Mosconi `.PR15`, as item 13 reads them; `propose --from-file` a `.pct6` only. Both verbs take the writer lock as
+`attest` and `propose` do (item 8), read the file with its item 13 reader, hash it before the read and after, and never
+write it. Both print the reader's `WARNING` verbatim and a `model:` line -- `checked`, or `NOT CHECKED: read at your
+own risk ...` -- before the result.
 
 **The exit table**, both verbs: 0 banked; 1 the journal refused (`error: <reason>` on stderr: no such version, a
 candidate, `attest` on a version with no preset setting, as for `--source-file`, a version holding a leg `slope` or a
 `phase_deg` that is no number, as item 13 refuses it); 2 the file cannot be read or interpreted (`error: <file>: <kind>:
 <message>`, the kinds of item 13 -- both verbs refuse what compare-file refuses, `propose` comparing its base with the
-file on the same read), a `.PR<n>` file (`model`: `--from-file` reads a `.pct6`; a `.PR15` is compared with
-`compare-file`, and nothing is banked from it), or usage -- `--from-file` with `--source-file`, with a delta file, with
-`--evidence` or `--reviewed`; 3 the file changed while it was read (`changed`). Nothing is banked on 1, 2 or 3; 75 is a
-held lock (item 8).
+file on the same read; `attest` a `.PR<n>` other than 15, `model`, as item 13), a `.PR<n>` file given to `propose`
+(`model`: it reads a `.pct6`; a `.PR15` is compared with `compare-file` and recorded with `attest --from-file`), or
+usage -- `--from-file` with `--source-file`, with a delta file, with `--evidence` or `--reviewed`; 3 the file
+changed while it was read (`changed`). Nothing is banked on 1, 2 or 3; 75 is a held lock (item 8).
 
 **`attest --from-file`** banks what `attest` banks, with `preset_settings.source_file` filled by the method:
 S-119's eight keys (`state/schema.md`, "Preset settings"), no other -- `name` (the base name), `path` (absolute), `md5`
-(the reader's), `saved` (`dd.MM.yyyy hh:mm` as the file states it), `pctool`, `device` (`<model> (Dev <n>)`, or the
-Dev code of a model the reader does not know), `read_at` (local time, ISO 8601 to the second) and `compared`.
-`compared` is item 13's comparison of the attested version against the file: `"no difference"` when every row is a
-match, else a list of strings -- first `compare-file.v1: <n> match, <n> differs, <n> unknown`, then one string per row
+(the reader's), `saved` (`dd.MM.yyyy hh:mm` as the file states it), `pctool` (both null for a `.PR15`), `device`
+(`<model> (Dev <n>)`, or the Dev code of a model the reader does not know), `read_at` (local time, ISO 8601 to the
+second) and `compared`. `compared` is item 13's comparison of the attested version against the file (a `.PR15`'s with
+`project.json`'s `dsp.settings`, as compare-file reads them, under the same hold): `"no difference"` when every row is
+a match, else a list of strings -- first `compare-file.v1: <n> match, <n> differs, <n> unknown`, then one string per row
 that differs, `<channel> <parameter> differs: journal <value>, file <value>`, then one per unknown row, `<channel>
 <parameter> unknown: <reason>`. An unknown row is never written as no difference. The hand-filled JSON,
 `--source-file`, stays the way for a file of any other DSP.
