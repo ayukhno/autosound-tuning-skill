@@ -1631,7 +1631,8 @@ four assessment lines, and nothing is built before his `ok` on that task. Resume
 
 **Status**: open 2026-11-22 · the next wave's pool; recorded, not diagnosed · from the v3.3.3 implementers and seats
 
-1. `attest` refuses a `source_file` on a version with no other preset setting (a 3.2 copy would read the field alone as
+1. (done v3.3.3, `1acd549`: the record sits beside `preset_settings.status`, a 3.2 copy refuses it loudly) `attest`
+   refused a `source_file` on a version with no other preset setting (a 3.2 copy would read the field alone as
    a tier). A Mosconi version's only preset setting is `input_gain_db`, so most Mosconi versions cannot be attested from
    their file, and TCC's «checked in the DSP» mark (hub #348) stays off for them; a `.pct6` version with no setting
    likewise. A home for the record that an older copy does not misread.
