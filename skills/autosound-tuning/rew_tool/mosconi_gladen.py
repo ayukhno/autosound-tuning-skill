@@ -24,7 +24,8 @@ the project: `project.py <dir> set-dsp-setting peak_mode rew|gain_dependent --so
 default is never guessed.
 
 The desk reaches it through `dsp_math`'s response hook: `bind_for_project(dir)`, called by `predict`,
-binds this model when the project's `dsp_profile.json` is this vendor's (`is_this_vendor`).
+`eq_propose`, `joint_search`, `xover_candidates` and `version_bench`, binds this model when the
+project's `dsp_profile.json` is this vendor's (`is_this_vendor`).
 
 Verified against saved presets by the contributor: Butterworth 6/12/18/24, Linkwitz 12/18/24, Bessel 12,
 the default corner set. The rest (Chebyshev, Bessel 6/18/24, Linkwitz 6, the two normalised sets) is

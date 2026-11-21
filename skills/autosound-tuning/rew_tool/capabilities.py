@@ -53,8 +53,8 @@ NOT_ON_BOARD = {
     "capabilities.py": "this checker",
     "compare_file.py": "the comparison `state/apply.py compare-file` runs (skill #218): a library, on the board as "
                        "apply.py's verb; its command line is its selftest, not a step a tuner takes",
-    "mosconi_gladen.py": "the Mosconi / Gladen filter model `predict` binds for a Mosconi project (skill #219): a "
-                         "library; its command line is its selftest, not a step a tuner takes",
+    "mosconi_gladen.py": "the Mosconi / Gladen filter model `predict` and the proposing tools bind for a Mosconi "
+                         "project (skill #219): a library; its command line is its selftest, not a step a tuner takes",
     "verdict.py": "output plumbing: the five-line verdict block the tools open with (skill #70); its "
                   "command line is its selftest, not a decision a tuner makes",
     "console.py": "output plumbing: the console code-page fold every entry point installs "

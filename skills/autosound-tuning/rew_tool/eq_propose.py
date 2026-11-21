@@ -968,6 +968,8 @@ def main(argv=None):
             raise
         print(f"error: {exc}", file=sys.stderr)
         return 1
+    finally:
+        dsp_math.reset_response_model()      # the vendor model (S-136.1) is this run's only, whatever it ended in
 
 
 def _main(argv=None):
@@ -1010,6 +1012,12 @@ def _main(argv=None):
         _rate_hz, _rate_note = _dp_bind.bind_model_rate(args.project)
         if _rate_note:
             print(f"  \u26a0 {_rate_note}", file=sys.stderr)
+        # A Mosconi / Gladen DSP's own filter model, as predict binds it (#219, S-136.1): a refused setting is
+        # `is_unreadable`, one line from `main`.
+        import mosconi_gladen as _mg
+        _mg_note = _mg.bind_for_project(args.project)
+        if _mg_note:
+            print(f"  {_mg_note}", file=sys.stderr)
     if args.selftest:
         return _selftest()
     if not args.project or not args.house or not (args.solos or args.rew):
@@ -1368,6 +1376,43 @@ def _own_tempdir(selftest):
     return run
 
 
+def _check_the_vendor_model_is_bound_for_one_run():
+    """S-136.1: a Mosconi project's run binds the Mosconi / Gladen model with the project's recorded corner set and peak
+    mode, as predict's does; a Helix project's binds none; after either run the generic model is back; a setting edited
+    by hand is one line, `error: ...`, exit 1, no traceback. The model was bound in predict alone."""
+    import contextlib
+    import io
+    import shutil
+    import tempfile
+    import mosconi_gladen as mg
+    assert mg._siblings().load("dsp_math.py") is dsp_math, "the hook this tool models through is not the one bound"
+    top = tempfile.mkdtemp(prefix="autosound_eqpropose_vendor_")
+
+    def run(proj):
+        out, err = io.StringIO(), io.StringIO()
+        try:
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                rc = main(["--project", proj, "--house", os.path.join(top, "house.txt"), "--solos", top])
+        except (Exception, SystemExit) as exc:  # noqa: BLE001 -- the fixture is no whole project; the hook is looked at
+            rc = f"raised {type(exc).__name__}"
+        return rc, err.getvalue()
+    try:
+        mos, helix, bad = P.vendor_model_projects(top)
+        for proj, want in ((mos, P.VENDOR_MODEL_BOUND), (helix, [])):
+            with P.VendorBindSpy() as seen:
+                run(proj)
+            assert seen.bound == want, (proj, seen.bound)
+            assert seen.after is None, f"{proj}: the run left a model bound past its end"
+        with P.VendorBindSpy() as seen:
+            rc, err = run(bad)
+        lines = err.strip().splitlines()
+        assert rc == 1 and len(lines) == 1 and lines[0].startswith("error: ") and "'classic'" in lines[0], (rc, err)
+        assert seen.bound == [] and seen.after is None, (seen.bound, seen.after)
+    finally:
+        dsp_math.reset_response_model()
+        shutil.rmtree(top, ignore_errors=True)
+
+
 @_own_tempdir
 def _selftest():
     """Anchored to the definitions: a driver resonance is cut where it is, a comb is not boosted,
@@ -1378,7 +1423,7 @@ def _selftest():
     failures = []
     for check in (_check_profile_read_strictly, _check_refusal_names_its_reason, _check_refused_notes_never_cut,
                   _check_junction_band_names_its_step, _check_no_boost_path_said,
-                  _check_predict_refusals_are_one_line):
+                  _check_predict_refusals_are_one_line, _check_the_vendor_model_is_bound_for_one_run):
         try:
             check()
         except AssertionError as exc:

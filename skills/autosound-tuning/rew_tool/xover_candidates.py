@@ -349,10 +349,49 @@ def _check_predict_refusals_are_one_line():
             os.environ["AUTOSOUND_PROJECT_DIR"] = saved_env
 
 
+def _check_the_vendor_model_is_bound_for_one_run():
+    """S-136.1: a Mosconi project's run binds the Mosconi / Gladen model with the project's recorded corner set and peak
+    mode, as predict's does; a Helix project's binds none; after either run the generic model is back; a setting edited
+    by hand is this tool's one line, `refusing: ...`, exit 3. The model was bound in predict alone."""
+    import contextlib
+    import io
+    import shutil
+    import tempfile
+    import mosconi_gladen as mg
+    assert mg._siblings().load("dsp_math.py") is dsp_math, "the hook this tool models through is not the one bound"
+    top = tempfile.mkdtemp(prefix="autosound_xover_vendor_")
+
+    def run(proj):
+        out, err = io.StringIO(), io.StringIO()
+        try:
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                rc = _main(["--solos", top, "--project", proj, "--house", os.path.join(top, "house.txt"),
+                            "--channel", "m-L", "--hp", "60:100:10"])
+        except (Exception, SystemExit) as exc:  # noqa: BLE001 -- the fixture is no whole project; the hook is looked at
+            rc = f"raised {type(exc).__name__}"
+        return rc, out.getvalue(), err.getvalue()
+    try:
+        mos, helix, bad = P.vendor_model_projects(top)
+        for proj, want in ((mos, P.VENDOR_MODEL_BOUND), (helix, [])):
+            with P.VendorBindSpy() as seen:
+                run(proj)
+            assert seen.bound == want, (proj, seen.bound)
+            assert seen.after is None, f"{proj}: the run left a model bound past its end"
+        with P.VendorBindSpy() as seen:
+            rc, out, err = run(bad)
+        lines = err.strip().splitlines()
+        assert rc == 3 and not out.strip() and len(lines) == 1 and lines[0].startswith("refusing: ") \
+            and "'classic'" in lines[0], (rc, err)
+        assert seen.bound == [] and seen.after is None, (seen.bound, seen.after)
+    finally:
+        dsp_math.reset_response_model()
+        shutil.rmtree(top, ignore_errors=True)
+
+
 def _selftest():
     failures = []
     for check in (_check_cli_refuses_unreadable_profile, _check_unmodelled_protective_said,
-                  _check_predict_refusals_are_one_line):
+                  _check_predict_refusals_are_one_line, _check_the_vendor_model_is_bound_for_one_run):
         try:
             check()
         except AssertionError as exc:
@@ -428,6 +467,8 @@ def _main(argv=None):
             raise
         print(f"refusing: {exc}", file=sys.stderr)
         return 3
+    finally:
+        dsp_math.reset_response_model()      # the vendor model (S-136.1) is this run's only, whatever it ended in
 
 
 def _cli(argv=None):
@@ -484,6 +525,18 @@ def _cli(argv=None):
         return 3
     if _rate_note:
         print(f"  \u26a0 {_rate_note}", file=sys.stderr)
+    # A Mosconi / Gladen DSP's own filter model, bound after the rate as predict binds it (#219, S-136.1); a setting it
+    # has no name for is refused in this tool's form; `_main` unbinds it when the run ends.
+    import mosconi_gladen as _mg
+    try:
+        _mg_note = _mg.bind_for_project(args.project)
+    except Exception as exc:  # noqa: BLE001 -- matched by its attribute; anything else still raises
+        if not getattr(type(exc), "is_unreadable", False):
+            raise
+        print(f"refusing: {exc}", file=sys.stderr)
+        return 3
+    if _mg_note:
+        print(f"  {_mg_note}", file=sys.stderr)
 
     f = P.grid(20, 20000, 96)
     preset, snap = P.load_project_state(args.project, args.preset)

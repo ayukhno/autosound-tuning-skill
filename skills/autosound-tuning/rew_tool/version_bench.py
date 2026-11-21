@@ -1107,7 +1107,8 @@ def _band(spec, label):
 
 
 def _bind_rate(project_dir):
-    """The model on this device's rate, the profile read once and strictly (`xover_candidates`'s order)."""
+    """The model on this device's rate, the profile read once and strictly (`xover_candidates`'s order), then the DSP's
+    own filter model where it has one (S-136.1)."""
     path = dsp_profile.profile_path(project_dir)
     try:
         prof = dsp_profile.load_profile(path)
@@ -1116,6 +1117,12 @@ def _bind_rate(project_dir):
     _rate, note = dsp_profile.bind_model_rate(prof if prof is not None else project_dir, path=path)
     if note:
         print(f"  ⚠ {note}", file=sys.stderr)
+    # A Mosconi / Gladen DSP's own filter model, bound after the rate as predict binds it (#219, S-136.1); a refused
+    # setting is `is_unreadable`, one line from `_main`; `_main` unbinds it when the run ends.
+    import mosconi_gladen as _mg
+    mg_note = _mg.bind_for_project(project_dir)
+    if mg_note:
+        print(f"  {mg_note}", file=sys.stderr)
 
 
 def _common(sub):
@@ -1345,6 +1352,8 @@ def _main(argv=None):
             raise
         print(f"refusing: {exc}", file=sys.stderr)
         return 3
+    finally:
+        P.dsp_math.reset_response_model()    # the vendor model (S-136.1) is this run's only, whatever it ended in
 
 
 # ---------------------------------------------------------------- selftests
@@ -2204,6 +2213,29 @@ def _check_round_check_names_what_it_did_not_read():
     _only_refusal(["round-check", "--project", bare, "--solos", bare_solos], "L w+m", "m-L", "solo")
 
 
+def _check_the_vendor_model_is_bound_for_one_run():
+    """S-136.1: a Mosconi project's run binds the Mosconi / Gladen model with the project's recorded corner set and peak
+    mode, as predict's does; a Helix project's binds none; after either run the generic model is back; a setting edited
+    by hand is this tool's one line, `refusing: ...`, exit 3. The model was bound in predict alone."""
+    import mosconi_gladen as mg
+    assert mg._siblings().load("dsp_math.py") is P.dsp_math, "the hook this tool models through is not the one bound"
+    top = os.path.join(_top(), "vendor_model")
+    os.makedirs(top)
+    mos, helix, bad = P.vendor_model_projects(top)
+    argv = ["--solos", top, "A/v_001", "A/v_002"]
+    for proj, want in ((mos, P.VENDOR_MODEL_BOUND), (helix, [])):
+        with P.VendorBindSpy() as seen:
+            _run(["table", "--project", proj] + argv)
+        assert seen.bound == want, (proj, seen.bound)
+        assert seen.after is None, f"{proj}: the run left a model bound past its end"
+    with P.VendorBindSpy() as seen:
+        rc, out, err = _run(["table", "--project", bad] + argv)
+    lines = err.strip().splitlines()
+    assert rc == 3 and not out.strip() and len(lines) == 1 and lines[0].startswith("refusing: ") \
+        and "'classic'" in lines[0], (rc, err)
+    assert seen.bound == [] and seen.after is None, (seen.bound, seen.after)
+
+
 def _selftest():
     import glob
     import shutil
@@ -2221,7 +2253,8 @@ def _selftest():
                       _check_differing_joint_sets_lose_the_joint_terms, _check_virtual_tier_named, _check_round_check_window, _check_round_check_flags_only_when_both_readings_are_over,
                       _check_bad_inputs_refuse, _check_documented_level_db_form, _check_loudness_sum_is_coherent,
                       _check_bass_marker_across_versions, _check_table_flags_show_their_effect, _check_tripod_fallback_says_tripod,
-                      _check_broken_mosqito_says_why, _check_round_check_names_what_it_did_not_read, _check_round_check_averages_over_the_codes_width):
+                      _check_broken_mosqito_says_why, _check_round_check_names_what_it_did_not_read, _check_round_check_averages_over_the_codes_width,
+                      _check_the_vendor_model_is_bound_for_one_run):
             try:
                 check()
             except AssertionError as exc:

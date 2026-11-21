@@ -195,10 +195,9 @@ In the new project's root (a git repo; layout and the "what's in git, what isn't
     program, not of the preset), and which corner set the crossovers use (default corners,
     normalised to −3 dB or to −6 dB): `project.py <dir> set-dsp-setting peak_mode rew|gain_dependent
     --source user`, `... set-dsp-setting corner_set default|minus_3db|minus_6db --source user`. `predict`
-    models this DSP with its own filter model (`mosconi_gladen.py`), and without them a peak band or a
-    crossover leg is refused there with the question, never modelled on a guess. The proposing tools
-    (`eq_propose`, `joint_search`, `xover_candidates`, `version_bench`) still use the generic filters:
-    check their proposals in `predict` before they go into the DSP.
+    and the proposing tools (`eq_propose`, `joint_search`, `xover_candidates`, `version_bench`) model
+    this DSP with its own filter model (`mosconi_gladen.py`), and without them a peak band or a
+    crossover leg is refused there with the question, never modelled on a guess.
   - If the channel = `@google/gemini-cli` (closed since 2026-09-08 — a key did not reopen it, `setup-critic-channel.md` §2; use `agy`) or the CWD ≠ the project root — add **`rew_analitic/.critic-env`** (`GEMINI_BIN=…`, and `PROJECT_MIRROR=…` if needed). Detail → `references/tooling/setup-critic-channel.md`.
 - The first changelog entry: "project created; intake done; candidate target: X; preset targets: …".
 

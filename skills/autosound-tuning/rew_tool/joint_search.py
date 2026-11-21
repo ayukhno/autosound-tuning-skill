@@ -4183,6 +4183,12 @@ def _cli(argv=None):
     space = space_of(project_dir)
     if space.rate_note:
         print(f"  ⚠ {space.rate_note}", file=sys.stderr)
+    # A Mosconi / Gladen DSP's own filter model, bound after the rate as predict binds it (#219, S-136.1); a refused
+    # setting is `is_unreadable`, one line from `_main`; `_main` unbinds it when the run ends.
+    import mosconi_gladen as _mg
+    _mg_note = _mg.bind_for_project(project_dir)
+    if _mg_note:
+        print(f"  {_mg_note}", file=sys.stderr)
     channels = _xw._channels(project_dir)
     stack = stack_names(channels)
     state_dir = os.path.join(_HERE, "state")
@@ -4418,6 +4424,8 @@ def _main(argv=None):
             raise
         print(f"refusing: {exc}", file=sys.stderr)
         return 3
+    finally:
+        dsp_math.reset_response_model()      # the vendor model (S-136.1) is this run's only, whatever it ended in
 
 
 def _rew_words(exc):
@@ -4662,6 +4670,37 @@ def _run(argv):
 
 _TINY = ["--lp-bounds", "56:71", "--hp-bounds", "56:80", "--gain", "2:8:2"]
 _FRONT_POINTS = {"w-L": POSITIONS, "w-R": POSITIONS}
+
+
+def _check_the_vendor_model_is_bound_for_one_run():
+    """S-136.1: a Mosconi project's run binds the Mosconi / Gladen model with the project's recorded corner set and peak
+    mode, as predict's does; a Helix project's binds none; after either run the generic model is back; a setting edited
+    by hand is this tool's one line, `refusing: ...`, exit 3. The model was bound in predict alone."""
+    import shutil
+    import tempfile
+    import mosconi_gladen as mg
+    assert mg._siblings().load("dsp_math.py") is dsp_math, "the hook this tool models through is not the one bound"
+    top = tempfile.mkdtemp(prefix="autosound_jointsearch_vendor_")
+    try:
+        mos, helix, bad = P.vendor_model_projects(top)
+        house = os.path.join(top, "house.txt")
+        with open(house, "w", encoding="utf-8") as fh:
+            fh.write("20 0\n20000 0\n")
+        argv = ["--house", house, "--solos", top] + _TINY
+        for proj, want in ((mos, P.VENDOR_MODEL_BOUND), (helix, [])):
+            with P.VendorBindSpy() as seen:
+                _run(["--project", proj] + argv)
+            assert seen.bound == want, (proj, seen.bound)
+            assert seen.after is None, f"{proj}: the run left a model bound past its end"
+        with P.VendorBindSpy() as seen:
+            rc, out, err = _run(["--project", bad] + argv)
+        lines = err.strip().splitlines()
+        assert rc == 3 and not out.strip() and len(lines) == 1 and lines[0].startswith("refusing: ") \
+            and "'classic'" in lines[0], (rc, err)
+        assert seen.bound == [] and seen.after is None, (seen.bound, seen.after)
+    finally:
+        dsp_math.reset_response_model()
+        shutil.rmtree(top, ignore_errors=True)
 
 
 def _check_refusals_are_one_line():
@@ -8092,7 +8131,8 @@ def _selftest():
                   _check_the_fs_floor_is_a_default_over_a_hard_limit, _check_no_row_through_the_dip_shows_the_nearest, _check_a_crossing_under_one_khz_keeps_its_upward_leak,
                   _check_held_woofers_at_zero_take_a_placeable_pair, _check_single_point_refusal_is_the_sheets_line, _check_a_no_with_a_colon_is_no_decision,
                   _check_out_keeps_the_table_it_holds, _check_a_row_carries_a_delta_ready_for_propose,
-                  _check_a_chain_banks_what_was_scored, _check_a_ledger_keeps_what_the_row_did_not_decide, _check_an_align_that_cut_nothing_clears_the_older_eq, _check_a_blend_states_only_the_eq_it_held, _check_the_hard_floor_binds_every_high_pass, _check_an_empty_table_is_rerun_on_the_same_out):
+                  _check_a_chain_banks_what_was_scored, _check_a_ledger_keeps_what_the_row_did_not_decide, _check_an_align_that_cut_nothing_clears_the_older_eq, _check_a_blend_states_only_the_eq_it_held, _check_the_hard_floor_binds_every_high_pass, _check_an_empty_table_is_rerun_on_the_same_out,
+                  _check_the_vendor_model_is_bound_for_one_run):
         try:
             check()
         except AssertionError as exc:

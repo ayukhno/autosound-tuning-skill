@@ -3218,6 +3218,63 @@ def _check_refused_notes_never_cut():
     assert "m-L, m-R: REFUSED -- one reason" in shown and shown[-1].startswith("(+1 more"), shown
 
 
+# ---- the vendor model's fixtures, for the proposing tools' selftests (S-136.1)
+def vendor_model_projects(top):
+    """Three project folders under `top` for a tool's selftest of the vendor model's binding (S-136.1):
+    `(mosconi, helix, bad)`. `mosconi` carries the shipped PICO 6/8-2 profile, its peak mode and corner set recorded
+    through `project.py set-dsp-setting` as `_check_the_vendor_model_is_bound_for_one_run` records them; `helix` the
+    shipped HELIX DSP ULTRA S profile; `bad` is `mosconi` with its peak mode edited by hand to a value the model has no
+    name for. `mosconi_gladen` holds no write path, so these live here."""
+    import shutil
+    import mosconi_gladen as mg
+    pj = mg._siblings().load("project.py")
+    profiles = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "knowledge", "dsp", "profiles")
+    mos, helix, bad = (os.path.join(top, n) for n in ("mosconi", "helix", "bad"))
+    for folder, vendor, profile in ((mos, "Mosconi", "mosconi-pico-6-8-2.json"),
+                                    (helix, "Audiotec-Fischer", "audiotec-fischer-helix-dsp-ultra-s.json")):
+        os.makedirs(folder)
+        pj.Project(folder).save({"schema_version": pj.SCHEMA_VERSION, "dsp": {"vendor": vendor, "model": "M"}})
+        shutil.copyfile(os.path.join(profiles, profile), os.path.join(folder, "dsp_profile.json"))
+    for key, value in (("peak_mode", "gain_dependent"), ("corner_set", "minus_3db")):
+        rc, _out, err = pj._run_cli(pj._main, ["project.py", mos, "set-dsp-setting", key, value, "--source", "user"])
+        assert rc in (0, None), (key, rc, err)
+    shutil.copytree(mos, bad)
+    with open(os.path.join(bad, "project.json"), encoding="utf-8") as fh:
+        data = json.load(fh)
+    data["dsp"]["settings"]["peak_mode"]["value"] = "classic"            # edited by hand
+    with open(os.path.join(bad, "project.json"), "w", encoding="utf-8") as fh:
+        json.dump(data, fh)
+    return mos, helix, bad
+
+
+class VendorBindSpy:
+    """`with VendorBindSpy() as seen:` -- every model bound into `dsp_math` inside the block, as `(name, corner_set,
+    peak_mode)`, in `seen.bound`; the hook as it stood when the block ended in `seen.after`."""
+
+    def __enter__(self):
+        import mosconi_gladen as mg
+        self.dsp_math = mg._siblings().load("dsp_math.py")
+        self.bound, self.after = [], "unset"
+        self._real = self.dsp_math.bind_response_model
+
+        def spy(impl):
+            self.bound.append((getattr(impl, "name", None), getattr(impl, "corner_set", None),
+                               getattr(impl, "peak_mode", None)))
+            return self._real(impl)
+        self.dsp_math.bind_response_model = spy
+        return self
+
+    def __exit__(self, *exc):
+        self.dsp_math.bind_response_model = self._real
+        self.after = self.dsp_math._MODEL["impl"]
+        self.dsp_math.reset_response_model()
+        return False
+
+
+#: What `VendorBindSpy.bound` holds after a run on `vendor_model_projects`' Mosconi folder.
+VENDOR_MODEL_BOUND = [("mosconi_gladen", "minus_3db", "gain_dependent")]
+
+
 def _check_the_vendor_model_is_bound_for_one_run():
     """The response hook on predict's real path (#219): a project whose `dsp_profile.json` is the shipped Mosconi PICO
     6/8-2 profile, its peak mode and corner set recorded through `project.py set-dsp-setting`, binds a model carrying
