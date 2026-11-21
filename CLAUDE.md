@@ -46,7 +46,11 @@ message with Cyrillic in it and names the line (its `--selftest` runs in CI).
   README/FAQ/ADVANCED install lines stay on the release before — they must never name a tag that does not
   exist yet — and move in one commit after the tag. The train runs `scripts/tag-check.sh --at <commit>
   vX.Y.Z` as this repo's half. **An ordinary patch is the session's own**: its bookkeeping commit moves the
-  front-page lines too, and `tag-check.sh vX.Y.Z` holds them to the tag.
+  front-page lines too, and `tag-check.sh vX.Y.Z` holds them to the tag. So a patch's candidate and its tag
+  cannot share a commit: `--candidate` holds the front page to the release before, the plain mode to the
+  patch's own tag. A patch candidate is cut before the bookkeeping commit moves the front page (version,
+  heading and PS1URL in, the front page not yet), or as an early one with `--early`; the front-page commit
+  then goes on top, and the tag on it.
 
 ## The installers are a TRIPLET
 
