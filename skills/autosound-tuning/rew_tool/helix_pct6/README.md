@@ -53,7 +53,7 @@ Differences fall into `audio` · `system` · `naming` · `save_metadata` · `ui_
 | model | Dev | how far it is checked |
 |---|---|---|
 | HELIX DSP ULTRA S | 39 | 57 mapping rules (50 confirmed, 6 assumption, 1 unknown), 15 one-change experiments, files from PC-Tool 6.03.03 to 6.05.01 |
-| HELIX NEXT V EIGHT DSP ULTIMATE | 44 | checked by the user; Dev code and channel layout (Virtual 1–14, Amp Out 1–8, Line Out 9–14) pinned on a demo-mode save, `testdata/helix-pct6/Helix-V8U.pct6`; the file states no clock, so delays are at an assumed 96 kHz |
+| HELIX NEXT V EIGHT DSP ULTIMATE | 44 | checked by the user; Dev code and channel layout (Virtual 1–14, Amp Out 1–8, Line Out 9–14) pinned on a demo-mode save, `testdata/helix-pct6/Helix-V8U.pct6`; the file states no clock, so delays are shown at an assumed 96 kHz and not compared; the preset settings are checked on the ULTRA S only and not compared |
 | any other ATF model | any | read with the ULTRA S rules at the user's risk: delays at an assumed 96 kHz, no A–L channel labels |
 
 Files of Dev 17, 32, 38, 50 and 53 open with the same container; their meaning is not checked.

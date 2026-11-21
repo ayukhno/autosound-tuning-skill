@@ -2477,6 +2477,39 @@ def _check_compare_file_an_ordinal_lettered_project_keeps_its_slots():
 _V8_PCT6 = os.path.join(os.path.dirname(_AYA_PCT6), "Helix-V8U.pct6")
 
 
+def _v8_project(top, settings=None, more=()):
+    """A V EIGHT project in `top/project` -- physical slots "1", "9", "15", virtual "1", "9", "7", "A", plus `more`
+    as `(code, tier, slot)` -- whose v_001 holds flat values, `settings` as its `preset_settings`, and a copy of the
+    shipped Helix-V8U.pct6 in `top/files`. Returns (project, file)."""
+    import shutil
+    project, files = os.path.join(top, "project"), os.path.join(top, "files")
+    os.makedirs(project)
+    os.makedirs(files)
+    channels = [{"code": "tw-L", "tier": "channels", "slot": "1"}, {"code": "sw", "tier": "channels", "slot": "9"},
+                {"code": "x", "tier": "channels", "slot": "15"},
+                {"code": "VFL", "tier": "virtual_channels", "slot": "1"},
+                {"code": "VSW", "tier": "virtual_channels", "slot": "9"},
+                {"code": "VPT", "tier": "virtual_channels", "slot": "7"},
+                {"code": "VA", "tier": "virtual_channels", "slot": "A"}]
+    channels += [{"code": code, "tier": tier, "slot": slot} for code, tier, slot in more]
+    with open(os.path.join(project, "project.json"), "w", encoding="utf-8") as fh:
+        json.dump({"schema_version": _state.SCHEMA_VERSION, "project_rev": 1, "channels": channels}, fh)
+    flat = {"gain_db": 0.0, "ta_ms": 0.0, "polarity": "NORM", "mute": False}
+    state = {"preset": "V8", "sample_rate": 96000, "project_rev": 1,
+             "channels": {"tw-L": dict(flat, hp={"f": 3237, "type": "LR", "slope": 24}, lp=None),
+                          "sw": dict(flat, gain_db=-2.0, hp=None, lp={"f": 80, "type": "LR", "slope": 24}),
+                          "x": dict(flat, hp=None, lp=None)},
+             "virtual_channels": {"VFL": dict(flat), "VSW": dict(flat), "VPT": dict(flat), "VA": dict(flat)}}
+    for code, tier, _slot in more:
+        state[tier][code] = dict(flat, hp=None, lp=None) if tier == "channels" else dict(flat)
+    if settings is not None:
+        state["preset_settings"] = settings
+    _state.PresetHistory(os.path.join(project, "state"), "V8", project_dir=project).snapshot(state, note="V8")
+    pct6 = os.path.join(files, "Helix-V8U.pct6")
+    shutil.copyfile(_V8_PCT6, pct6)
+    return project, pct6
+
+
 def _check_compare_file_v_eight_slots_are_pc_tools_numbers():
     """On the shipped Helix-V8U.pct6 (HELIX NEXT V EIGHT DSP ULTIMATE, Dev 44): PC-Tool numbers the channels, so a slot
     is a number on each tier -- physical "1" reaches Amp Out 1 (index 16), "9" Line Out 9 (index 24); virtual "9"
@@ -2488,26 +2521,7 @@ def _check_compare_file_v_eight_slots_are_pc_tools_numbers():
     import tempfile
     top = tempfile.mkdtemp(prefix="autosound_compare_v8_")
     try:
-        project, files = os.path.join(top, "project"), os.path.join(top, "files")
-        os.makedirs(project)
-        os.makedirs(files)
-        channels = [{"code": "tw-L", "tier": "channels", "slot": "1"}, {"code": "sw", "tier": "channels", "slot": "9"},
-                    {"code": "x", "tier": "channels", "slot": "15"},
-                    {"code": "VFL", "tier": "virtual_channels", "slot": "1"},
-                    {"code": "VSW", "tier": "virtual_channels", "slot": "9"},
-                    {"code": "VPT", "tier": "virtual_channels", "slot": "7"},
-                    {"code": "VA", "tier": "virtual_channels", "slot": "A"}]
-        with open(os.path.join(project, "project.json"), "w", encoding="utf-8") as fh:
-            json.dump({"schema_version": _state.SCHEMA_VERSION, "project_rev": 1, "channels": channels}, fh)
-        flat = {"gain_db": 0.0, "ta_ms": 0.0, "polarity": "NORM", "mute": False}
-        state = {"preset": "V8", "sample_rate": 96000, "project_rev": 1,
-                 "channels": {"tw-L": dict(flat, hp={"f": 3237, "type": "LR", "slope": 24}, lp=None),
-                              "sw": dict(flat, gain_db=-2.0, hp=None, lp={"f": 80, "type": "LR", "slope": 24}),
-                              "x": dict(flat, hp=None, lp=None)},
-                 "virtual_channels": {"VFL": dict(flat), "VSW": dict(flat), "VPT": dict(flat), "VA": dict(flat)}}
-        _state.PresetHistory(os.path.join(project, "state"), "V8", project_dir=project).snapshot(state, note="V8")
-        pct6 = os.path.join(files, "Helix-V8U.pct6")
-        shutil.copyfile(_V8_PCT6, pct6)
+        project, pct6 = _v8_project(top)
         got = _compared(project, pct6)
         assert got["checked_model"] is True and got["device"]["layout"] == "v-eight", got["device"]
         for code, index in (("tw-L", 16), ("sw", 24), ("VFL", 0), ("VSW", 8)):
@@ -2535,6 +2549,61 @@ def _check_compare_file_v_eight_slots_are_pc_tools_numbers():
         assert new["channels"]["sw"]["gain_db"] == 0.0, new["channels"]["sw"]
         kept = [line for line in out.splitlines() if line.startswith("  - sw ta_ms: ")]
         assert kept and "states no clock" in kept[0], out[-1500:]
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
+#: Every preset setting a version can state, as a V EIGHT version might: each meets a file value on the Ultra S's paths.
+_V8_SETTINGS = {"input_gain_db": 0.0, "sources": {"main": 0.0, "hec": 0.0, "digital": 0.0},
+                "fx": {"realcenter": False, "dynamic_bass": False, "subxpander": False},
+                "rtc": {"on": False, "curve": {"fstart0": 100}}, "bt": {"source": "BT", "auto_switch": False},
+                "conductor": {"sub_lamps": 7}}
+
+
+def _check_compare_file_v_eight_preset_rows_are_ultra_s_only():
+    """The preset's settings -- source levels, RealCenter, Dynamic Bass, SubXpander, RTC and its curve, the BT selector
+    and auto-switch -- are read at paths and with meanings checked on the HELIX DSP ULTRA S only. On the V EIGHT each is
+    `unknown`, saying so, never a match or a differs, stated or not; `propose --from-file` takes none of them. The
+    Ultra S's preset rows stay compared (`_check_compare_file_matches_and_differs_on_aya`)."""
+    import shutil
+    import tempfile
+    only = "checked on the HELIX DSP ULTRA S only"
+    for settings in (_V8_SETTINGS, None):
+        top = tempfile.mkdtemp(prefix="autosound_compare_v8_preset_")
+        try:
+            project, pct6 = _v8_project(top, settings=settings)
+            got = _compared(project, pct6)
+            preset = [r for r in got["rows"] if r["channel"] == "preset"]
+            on_file = [r for r in preset if r["path"] is not None]
+            assert on_file, preset
+            for row in on_file:
+                assert row["result"] == "unknown" and only in row["reason"], row
+                assert row["file"] is None, row
+            if settings is not None:
+                named = {r["parameter"] for r in preset}
+                for path in ("sources.main", "fx.realcenter", "fx.dynamic_bass", "fx.subxpander", "rtc.on",
+                             "rtc.curve.fstart0", "bt.source", "bt.auto_switch"):
+                    assert path in named and only in _row(got, "preset", path)["reason"], (path, named)
+                code, out, err = _compare_cli(project, "propose", "--preset", "V8", "--from-file", pct6)
+                assert code == 0, (code, out[-800:], err)
+                new = _state.PresetHistory(os.path.join(project, "state"), "V8", project_dir=project).load("v_002")
+                assert new["preset_settings"] == settings, new["preset_settings"]
+                assert "preset fx.subxpander: " in out and only in out, out[-1500:]
+        finally:
+            shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_compare_file_v_eight_slots_sort_as_numbers():
+    """Numbered slots sort as numbers: on the V EIGHT the rows of slot "2" come before those of "10"."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_compare_v8_order_")
+    try:
+        project, pct6 = _v8_project(top, more=[("m-L", "channels", "2"), ("m-L2", "channels", "10")])
+        got = _compared(project, pct6)
+        order = [r["channel"] for r in got["rows"] if r["parameter"] == "gain_db"]
+        assert order.index("m-L") < order.index("m-L2") < order.index("x"), order
+        assert order.index("tw-L") < order.index("m-L") and order.index("sw") < order.index("m-L2"), order
     finally:
         shutil.rmtree(top, ignore_errors=True)
 
@@ -3813,6 +3882,8 @@ def _selftest():
                   _check_compare_file_virtual_letters_are_pc_tools,
                   _check_compare_file_an_ordinal_lettered_project_keeps_its_slots,
                   _check_compare_file_v_eight_slots_are_pc_tools_numbers,
+                  _check_compare_file_v_eight_preset_rows_are_ultra_s_only,
+                  _check_compare_file_v_eight_slots_sort_as_numbers,
                   _check_compare_file_a_file_it_cannot_interpret_is_exit_2,
                   _check_compare_file_pr15_matches_differs_and_unknown,
                   _check_compare_file_pr15_numbering_not_settled_is_unknown,

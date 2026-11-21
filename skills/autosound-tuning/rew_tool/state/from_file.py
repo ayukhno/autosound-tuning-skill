@@ -522,6 +522,13 @@ def build(snap, identity, read):
     undecoded_points = []
     stated = _preset_values(doc, hx, undecoded_points)
     held = snap.get(st.PRESET_SETTINGS) if isinstance(snap.get(st.PRESET_SETTINGS), dict) else {}
+    ultra_s_only = set()
+    if _compare_file().preset_unchecked(inv["device"]):
+        # the V EIGHT: the settings' places and meanings are the Ultra S's; none is taken, each named
+        why = _compare_file().PRESET_ULTRA_S_ONLY
+        for path in sorted(stated):
+            (kept if st._preset_leaf(held, path) is not None else not_taken).append(("preset %s" % path, why))
+        ultra_s_only, stated, undecoded_points = set(stated), {}, []
     held_curve = st._preset_leaf(held, "rtc.curve")
     held_curve = held_curve if isinstance(held_curve, dict) else {}
     if "rtc.curve" in stated or undecoded_points:
@@ -543,7 +550,7 @@ def build(snap, identity, read):
     if settings:
         delta[st.PRESET_SETTINGS] = settings
     for path in st._PRESET_FIELDS:
-        if path not in stated and st._preset_leaf(held, path) is not None:
+        if path not in stated and path not in ultra_s_only and st._preset_leaf(held, path) is not None:
             reason = {"input_gain_db": "the file decodes no input gain",
                       "conductor.sub_lamps": "a knob's position is not stored in the file"}.get(path, _NOT_DECODED)
             kept.append(("preset %s" % path, reason))

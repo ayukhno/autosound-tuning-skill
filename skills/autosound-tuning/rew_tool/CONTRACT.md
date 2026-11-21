@@ -786,7 +786,8 @@ a file band that is bypassed or neutral and not named by the version, which does
 comparison does not know is an `unknown` row. Tolerances: 0.005 dB, 0.005 Hz, 0.005 for a Q (a shelf's 0.71 is the
 file's 0.707), 0.001°, a slope exact, a delay to 0.01 ms as PC-Tool shows it. A model whose clock is not checked, the
 file stating none (the V EIGHT), has every `ta_ms` `unknown`: its steps are not read as ms at an assumed 96 kHz. No
-capability profile is read for a `.pct6`, and none of the V EIGHT is bundled.
+capability profile is read for a `.pct6`, and none of the V EIGHT is bundled. On the V EIGHT every preset row the file
+holds a value for is `unknown` (`file` null): those places and meanings are checked on the HELIX DSP ULTRA S only.
 
 **A Mosconi `.PR15`** (W-13, #219 T7; an addition): a `FILE` whose extension is `.PR<number>` is read by
 `rew_tool/mosconi_pr.py` instead, read only and hashed before and after the same way, and answered in the same
@@ -851,7 +852,8 @@ channel has the phase control or the base holds that form) and `eq` (every band 
 `f`, `gain_db`, `q`, `i` the file's slot, `bypass: true` when bypassed). A value the file holds as no finite number, or
 that the ledger's own rules refuse (a frequency of 0), is not decoded: never banked. A file band not decoded -- a type
 code the reader does not know, Fine EQ, a value missing or not decoded -- leaves the base's band in that slot as it was,
-named; a base whose bands carry no `i` keeps its whole `eq`, named. `preset_settings` takes `sources.*`,
+named; a base whose bands carry no `i` keeps its whole `eq`, named. `preset_settings` (none on the V EIGHT, named, as
+item 13 says) takes `sources.*`,
 `fx.realcenter`, `fx.dynamic_bass`, `fx.subxpander`, `rtc.on`, `rtc.curve` (point by point onto the base's curve: a
 point the file does not give, or not as a number, stays and is named), `bt.source` and `bt.auto_switch`. The
 codes between the two are one table (`state/from_file.py`), the one item 13 compares with. Anything else stays as the

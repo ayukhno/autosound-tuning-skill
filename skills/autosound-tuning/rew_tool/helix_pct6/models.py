@@ -47,8 +47,9 @@ MODELS = (
     Model("44", "HELIX NEXT V EIGHT DSP ULTIMATE", True, None, "v-eight",
           "checked by the user (2026-11-20); Dev 44 and the channel layout pinned on his demo-mode save "
           "(testdata/helix-pct6/Helix-V8U.pct6, PC-Tool 6.05.01) against PC-Tool's screens: Virtual 1-14, "
-          "Amp Out 1-8, Line Out 9-14; the file states no clock and none is checked, so delays are at an "
-          "assumed 96 kHz"),
+          "Amp Out 1-8, Line Out 9-14; the file states no clock and none is checked, so the reader shows delays "
+          "at an assumed 96 kHz and they are not compared; the preset settings are checked on the HELIX DSP "
+          "ULTRA S only and are not compared either"),
     Model("22", "HELIX DSP ULTRA", False, None, None,
           "named in the device list; no sample file"),
 )

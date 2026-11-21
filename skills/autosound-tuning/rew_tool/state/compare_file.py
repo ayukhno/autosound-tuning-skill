@@ -41,6 +41,24 @@ EXIT_COMPARED, EXIT_JOURNAL, EXIT_UNREADABLE, EXIT_CHANGED = 0, 1, 2, 3
 #: A row's fields that are the journal's own bookkeeping, no setting of the DSP: not compared, said in item 13.
 BOOKKEEPING = ("status", "eq_ptr", "tag")
 _TIER_LABEL = {"channels": "Output", "virtual_channels": "Virtual"}
+#: The layouts on which the preset settings' paths and meanings in a `.pct6` are checked (source levels, RealCenter,
+#: Dynamic Bass, SubXpander, RTC and its curve, the BT selector and auto-switch). On another checked layout -- the
+#: V EIGHT -- each is `unknown` with `PRESET_ULTRA_S_ONLY`, never a match or a differs.
+PRESET_CHECKED_LAYOUTS = ("ultra-s",)
+PRESET_ULTRA_S_ONLY = "this setting's place and meaning in the file are checked on the HELIX DSP ULTRA S only"
+
+
+def preset_unchecked(device):
+    """True for a model with a checked channel layout whose preset settings are not checked: the V EIGHT."""
+    layout = (device or {}).get("layout")
+    return layout is not None and layout not in PRESET_CHECKED_LAYOUTS
+
+
+def _slot_order(slot):
+    """A slot's sort key: numbers as numbers ("2" before "10"), then letters as they are."""
+    return (0, int(slot), "") if slot.isdigit() else (1, 0, slot)
+
+
 #: A delay of a model whose clock is not checked, the file stating none: its steps are not read as ms at an assumed rate.
 CLOCK_ASSUMED = "the file states no clock and this model's is not checked: its delay steps are not read as ms at an " \
                 "assumed 96 kHz"
@@ -575,7 +593,7 @@ def _plan(hx, doc, inv, snap, identity):
         for key, row in snap[tier].items():
             entry = identity.get(key) or {}
             slot = str(entry.get("slot") or "").strip().upper()
-            planned.append((tiers.index(tier), slot or "~", key, tier, row, entry, slot))
+            planned.append((tiers.index(tier), _slot_order(slot or "~"), key, tier, row, entry, slot))
     for _order, _slot, key, tier, row, entry, slot in sorted(planned, key=lambda p: (p[0], p[1], p[2])):
         code = entry.get("code") or key
         why = None
@@ -605,8 +623,12 @@ def _plan(hx, doc, inv, snap, identity):
                          "no row of this version is on this output", path="/ATF/OC[@ON='%d']" % ch["index"]))
     settings = snap.get(_state().PRESET_SETTINGS)
     stated = isinstance(settings, dict) and any(k not in ("status", "source_file") for k in settings)
-    out += _preset_rows(settings if isinstance(settings, dict) else {}, hx.inventory.flatten(doc.root), doc.root, stated)
-    return out
+    preset = _preset_rows(settings if isinstance(settings, dict) else {}, hx.inventory.flatten(doc.root), doc.root, stated)
+    if preset_unchecked(inv["device"]):
+        preset = [_said(p["parameter"], "preset", p["journal"], None, "unknown", PRESET_ULTRA_S_ONLY,
+                        path=p["expect"]["path"]) if "expect" in p else
+                  dict(p, file=None, reason=PRESET_ULTRA_S_ONLY) if p.get("path") is not None else p for p in preset]
+    return out + preset
 
 
 def _finish(hx, doc, plan):
