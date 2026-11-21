@@ -9,9 +9,10 @@ What is compared and how:
 * the file is read by `helix_pct6` (`read_pct6`, `interpret`); every value is compared by `helix_pct6.check`, one
   call for the whole version -- this module only says which path holds which of the version's values, and in what
   unit (`_PLAN` below);
-* a channel row of the version reaches the file through `project.json`: its `slot` (A...L) and the row's tier name the
-  output the reader labels `Output <slot>` (tier `channels`) or `Virtual <slot>` (tier `virtual_channels`, only a
-  channel PC-Tool shows). A row with no such output is `unknown`, and so is every visible output no row reaches;
+* a channel row of the version reaches the file through `project.json`: its `slot` and the row's tier name the output
+  the reader labels with that letter or number (tier `channels`: `Output <slot>`, on the V EIGHT `Amp Out` / `Line
+  Out <slot>`) or `Virtual <slot>` (tier `virtual_channels`, only a channel PC-Tool shows). A row with no such output
+  is `unknown`, and so is every visible output no row reaches;
 * a value one side holds and the other does not record or decode is a row too, `unknown` with its reason, never a
   match and never dropped. A value the version leaves unstated is not read as its default: the version did not say
   it. `check`'s `missing` (the file holds no value at the path) is passed on as `unknown` with that reason;
@@ -40,6 +41,9 @@ EXIT_COMPARED, EXIT_JOURNAL, EXIT_UNREADABLE, EXIT_CHANGED = 0, 1, 2, 3
 #: A row's fields that are the journal's own bookkeeping, no setting of the DSP: not compared, said in item 13.
 BOOKKEEPING = ("status", "eq_ptr", "tag")
 _TIER_LABEL = {"channels": "Output", "virtual_channels": "Virtual"}
+#: A delay of a model whose clock is not checked, the file stating none: its steps are not read as ms at an assumed rate.
+CLOCK_ASSUMED = "the file states no clock and this model's is not checked: its delay steps are not read as ms at an " \
+                "assumed 96 kHz"
 _POLARITY = {"NORM": "0", "INV": "1"}
 _POLARITY_BACK = {"0": "NORM", "1": "INV"}
 #: The journal's EQ band types -> the file's codes (`helix_pct6.inventory.EQ_TYPES`).
@@ -209,7 +213,9 @@ def _channel_rows(code, tier, row, ch, base):
     else:
         out.append(_said("gain_db", code, None, ch["level"]["value"], "unknown", not_recorded, path=base + "/Vol[1]/@L"))
     delay = timing.get("delay") or {}
-    if row.get("ta_ms") is not None:
+    if delay.get("clock_assumed"):
+        out.append(_said("ta_ms", code, row.get("ta_ms"), None, "unknown", CLOCK_ASSUMED, path=base + "/T[1]/@T"))
+    elif row.get("ta_ms") is not None:
         out.append(_compared("ta_ms", code, row["ta_ms"], base + "/T[1]/@T", row["ta_ms"], "display_delay_ms"))
     else:
         out.append(_said("ta_ms", code, None, delay.get("display_ms"), "unknown", not_recorded, path=base + "/T[1]/@T"))
@@ -511,6 +517,25 @@ def _shown_virtual(outputs):
                   key=lambda c: c["index"])
 
 
+def _slot_of(label):
+    """The slot a reader's label names: its last word (`Output C` -> C, `Line Out 9` -> 9, `Virtual K` -> K)."""
+    return str(label).rsplit(" ", 1)[-1]
+
+
+def _physical_by_slot(outputs):
+    """{slot: channel} for the physical outputs, the slot being the reader's own label's letter or number: Output A..L
+    on the HELIX DSP ULTRA S, Amp Out 1-8 and Line Out 9-14 on the HELIX NEXT V EIGHT DSP ULTIMATE. The one place this
+    rule lives."""
+    return {_slot_of(c["label"]): c for c in outputs if c.get("group") == "physical" and c.get("label")}
+
+
+def _physical_miss(outputs, slot):
+    """Why a physical slot reaches no output, in the model's own words."""
+    if all(str(c["label"]).startswith("Output ") for c in _physical_by_slot(outputs).values()):
+        return "no channel PC-Tool shows is Output %s on this model" % slot
+    return "no output PC-Tool shows is numbered %s on this model" % slot
+
+
 def _virtual_by_letter(outputs):
     """{PC-Tool's letter: channel} for the virtual channels PC-Tool shows. The letter is the reader's own label,
     `Virtual <letter>`, the index's letter: on the HELIX DSP ULTRA S PC-Tool shows Virtual A..F, K, L, indexes 0-5, 10,
@@ -518,7 +543,7 @@ def _virtual_by_letter(outputs):
     their ordinal, A..H, which put the sub at G; a project lettered so keeps its slots, and `_virtual_miss` names
     PC-Tool's letter for its G and H. The one place this rule lives."""
     return {c["label"][len("Virtual "):]: c for c in _shown_virtual(outputs)
-            if str(c.get("label") or "").startswith("Virtual ")}
+            if str(c.get("label") or "").startswith("Virtual ")}       # the V EIGHT's numbers alike: Virtual 9 -> "9"
 
 
 def _virtual_miss(outputs, slot):
@@ -530,8 +555,9 @@ def _virtual_miss(outputs, slot):
     n = ord(slot) - ord("A") if len(slot) == 1 and "A" <= slot <= "Z" else -1
     if 0 <= n < len(shown) and shown[n].get("label"):
         nth = "%d%s" % (n + 1, {1: "st", 2: "nd", 3: "rd"}.get(n + 1, "th"))
+        own = "number" if _slot_of(shown[n]["label"]).isdigit() else "letter"
         why += "; the %s virtual channel PC-Tool shows is %s: a tier lettered in order (A..H) holds it at %s, " \
-               "re-slot it to its own letter" % (nth, shown[n]["label"], slot)
+               "re-slot it to its own %s" % (nth, shown[n]["label"], slot, own)
     return why
 
 
@@ -540,7 +566,7 @@ def _plan(hx, doc, inv, snap, identity):
     outputs no row reaches, then the preset."""
     out, reached = [], set()
     outputs = [c for c in inv["channels"] if c["kind"] == "output"]
-    physical = {c["label"][len("Output "):]: c for c in outputs if c.get("group") == "physical" and c.get("label")}
+    physical = _physical_by_slot(outputs)
     virtual = _virtual_by_letter(outputs)
     letter_of = {c["index"]: "Virtual " + letter for letter, c in virtual.items()}
     tiers = [t for t in _state().tier_names(snap) if isinstance(snap.get(t), dict)]
@@ -563,8 +589,7 @@ def _plan(hx, doc, inv, snap, identity):
         else:
             ch = (physical if tier == "channels" else virtual).get(slot)
             if ch is None:
-                why = ("no channel PC-Tool shows is %s %s on this model" % (_TIER_LABEL[tier], slot)
-                       if tier == "channels" else _virtual_miss(outputs, slot))
+                why = _physical_miss(outputs, slot) if tier == "channels" else _virtual_miss(outputs, slot)
         if ch is None:
             for field in sorted(f for f in row if f not in BOOKKEEPING):
                 out.append(_said(field, code, row[field], None, "unknown", why))

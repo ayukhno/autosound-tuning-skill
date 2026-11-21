@@ -2469,6 +2469,71 @@ def _check_compare_file_an_ordinal_lettered_project_keeps_its_slots():
         shutil.rmtree(top, ignore_errors=True)
 
 
+_V8_PCT6 = os.path.join(os.path.dirname(_AYA_PCT6), "Helix-V8U.pct6")
+
+
+def _check_compare_file_v_eight_slots_are_pc_tools_numbers():
+    """On the shipped Helix-V8U.pct6 (HELIX NEXT V EIGHT DSP ULTIMATE, Dev 44): PC-Tool numbers the channels, so a slot
+    is a number on each tier -- physical "1" reaches Amp Out 1 (index 16), "9" Line Out 9 (index 24); virtual "9"
+    reaches Virtual 9 (index 8), "1" Virtual 1 (index 0). Virtual 7 is a pass-through PC-Tool does not show: slot "7"
+    is `unknown`, and so is a physical "15". The file states no clock and the model's is not checked, so a delay is
+    `unknown`, never read at an assumed 96 kHz; `propose --from-file` takes the level and keeps the delay, named. No
+    V EIGHT profile is bundled and none is read."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_compare_v8_")
+    try:
+        project, files = os.path.join(top, "project"), os.path.join(top, "files")
+        os.makedirs(project)
+        os.makedirs(files)
+        channels = [{"code": "tw-L", "tier": "channels", "slot": "1"}, {"code": "sw", "tier": "channels", "slot": "9"},
+                    {"code": "x", "tier": "channels", "slot": "15"},
+                    {"code": "VFL", "tier": "virtual_channels", "slot": "1"},
+                    {"code": "VSW", "tier": "virtual_channels", "slot": "9"},
+                    {"code": "VPT", "tier": "virtual_channels", "slot": "7"},
+                    {"code": "VA", "tier": "virtual_channels", "slot": "A"}]
+        with open(os.path.join(project, "project.json"), "w", encoding="utf-8") as fh:
+            json.dump({"schema_version": _state.SCHEMA_VERSION, "project_rev": 1, "channels": channels}, fh)
+        flat = {"gain_db": 0.0, "ta_ms": 0.0, "polarity": "NORM", "mute": False}
+        state = {"preset": "V8", "sample_rate": 96000, "project_rev": 1,
+                 "channels": {"tw-L": dict(flat, hp={"f": 3237, "type": "LR", "slope": 24}, lp=None),
+                              "sw": dict(flat, gain_db=-2.0, hp=None, lp={"f": 80, "type": "LR", "slope": 24}),
+                              "x": dict(flat, hp=None, lp=None)},
+                 "virtual_channels": {"VFL": dict(flat), "VSW": dict(flat), "VPT": dict(flat), "VA": dict(flat)}}
+        _state.PresetHistory(os.path.join(project, "state"), "V8", project_dir=project).snapshot(state, note="V8")
+        pct6 = os.path.join(files, "Helix-V8U.pct6")
+        shutil.copyfile(_V8_PCT6, pct6)
+        got = _compared(project, pct6)
+        assert got["checked_model"] is True and got["device"]["layout"] == "v-eight", got["device"]
+        for code, index in (("tw-L", 16), ("sw", 24), ("VFL", 0), ("VSW", 8)):
+            row = _row(got, code, "polarity")
+            assert row["result"] == "match" and row["path"] == "/ATF/OC[@ON='%d']/@CINV" % index, (code, row)
+        assert _row(got, "tw-L", "hp.f")["result"] == "match" and _row(got, "tw-L", "hp.slope")["result"] == "match"
+        assert _row(got, "sw", "lp.f")["result"] == "match", _row(got, "sw", "lp.f")
+        assert _row(got, "sw", "gain_db")["result"] == "differs", _row(got, "sw", "gain_db")
+        delay = _row(got, "VSW", "ta_ms")
+        assert delay["result"] == "unknown" and "states no clock" in delay["reason"], delay
+        pt = _row(got, "VPT", "gain_db")
+        assert pt["result"] == "unknown" and pt["path"] is None, pt
+        assert pt["reason"] == "no channel PC-Tool shows is Virtual 7 on this model", pt
+        assert _row(got, "x", "gain_db")["result"] == "unknown", _row(got, "x", "gain_db")
+        a = _row(got, "VA", "gain_db")
+        assert a["result"] == "unknown" and "is Virtual 1" in a["reason"] and "its own number" in a["reason"], a
+        unreached = {r["channel"] for r in got["rows"] if r["parameter"] == "channel"}
+        assert {"Virtual 2", "Virtual 10", "Amp Out 2", "Line Out 14"} <= unreached, unreached
+        assert not unreached & {"Virtual 1", "Virtual 9", "Amp Out 1", "Line Out 9", "Virtual 7"}, unreached
+        assert not any("profile" in (r["reason"] or "") for r in got["rows"]), "a V EIGHT profile was read"
+        # the other direction: the level is taken, the delay at an assumed clock is not
+        code, out, err = _compare_cli(project, "propose", "--preset", "V8", "--from-file", pct6)
+        assert code == 0, (code, out[-800:], err)
+        new = _state.PresetHistory(os.path.join(project, "state"), "V8", project_dir=project).load("v_002")
+        assert new["channels"]["sw"]["gain_db"] == 0.0, new["channels"]["sw"]
+        kept = [line for line in out.splitlines() if line.startswith("  - sw ta_ms: ")]
+        assert kept and "states no clock" in kept[0], out[-1500:]
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
 def _check_compare_file_a_file_it_cannot_interpret_is_exit_2():
     """A file that decodes and then cannot be interpreted or compared -- a delay `abc`, a delay `NaN` -- is exit 2,
     `kind` interpret, the JSON refusal: the file's failure, never the journal's exit 1, never a traceback."""
@@ -3079,6 +3144,13 @@ def _check_from_file_tables_are_compare_files():
     finally:
         cf._virtual_by_letter = real
     assert ff.virtual_miss(outputs, "G") == cf._virtual_miss(outputs, "G") and "Virtual K" in ff.virtual_miss(outputs, "G")
+    assert ff.physical_by_slot(outputs) == cf._physical_by_slot(outputs) and sorted(ff.physical_by_slot(outputs)) == \
+        list("ABCDEFGHIJKL"), sorted(ff.physical_by_slot(outputs))
+    assert ff.physical_miss(outputs, "M") == cf._physical_miss(outputs, "M") == \
+        "no channel PC-Tool shows is Output M on this model", ff.physical_miss(outputs, "M")
+    v8 = [c for c in hx.interpret(hx.read_pct6(_V8_PCT6))["channels"] if c["kind"] == "output"]
+    assert sorted(ff.physical_by_slot(v8), key=int) == [str(n) for n in range(1, 15)], sorted(ff.physical_by_slot(v8))
+    assert sorted(ff.virtual_by_letter(v8), key=int) == ["1", "2", "3", "4", "5", "6", "9", "10"]
 
 
 # ── the fix round of the DSP file readers (W-13): what the review seats found, each held by a check ────────────────
@@ -3671,6 +3743,7 @@ def _selftest():
                   _check_compare_file_bands_it_cannot_decode_and_an_inverted_all_pass,
                   _check_compare_file_virtual_letters_are_pc_tools,
                   _check_compare_file_an_ordinal_lettered_project_keeps_its_slots,
+                  _check_compare_file_v_eight_slots_are_pc_tools_numbers,
                   _check_compare_file_a_file_it_cannot_interpret_is_exit_2,
                   _check_compare_file_pr15_matches_differs_and_unknown,
                   _check_compare_file_pr15_numbering_not_settled_is_unknown,

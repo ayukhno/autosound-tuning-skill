@@ -53,7 +53,7 @@ Differences fall into `audio` · `system` · `naming` · `save_metadata` · `ui_
 | model | Dev | how far it is checked |
 |---|---|---|
 | HELIX DSP ULTRA S | 39 | 57 mapping rules (50 confirmed, 6 assumption, 1 unknown), 15 one-change experiments, files from PC-Tool 6.03.03 to 6.05.01 |
-| HELIX NEXT V EIGHT DSP ULTIMATE | not yet pinned | checked by the user; recognised as checked once a sample file pins its Dev code |
+| HELIX NEXT V EIGHT DSP ULTIMATE | 44 | checked by the user; Dev code and channel layout (Virtual 1–14, Amp Out 1–8, Line Out 9–14) pinned on a demo-mode save, `testdata/helix-pct6/Helix-V8U.pct6`; the file states no clock, so delays are at an assumed 96 kHz |
 | any other ATF model | any | read with the ULTRA S rules at the user's risk: delays at an assumed 96 kHz, no A–L channel labels |
 
 Files of Dev 17, 32, 38, 50 and 53 open with the same container; their meaning is not checked.
@@ -73,9 +73,10 @@ cd skills/autosound-tuning/rew_tool && python3 -m helix_pct6 selftest        # t
 ```
 
 Fixtures are files saved by PC-Tool, never generated. `HELIX_PCT6_FIXTURES` names their folders (`os.pathsep`
-between them); by default it is `rew_tool/testdata/helix-pct6/`, which holds the reference file only, so the tests
-of the other files are skipped there, never passed. A fixture is looked up at its relative path (`experiments/…`,
-`others/`, `versions/`) and, failing that, by its file name in the folder. Error cases build containers in memory.
+between them); by default it is `rew_tool/testdata/helix-pct6/`, which holds the Ultra S reference file and the
+V EIGHT's demo save only, so the tests of the other files are skipped there, never passed. A fixture is looked up at
+its relative path (`experiments/…`, `others/`, `versions/`) and, failing that, by its file name in the folder. Error
+cases build containers in memory.
 
 ## Limits
 

@@ -751,7 +751,8 @@ value in the journal's unit (dB, ms as PC-Tool shows it, Hz, degrees, `NORM`/`IN
 or a short text for a band or a channel the version does not hold.
 
 `channel` is the channel's code in `project.json` (the ledger's key where `project.json` has none), `preset` for the
-preset's settings, or PC-Tool's name (`Output A`, `Virtual K`) for an output no row of the version reaches.
+preset's settings, or PC-Tool's name (`Output A`, `Virtual K`; on the V EIGHT `Amp Out 2`, `Virtual 10`) for an output
+no row of the version reaches.
 `parameter` is the version's field: `gain_db`, `ta_ms`, `polarity`, `phase_deg`, `mute`, `off`, `eq_bypass`;
 `hp.type`, `hp.f`, `hp.slope`, `hp.bypass` and the same for `lp`, and a bare `hp` or `lp` when the file holds no leg
 there, `journal` the version's leg as written (an OFF leg is `<leg>.slope` against 0; a leg the version holds
@@ -769,17 +770,21 @@ reaches no output, each of its fields by its own name (`gain_db`, `hp`, `lp`, `e
 path in `preset_settings` (`fx.realcenter`, `sources.main`, `rtc.curve.<name>`, `bt.auto_switch` ...).
 
 **What reaches what.** A row of the version reaches the file through its `slot` in `project.json` and its tier: tier
-`channels` the output the reader labels `Output <slot>`; tier `virtual_channels` the virtual channel PC-Tool shows
-that the reader labels `Virtual <slot>`, the index's letter, as PC-Tool letters it (on the HELIX DSP ULTRA S, A..F, K, L
-are indexes 0-5, 10, 11). A row with no such channel, a tier other than those two, or a model whose layout is not
-checked gives `unknown` rows; a virtual slot lettered by order (A..H, as v3.3.2 mapped it) is told, in its reason,
+`channels` the output whose reader's label ends in `<slot>` (`Output <slot>`); tier `virtual_channels` the virtual
+channel PC-Tool shows that the reader labels `Virtual <slot>`, the index's letter or number, as PC-Tool names it (on the
+HELIX DSP ULTRA S, A..F, K, L are indexes 0-5, 10, 11). The HELIX NEXT V EIGHT DSP ULTIMATE numbers them: slots "1".."14"
+-- virtual "1"-"6", "9", "10" are indexes 0-5, 8, 9 (7, 8, 11-14 are pass-throughs PC-Tool does not show); physical
+"1"-"8" Amp Out 1-8, indexes 16-23, "9"-"14" Line Out 9-14, indexes 24-29. A row with no such channel, a tier other
+than those two, or a model whose layout is not checked gives `unknown` rows; a virtual slot lettered by order (A..H, as v3.3.2 mapped it) is told, in its reason,
 the letter PC-Tool gives that ordinal (G: the 7th shown, Virtual K). An EQ band pairs with the file's band in the slot its `i` names, else with the first
 unpaired band of its type at its frequency. A value one side holds and the other does not record or decode is a row,
 `unknown` with its reason: a field the version leaves unstated is not read as its default. Not compared: a row's
 `status`, `eq_ptr` and `tag`, and `preset_settings`' `status` and `source_file`, which are the journal's bookkeeping;
 a file band that is bypassed or neutral and not named by the version, which does nothing. A row's field this
 comparison does not know is an `unknown` row. Tolerances: 0.005 dB, 0.005 Hz, 0.005 for a Q (a shelf's 0.71 is the
-file's 0.707), 0.001°, a slope exact, a delay to 0.01 ms as PC-Tool shows it.
+file's 0.707), 0.001°, a slope exact, a delay to 0.01 ms as PC-Tool shows it. A model whose clock is not checked, the
+file stating none (the V EIGHT), has every `ta_ms` `unknown`: its steps are not read as ms at an assumed 96 kHz. No
+capability profile is read for a `.pct6`, and none of the V EIGHT is bundled.
 
 **A Mosconi `.PR15`** (W-13, #219 T7; an addition): a `FILE` whose extension is `.PR<number>` is read by
 `rew_tool/mosconi_pr.py` instead, read only and hashed before and after the same way, and answered in the same
@@ -837,7 +842,7 @@ that differs, `<channel> <parameter> differs: journal <value>, file <value>`, th
 **`propose --from-file`** banks a NEW version through `propose`, built on HEAD unless `--on` names another; no banked
 version is rewritten. A row of the base reaches the file's channel by item 13's rules; an unchecked layout reaches
 none. A reached row takes what the file gives, in the journal's units: `gain_db` (to 0.01 dB), `ta_ms` (as PC-Tool
-shows it), `polarity`, `mute`, `phase_deg` where the channel has the phase control or the base states one, `hp` and
+shows it; not where item 13 leaves it `unknown` at an assumed clock), `polarity`, `mute`, `phase_deg` where the channel has the phase control or the base states one, `hp` and
 `lp` (`{f, type, slope}`; for an OFF leg null, or `{f, type, slope: "OFF"}` with the file's stored corner where the
 channel has the phase control or the base holds that form) and `eq` (every band that works, and every bypassed one that would: `type`,
 `f`, `gain_db`, `q`, `i` the file's slot, `bypass: true` when bypassed). A value the file holds as no finite number, or

@@ -8,8 +8,8 @@ writes nothing. What it hands back -- a `source_file` record, a delta, the names
 **The codes between the journal and the file live here** (`POLARITY`, `EQ_CODES`, `XO_FAMILY`, ...): the one table both
 directions are to read. compare-file (`compare_file.py`) still holds its own copies, written before this module;
 `apply.py`'s selftest holds the two equal until compare-file reads them from here. The slot rule -- which output a row
-reaches -- is compare-file's `_virtual_by_letter`, taken as it is (`virtual_by_letter`), and its reasons are its words
-(`virtual_miss`).
+reaches -- is compare-file's `_physical_by_slot` and `_virtual_by_letter`, taken as they are (`physical_by_slot`,
+`virtual_by_letter`), and its reasons are its words (`physical_miss`, `virtual_miss`).
 
 **What the file gives a row** (`build`), in the journal's units: the level (dB, to 0.01), the delay as PC-Tool shows it
 (ms, to 0.01), the polarity, the mute, the phase where the channel has the phase control or the version states one,
@@ -93,6 +93,16 @@ def _state():
 def _compare_file():
     """`state/compare_file.py`: the comparison and the slot rule, one module object."""
     return _siblings().load("state/compare_file.py")
+
+
+def physical_by_slot(outputs):
+    """compare-file's slot rule for the physical tier, as it is: one place for it."""
+    return _compare_file()._physical_by_slot(outputs)
+
+
+def physical_miss(outputs, slot):
+    """compare-file's reason for a physical slot that reaches no output, in its words."""
+    return _compare_file()._physical_miss(outputs, slot)
 
 
 def virtual_by_letter(outputs):
@@ -193,7 +203,7 @@ def reach(inv, snap, identity):
     PC-Tool shows that no row is on, as `(label, text)`."""
     st = _state()
     outputs = [c for c in inv["channels"] if c["kind"] == "output"]
-    physical = {c["label"][len("Output "):]: c for c in outputs if c.get("group") == "physical" and c.get("label")}
+    physical = physical_by_slot(outputs)
     virtual = virtual_by_letter(outputs)
     letter_of = {c["index"]: "Virtual " + letter for letter, c in virtual.items()}
     rows, reached = [], set()
@@ -212,8 +222,7 @@ def reach(inv, snap, identity):
             else:
                 ch = (physical if tier == "channels" else virtual).get(slot)
                 if ch is None:
-                    why = ("no channel PC-Tool shows is Output %s on this model" % slot if tier == "channels"
-                           else virtual_miss(outputs, slot))
+                    why = physical_miss(outputs, slot) if tier == "channels" else virtual_miss(outputs, slot)
             if ch is not None:
                 reached.add(ch["index"])
             rows.append((tier, key, code, row, ch, why))
@@ -332,7 +341,9 @@ def _channel_values(ch, row, code=None):
         why["gain_db"] = "the file's level is %s" % (level.get("state") or "missing")
     timing = ch["timing"][0] if ch.get("timing") else {}
     delay = timing.get("delay") or {}
-    if delay.get("state") == "present" and _finite(delay.get("display_ms")):
+    if delay.get("clock_assumed"):
+        why["ta_ms"] = _compare_file().CLOCK_ASSUMED
+    elif delay.get("state") == "present" and _finite(delay.get("display_ms")):
         fields["ta_ms"] = delay["display_ms"]
     elif delay.get("state") == "present":
         why["ta_ms"] = "the file's delay %r is not a finite number" % delay.get("display_ms")

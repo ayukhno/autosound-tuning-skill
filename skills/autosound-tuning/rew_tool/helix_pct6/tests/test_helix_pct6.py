@@ -2,8 +2,9 @@
 by path); `python3 -m unittest discover -s helix_pct6/tests` from rew_tool runs the same tests.
 
 Fixtures are existing files saved by PC-Tool, never generated. `HELIX_PCT6_FIXTURES` names their folders, separated
-by `os.pathsep` (default: the skill's `rew_tool/testdata/helix-pct6/`, which holds the reference file only). A fixture
-is looked up at its relative path in each folder (`experiments/...`, `others/`, `versions/`), then by its file name.
+by `os.pathsep` (default: the skill's `rew_tool/testdata/helix-pct6/`, which holds the Ultra S reference file and the
+V EIGHT's demo save only). A fixture is looked up at its relative path in each folder (`experiments/...`, `others/`,
+`versions/`), then by its file name.
 The skill's own folder is always searched last, so the reference file is found whatever the variable says.
 `HELIX_PCT6_VERSIONS` may list more files or folders of `.pct6` (separated by `os.pathsep`); with it, the files must
 cover PC-Tool 6.03.03, 6.03.04, 6.04.01 and 6.05.01 -- the range `models.PC_TOOL_VERSIONS_READ` names, checked only
@@ -139,6 +140,64 @@ class TestAyaReference(unittest.TestCase):
 
     def test_rules_confidence_kept(self):
         self.assertEqual(self.inv["rules"]["confidence"], {"confirmed": 50, "assumption": 6, "unknown": 1})
+
+
+class TestVEight(unittest.TestCase):
+    """The HELIX NEXT V EIGHT DSP ULTIMATE: the owner's demo-mode save (PC-Tool 6.05.01, 21.11.2026), shipped as
+    `Helix-V8U.pct6`. The layout is PC-Tool's, from its screens: numbers, no letters."""
+
+    doc = inv = absent = None
+
+    @classmethod
+    def setUpClass(cls):
+        try:
+            path = fixture("Helix-V8U.pct6")
+        except unittest.SkipTest as exc:
+            cls.absent = str(exc)
+            return
+        cls.doc = hp.read_pct6(path)
+        cls.inv = hp.interpret(cls.doc)
+
+    def setUp(self):
+        if self.absent:
+            self.skipTest(self.absent)
+
+    def test_identity(self):
+        self.assertEqual(self.doc.input_sha256, "759eaf4b6699b647a44c668bc353fa5a62a88c3545c92a90065d068e39b0d42d")
+        self.assertEqual(self.doc.input_md5, "843160d2ab5a9d9827e07c5d9ead462b")
+        self.assertEqual(self.doc.dev, "44")
+        self.assertEqual(self.doc.pc_tool_version, "6.05.01")
+        self.assertEqual(self.inv["device"]["file_name_inside"], "/Users/Shared/Helix-V8U.pct6")   # no user name
+
+    def test_dev_44_is_the_v_eight_checked(self):
+        device = self.inv["device"]
+        self.assertEqual((device["dev"], device["name"], device["verified"], device["layout"]),
+                         ("44", "HELIX NEXT V EIGHT DSP ULTIMATE", True, "v-eight"))
+        # the file states no clock and none is checked for the model: the reader's 96 kHz is an assumption, said so
+        self.assertEqual((device["clock_hz"], device["clock_assumed_hz"]), (None, 96000))
+        self.assertIn("delays use an assumed 96000 Hz clock", self.inv["notes"])
+        self.assertTrue(channel(self.inv, "output", 16)["timing"][0]["delay"]["clock_assumed"])
+
+    def test_channels_are_numbered_as_pc_tool_numbers_them(self):
+        want = {0: ("Virtual 1", "virtual", True), 8: ("Virtual 9", "virtual", True), 9: ("Virtual 10", "virtual", True),
+                6: ("Virtual 7", "internal", False), 13: ("Virtual 14", "internal", False),
+                16: ("Amp Out 1", "physical", True), 23: ("Amp Out 8", "physical", True),
+                24: ("Line Out 9", "physical", True), 29: ("Line Out 14", "physical", True),
+                14: (None, "internal", False), 15: (None, "internal", False)}
+        for index, (label, group, shown) in want.items():
+            c = channel(self.inv, "output", index)
+            self.assertEqual((c["label"], c["group"], c["visible_in_pc_tool"]), (label, group, shown), index)
+        shown = sorted(c["index"] for c in self.inv["channels"]
+                       if c["kind"] == "output" and c["group"] == "virtual" and c["visible_in_pc_tool"])
+        self.assertEqual(shown, [0, 1, 2, 3, 4, 5, 8, 9])
+
+    def test_the_files_names_agree_with_the_layout(self):
+        self.assertEqual(channel(self.inv, "output", 16)["name"], "Front Left High")      # Amp Out 1
+        self.assertEqual(channel(self.inv, "output", 24)["name"], "Subwoofer 1")          # Line Out 9
+        self.assertEqual(channel(self.inv, "output", 8)["name"], "Subwoofer 1")           # Virtual 9
+        for index in (6, 7, 10, 11, 12, 13):                                              # the pass-throughs
+            self.assertTrue(channel(self.inv, "output", index)["name"].startswith("Pass Through"), index)
+            self.assertEqual(channel(self.inv, "output", index)["filters"], [], index)
 
 
 class TestExperiments(unittest.TestCase):

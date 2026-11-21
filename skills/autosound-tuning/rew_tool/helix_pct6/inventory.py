@@ -152,8 +152,28 @@ def channel_name(element) -> Optional[str]:
     return " ".join(parts)
 
 
+#: The HELIX NEXT V EIGHT DSP ULTIMATE's virtual channels PC-Tool shows (Virtual 1-6, 9, 10); 7, 8, 11-14 are
+#: pass-throughs (PC-Tool's screens, 2026-11-21, on testdata/helix-pct6/Helix-V8U.pct6).
+V_EIGHT_SHOWN = (0, 1, 2, 3, 4, 5, 8, 9)
+
+
+def _layout_v_eight(index: int) -> dict:
+    """The V EIGHT numbers its channels: Virtual 1-14 are indexes 0-13, Amp Out 1-8 indexes 16-23, Line Out 9-14
+    indexes 24-29."""
+    if 16 <= index <= 29:
+        return {"group": "physical", "label": "%s %d" % ("Amp Out" if index <= 23 else "Line Out", index - 15),
+                "visible_in_pc_tool": True}
+    if 0 <= index <= 13:
+        visible = index in V_EIGHT_SHOWN
+        return {"group": "virtual" if visible else "internal", "label": "Virtual %d" % (index + 1),
+                "visible_in_pc_tool": visible}
+    return {"group": "internal", "label": None, "visible_in_pc_tool": False}
+
+
 def _layout(kind: str, index: int, layout: Optional[str]) -> dict:
-    """Where a channel sits on the model. Known only for the HELIX DSP ULTRA S layout."""
+    """Where a channel sits on the model. Known for the HELIX DSP ULTRA S and HELIX NEXT V EIGHT DSP ULTIMATE layouts."""
+    if layout == "v-eight" and kind == "output":
+        return _layout_v_eight(index)
     if layout != "ultra-s" or kind != "output":
         return {"group": None, "label": None, "visible_in_pc_tool": None}
     if 14 <= index <= 25:

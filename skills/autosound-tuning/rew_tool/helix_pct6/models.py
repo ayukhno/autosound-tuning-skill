@@ -37,9 +37,11 @@ MODELS = (
     Model("39", "HELIX DSP ULTRA S", True, 96000, "ultra-s",
           "57 mapping rules (50 confirmed, 6 assumption, 1 unknown), 15 one-change experiments, "
           "files from PC-Tool 6.03.03 to 6.05.01"),
-    Model(None, "HELIX NEXT V EIGHT DSP ULTIMATE", True, None, None,
-          "checked by the user (2026-11-20); its Dev code is not yet pinned from a sample file, so a file of "
-          "this model is not yet recognised as verified"),
+    Model("44", "HELIX NEXT V EIGHT DSP ULTIMATE", True, None, "v-eight",
+          "checked by the user (2026-11-20); Dev 44 and the channel layout pinned on his demo-mode save "
+          "(testdata/helix-pct6/Helix-V8U.pct6, PC-Tool 6.05.01) against PC-Tool's screens: Virtual 1-14, "
+          "Amp Out 1-8, Line Out 9-14; the file states no clock and none is checked, so delays are at an "
+          "assumed 96 kHz"),
     Model("22", "HELIX DSP ULTRA", False, None, None,
           "named in the device list; no sample file"),
 )
