@@ -2294,6 +2294,50 @@ def _check_compare_file_a_leg_with_no_slope_is_unknown():
         shutil.rmtree(top, ignore_errors=True)
 
 
+def _check_compare_file_a_preset_row_without_its_value_is_system():
+    """A preset setting the file does not hold is a `system` row like the rest of the preset: `bt.auto_switch` against a
+    file with no input mask is unknown, category system, and after every audio row."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_compare_category_")
+    try:
+        def auto(state):
+            state["preset_settings"]["bt"]["auto_switch"] = True
+
+        def no_mask(root):
+            for e in root.iter("MCV2"):
+                e.attrib.pop("IMASK", None)
+
+        project, pct6 = _aya_project(top, edit_state=auto, edit_xml=no_mask)
+        got = _compared(project, pct6)
+        row = _row(got, "preset", "bt.auto_switch")
+        assert row["result"] == "unknown" and row["category"] == "system", row
+        cats = [r["category"] for r in got["rows"]]
+        assert "audio" not in cats[cats.index("system"):], cats
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_compare_file_a_journal_fault_is_the_journals():
+    """A version whose leg `slope` or `phase_deg` is not a number is refused as the journal's fault, exit 1 `journal`,
+    never blamed on the file as exit 2 `interpret`."""
+    import shutil
+    import tempfile
+    for field, edit in (("slope", lambda st: st["channels"]["w-L"]["hp"].update(slope="24")),
+                        ("phase_deg", lambda st: st["channels"]["tw-L"].update(phase_deg="0"))):
+        top = tempfile.mkdtemp(prefix="autosound_compare_kinds_")
+        try:
+            try:
+                project, pct6 = _aya_project(top, edit_state=edit)
+            except ValueError:
+                continue            # the ledger refuses it itself: then it never reaches compare-file
+            code, out, err = _compare_cli(project, "compare-file", "v_001", pct6, "--json")
+            assert code == 1, (field, code, out, err)
+            assert json.loads(out)["error"]["kind"] == "journal", (field, out)
+        finally:
+            shutil.rmtree(top, ignore_errors=True)
+
+
 def _check_compare_file_bands_it_cannot_decode_and_an_inverted_all_pass():
     """A file band of a type code the reader does not decode is a row, unknown, whether the version holds EQ for the
     channel or not; an all-pass the file holds inverted is unknown, the version having no way to record an invert."""
@@ -2738,6 +2782,8 @@ def _selftest():
                   _check_compare_file_unreadable_is_exit_2, _check_compare_file_input_changed_is_exit_3,
                   _check_compare_file_writes_nothing, _check_compare_file_delay_rounds_half_up_on_both_sides,
                   _check_compare_file_a_leg_with_no_slope_is_unknown,
+                  _check_compare_file_a_preset_row_without_its_value_is_system,
+                  _check_compare_file_a_journal_fault_is_the_journals,
                   _check_compare_file_bands_it_cannot_decode_and_an_inverted_all_pass,
                   _check_compare_file_virtual_letters_are_pc_tools,
                   _check_compare_file_a_file_it_cannot_interpret_is_exit_2,

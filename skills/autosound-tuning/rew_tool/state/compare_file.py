@@ -144,7 +144,16 @@ def _compared(parameter, channel, journal, path, expected, policy, show=None, to
             "confirm": confirm}
 
 
-def _said(parameter, channel, journal, file, result, reason, category="audio", path=None):
+def _said(parameter, channel, journal, file, result, reason, category=None, path=None):
+    """A row built without `compare.check`. Its category is the one `check` would give its path; a row with no path
+    is `audio`, except a preset setting other than a source level or the input gain, which is `system` (item 13)."""
+    if category is None:
+        if path is not None:
+            category = _helix().compare.category(path)
+        elif channel == "preset" and not (parameter.startswith("sources.") or parameter == "input_gain_db"):
+            category = "system"
+        else:
+            category = "audio"
     return {"parameter": parameter, "channel": channel, "journal": journal, "file": file, "result": result,
             "reason": reason, "category": category, "path": path}
 
@@ -596,7 +605,28 @@ def load_journal(project_dir, version, preset=None):
     """`(snapshot, identity)`: the version and `project.json`'s channels by every name a row may use. The journal's
     side, and the only one that raises: `ValueError` (a `SnapshotError` among them) or `OSError` -- exit 1."""
     _name, snap = load_version(project_dir, version, preset)
+    _check_kinds(snap)
     return snap, _state().project_channels(project_dir)
+
+
+def _check_kinds(snap):
+    """The two fields the ledger's validators leave untyped and this comparison does arithmetic on: a leg's `slope`
+    and a row's `phase_deg` must be numbers, or the version is refused here -- a journal fault, exit 1, never blamed
+    on the file (exit 2 `interpret`)."""
+    def number(value):
+        return isinstance(value, (int, float)) and not isinstance(value, bool)
+    for tier, rows in snap.items():
+        if not isinstance(rows, dict):
+            continue
+        for code, row in rows.items():
+            if not isinstance(row, dict):
+                continue
+            if row.get("phase_deg") is not None and not number(row["phase_deg"]):
+                raise ValueError("%s %s: phase_deg is %r, not a number" % (tier, code, row["phase_deg"]))
+            for leg in ("hp", "lp"):
+                spec = row.get(leg)
+                if isinstance(spec, dict) and spec.get("slope") is not None and not number(spec["slope"]):
+                    raise ValueError("%s %s: %s.slope is %r, not a number" % (tier, code, leg, spec["slope"]))
 
 
 def compare(project_dir, version, file_path, preset=None):

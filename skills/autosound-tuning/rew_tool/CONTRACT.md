@@ -753,12 +753,16 @@ or a short text for a band or a channel the version does not hold.
 `channel` is the channel's code in `project.json` (the ledger's key where `project.json` has none), `preset` for the
 preset's settings, or PC-Tool's name (`Output A`, `Virtual G`) for an output no row of the version reaches.
 `parameter` is the version's field: `gain_db`, `ta_ms`, `polarity`, `phase_deg`, `mute`, `off`, `eq_bypass`;
-`hp.type`, `hp.f`, `hp.slope`, `hp.bypass` and the same for `lp` (an OFF leg is `<leg>.slope` against 0; a leg the
+`hp.type`, `hp.f`, `hp.slope`, `hp.bypass` and the same for `lp`, and a bare `hp` or `lp` when the file holds no leg
+there, `journal` the version's leg as written (an OFF leg is `<leg>.slope` against 0; a leg the
 version holds with no slope gives `<leg>.slope` unknown, the file's leg beside it); `eq` (a version that holds no EQ
 for the channel); `eq[<n>].type`, `.f`, `.gain_db`, `.q`, `.bypass` for a band paired with the file's band in slot n,
 and `eq[<n>].invert`, unknown, when that band is an all-pass the file holds inverted (the journal cannot record an
 invert); `eq[<n>]` for an active band of the file the version does not hold -- unknown when its type code is one the
-reader does not decode --, `eq <type> <f> Hz` for a band of the version the file does not hold; `channel` for an output no row reaches; under `preset`, the field's
+reader does not decode --, `eq <type> <f> Hz` for a band of the version the file does not hold, and `eq[<i>]`, `journal` the version's band, when
+its `i` names a slot the file does not have; `channel` for an output no row reaches; for a row of the version that
+reaches no output, each of its fields by its own name (`gain_db`, `hp`, `lp`, `eq` -- here the whole band list --
+...), unknown; under `preset`, the field's
 path in `preset_settings` (`fx.realcenter`, `sources.main`, `rtc.curve.<name>`, `bt.auto_switch` ...).
 
 **What reaches what.** A row of the version reaches the file through its `slot` in `project.json` and its tier: tier
