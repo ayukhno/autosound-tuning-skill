@@ -1629,7 +1629,7 @@ four assessment lines, and nothing is built before his `ok` on that task. Resume
 
 ## S-136 · W-13's final review: four things after the tag v3.3.2
 
-**Status**: open 2026-11-21 · the next wave's pool; recorded, not diagnosed · from the final branch review on Fable
+**Status**: open 2026-11-21 · in the patch v3.3.3 (the Arbiter's decision, 2026-11-21; `docs/PLAN-v3.3.3.md`), branch `patch-2026-11-21` · was: open 2026-11-21 · the next wave's pool; recorded, not diagnosed · from the final branch review on Fable
 
 1. The Mosconi filter model is bound only in `predict`; `eq_propose`, `joint_search`, `xover_candidates` and
    `version_bench` still use the generic filters (said so in the v3.3.2 texts). Bind and reset them the way `predict`
@@ -1653,7 +1653,7 @@ Not the product's Ukrainian texts (the interface strings, the language versions)
 
 ## S-134 · The method's texts still cite the deleted `ayukhno/autosound-measurements` by name
 
-**Status**: open 2026-11-21 · the next wave's pool; recorded, not diagnosed · found while doing S-130, whose asks named the link in three files
+**Status**: open 2026-11-21 · in the patch v3.3.3 (the Arbiter's decision, 2026-11-21; `docs/PLAN-v3.3.3.md`), branch `patch-2026-11-21` · was: open 2026-11-21 · the next wave's pool; recorded, not diagnosed · found while doing S-130, whose asks named the link in three files
 
 S-130 took the three files with a LINK. A sweep for the repo's NAME finds it cited as a source in the method's
 texts and data: `references/tooling/helix-eq-export.md:20`, `references/tooling/rew-api-quirks.md:18`,
