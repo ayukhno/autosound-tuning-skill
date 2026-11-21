@@ -1649,7 +1649,7 @@ released skill (its `depends_on` is required). Resume: `hub/bin/role skill --res
 
 ## S-132 · Mosconi PICO 6/8-2: a selectable profile and the Mosconi / Gladen filter model (hub #345 RES-026, skill #214)
 
-**Status**: open 2026-11-21 · on milestone `W-13 · v3.3.2` as #219, `ok` (the Arbiter: «Усі шість», 2026-11-21) · was: W-13's pool, order 4 of 5; recorded, not diagnosed
+**Status**: open 2026-11-21 · T5 (profile, sonnet · medium, the trial) and T6 (`mosconi_gladen`, opus · medium) with their implementers; T7 (`.PR15` reader) next · on milestone `W-13 · v3.3.2` as #219, `ok` (the Arbiter: «Усі шість», 2026-11-21) · was: W-13's pool, order 4 of 5; recorded, not diagnosed
 
 The profile does not depend on anything and could go earlier, since the contributor of #214 is waiting. The filter
 library follows S-131's pattern: one library per vendor, no write path. The intake is the Arbiter's (hub #345 comments):
@@ -1659,7 +1659,7 @@ possible; it joins this wave (the Arbiter: «У цю хвилю», 2026-11-21). 
 
 ## S-131 · Read `.pct6` in the skill: take research's `helix_pct6`, a comparison verb, never writes (hub #344 RES-025)
 
-**Status**: open 2026-11-21 · T1 built `0123561` + `380a4bf` (reviewed, fixed, re-reviewed); T2 built `974bdf1` (`compare-file`, CONTRACT.md item 13; the review's five findings fixed, the fix's re-review running; virtual letters = PC-Tool's ordinal among shown channels, the reader's own labels are index letters); T3 (`attest`/`propose --from-file`) with its implementer · open 2026-11-21 · on milestone `W-13 · v3.3.2` as #218, `ok` (the Arbiter: «Усі шість», 2026-11-21) · was: W-13's pool, order 3 of 5; recorded, not diagnosed
+**Status**: open 2026-11-21 · T1 built `0123561` + `380a4bf` (reviewed, fixed, re-reviewed); T2 built `974bdf1` (`compare-file`, CONTRACT.md item 13; the review's five findings fixed, the fix's re-review running; virtual letters = PC-Tool's ordinal among shown channels, the reader's own labels are index letters); T3 built `e8f5790` (its task review stopped before it reported: T3 goes to the group seats); T2's re-review findings fixed `ae4e1a5`; T4 texts `92e2b5c` · open 2026-11-21 · on milestone `W-13 · v3.3.2` as #218, `ok` (the Arbiter: «Усі шість», 2026-11-21) · was: W-13's pool, order 3 of 5; recorded, not diagnosed
 
 The core of the wave. It sets the comparison's JSON shape in `CONTRACT.md` (S-133 needs it) and the pattern of one
 library per vendor with a never-writes test (S-132 repeats it). Ask 6 is decided: `AYA.pct6` ships byte for byte
