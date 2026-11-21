@@ -341,6 +341,7 @@ li { margin:3px 0; font-size:13.5px; }
 .slot { display:flex; align-items:center; gap:8px; padding:4px 0; border-bottom:1px solid #f1f1f1; flex-wrap:wrap; }
 .slot .sl { width:26px; color:#555; } .slot .sc { min-width:90px; }
 .slot-off .sc { color:#9ca3af; }
+.slot-reslot .sl { color:#b45309; font-weight:600; } .slot .reslot { width:100%; font-size:12px; color:#b45309; }
 .slot input.code, .slot input.slotname { min-width:120px; width:140px; }
 button.tog { font:inherit; font-size:12px; font-weight:600; text-transform:uppercase; padding:3px 10px;
              border-radius:6px; background:#fff; cursor:pointer; margin-left:auto; }
@@ -543,20 +544,24 @@ function redrawMap() {
   const groups = src.groups.filter(g => used.length ? used.includes(g.tier) : g.in_scope);
   body.innerHTML = groups.map(g => {
     const mine = src.chans.filter(c => c.tier === g.tier);
-    const slots = g.slots.length ? g.slots : mine.map(c => c.slot);
+    // a live channel on a slot the profile does not name (an older lettering) comes after, marked for a re-slot
+    const reslot = g.reslot || [];
+    const slots = g.slots.length ? g.slots.concat(g.reslot || []) : mine.map(c => c.slot);
     const rows = slots.map(slot => {
       const c = mine.find(x => String(x.slot) === String(slot)) || {};
       const origOn = !!c.code && !c.hidden && c.role !== 'unused';
       const e = edits[g.tier + '|' + slot] || {};
       const on = 'on' in e ? e.on : origOn;
       const code = 'code' in e ? e.code : (origOn ? c.code : '');
-      return '<div class="slot' + (on ? '' : ' slot-off') + '" data-tier="' + esc(g.tier) + '" data-slot="' + esc(slot)
+      const re = reslot.includes(String(slot));
+      return '<div class="slot' + (on ? '' : ' slot-off') + (re ? ' slot-reslot' : '') + '" data-tier="' + esc(g.tier) + '" data-slot="' + esc(slot)
         + '" data-orig-on="' + (origOn ? 1 : 0) + '" data-orig-code="' + esc(origOn ? c.code : '') + '" data-on="' + (on ? 1 : 0) + '">'
         + '<span class="sl">' + esc(slot) + ' ·</span><span class="sc">' + esc(on ? code : (c.code || offCode(g.tier, slot))) + '</span>'
         + '<input type="text" class="code" list="codes-' + esc(g.tier) + '" value="' + esc(code)
         + '" placeholder="' + esc(T.code_pick) + '" oninput="codeEdited(this)">'
         + '<button type="button" class="tog ' + (on ? 'tog-off' : 'tog-on') + '" onclick="toggleSlot(this)">'
-        + esc(on ? T.chan_off : T.chan_on) + '</button></div>';
+        + esc(on ? T.chan_off : T.chan_on) + '</button>'
+        + (re ? '<span class="reslot">' + esc(T.slot_reslot) + '</span>' : '') + '</div>';
     }).join('');
     return '<details class="tier" open><summary>' + esc((T.tier_names || {})[g.tier] || g.label)
       + ' <b class="usedtotal"></b></summary>' + rows + '</details>';
@@ -1242,6 +1247,10 @@ def _knobs_block(f, ui):
             f'</div></div>')
 
 
+#: The mark beside a slot the project uses and the processor's profile does not name (`intake.reslot_slots`).
+_SLOT_RESLOT_EN = "not a slot of this DSP: switch it off here and on at its own slot"
+
+
 def _page_data(m):
     """What the page's JS draws the channel map from — embedded, so it works before any save."""
     chans = [{"tier": c.get("tier"), "slot": str(c.get("slot")), "code": c.get("code"),
@@ -1255,10 +1264,12 @@ def _page_data(m):
     # Round 6: what is wrong is said AT the field. English fallbacks for a language without them.
     t.update({k: ui.get(k) or en for k, en in _ERR_EN.items()})
     t["tier_names"] = ui.get("tier_names") if isinstance(ui.get("tier_names"), dict) else {}
+    t["slot_reslot"] = ui.get("slot_reslot") or _SLOT_RESLOT_EN
     data = {"dsps": [{"vendor": d["vendor"], "model": d["model"], "groups": d["groups"],
                       "knobs": d.get("knobs") or []} for d in m["dsps"]],
             "saved": {"vendor": m["dsp"]["vendor"], "model": m["dsp"]["model"], "new": bool(m["dsp"]["new"]),
-                      "groups": m["dsp"]["groups"], "channels": chans, "slotted": len(chans),
+                      "groups": [dict(g, reslot=intake.reslot_slots(g, chans)) for g in m["dsp"]["groups"]],
+                      "channels": chans, "slotted": len(chans),
                       "tiers_used": m["tiers_used"], "knobs": m["dsp"].get("knobs") or []},
             "controls": m["controls"], "car": m["car"],
             "lang": m["lang"] if m["lang"] in intake.LANGUAGES else None, "lang_saved": m["lang_saved"],
@@ -2146,6 +2157,17 @@ def _selftest():
         m2 = model(root, "uk")
         assert [(g["tier"], g["used"], g["total"]) for g in m2["map"]] == \
             [("virtual_channels", 1, 8), ("channels", 0, 12)], m2["map"]
+        # a slot the project uses that the profile does not name (an A..H-lettered Ultra S: the sub at virtual G) is
+        # carried to the page beside the profile's slots, marked for a re-slot; the rest carry none
+        aya = tempfile.mkdtemp(prefix="intake_form_reslot_", dir=root)
+        intake.save(aya, "dsp.vendor", helix_id[0])
+        intake.save(aya, "dsp.model", helix_id[1])
+        intake.save_slot(aya, "virtual_channels", "G", "VSW")
+        page_g = render(model(aya, "uk"))
+        old_lettering = carried(page_g)["saved"]["groups"]
+        assert [g.get("reslot") for g in old_lettering[:2]] == [["G"], []], old_lettering
+        assert "g.slots.concat(g.reslot" in page_g and "slot-reslot" in page_g, "the page does not draw a re-slot"
+        assert carried(page_g)["t"]["slot_reslot"] == labels("en")["ui"]["slot_reslot"] == _SLOT_RESLOT_EN
         # ── round 5: knobs outside the DSP -- the processor's own pre-seeded, others by name ─
         d2 = carried(render(m2))
         assert d2["saved"]["knobs"] == ["SubRC", "RearRC"], d2["saved"]["knobs"]

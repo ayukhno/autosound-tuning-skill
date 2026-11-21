@@ -275,6 +275,20 @@ def slot_names(group):
     return [str(i + 1) for i in range(n)]
 
 
+def reslot_slots(group, channels):
+    """The slots of one tier that a LIVE channel of the project sits on and the profile does not name, sorted -- a
+    project lettered by an older rule (an HELIX DSP ULTRA S whose virtual tier was lettered A..H in order keeps its
+    sub at G; PC-Tool's letter is K). Drawn after the profile's slots, marked for a re-slot, so the channel can be
+    moved to its slot. None on a tier whose size is not known: there every slot is the project's own."""
+    names = slot_names(group)
+    if not names:
+        return []
+    return sorted({str(c.get("slot")) for c in channels
+                   if isinstance(c, dict) and c.get("tier") == group.get("tier") and c.get("slot")
+                   and c.get("code") and not c.get("hidden") and c.get("role") != "unused"
+                   and str(c.get("slot")) not in names})
+
+
 def off_code(tier, slot):
     """`off-out-A`, `off-virt-F`: the name of a slot nothing is wired to."""
     return f"{OFF_PREFIX.get(tier, 'off-' + str(tier))}-{slot}"
@@ -617,7 +631,8 @@ def channel_map(project_dir):
     `[{"tier", "label", "total", "used", "rows": [{"slot", "code", "on"}]}]`. The tiers are the ones
     the person said this car uses (`dsp.tiers_used`), else every in-scope tier the processor has.
     A tier of known size lists EVERY slot -- a spare one is a row, not an absence; a tier whose
-    size is not known yet lists only the rows the project already has.
+    size is not known yet lists only the rows the project already has. A live channel on a slot the
+    profile does not name (`reslot_slots`) is a row after them, `"reslot": true`; `total` counts the rows.
     """
     dsp = dsp_state(project_dir)
     data = _read_project(project_dir) or {}
@@ -628,13 +643,14 @@ def channel_map(project_dir):
         if (used and g["tier"] not in used) or (not used and not g["in_scope"]):
             continue
         mine = {str(c.get("slot")): c for c in channels if c.get("tier") == g["tier"] and c.get("slot")}
-        slots = slot_names(g) or sorted(mine)
+        extra = reslot_slots(g, channels)
+        slots = (slot_names(g) or sorted(mine)) + extra
         rows = []
         for slot in slots:
             c = mine.get(slot) or {}
             code = c.get("code") or ""
             on = bool(code) and not c.get("hidden") and c.get("role") != "unused"
-            rows.append({"slot": slot, "code": code, "on": on})
+            rows.append(dict({"slot": slot, "code": code, "on": on}, **({"reslot": True} if slot in extra else {})))
         out.append({"tier": g["tier"], "label": g["label"], "total": len(slots),
                     "used": sum(1 for r in rows if r["on"]), "rows": rows,
                     "sized": bool(slot_names(g))})
@@ -2635,6 +2651,21 @@ def _selftest():
         # the Ultra S's virtual tier is lettered as PC-Tool letters it: A..F, K, L (the profile's `row_ids`)
         assert [r["slot"] for r in cmap[0]["rows"]] == list("ABCDEFKL"), cmap[0]["rows"]
         assert [r["slot"] for r in cmap[1]["rows"]] == list("ABCDEFGHIJKL"), cmap[1]["rows"]
+        assert not any("reslot" in r for g in cmap for r in g["rows"]), cmap
+        # a project lettered A..H in order (v3.3.2's rule) keeps its sub at G: drawn after the profile's slots and
+        # marked for a re-slot, so the form can switch it off there and on at K -- the move takes it across
+        aya = os.path.join(root, "reslot")
+        save(aya, "dsp.vendor", "Audiotec-Fischer")
+        save(aya, "dsp.model", "Helix DSP Ultra S")
+        save_slot(aya, "virtual_channels", "G", "VSW")
+        vmap = channel_map(aya)[0]
+        assert [r["slot"] for r in vmap["rows"]] == list("ABCDEFKLG"), vmap["rows"]
+        assert vmap["rows"][-1] == {"slot": "G", "code": "VSW", "on": True, "reslot": True}, vmap["rows"][-1]
+        assert not any("reslot" in r for r in vmap["rows"][:-1]) and (vmap["used"], vmap["total"]) == (1, 9), vmap
+        move_slot(aya, "virtual_channels", "VSW", "K")
+        vmap = channel_map(aya)[0]
+        assert [r["slot"] for r in vmap["rows"]] == list("ABCDEFKL"), "a slot left spare is still drawn"
+        assert vmap["rows"][6] == {"slot": "K", "code": "VSW", "on": True}, vmap["rows"][6]
         assert cmap[1]["rows"][0] == {"slot": "A", "code": "", "on": False}, cmap[1]["rows"][0]
         save_slot(slots, "channels", "A", on=False)
         save_slot(slots, "channels", "A", "w-L")            # a spare with no history is REPLACED

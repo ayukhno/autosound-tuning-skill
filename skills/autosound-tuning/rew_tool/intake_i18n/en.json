@@ -85,6 +85,7 @@
     "map_new": "This is a new DSP: first fill in its baseline separately (link above) — then the map will appear here.",
     "map_new_unsaved": "This DSP is not in the skill profiles. Save it — then the separate \"New DSP\" form will open.",
     "code_needed": "code first",
+    "slot_reslot": "not a slot of this DSP: switch it off here and on at its own slot",
     "dsp_new_unsaved": "New DSP: click \"Save\", then fill in its baseline in the separate form.",
     "new_dsp_link": "New DSP — fill in separately",
     "new_dsp_not_new": "This DSP has a profile in the skill — its baseline does not need to be asked.",
