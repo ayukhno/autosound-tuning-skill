@@ -800,8 +800,10 @@ the version paired with it has its `f`, `gain_db` and `q` `unknown`). A leg's sl
 rate byte in the file (or one the reader does not know) every `ta_ms` is `unknown`: the steps are not read as ms at an
 assumed 96 kHz. A bundled profile of the model that cannot be read is named, file and why, in the rows' reason. `unknown`
 always: `phase_deg` (no phase control), `off`, `eq_bypass` and a band's `bypass` (not decoded), and under `preset`
-`input_gain_db` (the file holds one per input), any other stated setting, and `crossover.corner_set` (the file's
-global corner set; the journal records none). Not read: the mixer, the input EQ, the group EQ.
+`input_gain_db` (the file holds one per input) and any other stated setting. `crossover.corner_set` (the file's
+global corner set) is set against `project.json` `dsp.settings.corner_set`, the tuner's recorded answer, in the
+reader's words: `match` or `differs`; `unknown` when none is recorded or the file's code is outside the reader's table.
+Not read: the mixer, the input EQ, the group EQ.
 
 A key, a row's `parameter`, a category, an `error.kind` or an exit code added later is an addition (item 12);
 removing or renaming one is a contract change.

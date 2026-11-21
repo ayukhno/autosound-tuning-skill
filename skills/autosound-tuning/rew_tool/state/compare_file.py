@@ -619,11 +619,15 @@ def refusal(warning, name, kind, message, md5=None):
 
 
 def load_journal(project_dir, version, preset=None):
-    """`(snapshot, identity)`: the version and `project.json`'s channels by every name a row may use. The journal's
-    side, and the only one that raises: `ValueError` (a `SnapshotError` among them) or `OSError` -- exit 1."""
+    """`(snapshot, identity, dsp_settings)`: the version, `project.json`'s channels by every name a row may use, and its
+    `dsp.settings` (the tuner's answers a file is compared with: a `.PR15`'s corner set, S-136.2). The journal's side,
+    and the only one that raises: `ValueError` (a `SnapshotError` among them) or `OSError` -- exit 1. A caller that
+    builds the journal itself may pass the pair alone: no setting is then recorded."""
     _name, snap = load_version(project_dir, version, preset)
     _check_kinds(snap)
-    return snap, _state().project_channels(project_dir)
+    st = _state()
+    settings = (st._project_json(project_dir).get("dsp") or {}).get("settings")
+    return snap, st.project_channels(project_dir), settings if isinstance(settings, dict) else {}
 
 
 def _check_kinds(snap):
@@ -739,7 +743,7 @@ def compare_doc(journal, doc, name, inv=None):
     `interpret`), and a value of the file `check` cannot read at a compared path once the version's own values are
     known to be of their kind (`_check_plan`). The version's side raises `JournalFault`: exit 1."""
     hx = _helix()
-    snap, identity = journal
+    snap, identity = journal[:2]
 
     def uninterpretable(exc):
         # The file decoded and a value in it is not what the reader takes (a delay `abc`: decimal.InvalidOperation,
@@ -1025,9 +1029,15 @@ def _pr_channel_rows(code, row, o, reading_rate=None):
     return out
 
 
-def _pr_preset_rows(snap, reading):
+#: `project.json` `dsp.settings.corner_set` (`project.DSP_SETTINGS`) in the `.PR15` reader's words
+#: (`mosconi_pr.CORNER_SETS`); the selftest holds the two tables to these keys and names.
+PR_CORNER_SETS = {"default": "default", "minus_3db": "normalized to -3 dB", "minus_6db": "normalized to -6 dB"}
+
+
+def _pr_preset_rows(snap, reading, dsp_settings=None):
     """The version's `preset_settings` against the file: the input gain (one per input in the file) and the corner set
-    (the file's only; the journal records none). Any other stated setting: the file decodes no such setting."""
+    (the file's only one; the journal records none, `project.json` `dsp.settings.corner_set` does, S-136.2). Any other
+    stated setting: the file decodes no such setting."""
     st = _state()
     settings = snap.get(st.PRESET_SETTINGS)
     settings = settings if isinstance(settings, dict) else {}
@@ -1046,13 +1056,35 @@ def _pr_preset_rows(snap, reading):
         elif value is not None:
             out.append(_said(path, "preset", value, None, "unknown", "the file decodes no such setting",
                              category=category))
-    out.append(_said("crossover.corner_set", "preset", None, reading["corner_set"]["name"], "unknown",
-                     "the journal records no corner set: the program's corner correction is asked, not recorded",
-                     category="system", path=_pr_at(2307)))
+    out.append(_pr_corner_set_row(reading["corner_set"], dsp_settings))
     return out
 
 
-def _pr_plan(reading, snap, identity):
+def _pr_corner_set_row(corner, dsp_settings):
+    """`crossover.corner_set`: the file's code against `project.json`'s recorded answer -- `match` or `differs` in the
+    reader's words; `unknown` when the project has not recorded it, records a value that is no corner set, or the file
+    holds a code outside the reader's table."""
+    raw = (dsp_settings or {}).get("corner_set")
+    recorded = raw.get("value") if isinstance(raw, dict) else raw
+    have = corner.get("name")
+    if recorded is None:
+        return _said("crossover.corner_set", "preset", None, have, "unknown",
+                     "the journal records no corner set: the program's corner correction is asked, not recorded",
+                     category="system", path=_pr_at(2307))
+    want = PR_CORNER_SETS.get(recorded)
+    if want is None:
+        return _said("crossover.corner_set", "preset", recorded, have, "unknown",
+                     "project.json dsp.settings.corner_set is %r, no corner set (%s)"
+                     % (recorded, ", ".join(PR_CORNER_SETS)), category="system", path=_pr_at(2307))
+    if have is None:
+        return _said("crossover.corner_set", "preset", want, "code %s" % corner.get("code"), "unknown",
+                     "the file's corner set code %s is outside the reader's table" % corner.get("code"),
+                     category="system", path=_pr_at(2307))
+    return _said("crossover.corner_set", "preset", want, have, "match" if want == have else "differs", None,
+                 category="system", path=_pr_at(2307))
+
+
+def _pr_plan(reading, snap, identity, dsp_settings=None):
     out, reached = [], set()
     outputs = reading["outputs"]
     skipped = []
@@ -1093,7 +1125,7 @@ def _pr_plan(reading, snap, identity):
         out.append(_said("channel", "Output %d" % o["channel"], None, "muted" if o["muted"] else "on", "unknown",
                          "no row of this version is on this output", category="audio",
                          path=_pr_at(1280 + o["slot"] - 1)))
-    out += _pr_preset_rows(snap, reading)
+    out += _pr_preset_rows(snap, reading, dsp_settings)
     rank = {c: i for i, c in enumerate(CATEGORY_ORDER)}
     out.sort(key=lambda r: rank.get(r["category"], len(rank)))
     return out
@@ -1113,7 +1145,8 @@ def _compare_pr(journal, file_path):
     """`compare_journal` for a `.PR<n>`: exit 0 compared, 2 unreadable (`io`, `model`, `format`, `truncated`,
     `interpret`), 3 changed while read. The reader hashes the file before it reads it and after."""
     mp = _mosconi()
-    snap, identity = journal
+    snap, identity = journal[:2]
+    dsp_settings = journal[2] if len(journal) > 2 and isinstance(journal[2], dict) else {}
     name = os.path.basename(file_path)
     try:
         reading = mp.read_pr(file_path)
@@ -1121,7 +1154,7 @@ def _compare_pr(journal, file_path):
         code = EXIT_CHANGED if exc.kind == "changed" else EXIT_UNREADABLE
         return code, refusal(mp.WARNING, name, exc.kind, str(exc))
     try:
-        rows = _pr_plan(reading, snap, identity)
+        rows = _pr_plan(reading, snap, identity, dsp_settings)
         device = _pr_device(reading)
     except Exception as exc:  # noqa: BLE001 -- past the read, a failure is the file's, its type named
         return EXIT_UNREADABLE, refusal(mp.WARNING, name, "interpret", "the file was read and could not be compared "

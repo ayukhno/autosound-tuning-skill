@@ -2581,6 +2581,37 @@ def _check_compare_file_pr15_matches_differs_and_unknown():
         shutil.rmtree(top, ignore_errors=True)
 
 
+def _check_compare_file_pr15_corner_set_against_the_project():
+    """S-136.2: `crossover.corner_set` sets the file's corner set against `project.json` `dsp.settings.corner_set` --
+    `match` where the tuner's recorded answer is the file's, `differs` where it is another, `unknown` with its reason
+    where none is recorded. It was `unknown` always. The table between the project's keys and the reader's names is
+    the two modules' own."""
+    import shutil
+    import tempfile
+    cf = _compare_file()
+    project_mod = _state._siblings().load("project.py")
+    assert tuple(cf.PR_CORNER_SETS) == project_mod.DSP_SETTINGS["corner_set"], cf.PR_CORNER_SETS
+    assert tuple(cf.PR_CORNER_SETS.values()) == cf._mosconi().CORNER_SETS, cf.PR_CORNER_SETS
+    top = tempfile.mkdtemp(prefix="autosound_compare_pr15_corners_")
+    try:
+        project, pr15 = _pico_project(top)
+        row = _row(_compared(project, pr15), "preset", "crossover.corner_set")
+        assert row["result"] == "unknown" and "records no corner set" in row["reason"], row
+        pj = os.path.join(project, "project.json")
+        with open(pj, encoding="utf-8") as fh:
+            data = json.load(fh)
+        for recorded, result, journal in (("default", "match", "default"),
+                                          ("minus_6db", "differs", "normalized to -6 dB")):
+            data["dsp"] = {"settings": {"corner_set": {"value": recorded, "source": "user"}}}
+            with open(pj, "w", encoding="utf-8") as fh:
+                json.dump(data, fh)
+            row = _row(_compared(project, pr15), "preset", "crossover.corner_set")
+            assert (row["result"], row["journal"], row["file"]) == (result, journal, "default"), (recorded, row)
+            assert row["category"] == "system" and row["path"] == "offset 2307", row
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
 def _check_compare_file_pr15_numbering_not_settled_is_unknown():
     """Outputs reach a version's rows only by the profile's numbering: a profile that letters them (or none at all)
     leaves every row unknown with its reason -- never a guessed match."""
@@ -3578,6 +3609,7 @@ def _selftest():
                   _check_compare_file_a_file_it_cannot_interpret_is_exit_2,
                   _check_compare_file_pr15_matches_differs_and_unknown,
                   _check_compare_file_pr15_numbering_not_settled_is_unknown,
+                  _check_compare_file_pr15_corner_set_against_the_project,
                   _check_compare_file_pr15_unreadable_is_exit_2_and_changed_is_exit_3,
                   _check_attest_from_file_fills_the_source_file,
                   _check_from_file_and_source_file_together_are_a_usage_error,
