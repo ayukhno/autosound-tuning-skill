@@ -754,7 +754,9 @@ or a short text for a band or a channel the version does not hold.
 preset's settings, or PC-Tool's name (`Output A`, `Virtual G`) for an output no row of the version reaches.
 `parameter` is the version's field: `gain_db`, `ta_ms`, `polarity`, `phase_deg`, `mute`, `off`, `eq_bypass`;
 `hp.type`, `hp.f`, `hp.slope`, `hp.bypass` and the same for `lp`, and a bare `hp` or `lp` when the file holds no leg
-there, `journal` the version's leg as written (an OFF leg is `<leg>.slope` against 0; a leg the
+there, `journal` the version's leg as written (an OFF leg is `<leg>.slope` against 0; a leg the version holds
+`{f, type, slope: "OFF"}` -- switched off, its corner kept -- gives `.type` and `.f` against the file's stored ones and
+`<leg>.slope` OFF against 0; a leg the
 version holds with no slope gives `<leg>.slope` unknown, the file's leg beside it); `eq` (a version that holds no EQ
 for the channel); `eq[<n>].type`, `.f`, `.gain_db`, `.q`, `.bypass` for a band paired with the file's band in slot n,
 and `eq[<n>].invert`, unknown, when that band is an all-pass the file holds inverted (the journal cannot record an
@@ -834,7 +836,8 @@ that differs, `<channel> <parameter> differs: journal <value>, file <value>`, th
 version is rewritten. A row of the base reaches the file's channel by item 13's rules; an unchecked layout reaches
 none. A reached row takes what the file gives, in the journal's units: `gain_db` (to 0.01 dB), `ta_ms` (as PC-Tool
 shows it), `polarity`, `mute`, `phase_deg` where the channel has the phase control or the base states one, `hp` and
-`lp` (`{f, type, slope}`, null for an OFF leg) and `eq` (every band that works, and every bypassed one that would: `type`,
+`lp` (`{f, type, slope}`; for an OFF leg null, or `{f, type, slope: "OFF"}` with the file's stored corner where the
+channel has the phase control or the base holds that form) and `eq` (every band that works, and every bypassed one that would: `type`,
 `f`, `gain_db`, `q`, `i` the file's slot, `bypass: true` when bypassed). A value the file holds as no finite number, or
 that the ledger's own rules refuse (a frequency of 0), is not decoded: never banked. A file band not decoded -- a type
 code the reader does not know, Fine EQ, a value missing or not decoded -- leaves the base's band in that slot as it was,

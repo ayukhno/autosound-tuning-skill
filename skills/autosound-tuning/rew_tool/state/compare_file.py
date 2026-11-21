@@ -274,7 +274,11 @@ def _leg_rows(code, leg, want, have, base, tier):
     if want.get("f") is not None:
         rows.append(_compared(leg + ".f", code, want["f"], path + "/@F", want["f"], "number", show=_number,
                               tolerance=_TOL_HZ))
-    if want.get("slope") is not None:
+    if _configured_off(want):
+        # off with its corner kept: the type and the frequency above, and off is G = 0, as for an OFF leg
+        rows.append(_compared(leg + ".slope", code, "OFF", path + "/@G", 0, "number", tolerance=0.0,
+                              show=lambda _raw, have=have: _leg_text(have)))
+    elif want.get("slope") is not None:
         rows.append(_compared(leg + ".slope", code, want["slope"], path + "/@G", -want["slope"], "number",
                               show=lambda raw: -_number(raw) if isinstance(_number(raw), float) else raw, tolerance=0.0))
     else:
@@ -638,8 +642,15 @@ def _check_kinds(snap):
                 raise ValueError("%s %s: phase_deg is %r, not a number" % (tier, code, row["phase_deg"]))
             for leg in ("hp", "lp"):
                 spec = row.get(leg)
-                if isinstance(spec, dict) and spec.get("slope") is not None and not number(spec["slope"]):
+                if isinstance(spec, dict) and spec.get("slope") is not None and not number(spec["slope"]) \
+                        and not _configured_off(spec):
                     raise ValueError("%s %s: %s.slope is %r, not a number" % (tier, code, leg, spec["slope"]))
+
+
+def _configured_off(spec):
+    """A leg `{f, type, slope: "OFF"}`: the method's form for a crossover switched off with its corner still configured
+    (the phase control's reference, `predict._phase_reference`)."""
+    return isinstance(spec, dict) and isinstance(spec.get("slope"), str) and spec["slope"].upper() == "OFF"
 
 
 def compare(project_dir, version, file_path, preset=None):
@@ -862,6 +873,9 @@ def _pr_leg_rows(code, leg, want, have):
     if undecoded:
         rows.append(_said(leg + ".slope", code, want.get("slope"), _pr_leg_text(have), "unknown", undecoded,
                           category="audio", path=path))
+    elif _configured_off(want):
+        rows.append(_said(leg + ".slope", code, "OFF", _pr_leg_text(have), "match" if have["state"] == "off" else "differs",
+                          None, category="audio", path=path))
     elif want.get("slope") is not None:
         rows.append(_pr_equal(leg + ".slope", code, want["slope"], have["slope_db_oct"], path))
     else:

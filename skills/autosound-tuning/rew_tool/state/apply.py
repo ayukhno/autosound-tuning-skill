@@ -2800,7 +2800,10 @@ def _expected_from_the_reader(ch):
             short = {"Linkwitz": "LR", "Butterworth": "BW"}[have["family"]]
             want[leg] = {"f": have["frequency_hz"], "type": short, "slope": have["slope_db_oct"]}
         elif have and have.get("state") == "off":
-            want[leg] = None
+            # a channel with the phase control keeps the OFF leg's corner, its phase reference
+            short = {"Linkwitz": "LR", "Butterworth": "BW"}.get(have.get("family"))
+            want[leg] = ({"f": have["frequency_hz"], "type": short, "slope": "OFF"}
+                         if timing.get("phase_mode") == "phase_adjustable" and short else None)
     bands = []
     for f in ch["filters"]:
         if f["role"] != "eq" or f.get("type") is None:
@@ -2870,6 +2873,30 @@ def _check_propose_from_file_banks_the_files_values():
             assert named in kept, (named, kept)
         assert new["provenance"]["kind"] == "pct6" and new["provenance"]["md5"] == "708ccc26583f90e7dfb84fd9345f670c"
         assert "sw off" in " ".join(new["provenance"]["kept"]), new["provenance"]
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_from_file_a_leg_switched_off_keeps_its_corner():
+    """A leg written `{f, type, slope: "OFF"}` -- the method's form for a crossover switched off with its corner kept,
+    the phase control's reference -- is compared, never refused as a journal fault: its type and frequency against the
+    file's stored ones, off against G = 0. propose --from-file takes an OFF leg of a channel with the phase control in
+    that form, the file's stored corner kept, so the phase it takes has its reference."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_from_file_off_corner_")
+    try:
+        def configured_off(state):
+            state["channels"]["tw-L"]["lp"] = {"f": 1000, "type": "LR", "slope": "OFF"}
+
+        project, pct6 = _aya_project(top, edit_state=configured_off)
+        got = _compared(project, pct6)
+        for parameter in ("lp.type", "lp.f", "lp.slope"):
+            assert _row(got, "tw-L", parameter)["result"] == "match", (parameter, _row(got, "tw-L", parameter))
+        code, out, err = _compare_cli(project, "propose", "--preset", "AYA", "--from-file", pct6)
+        assert code == 0, (code, out, err)
+        lp = _aya_history(project).load("v_002")["channels"]["tw-L"]["lp"]
+        assert lp == {"f": 1000, "type": "LR", "slope": "OFF"}, lp
     finally:
         shutil.rmtree(top, ignore_errors=True)
 
@@ -3545,6 +3572,7 @@ def _selftest():
                   _check_compare_file_a_leg_with_no_slope_is_unknown,
                   _check_compare_file_a_preset_row_without_its_value_is_system,
                   _check_compare_file_a_journal_fault_is_the_journals,
+                  _check_from_file_a_leg_switched_off_keeps_its_corner,
                   _check_compare_file_bands_it_cannot_decode_and_an_inverted_all_pass,
                   _check_compare_file_virtual_letters_are_pc_tools,
                   _check_compare_file_a_file_it_cannot_interpret_is_exit_2,

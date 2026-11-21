@@ -228,7 +228,7 @@ def _finite(value, positive=False):
     return value > 0 if positive else True
 
 
-def _leg(have, side, code=None):
+def _leg(have, side, code=None, keep_corner=False):
     """`(value, why, note)` for a crossover leg: `value` the leg the file gives -- `{f, type, slope}`, or None for OFF
     -- with `why` None, or `why` the reason it is not taken; `note` a `(what, why)` taken short -- a family whose file
     code is documented and not confirmed, which compare-file holds `unknown` (`confirm`), is taken and named."""
@@ -237,6 +237,11 @@ def _leg(have, side, code=None):
         return None, "the file holds no %s filter for this channel" % what, None
     state = have.get("state")
     if state == "off":
+        # The corner an OFF leg keeps is the phase control's reference: taken as `{f, type, slope: "OFF"}` where it
+        # matters -- the channel's phase is adjustable, or the base already holds that form --, else plain OFF.
+        family = XO_SHORT.get(have.get("family"))
+        if keep_corner and family is not None and _finite(have.get("frequency_hz"), positive=True):
+            return {"f": _plain(have["frequency_hz"]), "type": family, "slope": "OFF"}, None, None
         return None, None, None
     if state == "bypassed":
         return None, "the file holds this %s bypassed, which the journal cannot record" % what, None
@@ -345,7 +350,10 @@ def _channel_values(ch, row, code=None):
         else:
             why["phase_deg"] = "the file's phase %r is not a finite number" % phase
     for leg, side in (("hp", "high_pass"), ("lp", "low_pass")):
-        value, reason, note = _leg(ch.get(side), leg, code)
+        base_leg = row.get(leg)
+        keep_corner = timing.get("phase_mode") == "phase_adjustable" or (
+            isinstance(base_leg, dict) and str(base_leg.get("slope", "")).upper() == "OFF")
+        value, reason, note = _leg(ch.get(side), leg, code, keep_corner)
         if reason is None:
             fields[leg] = value
             if note:

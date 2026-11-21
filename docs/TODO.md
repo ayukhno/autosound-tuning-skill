@@ -1627,6 +1627,21 @@ S-062, S-064 (with TCC's half, hub #217 SKL-056), S-065, S-066. When he says to 
 four assessment lines, and nothing is built before his `ok` on that task. Resume: `hub/bin/role skill --resume
 6b9c70d1-4094-4337-a1fd-23976307dfc2`.
 
+## S-136 · W-13's final review: four things after the tag v3.3.2
+
+**Status**: open 2026-11-21 · the next wave's pool; recorded, not diagnosed · from the final branch review on Fable
+
+1. The Mosconi filter model is bound only in `predict`; `eq_propose`, `joint_search`, `xover_candidates` and
+   `version_bench` still use the generic filters (said so in the v3.3.2 texts). Bind and reset them the way `predict`
+   does, so a proposal for a PICO project is fitted with the DSP's own peaks and corners.
+2. `compare-file` on a `.PR15` answers `crossover.corner_set` unknown although project.json records the tuner's corner
+   set; compare the two.
+3. `state/from_file.py` writes the families `CH` and `SD`; the profiles and the Mosconi reader spell them `CHEBYSHEV` and
+   `SELF_DEFINED`.
+4. A patch candidate cannot share a commit with its tag: `--candidate` holds the front page to the release before, the
+   plain mode holds a patch's to its own tag. Say in the skill's `CLAUDE.md` that a patch candidate is cut before the
+   bookkeeping commit, or with `--early`.
+
 ## S-135 · Records quote the Arbiter's words in Ukrainian; a decision and a reference are enough
 
 **Status**: dropped 2026-11-21 · the Arbiter's decision: the older records stay as they are; the rule holds from W-13 on
