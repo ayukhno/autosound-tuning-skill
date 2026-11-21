@@ -1627,6 +1627,18 @@ S-062, S-064 (with TCC's half, hub #217 SKL-056), S-065, S-066. When he says to 
 four assessment lines, and nothing is built before his `ok` on that task. Resume: `hub/bin/role skill --resume
 6b9c70d1-4094-4337-a1fd-23976307dfc2`.
 
+## S-134 · The method's texts still cite the deleted `ayukhno/autosound-measurements` by name
+
+**Status**: open 2026-11-21 · the next wave's pool; recorded, not diagnosed · found while doing #216 (S-130), whose asks named the link in three files
+
+#216 took the three files with a LINK. A sweep for the repo's NAME finds it cited as a source in the method's
+texts and data: `references/tooling/helix-eq-export.md:20`, `references/tooling/rew-api-quirks.md:18`,
+`references/tooling/helix-phase-allpass.md:15,220`, `references/core/filter-types-car-audio.md:75`,
+`references/core/diagnostic-techniques.md:135`, `knowledge/dsp/helix-dsp-ultra-s.md:64` (its `FACTS.md`),
+`rew_tool/phase_rotation.py:12`, `rew_tool/contract.py:3598`, `testdata/helix-bench/phase-control-vectors.json:2`,
+`knowledge/dsp/profiles/audiotec-fischer-helix-dsp-ultra-s.json:159,236,275`; `CHANGELOG.md:4311` is history. A reader
+sent to a repository that no longer exists; the facts it held may need a home in the skill.
+
 ## S-133 · TCC's «Перевірити налаштування» button: pass it on to TCC once the reader is released (hub #346 RES-027)
 
 **Status**: open 2026-11-21 · on milestone `W-13 · v3.3.2` as #220, `ok` (the Arbiter: «Усі шість», 2026-11-21) · was: W-13's pool, order 5 of 5; recorded, not diagnosed; the Arbiter's «так» to the order
@@ -1655,14 +1667,14 @@ library per vendor with a never-writes test (S-132 repeats it). Ask 6 is decided
 
 ## S-130 · Dead links to the deleted `ayukhno/autosound-measurements` (hub #342 RES-023)
 
-**Status**: open 2026-11-21 · on milestone `W-13 · v3.3.2` as #216, `ok` (the Arbiter: «Усі шість», 2026-11-21) · was: W-13's pool, order 2 of 5; recorded, not diagnosed
+**Status**: open 2026-11-21 · `testdata/helix-bench/README.md` and the changelog archive done on `wave-2026-11-21` (the provenance in our words, no link); `NOTICE.md` waits for #219's T5, one edit for both · on milestone `W-13 · v3.3.2` as #216, `ok` (the Arbiter: «Усі шість», 2026-11-21); set to done in the release commit
 
 Text only: `LICENSES/NOTICE.md`, `testdata/helix-bench/README.md`, `docs/changelog/` archive. `NOTICE.md` is edited
 once, together with S-132's credit. CI: none of its own. Resume: `hub/bin/role skill --resume 4cf06299-0cbf-40a3-bff9-923f6750b75e`.
 
 ## S-129 · The candidate gate checks the wave's pool; «LAST candidate» rewording; main runs finish; hub rules by link (hub #338 asks 1–2)
 
-**Status**: open 2026-11-21 · built `4853545` on `wave-2026-11-21`, the task review (opus · high) running · on milestone `W-13 · v3.3.2` as #215, `ok` (the Arbiter: «Усі шість», 2026-11-21); set to done in the release commit
+**Status**: open 2026-11-21 · built `4853545` on `wave-2026-11-21`; the task review (opus · high) found one defect — a failed `installers` added no reason, so `releasable: yes` could print beside it — fixed in `c5933c8` (red then green), the fix's re-review clean; noted, not changed: `installer-consistency.py` holds `install.cmd`'s PS1URL to the CHANGELOG's newest heading, so an EARLY candidate with its heading already renamed is refused through `installers` · on milestone `W-13 · v3.3.2` as #215, `ok` (the Arbiter: «Усі шість», 2026-11-21); set to done in the release commit
 
 Asks 1 and 2 of hub #338 (ask 3 is S-128, done), plus the two lines from its comments: `cancel-in-progress` off on
 `main` in `checks.yml`, and links to the hub's rules instead of copies in `CLAUDE.md`, `checks.yml`, `tag-check.sh`.
@@ -1680,7 +1692,7 @@ Arbiter's OK. Resume: `hub/bin/role skill --resume 766d28a7-6c7a-4cea-9e5b-2d4bc
 
 ## S-127 · Resonalyze has moved: its crossover project file is at format 13, our reader at 10; 11 ported files drifted
 
-**Status**: open 2026-11-21 · the re-pins on milestone `W-13 · v3.3.2` as #217, `ok` (the Arbiter: «Усі шість», 2026-11-21); reading a FIR stage and the `NonCausalLoopback` check stay in the pool · was: the 11 DRIFTs triaged (below): nothing critical, the engine stays pinned; the FIR stage stays in the pool (the Arbiter: «FIR не ставлю — лишай у пулі»); to W-13's milestone go only the five re-pins; the `NonCausalLoopback` check stays in the pool (the Arbiter: «ми не міряємо — ми використовуємо REW») · was: open 2026-11-10 · the FORMAT half done: **v3.3.1** released and `Latest` (tag on `8ae9095`, PR #213, hub #340 commented with tag and commit; the hub opens TCC's re-pin); reader v7..v13, a channel's FIR stage refused; still W-13's: the 11 DRIFTs and reading a FIR stage; resume: `hub/bin/role skill --resume cf677227-b29a-42f7-b42d-9de0455cbee2` · was: format half built, not pushed · was: open 2026-11-10 · W-13's pool; recorded, not diagnosed; found on the Arbiter's question about Resonalyze after v3.3.0
+**Status**: open 2026-11-21 · the five re-pins built on `wave-2026-11-21` (#217): `upstream-drift.py` 0 DRIFT for the Python ports, the engine's 7 stay; one correction to the triage below — 7334d3b's 40 dB channel-presence gate does reach `sum_loss`'s read-out (their `SumLossCurve`), declared as a `# deviation:` (the read-out only draws `predict`'s plot, the junction band keeps a channel playing); reading a FIR stage and the `NonCausalLoopback` check stay in the pool · was: the 11 DRIFTs triaged (below): nothing critical, the engine stays pinned; the FIR stage stays in the pool (the Arbiter: «FIR не ставлю — лишай у пулі»); to W-13's milestone go only the five re-pins; the `NonCausalLoopback` check stays in the pool (the Arbiter: «ми не міряємо — ми використовуємо REW») · was: open 2026-11-10 · the FORMAT half done: **v3.3.1** released and `Latest` (tag on `8ae9095`, PR #213, hub #340 commented with tag and commit; the hub opens TCC's re-pin); reader v7..v13, a channel's FIR stage refused; still W-13's: the 11 DRIFTs and reading a FIR stage; resume: `hub/bin/role skill --resume cf677227-b29a-42f7-b42d-9de0455cbee2` · was: format half built, not pushed · was: open 2026-11-10 · W-13's pool; recorded, not diagnosed; found on the Arbiter's question about Resonalyze after v3.3.0
 
 `python3 scripts/upstream-drift.py` (exit 0, 19 ok, 11 DRIFT, 1 FORMAT):
 

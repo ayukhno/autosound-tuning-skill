@@ -1,9 +1,8 @@
 # Helix DSP Ultra S — bench curves the selftests run against
 
-Ten measured curves and one table of fitted cases, copied **verbatim** from
-[`ayukhno/autosound-measurements`](https://github.com/ayukhno/autosound-measurements),
-`hardware/helix/dsp-ultra-s/` at commit `5254c16` (2026-09-05), **CC BY 4.0** (`LICENSES/NOTICE.md`).
-The facts they decided are in that repo's `FACTS.md`; the method's reading of them is in
+Ten measured curves and one table of fitted cases from the author's own electrical bench captures
+of a Helix DSP Ultra S (2026-08-31 .. 2026-09-05), kept **verbatim**, **CC BY 4.0**
+(`LICENSES/NOTICE.md`). The method's reading of what they decided is in
 `knowledge/dsp/helix-dsp-ultra-s.md` and `references/tooling/helix-phase-allpass.md`.
 
 Why they are here: every other anchor in `dsp_math`'s selftest is a *definition* (LR is −6.02 dB

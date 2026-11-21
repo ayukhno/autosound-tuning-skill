@@ -911,9 +911,9 @@ had is a full tune driven end to end from the app.
   itself**, so a REW-with-loopback measurement set opens in its Virtual DSP / Auto delay / Auto
   crossover with nothing retyped — the file-level bridge offered in
   [DIMOSUS/Resonalyze#86](https://github.com/DIMOSUS/Resonalyze/issues/86) (item 6 — the "second
-  cabin" dataset, published in this format as the first set of
-  [autosound-measurements](https://github.com/ayukhno/autosound-measurements), the new public data
-  repository: per-driver loopback IRs of real cabins, moving-mic RTA, DSP states, hardware facts; CC BY 4.0). Three things the file must get right, and where each was
+  cabin" dataset, published in this format as the first set of the author's public data repository
+  `autosound-measurements` at the time: per-driver loopback IRs of real cabins, moving-mic RTA, DSP
+  states, hardware facts; CC BY 4.0. That repository was withdrawn on 2026-11-17). Three things the file must get right, and where each was
   checked: the **level** — REW's IR endpoint peak-normalises every IR to ±1.0 by default, which
   silently destroys the level relation between channels (a sub's IR peak really sits ~18 dB under a
   woofer's); the module pulls `?normalised=false` and carries fractions of full scale, so relative
