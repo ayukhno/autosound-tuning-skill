@@ -901,6 +901,15 @@ def greedy_eq_fit(freqs_hz, resid_db, weight, n_bands=4,
     def wrms(r):
         return float(np.sqrt(np.sum(w * r * r)))
 
+    # A candidate band is scored as the DSP runs it: through the bound response model when there is one (a Mosconi /
+    # Gladen DSP's own peaks and shelves, S-136.1), as `eq_complex` renders the bands chosen; else the generic RBJ.
+    model = _MODEL["impl"]
+
+    def band_response(kind, f0, g, q):
+        if model is None:
+            return peq_response(freqs_hz, kind, f0, g, q)
+        return model.eq_complex(freqs_hz, [(kind, f0, g, q)], _fs(None))
+
     for _ in range(n_bands):
         base = wrms(resid)
         best = (base, None, None)
@@ -956,7 +965,7 @@ def greedy_eq_fit(freqs_hz, resid_db, weight, n_bands=4,
                 # total boost budget per driver: headroom + EQ-ability caution
                 if g > 0 and sum(max(g2, 0.0) for _, _, g2, _ in bands) + g > 4.5:
                     continue
-                mag = 20 * np.log10(np.abs(peq_response(freqs_hz, kind, f0, g, q)) + 1e-12)
+                mag = 20 * np.log10(np.abs(band_response(kind, f0, g, q)) + 1e-12)
                 r = wrms(resid + mag)
                 if r < best[0]:
                     best = (r, (kind, float(f0), float(g), float(q)), mag)

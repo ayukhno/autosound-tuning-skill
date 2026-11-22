@@ -421,11 +421,38 @@ def _check_the_vendor_model_unrecorded_refuses_and_recorded_offers_its_filters()
             shutil.rmtree(top, ignore_errors=True)
 
 
+def _check_a_filter_the_vendor_model_lacks_is_one_line():
+    """S-136.1, the final review: a ledger leg the Mosconi / Gladen model has no realisation for (an LR36) is one line,
+    `refusing: ...`, exit 3, the hook empty after -- it was a `ValueError` traceback."""
+    import contextlib
+    import io
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_xover_vendor_steep_")
+    try:
+        proj, solos, house = P.vendor_model_two_way(top, P.VENDOR_MODEL_RECORDED)
+        P.vendor_model_steep_leg(proj)
+        out, err = io.StringIO(), io.StringIO()
+        try:
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                rc = _main(["--solos", solos, "--project", proj, "--house", house, "--channel", "m-L",
+                            "--hp", "200:400:10"])
+        except BaseException as exc:  # noqa: BLE001 -- a traceback is the failure under test
+            rc = f"raised {type(exc).__name__}: {exc}"
+        assert dsp_math._MODEL["impl"] is None, "the run left the vendor model bound"
+        said = P.unrecorded_said(rc, out.getvalue(), err.getvalue(), 3, "refusing: ", P.STEEP_LEG_SAID)
+        assert said is None, said
+    finally:
+        dsp_math.reset_response_model()
+        shutil.rmtree(top, ignore_errors=True)
+
+
 def _selftest():
     failures = []
     for check in (_check_cli_refuses_unreadable_profile, _check_unmodelled_protective_said,
                   _check_predict_refusals_are_one_line, _check_the_vendor_model_is_bound_for_one_run,
-                  _check_the_vendor_model_unrecorded_refuses_and_recorded_offers_its_filters):
+                  _check_the_vendor_model_unrecorded_refuses_and_recorded_offers_its_filters,
+                  _check_a_filter_the_vendor_model_lacks_is_one_line):
         try:
             check()
         except AssertionError as exc:

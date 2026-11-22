@@ -2251,6 +2251,19 @@ def _check_the_vendor_model_unrecorded_is_one_line():
     assert said is None, said
 
 
+def _check_a_filter_the_vendor_model_lacks_is_one_line():
+    """S-136.1, the final review: a leg the Mosconi / Gladen model has no realisation for (an LR36) is one line,
+    `refusing: ...`, exit 3, the hook empty after -- it was a `ValueError` traceback."""
+    top = os.path.join(_top(), "vendor_steep")
+    os.makedirs(top)
+    proj, solos, _house = P.vendor_model_two_way(top, P.VENDOR_MODEL_RECORDED)
+    P.vendor_model_steep_leg(proj)
+    rc, out, err = _run(["table", "--project", proj, "--solos", solos, "SQ/v_001", "SQ/v_002"])
+    assert P.dsp_math._MODEL["impl"] is None, "the run left the vendor model bound"
+    said = P.unrecorded_said(rc, out, err, 3, "refusing: ", P.STEEP_LEG_SAID)
+    assert said is None, said
+
+
 def _selftest():
     import glob
     import shutil
@@ -2269,7 +2282,8 @@ def _selftest():
                       _check_bad_inputs_refuse, _check_documented_level_db_form, _check_loudness_sum_is_coherent,
                       _check_bass_marker_across_versions, _check_table_flags_show_their_effect, _check_tripod_fallback_says_tripod,
                       _check_broken_mosqito_says_why, _check_round_check_names_what_it_did_not_read, _check_round_check_averages_over_the_codes_width,
-                      _check_the_vendor_model_is_bound_for_one_run, _check_the_vendor_model_unrecorded_is_one_line):
+                      _check_the_vendor_model_is_bound_for_one_run, _check_the_vendor_model_unrecorded_is_one_line,
+                      _check_a_filter_the_vendor_model_lacks_is_one_line):
             try:
                 check()
             except AssertionError as exc:

@@ -92,6 +92,14 @@ EQ_KINDS = ("PK", "LSH", "HSH", "NOTCH", "BP", "APF1", "APF2", "HP1", "LP1", "HP
 _EQ_SPELLINGS = {"LS": "LSH", "HS": "HSH", "AP1": "APF1", "AP2": "APF2"}
 
 
+class NotModelled(ValueError):
+    """A filter or EQ band this DSP's model has no realisation for: a crossover family, slope or corner set outside its
+    tables (an LR36 on a PICO), an EQ kind it does not know, a band with no Q where the DSP depends on one.
+    `is_unmodelled`, as `dsp_math.Unmodelled`, so a tool's command line says it in its one line; a `ValueError` still,
+    so a caller that caught one before goes on catching it."""
+    is_unmodelled = True
+
+
 class NotRecorded(Exception):
     """A setting the response depends on that the project has not recorded: the peak mode or the corner set.
 
@@ -164,7 +172,7 @@ def crossover_sections(family, slope, corner_hz, kind, corner_set, fs):
     """The two stages of one leg: `[(order, section, stored words), (order, section, stored words)]`."""
     fam = _FAMILY_SPELLINGS.get(str(family).upper())
     if fam is None or slope not in SECTION_ORDERS or kind not in ("hp", "lp") or corner_set not in CORNER_K:
-        raise ValueError(f"crossover {family}{slope} {kind} on corner set {corner_set!r}: families "
+        raise NotModelled(f"crossover {family}{slope} {kind} on corner set {corner_set!r}: families "
                          f"{'/'.join(FAMILIES)}, slopes {'/'.join(map(str, SLOPES))}, kind hp|lp, corner sets "
                          f"{'/'.join(CORNER_SET_ORDER)}")
     ks = CORNER_K[corner_set][fam].get(slope, (1, 1))
@@ -200,7 +208,7 @@ def eq_section(kind, f0, gain_db, q, fs, peak_mode=None):
     if kind in ("HP1", "LP1", "HP2", "LP2"):
         return _xo_section(int(kind[2]), kind[:2].lower(), f0, q if q is not None else 0.707, fs)[0]
     if kind not in EQ_KINDS:
-        raise ValueError(f"EQ band {kind!r}: the kinds are {', '.join(EQ_KINDS)}")
+        raise NotModelled(f"EQ band {kind!r}: the kinds are {', '.join(EQ_KINDS)}")
     w0 = 2 * math.pi * f0 / fs
     s, c = math.sin(w0), math.cos(w0)
     A = 10 ** ((gain_db or 0.0) / 40)
@@ -208,7 +216,7 @@ def eq_section(kind, f0, gain_db, q, fs, peak_mode=None):
         p = POLE_BASE ** -w0
         return (-p, 1.0, 0.0, -p, 0.0)
     if q is None:
-        raise ValueError(f"{kind} at {f0:g} Hz has no Q: this DSP's {kind} depends on it")
+        raise NotModelled(f"{kind} at {f0:g} Hz has no Q: this DSP's {kind} depends on it")
     alpha = s / (2 * q)
     if kind == "PK":
         if peak_mode not in PEAK_MODES:
@@ -278,7 +286,13 @@ class BadSetting(ValueError):
 def settings_of(project_data):
     """`(corner_set, peak_mode)` recorded in `project.json` `dsp.settings`, each None when not recorded. A value the
     model has no name for raises `BadSetting`, naming the repair."""
-    raw = (((project_data or {}).get("dsp") or {}).get("settings") or {})
+    dsp = (project_data or {}).get("dsp") or {}
+    raw = (dsp.get("settings") if isinstance(dsp, dict) else dsp) or {}
+    if not isinstance(raw, dict):
+        raise BadSetting(f"project.json dsp{'.settings' if isinstance(dsp, dict) else ''} is {raw!r}, not an object "
+                         f"-- record the tuner's answers again: project.py <dir> set-dsp-setting corner_set "
+                         f"{'|'.join(CORNER_SET_ORDER)} --source user, ... set-dsp-setting peak_mode "
+                         f"{'|'.join(PEAK_MODES)} --source user")
 
     def value(key, allowed):
         x = raw.get(key)
@@ -537,6 +551,27 @@ def _selftest():
             failures.append("another vendor's project with no profile got the Mosconi note")
     finally:
         dsp_math.reset_response_model()
+
+    # a `dsp.settings` (or a `dsp`) that is no object is a setting refused, never an AttributeError (the final review)
+    for data in ({"dsp": {"settings": "minus_3db"}}, {"dsp": {"settings": ["minus_3db"]}}, {"dsp": "Mosconi"}):
+        try:
+            settings_of(data)
+            failures.append(f"{data}: no BadSetting")
+        except BadSetting as exc:
+            if "not an object" not in str(exc) or "set-dsp-setting" not in str(exc):
+                failures.append(f"{data}: BadSetting says {exc}")
+        except Exception as exc:  # noqa: BLE001 -- any other is the failure under test
+            failures.append(f"{data}: raised {type(exc).__name__}: {exc}")
+    # a filter or a band the model lacks is `is_unmodelled` -- the tools' one-line refusal -- and still a ValueError
+    for call in (lambda: crossover_sections("LR", 36, 300.0, "hp", "default", 96000.0),
+                 lambda: eq_section("XX", 1000.0, -3.0, 1.0, 96000.0),
+                 lambda: eq_section("LSH", 1000.0, -3.0, None, 96000.0)):
+        try:
+            call()
+            failures.append("a filter the model lacks was built")
+        except ValueError as exc:
+            if not getattr(type(exc), "is_unmodelled", False):
+                failures.append(f"{type(exc).__name__} is not is_unmodelled: {exc}")
 
     # what project.py records is what this model reads
     recorded = _siblings().load("project.py").DSP_SETTINGS

@@ -1447,6 +1447,53 @@ def _check_the_vendor_model_unrecorded_refuses_and_recorded_models():
             shutil.rmtree(top, ignore_errors=True)
 
 
+def _check_a_filter_the_vendor_model_lacks_is_one_line():
+    """S-136.1, the final review: a leg the Mosconi / Gladen model has no realisation for (an LR36) is one line,
+    `error: ...`, exit 1, the hook empty after -- it was a `ValueError` traceback."""
+    import contextlib
+    import io
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_eqpropose_vendor_steep_")
+    try:
+        proj, solos, house = P.vendor_model_two_way(top, P.VENDOR_MODEL_RECORDED)
+        P.vendor_model_steep_leg(proj)
+        out, err = io.StringIO(), io.StringIO()
+        try:
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                rc = main(["--project", proj, "--house", house, "--solos", solos])
+        except BaseException as exc:  # noqa: BLE001 -- a traceback is the failure under test
+            rc = f"raised {type(exc).__name__}: {exc}"
+        assert dsp_math._MODEL["impl"] is None, "the run left the vendor model bound"
+        said = P.unrecorded_said(rc, out.getvalue(), err.getvalue(), 1, "error: ", P.STEEP_LEG_SAID)
+        assert said is None, said
+    finally:
+        dsp_math.reset_response_model()
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_the_eq_fit_scores_on_the_bound_model():
+    """S-136.1, the final review: `dsp_math.greedy_eq_fit` scores its candidates on the bound Mosconi / Gladen model,
+    as `_apply_bands` renders the bands it chose: one +6 dB Q4 resonance fitted under the two peak modes gives other
+    bands, and each fit's own residual is `_apply_bands`' to 1e-6 dB. It scored on the generic peak whatever was bound,
+    so the two modes chose the same bands and the gain-dependent fit's residual was not the one it banked."""
+    import mosconi_gladen as mg
+    f = P.grid(20, 20000, 96)
+    resid = _db(dsp_math.peq_response(f, "PK", 1000.0, 6.0, 4.0))
+    fits = {}
+    try:
+        for mode in mg.PEAK_MODES:
+            dsp_math.bind_response_model(mg.Model("default", mode))
+            bands, after = dsp_math.greedy_eq_fit(f, resid, np.ones(len(f)), n_bands=2, gain_lo=-MAX_CUT_DB,
+                                                  gain_hi=0.0)
+            gap = float(np.max(np.abs(after - _apply_bands(f, resid, bands))))
+            assert bands and gap < 1e-6, (mode, bands, gap)
+            fits[mode] = bands
+    finally:
+        dsp_math.reset_response_model()
+    assert fits["rew"] != fits["gain_dependent"], fits
+
+
 @_own_tempdir
 def _selftest():
     """Anchored to the definitions: a driver resonance is cut where it is, a comb is not boosted,
@@ -1458,7 +1505,8 @@ def _selftest():
     for check in (_check_profile_read_strictly, _check_refusal_names_its_reason, _check_refused_notes_never_cut,
                   _check_junction_band_names_its_step, _check_no_boost_path_said,
                   _check_predict_refusals_are_one_line, _check_the_vendor_model_is_bound_for_one_run,
-                  _check_the_vendor_model_unrecorded_refuses_and_recorded_models):
+                  _check_the_vendor_model_unrecorded_refuses_and_recorded_models,
+                  _check_a_filter_the_vendor_model_lacks_is_one_line, _check_the_eq_fit_scores_on_the_bound_model):
         try:
             check()
         except AssertionError as exc:

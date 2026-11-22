@@ -4675,6 +4675,36 @@ _TINY = ["--lp-bounds", "56:71", "--hp-bounds", "56:80", "--gain", "2:8:2"]
 _FRONT_POINTS = {"w-L": POSITIONS, "w-R": POSITIONS}
 
 
+def _check_a_filter_the_vendor_model_lacks_is_one_line():
+    """S-136.1, the final review: a Mosconi project whose profile offers a filter the Mosconi / Gladen model has no
+    realisation for (an LR36) is one line, `refusing: ...`, exit 3, the hook empty after -- a `ValueError` traceback."""
+    import shutil
+    import tempfile
+    import mosconi_gladen as mg
+    top = tempfile.mkdtemp(prefix="autosound_jointsearch_vendor_steep_")
+    try:
+        proj, house = _fixture(top)
+        path = os.path.join(proj, "dsp_profile.json")
+        with open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
+        data.get("dsp_profile", data)["vendor"] = "Mosconi"          # this fixture's profile offers LR36
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(data, fh)
+        pj = mg._siblings().load("project.py")
+        for key, value in P.VENDOR_MODEL_RECORDED:
+            rc, _o, err = pj._run_cli(pj._main, ["project.py", proj, "set-dsp-setting", key, value, "--source", "user"])
+            assert rc in (0, None), (key, rc, err)
+        solos = os.path.join(top, "solos")
+        _write_solos(solos, ("sw", "w-L", "w-R"), points=_FRONT_POINTS, at={"w-L": 200, "w-R": 100})
+        rc, out, err = _run(["--project", proj, "--house", house, "--solos", solos] + _TINY)
+        assert dsp_math._MODEL["impl"] is None, "the run left the vendor model bound"
+        said = P.unrecorded_said(rc, out, err, 3, "refusing: ", "crossover LR36")
+        assert said is None, said
+    finally:
+        dsp_math.reset_response_model()
+        shutil.rmtree(top, ignore_errors=True)
+
+
 def _check_the_vendor_model_unrecorded_is_one_line():
     """S-136.1, the review: a Mosconi project with no corner set or peak mode recorded is one line, `refusing: ...`,
     exit 3, naming the question and the command, the hook empty after -- it was a traceback (`NotRecorded`)."""
@@ -8155,7 +8185,8 @@ def _selftest():
                   _check_held_woofers_at_zero_take_a_placeable_pair, _check_single_point_refusal_is_the_sheets_line, _check_a_no_with_a_colon_is_no_decision,
                   _check_out_keeps_the_table_it_holds, _check_a_row_carries_a_delta_ready_for_propose,
                   _check_a_chain_banks_what_was_scored, _check_a_ledger_keeps_what_the_row_did_not_decide, _check_an_align_that_cut_nothing_clears_the_older_eq, _check_a_blend_states_only_the_eq_it_held, _check_the_hard_floor_binds_every_high_pass, _check_an_empty_table_is_rerun_on_the_same_out,
-                  _check_the_vendor_model_is_bound_for_one_run, _check_the_vendor_model_unrecorded_is_one_line):
+                  _check_the_vendor_model_is_bound_for_one_run, _check_the_vendor_model_unrecorded_is_one_line,
+                  _check_a_filter_the_vendor_model_lacks_is_one_line):
         try:
             check()
         except AssertionError as exc:

@@ -3299,18 +3299,38 @@ def vendor_model_two_way(top, record=()):
     return proj, solos, house
 
 
+def vendor_model_steep_leg(proj):
+    """`_two_way_fixture`'s ledger banked again with m-L's high-pass an LR36 at 300 Hz -- a filter the Mosconi / Gladen
+    model has no realisation for (`mosconi_gladen.NotModelled`). The new version is the slot's head."""
+    state_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "state")
+    if state_dir not in sys.path:
+        sys.path.insert(0, state_dir)
+    import state as st
+    history = st.PresetHistory(os.path.join(proj, "state"), "SQ", project_dir=proj)
+    snap = history.load(history.head())
+    snap["channels"]["m-L"]["hp"] = {"f": 300, "type": "LR", "slope": 36}
+    history.snapshot({k: v for k, v in snap.items() if k in ("schema_version", "preset", "sample_rate", "channels")},
+                     note="a steep leg")
+    return proj
+
+
 #: Recorded on a fixture whose run should model (`vendor_model_on`).
 VENDOR_MODEL_RECORDED = (("corner_set", "default"), ("peak_mode", "rew"))
 
 
-def unrecorded_said(rc, out, err, want_rc, prefix):
-    """None when a run on a Mosconi project with nothing recorded refused in one line -- `prefix`, exit `want_rc`,
-    naming the setting and the command that records it, no traceback, nothing on stdout -- else what it did."""
+def unrecorded_said(rc, out, err, want_rc, prefix, naming="set-dsp-setting corner_set"):
+    """None when a run on a Mosconi project refused in one line -- `prefix`, exit `want_rc`, the line holding `naming`
+    (by default the command that records the corner set, for a project with nothing recorded), no traceback, nothing
+    on stdout -- else what it did."""
     refusals = [ln for ln in err.strip().splitlines() if ln.startswith(prefix)]
     if rc == want_rc and not out.strip() and len(refusals) == 1 and "Traceback" not in err \
-            and "set-dsp-setting corner_set" in refusals[0]:
+            and naming in refusals[0]:
         return None
     return rc, out[:200], err[-500:]
+
+
+#: What a run says of the LR36 `vendor_model_steep_leg` banks, on the bound Mosconi / Gladen model.
+STEEP_LEG_SAID = "crossover LR36 hp"
 
 
 #: What `VendorBindSpy.bound` holds after a run on `vendor_model_projects`' Mosconi folder.
