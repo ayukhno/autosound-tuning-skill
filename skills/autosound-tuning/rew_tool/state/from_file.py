@@ -526,8 +526,9 @@ def build(snap, identity, read):
     held = snap.get(st.PRESET_SETTINGS) if isinstance(snap.get(st.PRESET_SETTINGS), dict) else {}
     ultra_s_only = set()
     if _compare_file().preset_unchecked(inv["device"]):
-        # the V EIGHT: the settings' places and meanings are the Ultra S's; none is taken, each named
-        why = _compare_file().PRESET_ULTRA_S_ONLY
+        # the V EIGHT, or a model the reader does not know: the settings' places and meanings are the Ultra S's; none
+        # is taken, each named
+        why = _compare_file().preset_reason(inv["device"])
         for path in sorted(stated):
             (kept if st._preset_leaf(held, path) is not None else not_taken).append(("preset %s" % path, why))
         ultra_s_only, stated, undecoded_points = set(stated), {}, []

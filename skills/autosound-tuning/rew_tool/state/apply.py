@@ -2542,7 +2542,8 @@ def _check_compare_file_v_eight_slots_are_pc_tools_numbers():
         pt = _row(got, "VPT", "gain_db")
         assert pt["result"] == "unknown" and pt["path"] is None, pt
         assert pt["reason"] == "no channel PC-Tool shows is Virtual 7 on this model", pt
-        assert _row(got, "x", "gain_db")["result"] == "unknown", _row(got, "x", "gain_db")
+        x = _row(got, "x", "gain_db")
+        assert x["result"] == "unknown" and x["reason"] == "no output PC-Tool shows is numbered 15 on this model", x
         a = _row(got, "VA", "gain_db")
         assert a["result"] == "unknown" and "is Virtual 1" in a["reason"] and "its own number" in a["reason"], a
         unreached = {r["channel"] for r in got["rows"] if r["parameter"] == "channel"}
@@ -3754,6 +3755,142 @@ def _check_a_file_no_reader_reads_is_refused_by_its_name():
         shutil.rmtree(top, ignore_errors=True)
 
 
+def _check_compare_file_an_unknown_dev_reads_no_preset_setting():
+    """Final review (B2, 1): on a Helix model the reader does not know (Dev 99: no layout), the preset settings' places
+    and meanings are the Ultra S's, so each preset row the file holds a value for is `unknown`, saying the model is not
+    checked -- never a match or a differs -- and `propose --from-file` takes none of them: the version's settings stay,
+    named. They were compared and banked with the Ultra S's meanings."""
+    import shutil
+    import tempfile
+    cf = _compare_file()
+    top = tempfile.mkdtemp(prefix="autosound_compare_unknown_dev_preset_")
+    try:
+        project, pct6 = _aya_project(top, edit_xml=lambda root: root.set("Dev", "99"))
+        got = _compared(project, pct6)
+        on_file = [r for r in got["rows"] if r["channel"] == "preset" and r["path"] is not None]
+        assert on_file, [r for r in got["rows"] if r["channel"] == "preset"]
+        for row in on_file:
+            assert row["result"] == "unknown" and row["reason"] == cf.PRESET_MODEL_UNCHECKED, row
+            assert row["file"] is None, row
+        assert cf.PRESET_MODEL_UNCHECKED != cf.PRESET_ULTRA_S_ONLY
+        before = _aya_history(project).load("v_001")["preset_settings"]
+        code, out, err = _compare_cli(project, "propose", "--preset", "AYA", "--from-file", pct6)
+        assert code == 0, (code, out[-600:], err)
+        assert _aya_history(project).load("v_002")["preset_settings"] == before, \
+            _aya_history(project).load("v_002")["preset_settings"]
+        assert "preset fx.subxpander: " + cf.PRESET_MODEL_UNCHECKED in out, out[-1500:]
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_compare_file_refuses_a_project_json_it_cannot_read():
+    """Final review (B2, 2): a `project.json` that is there and cannot be read is the journal's refusal, exit 1,
+    naming the file -- never a comparison with every channel unknown and a corner-set reason asking the tuner to
+    record what the project may well record. The same for `attest` and `propose --from-file`: exit 1, nothing banked."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_compare_broken_project_")
+    try:
+        project, pr15 = _pico_with_a_setting(top, corner_set="default")
+        pj = os.path.join(project, "project.json")
+        with open(pj, "w", encoding="utf-8") as fh:
+            fh.write('{"channels": [')
+        code, out, err = _compare_cli(project, "compare-file", "v_001", pr15, "--json")
+        assert code == 1 and "project.json" in err, (code, out[:300], err)
+        refused = json.loads(out)
+        assert refused["error"]["kind"] == "journal" and "project.json" in refused["error"]["message"], refused
+        assert "rows" not in refused, refused
+        for verb in ("attest", "propose"):
+            code, out, err = _compare_cli(project, verb, "--preset", "PICO", "--from-file", pr15)
+            assert code == 1 and "project.json" in err and "Traceback" not in err, (verb, code, out, err)
+        assert _pico_history(project).versions() == ["v_001"], _pico_history(project).versions()
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_propose_from_file_pr15_carries_a_bypass_by_type_and_frequency():
+    """A bypassed base band with no slot (`i`) is paired with the `.PR15`'s band as compare-file pairs it, by type and
+    frequency: its `bypass` is carried onto the file's band in that slot and named (`w-L eq[2].bypass`), never dropped."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_pr15_bypass_no_slot_")
+    try:
+        def bypass(state):
+            state["channels"]["w-L"]["eq"][0]["bypass"] = True            # PK 81 Hz, no `i`: the file's band 2
+        project, pr15 = _pico_project(top, edit_state=bypass)
+        code, out, err = _compare_cli(project, "propose", "--preset", "PICO", "--from-file", pr15)
+        assert code == 0, (code, out, err)
+        bands = _pico_history(project).load("v_002")["channels"]["w-L"]["eq"]
+        band = next(b for b in bands if b["i"] == 2)
+        assert band["f"] == 81 and band.get("bypass") is True, bands
+        assert not [b for b in bands if b["i"] != 2 and b.get("bypass")], bands
+        assert "w-L eq[2].bypass" in _named_lines(out), _named_lines(out)
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_propose_from_file_pr15_keeps_a_base_leg_spelled_short():
+    """The `.PR15` twin of `_check_propose_from_file_keeps_a_base_leg_spelled_short`: a version banked with a leg spelled
+    `CH`, and a `.PR15` holding the same Chebyshev filter -- propose keeps the version's leg, no HP line on the sheet."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_pr15_short_leg_")
+    try:
+        def short(state):
+            state["channels"]["w-L"]["hp"] = {"f": 70, "type": "CH", "slope": 12}
+        project, pr15 = _pico_project(top, edit_state=short)
+        at = 2304 + 5 * 12                                    # output 5 (memory slot 7): its high-pass, BE 12 at 70 Hz
+        _pr15_edit(pr15, {at: str((_pr15_byte(pr15, at) & ~3) | 3)})      # the family bits: Chebyshev
+        assert _row(_compared(project, pr15), "w-L", "hp.type")["result"] == "match"
+        code, out, err = _compare_cli(project, "propose", "--preset", "PICO", "--from-file", pr15)
+        assert code == 0, (code, out, err)
+        hp = _pico_history(project).load("v_002")["channels"]["w-L"]["hp"]
+        assert hp == {"f": 70, "type": "CH", "slope": 12}, hp
+        assert not [ln for ln in out.splitlines() if ln.startswith("| w-L | HP |")], out[-800:]
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_the_reader_gate_ignores_the_letter_case():
+    """The gate matches an extension case aside: `UP.PCT6` is read as a `.pct6`, `x.pr15` as a `.PR15` -- compared,
+    exit 0, never refused for its spelling."""
+    import shutil
+    import tempfile
+    cf = _compare_file()
+    top = tempfile.mkdtemp(prefix="autosound_gate_case_")
+    try:
+        aya, pct6 = _aya_project(os.path.join(top, "aya"))
+        pico, pr15 = _pico_project(os.path.join(top, "pico"))
+        for project, source, name, reader in ((aya, pct6, "UP.PCT6", "helix_pct6"), (pico, pr15, "x.pr15", "mosconi_pr")):
+            path = os.path.join(os.path.dirname(source), name)
+            shutil.copyfile(source, path)
+            assert all(cf.reader_for(path, verb) == reader for verb in cf.FILE_VERBS), (name, cf.reader_for(path))
+            got = _compared(project, path)
+            assert got["rows"] and got["file"]["name"] == name, (name, got["file"])
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_compare_file_rows_spell_the_full_family_names():
+    """S-136.3 on compare-file's own output: a file leg of Chebyshev or Self-define is said `CHEBYSHEV` /
+    `SELF_DEFINED` in the row's `file`, as the profiles and the Mosconi reader spell them -- not `CH` / `SD`."""
+    import shutil
+    import tempfile
+    for code_, name in (("14", "CHEBYSHEV"), ("8", "SELF_DEFINED")):
+        # a version type the file has a code for (the compared row), and one it has none for (the row `unknown`)
+        for version_type in ("LR", "QQ"):
+            top = tempfile.mkdtemp(prefix="autosound_compare_family_names_")
+            try:
+                project, pct6 = _aya_project(
+                    top, edit_xml=lambda root, c=code_: _fils(root, 16)[31].set("T", c),
+                    edit_state=lambda state, t=version_type: state["channels"]["w-L"]["hp"].update(type=t))
+                row = _row(_compared(project, pct6), "w-L", "hp.type")
+                assert row["file"] == name, (code_, version_type, row)
+                assert (row["result"] == "unknown") == (version_type == "QQ"), (version_type, row)
+            finally:
+                shutil.rmtree(top, ignore_errors=True)
+
+
 def _check_another_mosconi_model_is_read_at_the_persons_risk():
     """hub #350: a `.PR16` in the PICO 6/8-2's container -- a copy of the shipped sample -- is read at the person's
     risk, never refused for its model. compare-file: exit 0, the other-model warning (and its Ukrainian), `checked_model`
@@ -4297,6 +4434,12 @@ def _selftest():
                   _check_propose_from_file_pr15_refusals,
                   _check_another_mosconi_model_is_read_at_the_persons_risk,
                   _check_a_file_no_reader_reads_is_refused_by_its_name,
+                  _check_compare_file_an_unknown_dev_reads_no_preset_setting,
+                  _check_compare_file_refuses_a_project_json_it_cannot_read,
+                  _check_propose_from_file_pr15_carries_a_bypass_by_type_and_frequency,
+                  _check_propose_from_file_pr15_keeps_a_base_leg_spelled_short,
+                  _check_the_reader_gate_ignores_the_letter_case,
+                  _check_compare_file_rows_spell_the_full_family_names,
                   _check_attest_from_file_records_a_pr15, _check_attest_from_file_pr15_refusals,
                   _check_compare_file_a_band_of_an_undecoded_type_paired_by_slot_is_unknown,
                   _check_compare_file_pr15_an_undecoded_slope_code_is_unknown,

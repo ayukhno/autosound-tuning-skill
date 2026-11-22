@@ -711,7 +711,7 @@ It takes no writer lock and needs no active slot for a `v_NNN`. The file is hash
 | exit | means |
 |---|---|
 | 0 | compared, whatever the rows say: the JSON below on stdout with `--json`, else a table a person reads (the warning, the file, the model, the counts, one row a line, then each unknown with its reason) |
-| 1 | the journal refused: the version is not there, `HEAD` with no slot named or active, or the version holds a value the comparison cannot read (a leg `slope` or a `phase_deg` that is no number) -- `error: <reason>` on stderr; with `--json` also a refusal on stdout, `error.kind` `journal`. Never said as the file's: only the file's interpretation, and a file value at a compared path, are exit 2 |
+| 1 | the journal refused: the version is not there, `HEAD` with no slot named or active, a `project.json` that is there and cannot be read (named, with its repair), or the version holds a value the comparison cannot read (a leg `slope` or a `phase_deg` that is no number) -- `error: <reason>` on stderr; with `--json` also a refusal on stdout, `error.kind` `journal`. Never said as the file's: only the file's interpretation, and a file value at a compared path, are exit 2 |
 | 2 | the file cannot be read: a refusal naming the kind, `error.kind` one of `container`, `checksum`, `truncated`, `limit`, `xml` (the reader's `Pct6Error.kind`), `io` (not there, not to be opened) or `interpret` (it decoded, and a value in it could not be interpreted or compared: a delay `abc`); no rows. Also usage, a wrong number of arguments: the usage on stderr and nothing on stdout, which is what tells the two apart |
 | 3 | the file changed while it was read (its hash before the read, the bytes read and its hash after are not one): a refusal, not a result, `error.kind` `changed`, no rows -- read it again once nothing is saving it |
 
@@ -787,7 +787,9 @@ comparison does not know is an `unknown` row. Tolerances: 0.005 dB, 0.005 Hz, 0.
 file's 0.707), 0.001°, a slope exact, a delay to 0.01 ms as PC-Tool shows it. A model whose clock is not checked, the
 file stating none (the V EIGHT), has every `ta_ms` `unknown`: its steps are not read as ms at an assumed 96 kHz. No
 capability profile is read for a `.pct6`, and none of the V EIGHT is bundled. On the V EIGHT every preset row the file
-holds a value for is `unknown` (`file` null): those places and meanings are checked on the HELIX DSP ULTRA S only.
+holds a value for is `unknown` (`file` null): those places and meanings are checked on the HELIX DSP ULTRA S only. So
+on a model the reader does not know (no layout), the reason saying the model is not checked; `propose --from-file`
+takes none of them.
 
 **A Mosconi `.PR15`** (W-13, #219 T7; an addition): a `FILE` whose extension is `.PR<number>` is read by
 `rew_tool/mosconi_pr.py` instead, read only and hashed before and after the same way, and answered in the same
@@ -838,7 +840,7 @@ write it. Both print the reader's `WARNING` verbatim and a `model:` line -- `che
 own risk ...` -- before the result.
 
 **The exit table**, both verbs: 0 banked; 1 the journal refused (`error: <reason>` on stderr: no such version, a
-candidate, a version holding a leg `slope` or a `phase_deg` that is no number, as item 13 refuses it); 2 the file cannot be read or interpreted (`error: <file>: <kind>:
+candidate, a `project.json` that cannot be read (as item 13), a version holding a leg `slope` or a `phase_deg` that is no number, as item 13 refuses it); 2 the file cannot be read or interpreted (`error: <file>: <kind>:
 <message>`, the kinds of item 13 -- both verbs refuse what compare-file refuses, `propose` comparing its base with the
 file on the same read), or usage -- `--from-file` with `--source-file`, with a delta file, with `--evidence` or
 `--reviewed`; 3 the file changed while it was read (`changed`). Nothing is banked on 1, 2 or 3; 75 is a held lock

@@ -177,7 +177,11 @@ def check(registry):
         strange = [v for v in verbs if v not in cf.FILE_VERBS]
         if strange or not isinstance(r["verbs"], list):
             out.append("%s: %s no verb that reads a file (%s)" % (rid, strange or r["verbs"], list(cf.FILE_VERBS)))
+        for verb in sorted({v for v in verbs if isinstance(v, str) and verbs.count(v) > 1}):
+            out.append("%s: the verb %r is listed %d times" % (rid, verb, verbs.count(verb)))
         models = [m for m in r["models"] if isinstance(m, dict)] if isinstance(r["models"], list) else []
+        if not isinstance(r["models"], list) or len(models) != len(r["models"]):
+            out.append("%s: models %r hold an entry that is no object" % (rid, r["models"]))
         for m in models:
             if not (isinstance(m.get("name"), str) and isinstance(m.get("code"), str) and _bool(m.get("checked_model"))
                     and sorted(m) == ["checked_model", "code", "name"]):
@@ -243,6 +247,8 @@ def _check_planted_lines_fail():
         "a key missing": lambda g: g["readers"][helix].pop("family"),
     }
     cases.update({
+        "a model entry that is no object": lambda g: g["readers"][helix]["models"].append("HELIX DSP PRO MK3"),
+        "a verb twice": lambda g: g["readers"][mosconi]["verbs"].append("compare-file"),
         "a family": lambda g: g["readers"][mosconi].update(family="Gladen"),
         "a model_code": lambda g: g["readers"][helix].update(model_code="extension"),
         "a code that is no string": lambda g: g["readers"][mosconi]["models"][0].update(code=15),

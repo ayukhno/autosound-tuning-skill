@@ -42,16 +42,24 @@ EXIT_COMPARED, EXIT_JOURNAL, EXIT_UNREADABLE, EXIT_CHANGED = 0, 1, 2, 3
 BOOKKEEPING = ("status", "eq_ptr", "tag")
 _TIER_LABEL = {"channels": "Output", "virtual_channels": "Virtual"}
 #: The layouts on which the preset settings' paths and meanings in a `.pct6` are checked (source levels, RealCenter,
-#: Dynamic Bass, SubXpander, RTC and its curve, the BT selector and auto-switch). On another checked layout -- the
-#: V EIGHT -- each is `unknown` with `PRESET_ULTRA_S_ONLY`, never a match or a differs.
+#: Dynamic Bass, SubXpander, RTC and its curve, the BT selector and auto-switch). On any other model each is `unknown`,
+#: never a match or a differs: on another checked layout -- the V EIGHT -- with `PRESET_ULTRA_S_ONLY`, on a model the
+#: reader does not know (no layout) with `PRESET_MODEL_UNCHECKED` (final review B2).
 PRESET_CHECKED_LAYOUTS = ("ultra-s",)
 PRESET_ULTRA_S_ONLY = "this setting's place and meaning in the file are checked on the HELIX DSP ULTRA S only"
+PRESET_MODEL_UNCHECKED = ("this model is not checked: the setting's place and meaning in the file are the HELIX DSP "
+                          "ULTRA S's, which may not hold on it")
 
 
 def preset_unchecked(device):
-    """True for a model with a checked channel layout whose preset settings are not checked: the V EIGHT."""
-    layout = (device or {}).get("layout")
-    return layout is not None and layout not in PRESET_CHECKED_LAYOUTS
+    """True for every model whose preset settings are not checked: all but the Ultra S's layout -- the V EIGHT, and a
+    model the reader does not know (no layout)."""
+    return (device or {}).get("layout") not in PRESET_CHECKED_LAYOUTS
+
+
+def preset_reason(device):
+    """Why a preset row of `device`'s file is `unknown` (`preset_unchecked`): an unknown model, or the V EIGHT's case."""
+    return PRESET_MODEL_UNCHECKED if (device or {}).get("layout") is None else PRESET_ULTRA_S_ONLY
 
 
 def _slot_order(slot):
@@ -625,9 +633,10 @@ def _plan(hx, doc, inv, snap, identity):
     stated = isinstance(settings, dict) and any(k not in ("status", "source_file") for k in settings)
     preset = _preset_rows(settings if isinstance(settings, dict) else {}, hx.inventory.flatten(doc.root), doc.root, stated)
     if preset_unchecked(inv["device"]):
-        preset = [_said(p["parameter"], "preset", p["journal"], None, "unknown", PRESET_ULTRA_S_ONLY,
+        why = preset_reason(inv["device"])
+        preset = [_said(p["parameter"], "preset", p["journal"], None, "unknown", why,
                         path=p["expect"]["path"]) if "expect" in p else
-                  dict(p, file=None, reason=PRESET_ULTRA_S_ONLY) if p.get("path") is not None else p for p in preset]
+                  dict(p, file=None, reason=why) if p.get("path") is not None else p for p in preset]
     return out + preset
 
 
@@ -702,13 +711,32 @@ def load_journal(project_dir, version, preset=None):
     builds the journal itself may pass the pair alone: no setting is then recorded."""
     _name, snap = load_version(project_dir, version, preset)
     _check_kinds(snap)
-    return snap, _state().project_channels(project_dir), dsp_settings(project_dir)
+    settings = dsp_settings(project_dir)          # first: a project.json that cannot be read is refused, never empty
+    return snap, _state().project_channels(project_dir), settings
+
+
+def _project_json(project_dir):
+    """`project.json`'s object, strictly: `{}` when there is none; one that is there and cannot be read raises
+    `JournalFault` naming it and its repair (final review B2) -- read leniently, as "no facts", it gave a comparison
+    with every channel unknown and a corner-set reason asking the tuner to record what the project may record."""
+    if not project_dir:
+        return {}
+    io_ = _state()._project_io()
+    path = os.path.join(project_dir, "project.json")
+    try:
+        data = io_.read_json(path, None, repair=io_.restore_line(path), repair_encoding=io_.reencode_line(project_dir))
+    except Exception as exc:  # noqa: BLE001 -- matched by its attribute; anything else still raises
+        if getattr(exc, "is_unreadable", False):
+            raise JournalFault(str(exc)) from exc
+        raise
+    return data if isinstance(data, dict) else {}
 
 
 def dsp_settings(project_dir):
     """`project.json`'s `dsp.settings`, `{}` when none is recorded: the third member of `load_journal`'s triple, which
-    `attest --from-file` reads under its own hold of the lock, so what it records is what compare-file prints."""
-    dsp = _state()._project_json(project_dir).get("dsp")
+    `attest --from-file` reads under its own hold of the lock, so what it records is what compare-file prints. A
+    `project.json` that is there and cannot be read raises `JournalFault` (`_project_json`): exit 1."""
+    dsp = _project_json(project_dir).get("dsp")
     settings = dsp.get("settings") if isinstance(dsp, dict) else None      # a `dsp` that is no object: none recorded
     return settings if isinstance(settings, dict) else {}
 
