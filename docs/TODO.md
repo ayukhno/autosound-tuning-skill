@@ -1627,6 +1627,14 @@ S-062, S-064 (with TCC's half, hub #217 SKL-056), S-065, S-066. When he says to 
 four assessment lines, and nothing is built before his `ok` on that task. Resume: `hub/bin/role skill --resume
 6b9c70d1-4094-4337-a1fd-23976307dfc2`.
 
+## S-138 · Tell the contributor of #214 it shipped in v3.3.2, and close #214
+
+**Status**: done 2026-11-22 · `gh issue view 214 --json state,comments` → CLOSED, the reply https://github.com/ayukhno/autosound-tuning-skill/issues/214#issuecomment-7078761546 (on the Arbiter's OK) · was: the reply drafted, pointing at v3.3.3; it goes out, and #214 closes, only with the Arbiter's OK (outward text, hub #345 RES-026)
+
+S-132 closed as `done v3.3.2` and #214 stayed open: no item said "reply and close". The last reply on #214
+(2026-11-21 15:15 UTC) came before the tag (21:27 UTC), so the contributor never heard it shipped. Close with
+`gh issue close 214 --comment-file <draft>` after his OK; `done` names the comment's URL.
+
 ## S-137 · Found while building v3.3.3: left for the next wave
 
 **Status**: open 2026-11-22 · the next wave's pool; recorded, not diagnosed · from the v3.3.3 implementers and seats
