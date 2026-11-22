@@ -2263,7 +2263,6 @@ def _own_tempdir(selftest):
     return run
 
 
-@_own_tempdir
 def _check_row_ids_name_a_tiers_slots():
     """A tier's `row_ids` names its slots as the vendor's program does, in order, and wins over `row_id_style`: a list
     of distinct non-empty strings, as long as `max_count` where that is stated. The bundled HELIX DSP ULTRA S profile
@@ -2287,6 +2286,7 @@ def _check_row_ids_name_a_tiers_slots():
     assert "row_ids" not in tiers["physical_outputs"], tiers["physical_outputs"]
 
 
+@_own_tempdir
 def _selftest():
     failures, ran = [], {}
     for check in (_check_loads_by_path, _check_bind_model_rate_binds_the_callers_dsp_math,

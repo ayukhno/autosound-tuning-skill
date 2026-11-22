@@ -331,4 +331,7 @@ def main(argv):
 
 
 if __name__ == "__main__":
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import console                       # issue #21: a code page must not destroy a result
+    console.install()
     sys.exit(main(sys.argv[1:]))

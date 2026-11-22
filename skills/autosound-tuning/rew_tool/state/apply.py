@@ -2134,7 +2134,7 @@ def _check_compare_file_keys_are_the_pinned_ones():
             reader = _compare_file()._helix() if bad_name.endswith(".pct6") else _compare_file()._mosconi()
             for answer in (got, refused):
                 assert answer["warning"] == reader.WARNING and answer["warning_uk"] == reader.WARNING_UK, answer
-                assert any("\u0400" <= c <= "\u04ff" for c in answer["warning_uk"]), answer["warning_uk"]
+                assert any(0x0400 <= ord(c) <= 0x04FF for c in answer["warning_uk"]), answer["warning_uk"]
         finally:
             shutil.rmtree(top, ignore_errors=True)
 
