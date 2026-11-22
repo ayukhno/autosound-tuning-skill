@@ -1640,11 +1640,15 @@ four assessment lines, and nothing is built before his `ok` on that task. Resume
 3. compare-file's text output prints "saved None" in its header for a `.PR15`; the sheet shows "None → False" for a
    field the base left unset.
 4. `helix_pct6/__main__.py` keeps its own `_SHORT` table: the reader's own output still spells `CH` / `SD`.
-5. A Helix model the reader does not know has no layout, yet its preset rows are compared on the Ultra S's paths under
+5. (done v3.3.3, the final review's fix round: a model with no checked layout has its preset rows `unknown` and
+   `propose --from-file` takes none of them) A Helix model the reader does not know has no layout, yet its preset rows are compared on the Ultra S's paths under
    the read-at-your-own-risk warning (the V EIGHT's are `unknown` since v3.3.3).
 6. The V EIGHT: its routing labels are not read (the 14×14 matrix's columns not checked); two routing codes (AOM 25,
    32) not decoded; its mute inversion, crossover and EQ codes are taken from the Ultra S and only consistent with the
    demo file's defaults.
+7. The intake form's page script draws the re-slot mark (`g.slots.concat(g.reslot`, `const re`), and no test runs
+   it: `intake_form.py`'s selftest only finds the strings in the page, so the form could stop drawing a G row or its
+   mark with every test green (the final review's test seat). The Python side (`channel_map`, `move_slot`) is held.
 
 ## S-136 · W-13's final review: four things after the tag v3.3.2
 
