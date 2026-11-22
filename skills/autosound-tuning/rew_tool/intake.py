@@ -245,8 +245,23 @@ def _same_dsp(profile, vendor, model):
             and str(p.get("name") or "").strip().lower() == model.strip().lower())
 
 
-def _groups_of(profile):
-    """The tiers a profile declares, as a form needs them: key, label, slot count, slot style."""
+def _bundled_row_ids(profile):
+    """{group id: row_ids} of the bundled profile of the same vendor and model as `profile`, for the tiers that name
+    their slots -- what a project's own copy written before `row_ids` lacks (the HELIX DSP ULTRA S's virtual tier,
+    A..F, K, L). Empty when the library has no such profile or it cannot be read."""
+    p = dsp_profile._unwrap(profile)
+    try:
+        bundled = dsp_profile.find_bundled(str(p.get("vendor") or ""), str(p.get("name") or ""))
+    except (OSError, ValueError):
+        bundled = None
+    return {g["id"]: list(g["row_ids"]) for g in dsp_profile._unwrap(bundled or {}).get("groups") or []
+            if isinstance(g, dict) and g.get("id") and isinstance(g.get("row_ids"), list)}
+
+
+def _groups_of(profile, row_ids_from=None):
+    """The tiers a profile declares, as a form needs them: key, label, slot count, slot style. `row_ids_from`,
+    {group id: row_ids}, names the slots of a tier the profile gives no `row_ids` of and the same count (a
+    project's own copy written before them, `_bundled_row_ids`); the copy itself is not changed."""
     out = []
     for g in dsp_profile._unwrap(profile).get("groups") or []:
         if not isinstance(g, dict) or not g.get("id"):
@@ -254,8 +269,13 @@ def _groups_of(profile):
         row = {"tier": dsp_profile.ledger_tier(g["id"]), "label": g.get("label") or g["id"],
                "max_count": g.get("max_count"), "letters": g.get("row_id_style") == "letter",
                "in_scope": g.get("in_scope", True) is not False}
-        if isinstance(g.get("row_ids"), list):
-            row["row_ids"] = list(g["row_ids"])
+        ids = g.get("row_ids")
+        if not isinstance(ids, list):
+            ids = (row_ids_from or {}).get(g["id"])
+            if ids is not None and row["max_count"] not in (None, len(ids)):
+                ids = None
+        if isinstance(ids, list):
+            row["row_ids"] = list(ids)
         row["slots"] = slot_names(row)
         out.append(row)
     return out
@@ -310,7 +330,8 @@ def dsp_state(project_dir):
            "new": None}
 
     def take(profile, source, new):
-        out.update(source=source, tiers=dsp_profile.tier_keys(profile), groups=_groups_of(profile),
+        ids = _bundled_row_ids(profile) if source == "project" else None
+        out.update(source=source, tiers=dsp_profile.tier_keys(profile), groups=_groups_of(profile, ids),
                    knobs=dsp_knobs(profile))
         if new is not None:
             out["new"] = new
@@ -2666,6 +2687,26 @@ def _selftest():
         vmap = channel_map(aya)[0]
         assert [r["slot"] for r in vmap["rows"]] == list("ABCDEFKL"), "a slot left spare is still drawn"
         assert vmap["rows"][6] == {"slot": "K", "code": "VSW", "on": True}, vmap["rows"][6]
+        # a project's own copy of the Ultra S profile written before `row_ids` letters its virtual tier as the bundled
+        # profile does (A..F, K, L): the copy is not rewritten, and the car's slots are not touched
+        copy_ = json.loads(json.dumps(dsp_profile.find_bundled("Audiotec-Fischer", "Helix DSP Ultra S")))
+        for g in dsp_profile._unwrap(copy_)["groups"]:
+            g.pop("row_ids", None)
+        for where, at in ((aya, "K"), (os.path.join(root, "reslot-old"), "G")):
+            save(where, "dsp.vendor", "Audiotec-Fischer")
+            save(where, "dsp.model", "Helix DSP Ultra S")
+            if at == "G":
+                save_slot(where, "virtual_channels", "G", "VSW")
+            with open(dsp_profile.profile_path(where), "w", encoding="utf-8") as fh:
+                json.dump(copy_, fh)
+            before = open(dsp_profile.profile_path(where), encoding="utf-8").read()
+            assert dsp_state(where)["source"] == "project", dsp_state(where)
+            vmap = channel_map(where)[0]
+            want = list("ABCDEFKL") + (["G"] if at == "G" else [])
+            assert [r["slot"] for r in vmap["rows"]] == want, (at, vmap["rows"])
+            reslot = [r["slot"] for r in vmap["rows"] if r.get("reslot")]
+            assert reslot == ([] if at == "K" else ["G"]), (at, reslot)
+            assert open(dsp_profile.profile_path(where), encoding="utf-8").read() == before, "the copy was rewritten"
         assert cmap[1]["rows"][0] == {"slot": "A", "code": "", "on": False}, cmap[1]["rows"][0]
         save_slot(slots, "channels", "A", on=False)
         save_slot(slots, "channels", "A", "w-L")            # a spare with no history is REPLACED
@@ -2723,6 +2764,17 @@ def _selftest():
                                   "delay": {"step_ms": "0.02", "max_ms": "10"}, "rate": 48000})
         assert st["groups"][0]["slots"] == ["A", "B", "C", "D"], st
         assert [g["total"] for g in channel_map(slots)] == [4]
+        # slot names the interview set by hand (`set-field groups.0.row_ids`) go when the form asks the count again:
+        # the form asks a count and a style, and a list of the old count would contradict it
+        dsp_profile.set_field(slots, "groups.0.row_ids", ["A", "B", "K", "L"])
+        assert dsp_state(slots)["groups"][0]["slots"] == ["A", "B", "K", "L"], dsp_state(slots)["groups"]
+        st = save_new_dsp(slots, {"tiers": {"channels": {"count": "3", "letters": True,
+                                                         "fields": ["hp", "lp", "ta_ms"]}},
+                                  "delay": {"step_ms": "0.02", "max_ms": "10"}, "rate": 48000})
+        assert st["groups"][0]["slots"] == ["A", "B", "C"], st["groups"]
+        st = save_new_dsp(slots, {"tiers": {"channels": {"count": "4", "letters": True,
+                                                         "fields": ["hp", "lp", "ta_ms"]}},
+                                  "delay": {"step_ms": "0.02", "max_ms": "10"}, "rate": 48000})
         assert new_dsp_answers(slots)["delay"] == {"step_ms": 0.02, "max_ms": 10.0}
         for bad in ({"tiers": {}}, {"tiers": {"channels": {"count": "0"}}},
                     {"tiers": {"channels": {"count": 2, "fields": ["delay"]}}}, {"tiers": {"channels": {}}, "rate": 97000}):

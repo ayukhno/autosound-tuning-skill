@@ -2172,6 +2172,16 @@ def _selftest():
             carried(page_g)["t"]["slot_reslot"]
         for lang in ("uk", "de", "pl"):    # the mark in every language the form ships, not the English fallback
             assert labels(lang)["ui"].get("slot_reslot") not in (None, _SLOT_RESLOT_EN), lang
+        # the project's own copy of the profile, written before `row_ids`: the page letters the virtual tier as the
+        # bundled profile does, and the sub moved to K is not marked
+        old_copy = json.loads(json.dumps(dsp_profile.find_bundled(*helix_id)))
+        for g in dsp_profile._unwrap(old_copy)["groups"]:
+            g.pop("row_ids", None)
+        with open(dsp_profile.profile_path(aya), "w", encoding="utf-8") as fh:
+            json.dump(old_copy, fh)
+        intake.move_slot(aya, "virtual_channels", "VSW", "K")
+        virtual = carried(render(model(aya, "uk")))["saved"]["groups"][0]
+        assert (virtual["slots"], virtual["reslot"]) == (list("ABCDEFKL"), []), virtual
         # ── round 5: knobs outside the DSP -- the processor's own pre-seeded, others by name ─
         d2 = carried(render(m2))
         assert d2["saved"]["knobs"] == ["SubRC", "RearRC"], d2["saved"]["knobs"]
